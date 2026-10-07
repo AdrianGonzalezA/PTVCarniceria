@@ -22,6 +22,7 @@ public static class SessionEndpoints
     private static async Task<IResult> CreateSessionAsync(
         LoginRequest? request,
         SessionAuthenticationService sessions,
+        PosTerminalAuthenticationService terminals,
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
@@ -34,7 +35,16 @@ public static class SessionEndpoints
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
         }
 
-        var created = await sessions.CreateAsync(request.Credential, request.Password, cancellationToken);
+        var terminalCredentialPresent = httpContext.Request.Headers.ContainsKey(Pos.PosTerminalEndpoints.CredentialHeader);
+        var terminal = terminalCredentialPresent
+            ? await terminals.FindActiveAsync(
+                httpContext.Request.Headers[Pos.PosTerminalEndpoints.CredentialHeader].ToString(), cancellationToken)
+            : null;
+        if (terminalCredentialPresent && terminal is null)
+            return Error(StatusCodes.Status401Unauthorized, "POS_TERMINAL_REQUIRED");
+
+        var created = await sessions.CreateAsync(
+            request.Credential, request.Password, terminal?.Id, cancellationToken);
         if (created is null)
         {
             return Error(StatusCodes.Status401Unauthorized, "AUTHENTICATION_FAILED");
@@ -58,13 +68,15 @@ public static class SessionEndpoints
 
     private static async Task<IResult> GetCurrentSessionAsync(
         SessionAuthenticationService sessions,
+        PosTerminalAuthenticationService terminals,
         OperationalContextAccessService contexts,
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
         var credential = httpContext.Request.Cookies[CookieName];
         var current = await sessions.FindActiveAsync(credential, cancellationToken);
-        if (current is null)
+        if (current is null || !(await TerminalSessionValidator.ValidateAsync(
+                current.Session, httpContext, terminals, cancellationToken)).IsValid)
         {
             return Error(StatusCodes.Status401Unauthorized, "NOT_AUTHENTICATED");
         }
@@ -79,6 +91,7 @@ public static class SessionEndpoints
 
     private static async Task<IResult> GetOperationalContextsAsync(
         SessionAuthenticationService sessions,
+        PosTerminalAuthenticationService terminals,
         OperationalContextAccessService contexts,
         HttpContext httpContext,
         CancellationToken cancellationToken)
@@ -91,7 +104,23 @@ public static class SessionEndpoints
             return Error(StatusCodes.Status401Unauthorized, "NOT_AUTHENTICATED");
         }
 
+        var terminalCheck = await TerminalSessionValidator.ValidateAsync(
+            current.Session, httpContext, terminals, cancellationToken);
+        if (!terminalCheck.IsValid)
+            return Error(StatusCodes.Status401Unauthorized, "NOT_AUTHENTICATED");
+
         var options = await contexts.ListAsync(current.User.Id, cancellationToken);
+        if (terminalCheck.Terminal is { } terminal)
+        {
+            options = options
+                .Where(company => company.CompanyId == terminal.CompanyId)
+                .Select(company => company with
+                {
+                    Branches = company.Branches.Where(branch => branch.BranchId == terminal.BranchId).ToArray()
+                })
+                .Where(company => company.Branches.Count > 0)
+                .ToArray();
+        }
         return Results.Ok(options.Select(company => new OperationalCompanyResponse(
             company.CompanyId,
             company.CompanyName,
@@ -102,6 +131,7 @@ public static class SessionEndpoints
     private static async Task<IResult> SelectOperationalContextAsync(
         SelectOperationalContextRequest? request,
         SessionAuthenticationService sessions,
+        PosTerminalAuthenticationService terminals,
         OperationalContextAccessService contexts,
         OperationalContextChangeGuard contextChangeGuard,
         HttpContext httpContext,
@@ -124,6 +154,17 @@ public static class SessionEndpoints
         if (current is null)
         {
             return Error(StatusCodes.Status401Unauthorized, "NOT_AUTHENTICATED");
+        }
+
+        var terminalCheck = await TerminalSessionValidator.ValidateAsync(
+            current.Session, httpContext, terminals, cancellationToken);
+        if (!terminalCheck.IsValid)
+            return Error(StatusCodes.Status401Unauthorized, "NOT_AUTHENTICATED");
+
+        if (terminalCheck.Terminal is { } terminal)
+        {
+            if (terminal.CompanyId != request.CompanyId || terminal.BranchId != request.BranchId)
+                return Error(StatusCodes.Status403Forbidden, "POS_TERMINAL_BRANCH_MISMATCH");
         }
 
         var requestedContext = await contexts.ResolveAsync(
@@ -176,6 +217,7 @@ public static class SessionEndpoints
 
     private static async Task<IResult> DeleteCurrentSessionAsync(
         SessionAuthenticationService sessions,
+        PosTerminalAuthenticationService terminals,
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
@@ -184,6 +226,11 @@ public static class SessionEndpoints
         {
             return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
         }
+
+        var current = await sessions.FindActiveAsync(httpContext.Request.Cookies[CookieName], cancellationToken);
+        if (current is null || !(await TerminalSessionValidator.ValidateAsync(
+                current.Session, httpContext, terminals, cancellationToken)).IsValid)
+            return Error(StatusCodes.Status401Unauthorized, "NOT_AUTHENTICATED");
 
         await sessions.RevokeAsync(httpContext.Request.Cookies[CookieName], cancellationToken);
         httpContext.Response.Cookies.Delete(CookieName, new CookieOptions

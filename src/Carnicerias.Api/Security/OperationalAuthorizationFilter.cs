@@ -14,6 +14,7 @@ public sealed class OperationalAuthorizationFilter(string? requiredPermission) :
         var services = httpContext.RequestServices;
         var sessions = services.GetRequiredService<SessionAuthenticationService>();
         var contexts = services.GetRequiredService<OperationalContextAccessService>();
+        var terminals = services.GetRequiredService<PosTerminalAuthenticationService>();
         var accessor = services.GetRequiredService<OperationalContextAccessor>();
         var current = await sessions.FindActiveAsync(
             httpContext.Request.Cookies[SessionEndpoints.CookieName],
@@ -23,6 +24,11 @@ public sealed class OperationalAuthorizationFilter(string? requiredPermission) :
         {
             return Error(StatusCodes.Status401Unauthorized, "NOT_AUTHENTICATED");
         }
+
+        var terminalCheck = await TerminalSessionValidator.ValidateAsync(
+            current.Session, httpContext, terminals, httpContext.RequestAborted);
+        if (!terminalCheck.IsValid)
+            return Error(StatusCodes.Status401Unauthorized, "POS_TERMINAL_REQUIRED");
 
         var authorized = await contexts.ResolveSessionAsync(current.Session, httpContext.RequestAborted);
         if (authorized is null)

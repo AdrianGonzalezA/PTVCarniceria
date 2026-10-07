@@ -22,6 +22,7 @@ public sealed class SessionAuthenticationService(
     public async Task<CreatedUserSession?> CreateAsync(
         string credential,
         string password,
+        Guid? terminalId = null,
         CancellationToken cancellationToken = default)
     {
         var normalizedCredential = Normalize(credential);
@@ -48,6 +49,8 @@ public sealed class SessionAuthenticationService(
 
         var tokenHash = HashCredential(sessionCredential);
         var session = new UserSession(user.Id, tokenHash, now, now.Add(AbsoluteLifetime));
+        if (terminalId is Guid boundTerminalId)
+            session.BindToTerminal(boundTerminalId);
         db.Sessions.Add(session);
         await db.SaveChangesAsync(cancellationToken);
 

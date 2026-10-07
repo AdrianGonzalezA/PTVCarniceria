@@ -267,12 +267,14 @@ describe('PosPage', () => {
     expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Bife');
     const retry = fixture.nativeElement.querySelector('.draft-retry') as HTMLButtonElement;
     expect(retry).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('.price-list-lock[role="alert"]').textContent).toContain('No se pudo sincronizar');
-    expect(fixture.nativeElement.querySelector('.pos-error').textContent).toContain('No hay stock suficiente');
+    expect(fixture.nativeElement.querySelector('.price-list-lock[role="alert"]').textContent).toContain('No hay stock suficiente');
+    expect(fixture.nativeElement.querySelector('.price-list-lock[role="alert"]').textContent).not.toContain('No se pudo sincronizar');
+    expect(fixture.nativeElement.querySelector('.pos-error')).toBeNull();
     (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#checkout-title')).toBeNull();
-    expect(fixture.nativeElement.querySelector('.pos-error').textContent).toContain('No hay stock suficiente');
+    expect(fixture.nativeElement.querySelector('.price-list-lock[role="alert"]').textContent).toContain('No hay stock suficiente');
+    expect(fixture.nativeElement.querySelector('.pos-error')).toBeNull();
     retry.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();

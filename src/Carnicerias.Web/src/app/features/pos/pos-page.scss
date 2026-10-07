@@ -104,6 +104,7 @@
 .sale-metadata select,.sale-metadata input { box-sizing: border-box; width: 100%; min-height: 2.15rem; padding: 0.4rem 0.5rem; color: #171717; background: #fff; border: 1px solid #ddd; border-radius: 0.35rem; font: inherit; font-size: 0.75rem; }
 .sale-metadata .price-list-field,.price-list-lock { grid-column: 1 / -1; }
 .price-list-lock { margin: -0.3rem 0 0; color: #555; font-size: 0.72rem; }
+.price-list-lock[role='alert'] { color: var(--pos-danger); font-size: 0.82rem; }
 .price-list-lock button { padding: 0; color: #006b6b; background: transparent; border: 0; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .sale-metadata input[readonly] { cursor: default; }
 .line-table-wrap { min-height: 0; flex: 1; overflow: auto; background: #fff; }

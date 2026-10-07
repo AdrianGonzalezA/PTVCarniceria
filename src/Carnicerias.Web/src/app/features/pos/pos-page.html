@@ -129,7 +129,7 @@
           } @else if (draftStatus() === 'saved') {
             <p class="price-list-lock" role="status">Borrador guardado · stock sin descontar</p>
           } @else if (draftStatus() === 'error') {
-            <p class="price-list-lock" role="alert">No se pudo sincronizar el ticket. <button class="draft-retry" type="button" (click)="retryDraftSave()">Reintentar guardado</button></p>
+            <p class="price-list-lock" role="alert">{{ errorMessage() ?? 'No se pudo guardar el ticket. Revisá el detalle e intentá nuevamente.' }} <button class="draft-retry" type="button" (click)="retryDraftSave()">Reintentar guardado</button></p>
           }
         </div>
         <button class="cancel-sale-button" type="button" (click)="cancelSale()">⊘ <span>Cancelar venta</span></button>
@@ -221,8 +221,10 @@
         </div>
       }
 
-      @if (errorMessage(); as error) {
-        <p class="pos-error" role="alert">{{ error }}</p>
+      @if (draftStatus() !== 'error') {
+        @if (errorMessage(); as error) {
+          <p class="pos-error" role="alert">{{ error }}</p>
+        }
       }
 
       <footer class="sale-footer">

@@ -2,6 +2,8 @@ using Carnicerias.Api.Contracts;
 using Carnicerias.Api.Security;
 using Carnicerias.Domain.Sales;
 using Carnicerias.Infrastructure;
+using Carnicerias.Api.Sessions;
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -85,19 +87,60 @@ public static class CashierShiftEndpoints
         PlatformAccessDbContext db,
         OperationalContextAccessor accessor,
         TimeProvider timeProvider,
+        HttpContext httpContext,
         CancellationToken cancellationToken)
     {
         var context = accessor.Context;
-        var shift = await db.CashierShifts.SingleOrDefaultAsync(item =>
-            item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
-            item.CashierId == context.UserId && item.PosTerminalId == accessor.TerminalId &&
-            item.Status == CashierShiftStatus.Open,
-            cancellationToken);
-        if (shift is null) return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_REQUIRED");
+        try
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable, cancellationToken);
+            var shift = await db.CashierShifts.SingleOrDefaultAsync(item =>
+                item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
+                item.CashierId == context.UserId && item.PosTerminalId == accessor.TerminalId &&
+                item.Status == CashierShiftStatus.Open,
+                cancellationToken);
+            if (shift is null) return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_REQUIRED");
 
-        shift.Close(context.UserId, timeProvider.GetUtcNow());
-        await db.SaveChangesAsync(cancellationToken);
-        return Results.Ok(await ToResponseAsync(db, shift, cancellationToken));
+            var hasDraft = await db.SaleDrafts.AnyAsync(draft =>
+                draft.CompanyId == context.CompanyId && draft.BranchId == context.BranchId &&
+                draft.UserId == context.UserId && draft.PosTerminalId == accessor.TerminalId &&
+                (accessor.TerminalId == null || draft.CashierShiftId == shift.Id) &&
+                draft.Status == SaleDraftStatus.Draft, cancellationToken);
+            if (hasDraft) return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_HAS_DRAFT");
+
+            var now = timeProvider.GetUtcNow();
+            shift.Close(context.UserId, now);
+            if (accessor.TerminalId is not null)
+            {
+                var session = await db.Sessions.SingleAsync(item => item.Id == context.SessionId, cancellationToken);
+                session.Revoke(now);
+            }
+            await db.SaveChangesAsync(cancellationToken);
+            var response = await ToResponseAsync(db, shift, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            if (accessor.TerminalId is not null)
+                httpContext.Response.Cookies.Delete(SessionEndpoints.CookieName, new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = true,
+                    SameSite = SameSiteMode.Strict,
+                    Path = "/api"
+                });
+            return Results.Ok(response);
+        }
+        catch (Exception exception) when (IsSerializationFailure(exception))
+        {
+            return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_CLOSE_CONFLICT");
+        }
+    }
+
+    private static bool IsSerializationFailure(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException!)
+            if (current is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure })
+                return true;
+        return false;
     }
 
     private static bool IsUniqueViolation(DbUpdateException exception) =>

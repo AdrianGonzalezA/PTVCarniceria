@@ -109,6 +109,11 @@ public sealed class CashierShiftEndpointTests
                 Assert.Contains(drafts, draft => draft.CashierShiftId == secondShiftId);
                 Assert.NotEqual(drafts[0].PosTerminalId, drafts[1].PosTerminalId);
             }
+            var pendingClose = await first.PostAsync("/api/cashier-shifts/current/close", null);
+            Assert.Equal(HttpStatusCode.Conflict, pendingClose.StatusCode);
+            using (var error = JsonDocument.Parse(await pendingClose.Content.ReadAsStringAsync()))
+                Assert.Equal("CASHIER_SHIFT_HAS_DRAFT", error.RootElement.GetProperty("error").GetProperty("code").GetString());
+            Assert.Equal(HttpStatusCode.OK, (await first.GetAsync("/api/cashier-shifts/current")).StatusCode);
 
             using var sameCashierOtherTerminal = factory.CreateClient(new WebApplicationFactoryClientOptions
             { BaseAddress = new Uri("https://localhost"), HandleCookies = false });
@@ -169,19 +174,30 @@ public sealed class CashierShiftEndpointTests
 
             Assert.Equal(HttpStatusCode.OK,
                 (await second.PostAsync("/api/cashier-shifts/current/close", null)).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized,
+                (await second.GetAsync("/api/cashier-shifts/current")).StatusCode);
             Assert.Equal(HttpStatusCode.Conflict,
                 (await sameCashierOtherTerminal.PostAsJsonAsync("/api/cashier-shifts", new { openingCash = 0m })).StatusCode);
+            using var secondAgain = factory.CreateClient(new WebApplicationFactoryClientOptions
+            { BaseAddress = new Uri("https://localhost"), HandleCookies = false });
+            await LoginAndSelectTerminalAsync(secondAgain, "cashier-two", password,
+                secondCredential.Token, companyId, branchId);
             Assert.Equal(HttpStatusCode.Created,
-                (await second.PostAsJsonAsync("/api/cashier-shifts", new { openingCash = 200m })).StatusCode);
+                (await secondAgain.PostAsJsonAsync("/api/cashier-shifts", new { openingCash = 200m })).StatusCode);
 
             Assert.Equal(HttpStatusCode.OK,
                 (await first.PostAsync("/api/cashier-shifts/current/close", null)).StatusCode);
-            Assert.Equal(HttpStatusCode.NoContent, (await first.GetAsync("/api/cashier-shifts/current")).StatusCode);
-            Assert.Equal(HttpStatusCode.OK, (await second.GetAsync("/api/cashier-shifts/current")).StatusCode);
-            Assert.Equal(HttpStatusCode.OK, (await second.GetAsync("/api/cashier-shifts/last-closed")).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await first.GetAsync("/api/cashier-shifts/current")).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await secondAgain.GetAsync("/api/cashier-shifts/current")).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await secondAgain.GetAsync("/api/cashier-shifts/last-closed")).StatusCode);
 
-            using var firstClosed = JsonDocument.Parse(await first.GetStringAsync("/api/cashier-shifts/last-closed"));
-            using var secondClosed = JsonDocument.Parse(await second.GetStringAsync("/api/cashier-shifts/last-closed"));
+            using var firstAgain = factory.CreateClient(new WebApplicationFactoryClientOptions
+            { BaseAddress = new Uri("https://localhost"), HandleCookies = false });
+            await LoginAndSelectTerminalAsync(firstAgain, "cashier-one", password,
+                firstCredential.Token, companyId, branchId);
+
+            using var firstClosed = JsonDocument.Parse(await firstAgain.GetStringAsync("/api/cashier-shifts/last-closed"));
+            using var secondClosed = JsonDocument.Parse(await secondAgain.GetStringAsync("/api/cashier-shifts/last-closed"));
             Assert.Equal(2100m, firstClosed.RootElement.GetProperty("cashBalance").GetDecimal());
             Assert.Equal(3200m, secondClosed.RootElement.GetProperty("cashBalance").GetDecimal());
 

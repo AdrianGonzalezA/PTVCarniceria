@@ -41,7 +41,7 @@ public sealed class OperationalAuthorizationFilter(string? requiredPermission) :
             return Error(StatusCodes.Status403Forbidden, "PERMISSION_REQUIRED");
         }
 
-        accessor.Set(authorized.Context);
+        accessor.Set(authorized.Context, terminalCheck.Terminal?.Id);
         return await next(context);
     }
 

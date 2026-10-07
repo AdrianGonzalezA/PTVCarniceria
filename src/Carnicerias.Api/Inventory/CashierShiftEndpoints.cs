@@ -26,7 +26,8 @@ public static class CashierShiftEndpoints
         var context = accessor.Context;
         var shift = await db.CashierShifts.AsNoTracking().SingleOrDefaultAsync(item =>
             item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
-            item.CashierId == context.UserId && item.Status == CashierShiftStatus.Open,
+            item.CashierId == context.UserId && item.PosTerminalId == accessor.TerminalId &&
+            item.Status == CashierShiftStatus.Open,
             cancellationToken);
 
         return shift is null ? Results.NoContent() : Results.Ok(await ToResponseAsync(db, shift, cancellationToken));
@@ -40,7 +41,8 @@ public static class CashierShiftEndpoints
         var context = accessor.Context;
         var shift = await db.CashierShifts.AsNoTracking()
             .Where(item => item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
-                item.CashierId == context.UserId && item.Status == CashierShiftStatus.Closed)
+                item.CashierId == context.UserId && item.PosTerminalId == accessor.TerminalId &&
+                item.Status == CashierShiftStatus.Closed)
             .OrderByDescending(item => item.ClosedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -60,13 +62,13 @@ public static class CashierShiftEndpoints
 
         var context = accessor.Context;
         var shift = new CashierShift(context.CompanyId, context.BranchId, context.UserId,
-            request.OpeningCash, timeProvider.GetUtcNow());
+            request.OpeningCash, timeProvider.GetUtcNow(), accessor.TerminalId);
         db.CashierShifts.Add(shift);
         if (request.OpeningCash > 0)
             db.CashLedgerMovements.Add(new CashLedgerMovement(
                 context.CompanyId, context.BranchId, shift.Id, context.UserId,
                 shift.Id, PaymentMethod.Cash, CashLedgerMovementKind.Opening,
-                request.OpeningCash, shift.OpenedAtUtc));
+                request.OpeningCash, shift.OpenedAtUtc, posTerminalId: accessor.TerminalId));
         try
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -88,7 +90,8 @@ public static class CashierShiftEndpoints
         var context = accessor.Context;
         var shift = await db.CashierShifts.SingleOrDefaultAsync(item =>
             item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
-            item.CashierId == context.UserId && item.Status == CashierShiftStatus.Open,
+            item.CashierId == context.UserId && item.PosTerminalId == accessor.TerminalId &&
+            item.Status == CashierShiftStatus.Open,
             cancellationToken);
         if (shift is null) return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_REQUIRED");
 

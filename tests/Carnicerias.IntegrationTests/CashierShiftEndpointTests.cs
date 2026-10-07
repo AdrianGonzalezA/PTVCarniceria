@@ -20,6 +20,122 @@ namespace Carnicerias.IntegrationTests;
 public sealed class CashierShiftEndpointTests
 {
     [PostgreSqlFact]
+    public async Task TwoTerminalsKeepIndependentConcurrentShifts()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("CARNICERIAS_TEST_CONNECTION_STRING")!;
+        var databaseName = new Npgsql.NpgsqlConnectionStringBuilder(connectionString).Database;
+        Assert.StartsWith("carnicerias_test_", databaseName, StringComparison.OrdinalIgnoreCase);
+        var options = new DbContextOptionsBuilder<PlatformAccessDbContext>().UseNpgsql(connectionString).Options;
+        const string password = "Two Terminal Shift Password 42!";
+        var firstCredential = PosTerminalCredential.Issue();
+        var secondCredential = PosTerminalCredential.Issue();
+
+        try
+        {
+            Guid companyId;
+            Guid branchId;
+            await using (var db = new PlatformAccessDbContext(options))
+            {
+                await db.Database.MigrateAsync();
+                var hasher = new Argon2idPasswordHasher();
+                await new BootstrapAdminService(db, hasher).CreateFirstAdministratorAsync(
+                    "cashier-one", "cashier-one@example.test", "Shift Company", "Shift Branch",
+                    password, PlatformPermissionCatalog.CreateDefaultPermissions());
+                var company = await db.Companies.SingleAsync();
+                var branch = await db.Branches.SingleAsync();
+                var role = await db.Roles.SingleAsync();
+                var secondUser = UserIdentity.Create("cashier-two", "cashier-two@example.test", hasher.Hash(password));
+                var firstTerminal = new PosTerminal(company.Id, branch.Id, "Caja 1");
+                var secondTerminal = new PosTerminal(company.Id, branch.Id, "Caja 2");
+                firstTerminal.AssignCredentialHash(firstCredential.Hash);
+                secondTerminal.AssignCredentialHash(secondCredential.Hash);
+                db.AddRange(secondUser, new UserAssignment(secondUser.Id, role.Id, company.Id),
+                    firstTerminal, secondTerminal);
+                await db.SaveChangesAsync();
+                companyId = company.Id;
+                branchId = branch.Id;
+            }
+
+            using var factory = new CashierShiftApiFactory(connectionString);
+            using var first = factory.CreateClient(new WebApplicationFactoryClientOptions
+            { BaseAddress = new Uri("https://localhost"), HandleCookies = false });
+            using var second = factory.CreateClient(new WebApplicationFactoryClientOptions
+            { BaseAddress = new Uri("https://localhost"), HandleCookies = false });
+            await LoginAndSelectTerminalAsync(first, "cashier-one", password, firstCredential.Token, companyId, branchId);
+            await LoginAndSelectTerminalAsync(second, "cashier-two", password, secondCredential.Token, companyId, branchId);
+
+            var opened = await Task.WhenAll(
+                first.PostAsJsonAsync("/api/cashier-shifts", new { openingCash = 100m }),
+                second.PostAsJsonAsync("/api/cashier-shifts", new { openingCash = 200m }));
+            Assert.All(opened, response => Assert.Equal(HttpStatusCode.Created, response.StatusCode));
+            using var firstBody = JsonDocument.Parse(await opened[0].Content.ReadAsStringAsync());
+            using var secondBody = JsonDocument.Parse(await opened[1].Content.ReadAsStringAsync());
+            var firstShiftId = firstBody.RootElement.GetProperty("id").GetGuid();
+            var secondShiftId = secondBody.RootElement.GetProperty("id").GetGuid();
+            Assert.NotEqual(firstShiftId, secondShiftId);
+
+            using var firstCurrent = JsonDocument.Parse(await first.GetStringAsync("/api/cashier-shifts/current"));
+            using var secondCurrent = JsonDocument.Parse(await second.GetStringAsync("/api/cashier-shifts/current"));
+            Assert.Equal(firstShiftId, firstCurrent.RootElement.GetProperty("id").GetGuid());
+            Assert.Equal(secondShiftId, secondCurrent.RootElement.GetProperty("id").GetGuid());
+            Assert.Equal(100m, firstCurrent.RootElement.GetProperty("cashBalance").GetDecimal());
+            Assert.Equal(200m, secondCurrent.RootElement.GetProperty("cashBalance").GetDecimal());
+
+            using var sameCashierOtherTerminal = factory.CreateClient(new WebApplicationFactoryClientOptions
+            { BaseAddress = new Uri("https://localhost"), HandleCookies = false });
+            await LoginAndSelectTerminalAsync(sameCashierOtherTerminal, "cashier-one", password,
+                secondCredential.Token, companyId, branchId);
+            Assert.Equal(HttpStatusCode.Conflict,
+                (await sameCashierOtherTerminal.PostAsJsonAsync("/api/cashier-shifts", new { openingCash = 0m })).StatusCode);
+
+            using var otherCashierSameTerminal = factory.CreateClient(new WebApplicationFactoryClientOptions
+            { BaseAddress = new Uri("https://localhost"), HandleCookies = false });
+            await LoginAndSelectTerminalAsync(otherCashierSameTerminal, "cashier-two", password,
+                firstCredential.Token, companyId, branchId);
+            Assert.Equal(HttpStatusCode.Conflict,
+                (await otherCashierSameTerminal.PostAsJsonAsync("/api/cashier-shifts", new { openingCash = 0m })).StatusCode);
+
+            Assert.Equal(HttpStatusCode.OK,
+                (await second.PostAsync("/api/cashier-shifts/current/close", null)).StatusCode);
+            Assert.Equal(HttpStatusCode.Conflict,
+                (await sameCashierOtherTerminal.PostAsJsonAsync("/api/cashier-shifts", new { openingCash = 0m })).StatusCode);
+            Assert.Equal(HttpStatusCode.Created,
+                (await second.PostAsJsonAsync("/api/cashier-shifts", new { openingCash = 200m })).StatusCode);
+
+            Assert.Equal(HttpStatusCode.OK,
+                (await first.PostAsync("/api/cashier-shifts/current/close", null)).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await first.GetAsync("/api/cashier-shifts/current")).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await second.GetAsync("/api/cashier-shifts/current")).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await second.GetAsync("/api/cashier-shifts/last-closed")).StatusCode);
+
+            await using var verifyDb = new PlatformAccessDbContext(options);
+            var shifts = await verifyDb.CashierShifts.OrderBy(shift => shift.OpeningCash).ToArrayAsync();
+            Assert.Equal(3, shifts.Length);
+            Assert.NotNull(shifts[0].PosTerminalId);
+            Assert.NotEqual(shifts[0].PosTerminalId, shifts[1].PosTerminalId);
+            Assert.All(await verifyDb.CashLedgerMovements.ToArrayAsync(), movement =>
+                Assert.NotNull(movement.PosTerminalId));
+        }
+        finally
+        {
+            await using var cleanup = new PlatformAccessDbContext(options);
+            await cleanup.Database.MigrateAsync("0");
+        }
+    }
+
+    private static async Task LoginAndSelectTerminalAsync(
+        HttpClient client, string username, string password, string terminalCredential,
+        Guid companyId, Guid branchId)
+    {
+        client.DefaultRequestHeaders.Add("X-Pos-Terminal-Credential", terminalCredential);
+        var login = await client.PostAsJsonAsync("/api/sessions", new { credential = username, password });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        client.DefaultRequestHeaders.Add("Cookie", Assert.Single(login.Headers.GetValues("Set-Cookie")).Split(';', 2)[0]);
+        Assert.Equal(HttpStatusCode.OK, (await client.PutAsJsonAsync(
+            "/api/sessions/current/context", new { companyId, branchId })).StatusCode);
+    }
+
+    [PostgreSqlFact]
     public async Task CashierCanOpenCloseAndChangeBranchOnlyAfterClosingShift()
     {
         var connectionString = Environment.GetEnvironmentVariable("CARNICERIAS_TEST_CONNECTION_STRING")!;

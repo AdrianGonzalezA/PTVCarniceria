@@ -6,9 +6,10 @@
     </div>
     <div class="pos-account">
       <span class="context-label">{{ session()?.context?.branchName }}</span>
+      <span class="terminal-label">{{ terminal()?.name ?? 'Caja sin configurar' }}</span>
       <span class="cashier-name">{{ session()?.username }}</span>
-      <button class="shift-status" type="button" (click)="openShiftDialog()">{{ cashierShift() ? 'Turno abierto' : 'Abrir turno' }}</button>
-      @if (session()?.context?.permissions?.includes('inventory.stock.manage')) {
+      <button class="shift-status" type="button" [disabled]="!terminal()" (click)="openShiftDialog()">{{ cashierShift() ? 'Turno abierto' : 'Abrir turno' }}</button>
+      @if (canOperate() && session()?.context?.permissions?.includes('inventory.stock.manage')) {
         <button class="stock-manage-button" type="button" aria-label="Administrar stock" title="Administrar stock" (click)="openInventory()">Stock</button>
       }
       <button class="menu-trigger" type="button" aria-label="Abrir menú" [attr.aria-expanded]="isMenuOpen()" (click)="isMenuOpen.update(value => !value)">
@@ -26,6 +27,28 @@
     </div>
   </header>
 
+  @if (!canOperate()) {
+    <main class="pos-workspace shift-gate-workspace">
+      <section class="shift-gate" aria-labelledby="shift-gate-title">
+        <p class="eyebrow">{{ terminal()?.name ?? 'Caja sin configurar' }} · {{ session()?.context?.branchName }}</p>
+        @if (terminalError(); as error) {
+          <h1 id="shift-gate-title">Caja no disponible</h1>
+          <p role="alert">{{ error }}</p>
+        } @else if (shiftLoadState() === 'loading') {
+          <h1 id="shift-gate-title">Consultando turno</h1>
+          <p role="status">Esperá mientras verificamos la caja y el cajero.</p>
+        } @else if (shiftLoadState() === 'error') {
+          <h1 id="shift-gate-title">No se pudo consultar el turno</h1>
+          <p role="alert">{{ shiftError() }}</p>
+          <button class="finish-button" type="button" (click)="loadCashierShift()">Reintentar</button>
+        } @else {
+          <h1 id="shift-gate-title">Abrí el turno para comenzar a vender</h1>
+          <p>La búsqueda, el ticket, el stock y el cobro quedan bloqueados hasta que te identifiques como responsable de esta caja.</p>
+          <button class="finish-button" type="button" (click)="openShiftDialog()">Abrir turno de {{ terminal()?.name }}</button>
+        }
+      </section>
+    </main>
+  } @else {
   <main class="pos-workspace">
     <section class="catalog-panel" aria-label="Catálogo de productos">
       <div class="catalog-toolbar">
@@ -236,6 +259,7 @@
       </footer>
     </section>
   </main>
+  }
 
   <footer class="ticket-strip" aria-label="Tickets de venta">
     <button class="ticket-tab selected" type="button" aria-current="page">Ticket A</button>

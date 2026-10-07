@@ -1,9 +1,11 @@
 import '@angular/compiler';
 import { HttpErrorResponse } from '@angular/common/http';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { TestBed } from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
+import { vi } from 'vitest';
 import { CatalogClient } from '../../core/catalog/catalog-client';
+import { PosTerminalClient } from '../../core/pos/pos-terminal-client';
 import { InventoryClient } from '../../core/inventory/inventory-client';
 import { CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { SaleDraftClient } from '../../core/sales/sale-draft-client';
@@ -11,6 +13,59 @@ import { CurrentSession, SessionClient } from '../../core/session/session-client
 import { PosPage } from './pos-page';
 
 describe('PosPage', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [
+      { provide: PosTerminalClient, useValue: { current: () => of({
+        id: 'terminal-id', name: 'Caja 1', companyId: 'company-id', branchId: 'branch-id',
+      }) } },
+      { provide: CashierShiftClient, useValue: { current: () => of({
+        id: 'shift-id', openingCash: 0, openedAtUtc: '2026-10-06T15:00:00Z', closedAtUtc: null,
+      }) } },
+    ] });
+  });
+
+  it('blocks the catalogue and ticket until this cashier opens a shift', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    let saved = false;
+    let opened = false;
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CashierShiftClient, useValue: {
+        current: () => of(null), lastClosed: () => of(null),
+        open: () => { opened = true; return of({
+          id: 'new-shift', openingCash: 0, openedAtUtc: '2026-10-06T15:00:00Z', closedAtUtc: null,
+        }); },
+      } },
+      { provide: CatalogClient, useValue: { priceLists: () => of([]) } },
+      { provide: SaleDraftClient, useValue: { current: () => of(null), save: () => { saved = true; return of(null); } } },
+      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+    ] });
+
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Caja 1');
+    expect(fixture.nativeElement.textContent).toContain('Abrí el turno');
+    expect(fixture.nativeElement.querySelector('#product-search')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.sale-footer')).toBeNull();
+    expect(saved).toBe(false);
+
+    (fixture.nativeElement.querySelector('.shift-gate .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#shift-title').textContent).toContain('Abrir turno');
+    (fixture.nativeElement.querySelector('.shift-dialog .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(opened).toBe(true);
+    expect(fixture.nativeElement.querySelector('#product-search')).not.toBeNull();
+  });
+
   it('loads the branch catalog automatically and persists an added sale line', async () => {
     const session: CurrentSession = {
       userId: 'user-id',
@@ -494,7 +549,7 @@ describe('PosPage', () => {
     expect(fixture.nativeElement.querySelector('.price-list-lock').textContent).toContain('Borrador guardado');
   });
 
-  it('shows the cash balance after closing and when reopening the POS', async () => {
+  it('returns to login after closing and preserves the cash summary for a fresh login', async () => {
     const session: CurrentSession = {
       userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
       context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
@@ -518,6 +573,7 @@ describe('PosPage', () => {
       { provide: InventoryClient, useValue: { stock: () => of([]) } },
     ] });
     const fixture = TestBed.createComponent(PosPage);
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
     fixture.detectChanges();
     await fixture.whenStable();
     (fixture.nativeElement.querySelector('.shift-status') as HTMLButtonElement).click();
@@ -525,8 +581,8 @@ describe('PosPage', () => {
     expect(fixture.nativeElement.querySelector('.shift-summary').textContent).toContain('1.100,00');
     (fixture.nativeElement.querySelector('.shift-dialog .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.closed-shift-summary').textContent).toContain('1.500,00');
-    expect(fixture.nativeElement.querySelector('.closed-shift-summary').textContent).toContain('1.100,00');
+    expect(navigate).toHaveBeenCalledWith('/');
+    expect(fixture.nativeElement.querySelector('.shift-dialog')).toBeNull();
 
     fixture.destroy();
     const reopened = TestBed.createComponent(PosPage);

@@ -6,6 +6,7 @@ import { Observable, of, Subject } from 'rxjs';
 import { catchError, concatMap, map } from 'rxjs/operators';
 import { CatalogCategory, CatalogClient, PriceListOption } from '../../core/catalog/catalog-client';
 import { InventoryClient, InventoryStockItem } from '../../core/inventory/inventory-client';
+import { PosTerminal, PosTerminalClient } from '../../core/pos/pos-terminal-client';
 import { ConfirmedSale, SaleDraft, SaleDraftClient, SaleDraftLine, SalePaymentMethod } from '../../core/sales/sale-draft-client';
 import { CashierShift, CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
@@ -75,6 +76,7 @@ export class PosPage implements OnInit {
   private readonly saleDraftClient = inject(SaleDraftClient);
   private readonly cashierShiftClient = inject(CashierShiftClient);
   private readonly inventoryClient = inject(InventoryClient);
+  private readonly terminalClient = inject(PosTerminalClient);
   private readonly router = inject(Router);
   private readonly draftOperations = new Subject<{
     readonly revision: number;
@@ -84,6 +86,8 @@ export class PosPage implements OnInit {
   private stockRequestRevision = 0;
 
   protected readonly session = signal<CurrentSession | null>(null);
+  protected readonly terminal = signal<PosTerminal | null>(null);
+  protected readonly terminalError = signal<string | null>(null);
   protected readonly demoPriceLists = demoPriceLists;
   protected readonly realPriceLists = signal<readonly PriceListOption[]>([]);
   protected readonly catalogCategories = signal<readonly CatalogCategory[]>([]);
@@ -138,6 +142,8 @@ export class PosPage implements OnInit {
   protected readonly isMenuOpen = signal(false);
   protected readonly checkoutNotice = signal(false);
   protected readonly cashierShift = signal<CashierShift | null>(null);
+  protected readonly shiftLoadState = signal<'loading' | 'ready' | 'error'>('loading');
+  protected readonly canOperate = computed(() => !!this.terminal() && !!this.cashierShift());
   protected readonly lastClosedShift = signal<CashierShift | null>(null);
   protected readonly shiftDialog = signal(false);
   protected readonly shiftOpeningCash = signal('0');
@@ -273,9 +279,18 @@ export class PosPage implements OnInit {
           return;
         }
         this.session.set(session);
-        this.loadCashierShift();
-        this.loadPriceLists();
-        this.refreshStock();
+        this.terminalClient.current().subscribe({
+          next: (terminal) => {
+            if (terminal.companyId !== session.context?.companyId ||
+                terminal.branchId !== session.context?.branchId) {
+              this.terminalError.set('La caja no corresponde a la sucursal seleccionada. Volvé a identificarte.');
+              return;
+            }
+            this.terminal.set(terminal);
+            this.loadCashierShift();
+          },
+          error: () => this.terminalError.set('Esta instalación no tiene una caja habilitada. Configurá la terminal antes de vender.'),
+        });
       },
       error: () => void this.router.navigateByUrl('/'),
     });
@@ -324,6 +339,7 @@ export class PosPage implements OnInit {
 
   protected submitSearch(event: Event): void {
     event.preventDefault();
+    if (!this.canOperate()) return;
     const code = this.searchText().trim();
     if (!this.isDemoPriceList()) {
       const priceListId = this.selectedPriceListId();
@@ -340,6 +356,7 @@ export class PosPage implements OnInit {
   }
 
   protected selectCategory(id: string): void {
+    if (!this.canOperate()) return;
     this.activeCategory.set(id);
     this.searchText.set('');
     this.realSearchSubmitted.set(false);
@@ -441,6 +458,7 @@ export class PosPage implements OnInit {
   }
 
   protected openProduct(product: PosProduct): void {
+    if (!this.canOperate()) return;
     this.errorMessage.set(null);
     if (!this.isDemoPriceList() && (this.availableStock(product) ?? 0) <= 0) {
       this.errorMessage.set('No hay stock disponible para este producto en la sucursal.');
@@ -455,6 +473,7 @@ export class PosPage implements OnInit {
   }
 
   protected addSelectedProduct(): void {
+    if (!this.canOperate()) return;
     const product = this.selectedProduct();
     const quantity = Number(this.quantityDraft());
     if (!product || this.quantityProblem()) {
@@ -468,6 +487,7 @@ export class PosPage implements OnInit {
   }
 
   protected updateLineQuantity(productId: string, event: Event): void {
+    if (!this.canOperate()) return;
     const input = event.target as HTMLInputElement;
     const quantity = Number(input.value.replace(',', '.'));
     const line = this.lines().find((item) => item.product.id === productId);
@@ -493,6 +513,7 @@ export class PosPage implements OnInit {
   }
 
   protected removeLine(productId: string): void {
+    if (!this.canOperate()) return;
     const line = this.lines().find((item) => item.product.id === productId);
     if (!line || !window.confirm(`¿Querés quitar ${line.product.name} del detalle?`)) return;
     this.lines.update((lines) => lines.filter((item) => item.product.id !== productId));
@@ -500,6 +521,7 @@ export class PosPage implements OnInit {
   }
 
   protected cancelSale(): void {
+    if (!this.canOperate()) return;
     if (!window.confirm('¿Querés cancelar la venta y quitar todos sus productos?')) return;
     if (!this.isDemoPriceList() && this.selectedPriceListId()) {
       this.queueDraftOperation('cancel');
@@ -510,6 +532,7 @@ export class PosPage implements OnInit {
   }
 
   protected openInventory(): void {
+    if (!this.canOperate()) return;
     this.inventoryOpen.set(true);
     this.inventoryStatus.set('loading');
     this.inventoryMessage.set(null);
@@ -536,6 +559,7 @@ export class PosPage implements OnInit {
   }
 
   protected submitStockAdjustment(): void {
+    if (!this.canOperate()) return;
     const quantityDelta = Number(this.adjustmentQuantity());
     const reason = this.adjustmentReason().trim();
     if (!this.adjustmentProductId() || !Number.isFinite(quantityDelta) || quantityDelta === 0 ||
@@ -576,6 +600,7 @@ export class PosPage implements OnInit {
   }
 
   protected continueToCheckout(): void {
+    if (!this.canOperate()) return;
     if (this.isDemoPriceList()) {
       this.errorMessage.set(null);
       this.checkoutNotice.set(true);
@@ -634,13 +659,14 @@ export class PosPage implements OnInit {
   }
 
   protected openShiftDialog(): void {
+    if (!this.terminal()) return;
     this.shiftDialog.set(true);
     this.shiftError.set(null);
     this.loadCashierShift();
-    if (!this.cashierShift()) this.loadLastClosedShift();
   }
 
   protected openCashierShift(): void {
+    if (!this.terminal()) return;
     const amount = Number(this.shiftOpeningCash());
     if (!Number.isFinite(amount) || amount < 0 || amount > 9_999_999_999.99 || Math.round(amount * 100) !== amount * 100) {
       this.shiftError.set('Ingresá un fondo inicial válido (puede ser $0).');
@@ -649,7 +675,14 @@ export class PosPage implements OnInit {
     this.shiftBusy.set(true);
     this.shiftError.set(null);
     this.cashierShiftClient.open(amount).subscribe({
-      next: (shift) => { this.cashierShift.set(shift); this.shiftBusy.set(false); this.shiftDialog.set(false); },
+      next: (shift) => {
+        this.cashierShift.set(shift);
+        this.shiftLoadState.set('ready');
+        this.shiftBusy.set(false);
+        this.shiftDialog.set(false);
+        this.loadPriceLists();
+        this.refreshStock();
+      },
       error: (error: HttpErrorResponse) => {
         this.shiftBusy.set(false);
         this.shiftError.set(error.status === 409 ? 'Ya hay un turno abierto para tu usuario y esta sucursal.' : 'No se pudo abrir el turno. Revisá la conexión e intentá de nuevo.');
@@ -670,10 +703,15 @@ export class PosPage implements OnInit {
         this.cashierShift.set(null);
         this.lastClosedShift.set(closedShift);
         this.shiftBusy.set(false);
+        this.shiftDialog.set(false);
+        void this.router.navigateByUrl('/');
       },
       error: (error: HttpErrorResponse) => {
         this.shiftBusy.set(false);
-        this.shiftError.set(error.status === 409 ? 'No hay un turno abierto para cerrar.' : 'No se pudo cerrar el turno. Intentá de nuevo.');
+        this.shiftError.set(error.error?.error?.code === 'CASHIER_SHIFT_HAS_DRAFT'
+          ? 'Hay un ticket guardado pendiente. Confirmalo o cancelalo antes de cerrar el turno.'
+          : error.status === 409 ? 'El turno cambió. Actualizá su estado e intentá de nuevo.'
+            : 'No se pudo cerrar el turno. Intentá de nuevo.');
       },
     });
   }
@@ -701,7 +739,7 @@ export class PosPage implements OnInit {
   }
 
   protected confirmSale(): void {
-    if (!this.draftId() || !this.cashierShift() || this.checkoutBusy()) return;
+    if (!this.draftId() || !this.canOperate() || this.checkoutBusy()) return;
     const problem = this.paymentProblem();
     if (problem) {
       this.checkoutError.set(problem);
@@ -756,10 +794,23 @@ export class PosPage implements OnInit {
     return 'El ticket cambió o ya se procesó. Revisá el estado de la venta e intentá de nuevo.';
   }
 
-  private loadCashierShift(): void {
+  protected loadCashierShift(): void {
+    this.shiftLoadState.set('loading');
     this.cashierShiftClient.current().subscribe({
-      next: (shift) => this.cashierShift.set(shift),
-      error: () => this.shiftError.set('No se pudo consultar tu turno de caja.'),
+      next: (shift) => {
+        this.cashierShift.set(shift);
+        this.shiftLoadState.set('ready');
+        if (shift && this.priceListLoadState() === 'loading' && this.realPriceLists().length === 0) {
+          this.loadPriceLists();
+          this.refreshStock();
+        }
+        if (!shift) this.loadLastClosedShift();
+      },
+      error: (error: HttpErrorResponse) => {
+        if (error.status === 401) { void this.router.navigateByUrl('/'); return; }
+        this.shiftLoadState.set('error');
+        this.shiftError.set('No se pudo consultar tu turno de caja.');
+      },
     });
   }
 
@@ -839,6 +890,7 @@ export class PosPage implements OnInit {
   }
 
   private persistCurrentDraft(): void {
+    if (!this.canOperate()) return;
     if (!this.selectedPriceListId() || this.isDemoPriceList()) {
       this.draftStatus.set('demo');
       return;
@@ -848,6 +900,7 @@ export class PosPage implements OnInit {
   }
 
   private queueDraftOperation(operation: 'cancel' | { readonly priceListId: string; readonly lines: readonly SaleLine[] }): void {
+    if (!this.canOperate()) return;
     this.draftStatus.set('saving');
     this.draftOperations.next({ revision: ++this.draftRevision, operation });
   }

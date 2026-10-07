@@ -133,9 +133,39 @@ public sealed class CashierShiftEndpointTests
             Assert.Equal(HttpStatusCode.OK, (await second.GetAsync("/api/sales/draft")).StatusCode);
             await using (var stockDb = new PlatformAccessDbContext(options))
                 Assert.Equal(3m, (await stockDb.BranchInventoryBalances.SingleAsync()).Reserved);
-            Assert.Equal(HttpStatusCode.NoContent, (await second.DeleteAsync("/api/sales/draft")).StatusCode);
+
+            var firstResaved = await first.PutAsJsonAsync("/api/sales/draft", new
+            { priceListId, lines = new[] { new { productId, quantity = 2m } } });
+            Assert.Equal(HttpStatusCode.OK, firstResaved.StatusCode);
+            using var firstResavedBody = JsonDocument.Parse(await firstResaved.Content.ReadAsStringAsync());
+            var firstDraftId = firstResavedBody.RootElement.GetProperty("id").GetGuid();
+            using var secondDraftBody = JsonDocument.Parse(await second.GetStringAsync("/api/sales/draft"));
+            var secondDraftId = secondDraftBody.RootElement.GetProperty("id").GetGuid();
+            Assert.Equal(HttpStatusCode.Created,
+                (await first.PostAsJsonAsync($"/api/sales/drafts/{firstDraftId}/confirmation", new
+                { payments = new[] { new { method = "cash", amount = 2000m } } })).StatusCode);
+            Assert.Equal(HttpStatusCode.Created,
+                (await second.PostAsJsonAsync($"/api/sales/drafts/{secondDraftId}/confirmation", new
+                { payments = new[] { new { method = "cash", amount = 3000m } } })).StatusCode);
+            Assert.Equal(HttpStatusCode.OK,
+                (await first.PostAsJsonAsync($"/api/sales/drafts/{firstDraftId}/confirmation", new
+                { payments = new[] { new { method = "cash", amount = 2000m } } })).StatusCode);
+            Assert.Equal(HttpStatusCode.Conflict,
+                (await sameCashierOtherTerminal.PostAsJsonAsync($"/api/sales/drafts/{firstDraftId}/confirmation", new
+                { payments = new[] { new { method = "cash", amount = 2000m } } })).StatusCode);
             await using (var stockDb = new PlatformAccessDbContext(options))
-                Assert.Equal(0m, (await stockDb.BranchInventoryBalances.SingleAsync()).Reserved);
+            {
+                var stock = await stockDb.BranchInventoryBalances.SingleAsync();
+                Assert.Equal(5m, stock.OnHand);
+                Assert.Equal(0m, stock.Reserved);
+                var sales = await stockDb.ConfirmedSales.ToArrayAsync();
+                Assert.Equal(2, sales.Length);
+                Assert.All(sales, sale => Assert.NotNull(sale.PosTerminalId));
+                Assert.NotEqual(sales[0].PosTerminalId, sales[1].PosTerminalId);
+                var ledger = await stockDb.CashLedgerMovements.ToArrayAsync();
+                Assert.Equal(4, ledger.Length);
+                Assert.All(ledger, movement => Assert.NotNull(movement.PosTerminalId));
+            }
 
             Assert.Equal(HttpStatusCode.OK,
                 (await second.PostAsync("/api/cashier-shifts/current/close", null)).StatusCode);
@@ -150,6 +180,11 @@ public sealed class CashierShiftEndpointTests
             Assert.Equal(HttpStatusCode.OK, (await second.GetAsync("/api/cashier-shifts/current")).StatusCode);
             Assert.Equal(HttpStatusCode.OK, (await second.GetAsync("/api/cashier-shifts/last-closed")).StatusCode);
 
+            using var firstClosed = JsonDocument.Parse(await first.GetStringAsync("/api/cashier-shifts/last-closed"));
+            using var secondClosed = JsonDocument.Parse(await second.GetStringAsync("/api/cashier-shifts/last-closed"));
+            Assert.Equal(2100m, firstClosed.RootElement.GetProperty("cashBalance").GetDecimal());
+            Assert.Equal(3200m, secondClosed.RootElement.GetProperty("cashBalance").GetDecimal());
+
             await using var verifyDb = new PlatformAccessDbContext(options);
             var shifts = await verifyDb.CashierShifts.OrderBy(shift => shift.OpeningCash).ToArrayAsync();
             Assert.Equal(3, shifts.Length);
@@ -161,6 +196,7 @@ public sealed class CashierShiftEndpointTests
         finally
         {
             await using var cleanup = new PlatformAccessDbContext(options);
+            await cleanup.Database.ExecuteSqlRawAsync("TRUNCATE TABLE pos_sales.sale_drafts CASCADE");
             await cleanup.Database.MigrateAsync("0");
         }
     }

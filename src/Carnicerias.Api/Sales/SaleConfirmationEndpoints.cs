@@ -48,22 +48,26 @@ public static class SaleConfirmationEndpoints
                 IsolationLevel.Serializable, cancellationToken);
 
             var existingSale = await FindSaleAsync(db, context.CompanyId, context.BranchId,
-                context.UserId, draftId, cancellationToken);
+                context.UserId, accessor.TerminalId, draftId, cancellationToken);
             if (existingSale is not null)
                 return ExistingSaleResult(existingSale, requestHash);
 
             var draft = await db.SaleDrafts.Include(item => item.Lines).SingleOrDefaultAsync(item =>
                 item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
-                item.UserId == context.UserId && item.Id == draftId && item.Status == SaleDraftStatus.Draft,
+                item.UserId == context.UserId && item.PosTerminalId == accessor.TerminalId &&
+                item.Id == draftId && item.Status == SaleDraftStatus.Draft,
                 cancellationToken);
             if (draft is null || draft.Lines.Count == 0)
                 return Error(StatusCodes.Status409Conflict, "SALE_NOT_CONFIRMABLE");
 
             var shift = await db.CashierShifts.SingleOrDefaultAsync(item =>
                 item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
-                item.CashierId == context.UserId && item.Status == CashierShiftStatus.Open,
+                item.CashierId == context.UserId && item.PosTerminalId == accessor.TerminalId &&
+                item.Status == CashierShiftStatus.Open,
                 cancellationToken);
             if (shift is null) return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_REQUIRED");
+            if (accessor.TerminalId is not null && draft.CashierShiftId != shift.Id)
+                return Error(StatusCodes.Status409Conflict, "SALE_NOT_CONFIRMABLE");
 
             var total = draft.Lines.Sum(line => decimal.Round(
                 line.Quantity * line.UnitPrice, 2, MidpointRounding.AwayFromZero));
@@ -79,7 +83,7 @@ public static class SaleConfirmationEndpoints
 
             var now = timeProvider.GetUtcNow();
             var sale = new ConfirmedSale(context.CompanyId, context.BranchId, context.UserId,
-                shift.Id, draft.Id, draft.PriceListId, total, requestHash, now);
+                shift.Id, draft.Id, draft.PriceListId, total, requestHash, now, accessor.TerminalId);
             sale.Lines.AddRange(draft.Lines.Select(line => new ConfirmedSaleLine(
                 context.CompanyId, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
                 line.SaleMode, line.Quantity, line.UnitPrice)));
@@ -114,13 +118,13 @@ public static class SaleConfirmationEndpoints
                 db.CashLedgerMovements.Add(new CashLedgerMovement(
                     context.CompanyId, context.BranchId, shift.Id, context.UserId,
                     Guid.NewGuid(), payment.Method, CashLedgerMovementKind.SalePayment,
-                    amount, now, sale.Id));
+                    amount, now, sale.Id, accessor.TerminalId));
             }
             if (settlement.ChangeAmount > 0)
                 db.CashLedgerMovements.Add(new CashLedgerMovement(
                     context.CompanyId, context.BranchId, shift.Id, context.UserId,
                     Guid.NewGuid(), PaymentMethod.Cash, CashLedgerMovementKind.Change,
-                    -settlement.ChangeAmount, now, sale.Id));
+                    -settlement.ChangeAmount, now, sale.Id, accessor.TerminalId));
 
             draft.Confirm(sale.Id, now);
             await db.SaveChangesAsync(cancellationToken);
@@ -131,7 +135,7 @@ public static class SaleConfirmationEndpoints
         {
             db.ChangeTracker.Clear();
             var existingSale = await FindSaleAsync(db, context.CompanyId, context.BranchId,
-                context.UserId, draftId, cancellationToken);
+                context.UserId, accessor.TerminalId, draftId, cancellationToken);
             return existingSale is null
                 ? Error(StatusCodes.Status409Conflict, "SALE_CONFIRMATION_CONFLICT")
                 : ExistingSaleResult(existingSale, requestHash);
@@ -139,11 +143,12 @@ public static class SaleConfirmationEndpoints
     }
 
     private static async Task<ConfirmedSale?> FindSaleAsync(
-        PlatformAccessDbContext db, Guid companyId, Guid branchId, Guid cashierId,
+        PlatformAccessDbContext db, Guid companyId, Guid branchId, Guid cashierId, Guid? terminalId,
         Guid draftId, CancellationToken cancellationToken) =>
         await db.ConfirmedSales.AsNoTracking().Include(sale => sale.Lines).Include(sale => sale.Payments)
             .SingleOrDefaultAsync(sale => sale.CompanyId == companyId && sale.BranchId == branchId &&
-                sale.CashierId == cashierId && sale.SourceDraftId == draftId,
+                sale.CashierId == cashierId && sale.PosTerminalId == terminalId &&
+                sale.SourceDraftId == draftId,
                 cancellationToken);
 
     private static IResult ExistingSaleResult(ConfirmedSale sale, string requestHash) =>

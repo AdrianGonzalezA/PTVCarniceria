@@ -6,6 +6,7 @@ using Carnicerias.Api.Users;
 using Carnicerias.Api.Catalog;
 using Carnicerias.Api.Sales;
 using Carnicerias.Api.Inventory;
+using Carnicerias.Api.Pos;
 using Carnicerias.Domain.PlatformAccess;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,6 +19,7 @@ builder.Services.AddDbContext<PlatformAccessDbContext>(options => options.UseNpg
 builder.Services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<SessionAuthenticationService>();
+builder.Services.AddScoped<PosTerminalAuthenticationService>();
 builder.Services.AddScoped<OperationalContextAccessService>();
 builder.Services.AddScoped<OperationalContextAccessor>();
 builder.Services.AddScoped<OperationalContextChangeGuard>();
@@ -33,6 +35,7 @@ app.MapSaleDraftEndpoints();
 app.MapSaleConfirmationEndpoints();
 app.MapInventoryEndpoints();
 app.MapCashierShiftEndpoints();
+app.MapPosTerminalEndpoints();
 
 app.Run();
 

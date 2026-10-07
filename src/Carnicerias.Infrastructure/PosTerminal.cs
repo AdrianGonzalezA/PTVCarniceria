@@ -25,4 +25,18 @@ public sealed class PosTerminal
     public string Name { get; private set; }
     public bool IsActive { get; private set; }
     public bool IsHistorical { get; private set; }
+
+    public string? CredentialHash { get; private set; }
+
+    public void AssignCredentialHash(string hash)
+    {
+        if (IsHistorical)
+            throw new InvalidOperationException("Historical terminals cannot be activated.");
+        if (hash.Length != 64 || !hash.All(char.IsAsciiHexDigit))
+            throw new ArgumentException("A SHA-256 credential hash is required.", nameof(hash));
+
+        CredentialHash = hash.ToLowerInvariant();
+    }
+
+    public void Deactivate() => IsActive = false;
 }

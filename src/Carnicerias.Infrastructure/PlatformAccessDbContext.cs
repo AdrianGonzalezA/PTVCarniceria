@@ -117,12 +117,15 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasKey(terminal => terminal.Id);
             entity.HasAlternateKey(terminal => new { terminal.CompanyId, terminal.BranchId, terminal.Id });
             entity.Property(terminal => terminal.Name).HasMaxLength(120).IsRequired();
+            entity.Property(terminal => terminal.CredentialHash).HasMaxLength(64);
             entity.HasOne<Branch>().WithMany()
                 .HasForeignKey(terminal => new { terminal.CompanyId, terminal.BranchId })
                 .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(terminal => new { terminal.CompanyId, terminal.BranchId, terminal.Name })
                 .IsUnique();
+            entity.HasIndex(terminal => terminal.CredentialHash)
+                .IsUnique().HasFilter("\"CredentialHash\" IS NOT NULL");
         });
 
         modelBuilder.Entity<UserAssignment>(entity =>

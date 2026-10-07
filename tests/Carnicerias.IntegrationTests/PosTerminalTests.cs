@@ -127,4 +127,28 @@ public sealed class PosTerminalTests
         Assert.Equal(terminalId, session.PosTerminalId);
         Assert.Throws<InvalidOperationException>(() => session.BindToTerminal(Guid.NewGuid()));
     }
+
+    [Fact]
+    public void TerminalStoresOnlyAHashOfItsIssuedCredential()
+    {
+        var terminal = new PosTerminal(Guid.NewGuid(), Guid.NewGuid(), "Caja 1");
+        var issued = PosTerminalCredential.Issue();
+
+        terminal.AssignCredentialHash(issued.Hash);
+
+        Assert.Equal(64, terminal.CredentialHash?.Length);
+        Assert.NotEqual(issued.Token, terminal.CredentialHash);
+        Assert.Equal(issued.Hash, PosTerminalCredential.ComputeHash(issued.Token));
+        Assert.NotEqual(issued.Hash, PosTerminalCredential.Issue().Hash);
+        Assert.DoesNotContain(issued.Token, issued.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HistoricalTerminalCannotReceiveAWorkingCredential()
+    {
+        var terminal = new PosTerminal(Guid.NewGuid(), Guid.NewGuid(), "Caja histórica", true);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            terminal.AssignCredentialHash(PosTerminalCredential.Issue().Hash));
+    }
 }

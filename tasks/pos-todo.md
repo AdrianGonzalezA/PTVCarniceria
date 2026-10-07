@@ -53,3 +53,152 @@ Alcance aprobado por el usuario el 6 de octubre de 2026; contrato en `SPEC-pos-c
 - [x] Confirmar borrador real en una transacción: venta, pagos, caja y egreso de stock con idempotencia.
 - [x] Conectar apertura, pagos y resumen al POS sin habilitar ventas demo reales.
 - [ ] Completar el recorrido integrado desde Electron: observar directamente la confirmación y el resumen final del cobro. Apertura, ticket recuperado y cierre de turno ya fueron comprobados; evidencia y límites en `tasks/pos-checkout-plan.md`.
+
+## Cajas simultáneas y relevo (desglose pendiente de aprobación)
+
+Contrato aprobado en `SPEC-pos-checkout.md` y plan técnico aprobado en `tasks/pos-checkout-plan.md`. Prioridad POS; no reactivar por este corte la administración general de usuarios. Cada tarea se cierra con pruebas y evidencia; los checkpoints no requieren detener el trabajo si las reglas aprobadas se mantienen.
+
+### Tarea C1: Registrar cajas de una sucursal
+
+**Descripción:** crear una identidad persistente de caja vinculada a empresa y sucursal, distinguible de la identidad del cajero.
+
+**Aceptación:**
+- [ ] La caja tiene ID estable, nombre, sucursal y estado; no puede vincularse a otra empresa/sucursal por un ID del cliente.
+- [ ] El modelo rechaza referencias inválidas y permite más de una caja activa en la misma sucursal.
+
+**Verificación:** pruebas de modelo y `dotnet build Carnicerias.sln --configuration Release`.
+**Dependencias:** ninguna. **Archivos probables:** nueva entidad de caja, `PlatformAccessDbContext.cs`, pruebas de dominio/integración. **Tamaño:** mediano.
+
+### Tarea C2: Extender las referencias de caja y turno
+
+**Descripción:** preparar turno, borrador, venta, sesión y libro de caja para conservar explícitamente su caja; el borrador nuevo queda ligado además al turno que lo creó.
+
+**Aceptación:**
+- [ ] El modelo expresa pertenencia a caja sin cambiar importes, renglones ni reglas de stock.
+- [ ] Una venta o movimiento no puede atribuirse a una caja distinta de su turno; las transiciones de borrador preservan turno/cajero.
+
+**Verificación:** pruebas de modelo y compilación .NET. **Dependencias:** C1. **Archivos probables:** `CashierShift.cs`, `SaleDraft.cs`, `ConfirmedSale.cs`, `UserSession.cs`, `PlatformAccessDbContext.cs` (el libro de caja se ajusta con la persistencia). **Tamaño:** mediano.
+
+### Tarea C3: Migrar sin perder datos ni reservas
+
+**Descripción:** crear las tablas, claves e índices de caja; atribuir datos anteriores a cajas históricas por sucursal y detectar borradores activos ambiguos antes de aplicar restricciones obligatorias.
+
+**Aceptación:**
+- [ ] Conteos, importes de ventas/caja y reservas anteriores coinciden antes y después de migrar; ninguna venta antigua se atribuye a Caja 1 o Caja 2 nuevas.
+- [ ] Un borrador activo sin turno atribuible detiene la migración con diagnóstico; no se cancela ni libera stock silenciosamente.
+- [ ] Restricciones únicas parciales impiden turnos abiertos duplicados por caja y por cajero/sucursal.
+
+**Verificación:** prueba de migración sobre copia desechable de PostgreSQL y `dotnet test Carnicerias.sln --configuration Release`. **Dependencias:** C1, C2. **Archivos probables:** migración EF y archivos generados, prueba de migración. **Tamaño:** mediano.
+
+### Checkpoint A: Persistencia
+
+- [ ] Migración y rollback ensayados en base de prueba, sin pérdida ni cambio de saldos/reservas.
+- [ ] Solución .NET compila y sus pruebas pasan.
+
+### Tarea C4: Validar la credencial de terminal en la API
+
+**Descripción:** provisionar una credencial por caja fuera del repositorio y resolver la caja desde ella, sin aceptar un ID del body como prueba de identidad.
+
+**Aceptación:**
+- [ ] Credencial inválida, revocada o de otra sucursal no habilita operaciones POS; la comparación no expone secretos en respuestas/logs.
+- [ ] La API entrega al cliente solo identidad/nombre/estado de caja, nunca la credencial.
+
+**Verificación:** pruebas negativas de API con PostgreSQL. **Dependencias:** C3. **Archivos probables:** servicio/endpoint de caja, registro de servicios, pruebas de integración. **Tamaño:** mediano.
+
+### Tarea C5: Aislar perfiles Electron
+
+**Descripción:** iniciar cada caja con perfil local persistente propio y adjuntar su credencial desde el proceso principal al proxy API, fuera del renderer.
+
+**Aceptación:**
+- [ ] Dos Electron no comparten cookies ni almacenamiento y recuperan la misma caja al reiniciar por separado.
+- [ ] Angular no recibe la credencial; el protocolo sigue bloqueando navegación y peticiones no permitidas.
+
+**Verificación:** `npm run electron:test --prefix src/Carnicerias.Pos` y prueba con dos procesos Electron. **Dependencias:** C4. **Archivos probables:** `main.ts`, `app-protocol.ts`, pruebas Electron, documentación de arranque. **Tamaño:** mediano.
+
+### Tarea C6: Ligar la sesión a su caja
+
+**Descripción:** autenticar el usuario dentro de la caja validada y exigir esa misma caja durante toda la sesión POS; conservar el acceso administrativo web fuera del POS.
+
+**Aceptación:**
+- [ ] Una cookie obtenida en Caja 1 no autoriza una llamada POS desde Caja 2, aun con empresa/sucursal iguales.
+- [ ] Selección de contexto comprueba que la sucursal corresponde a la caja; sesiones de otras cajas no se revocan por error.
+
+**Verificación:** pruebas de `SessionEndpointTests`/`UserSessionTests` y Electron. **Dependencias:** C4, C5. **Archivos probables:** `SessionAuthenticationService.cs`, `SessionEndpoints.cs`, autorización operativa, pruebas de sesión. **Tamaño:** mediano.
+
+### Checkpoint B: Identidad
+
+- [ ] Dos perfiles y dos sesiones independientes sobreviven a reinicios.
+- [ ] Pruebas negativas de suplantación de caja y sucursal pasan; Electron y .NET compilan.
+
+### Tarea C7: Abrir y consultar turno por caja
+
+**Descripción:** aplicar exclusividad concurrente por caja y por cajero/sucursal; mostrar solo el turno y último cierre que corresponden a la caja autenticada.
+
+**Aceptación:**
+- [ ] Dos cajeros abren turnos simultáneos en cajas distintas de la misma sucursal.
+- [ ] Segundo turno en una misma caja o mismo cajero en otra caja recibe conflicto, incluso con solicitudes concurrentes.
+
+**Verificación:** `CashierShiftEndpointTests` sobre PostgreSQL. **Dependencias:** C3, C6. **Archivos probables:** `CashierShiftEndpoints.cs`, `CashierShift.cs`, pruebas de turno. **Tamaño:** mediano.
+
+### Tarea C8: Aislar y bloquear los borradores
+
+**Descripción:** guardar, recuperar y cancelar el ticket solo dentro de caja/cajero/turno abiertos; mantener la reserva de stock agregada por sucursal.
+
+**Aceptación:**
+- [ ] Sin turno, guardado/cancelación y cualquier modificación de ticket devuelven código específico; otra caja no lee ni cambia el borrador.
+- [ ] El borrador creado en un turno no reaparece para otro cajero/turno y sus reservas se contabilizan correctamente.
+
+**Verificación:** `SaleDraftPersistenceTests` y pruebas de endpoint sobre PostgreSQL. **Dependencias:** C7. **Archivos probables:** `SaleDraftEndpoints.cs`, `SaleDraft.cs`, pruebas de borrador. **Tamaño:** mediano.
+
+### Tarea C9: Confirmar la venta en la caja correcta
+
+**Descripción:** reforzar la transacción de confirmación para que borrador, turno, venta y movimientos coincidan en caja/cajero/sucursal sin romper idempotencia.
+
+**Aceptación:**
+- [ ] Reintento idéntico devuelve la misma venta; intento cruzado o con turno ajeno falla sin alterar pagos, caja ni stock.
+- [ ] Dos cajas descuentan el stock compartido exactamente una vez por venta y sus saldos permanecen separados.
+
+**Verificación:** pruebas de integración de confirmación, concurrencia e idempotencia en PostgreSQL. **Dependencias:** C7, C8. **Archivos probables:** `SaleConfirmationEndpoints.cs`, modelos de venta/libro de caja, pruebas de confirmación. **Tamaño:** mediano.
+
+### Checkpoint C: Operación del servidor
+
+- [ ] Guardar, cobrar y cancelar sin turno o desde otra caja está rechazado por API.
+- [ ] Ventas, pagos, saldos y reservas se mantienen consistentes con dos cajas concurrentes.
+- [ ] Suite y compilación .NET pasan.
+
+### Tarea C10: Cerrar turno y revocar la sesión
+
+**Descripción:** impedir el cierre con borrador pendiente; al cerrar, persistir el resumen e invalidar solo la sesión de esa caja.
+
+**Aceptación:**
+- [ ] Cierre con borrador activo exige confirmarlo o cancelarlo; no cambia turno ni reservas.
+- [ ] Cierre exitoso conserva el resumen, borra la cookie y rechaza nuevas acciones POS de esa sesión; otra caja sigue operativa.
+
+**Verificación:** pruebas API de cierre, revocación y carreras con guardado/confirmación. **Dependencias:** C8, C9. **Archivos probables:** `CashierShiftEndpoints.cs`, servicio de sesiones, pruebas de turno/sesión. **Tamaño:** mediano.
+
+### Tarea C11: Bloquear acciones POS hasta abrir turno
+
+**Descripción:** mostrar caja y estado de turno; impedir desde Angular búsqueda, agregado, edición, guardado y cobro antes de abrir, y dirigir a login después del cierre.
+
+**Aceptación:**
+- [ ] Sin turno no se puede operar el catálogo/ticket ni por controles ni por atajos; se explica que hay que abrir turno.
+- [ ] Tras cerrar se muestra el acceso, no un botón de reapertura con la sesión anterior; con turno abierto continúa el flujo actual.
+
+**Verificación:** `npm test --prefix src/Carnicerias.Web -- --watch=false`, lint/build y revisión visual en Electron. **Dependencias:** C7, C8, C10. **Archivos probables:** `pos-page.ts`, `pos-page.html`, `pos-page.spec.ts`, estilos POS si hacen falta. **Tamaño:** mediano.
+
+### Tarea C12: Probar dos cajas y el relevo completo
+
+**Descripción:** crear segundo cajero y dos cajas de prueba con credenciales fuera de Git; iniciar dos Electron separados y recorrer ventas y relevo con datos persistidos.
+
+**Aceptación:**
+- [ ] Dos cajeros venden simultáneamente en la misma sucursal; PostgreSQL evidencia saldos/turnos separados y stock compartido.
+- [ ] Cerrar Caja 1 no interrumpe el turno de Caja 2. Para probar el relevo con solo dos cajeros, primero se cierra también Caja 2; entonces su cajero inicia sesión en Caja 1 y abre allí un turno nuevo.
+- [ ] Reiniciar cada Electron conserva su caja pero no restaura una sesión revocada; se observa confirmación y resumen final del cobro en Electron.
+
+**Verificación:** suites .NET/Angular/Electron, recorrido visual y funcional en dos Electron, comprobación read-only de ventas/caja/stock en PostgreSQL. **Dependencias:** C5–C11. **Archivos probables:** script/documentación local de provisionamiento, pruebas de integración/Electron, `tasks/pos-checkout-plan.md`. **Tamaño:** mediano.
+
+### Checkpoint final: Dos cajas operativas
+
+- [ ] Todos los criterios C1–C12 y el E2E histórico pendiente están verificados.
+- [ ] Ningún secreto de cajero o terminal aparece en archivos versionados, respuestas o logs.
+- [ ] Compilaciones, lint y pruebas .NET/Angular/Electron pasan; documentación refleja el comportamiento efectivamente implementado.

@@ -73,9 +73,9 @@ Permitir que el cajero abra su turno, registre pagos combinados y confirme un bo
 
 - ¿El arqueo físico y la diferencia deben ser obligatorios para cerrar el turno? No bloquea el registro inicial de ventas; queda fuera de este corte.
 
-## Cambio propuesto para cajas simultáneas y relevo de cajero (pendiente de aprobación)
+## Cambio aprobado para cajas simultáneas y relevo de cajero (pendiente de implementación)
 
-**Origen:** definición del usuario del 7 de octubre de 2026. Puede haber varias cajas en una sucursal. El cierre y la nueva apertura representan un relevo de responsabilidad entre personas. Esta sección reemplazará las reglas anteriores que limitan el turno solo por cajero/sucursal una vez aprobada e implementada; hasta entonces describe el comportamiento objetivo, no el estado actual.
+**Origen y estado:** definición aprobada por el usuario el 7 de octubre de 2026. Puede haber varias cajas en una sucursal. El cierre y la nueva apertura representan un relevo de responsabilidad entre personas. Esta sección reemplazará las reglas anteriores que limitan el turno solo por cajero/sucursal cuando se implemente; hasta entonces describe el comportamiento objetivo, no el estado actual.
 
 ### Objetivo y límites
 
@@ -109,6 +109,6 @@ Permitir que el cajero abra su turno, registre pagos combinados y confirme un bo
 - Contenedor Electron: `npm run electron:test --prefix src/Carnicerias.Pos` y `npm run electron:start --prefix src/Carnicerias.Pos` para cada perfil de caja. La verificación visual y funcional se hace en Electron.
 - Código esperado: identidad y sesiones en `platform-access`, perfiles de Electron en `devices-printing`, borradores en `pos-sales`, turnos/caja en `payments-cash`. No se cambian credenciales de usuarios existentes ni datos de venta fuera de la migración necesaria.
 
-### Decisión a validar
+### Decisión aprobada
 
-Se propone que el cierre del turno invalide automáticamente la sesión de esa caja y lleve al acceso, incluso si el usuario también tiene permisos administrativos. Esto garantiza que la siguiente apertura identifique realmente a la persona entrante; la administración podrá usarse tras iniciar su propia sesión.
+El cierre del turno invalida automáticamente la sesión de esa caja y lleva al acceso, incluso si el usuario también tiene permisos administrativos. Esto garantiza que la siguiente apertura identifique realmente a la persona entrante; la administración podrá usarse tras iniciar su propia sesión.

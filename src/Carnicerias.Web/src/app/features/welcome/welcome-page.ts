@@ -51,7 +51,7 @@ export class WelcomePage implements OnInit {
       next: (session) => {
         this.currentSession.set(session);
         this.sessionChecked.set(true);
-        if (session.context) void this.router.navigateByUrl('/pos');
+        if (session.context) void this.router.navigateByUrl(this.homeFor(session));
         else this.loadOperationalContexts();
       },
       error: (error: HttpErrorResponse) => {
@@ -84,7 +84,7 @@ export class WelcomePage implements OnInit {
           this.currentSession.set(session);
           this.isChangingContext.set(false);
           this.isSubmitting.set(false);
-          void this.router.navigateByUrl('/pos');
+          void this.router.navigateByUrl(this.homeFor(session));
         },
         error: (error: HttpErrorResponse) => {
           this.contextError.set(
@@ -171,6 +171,10 @@ export class WelcomePage implements OnInit {
         this.isLoadingContexts.set(false);
       },
     });
+  }
+
+  private homeFor(session: CurrentSession): string {
+    return session.context?.permissions.includes('platform.users.manage') ? '/admin' : '/pos';
   }
 
   private contextChangeBlockedMessage(error: HttpErrorResponse): string {

@@ -19,7 +19,7 @@
         <nav class="account-menu" aria-label="Menú de usuario">
           <a routerLink="/">Cambiar sucursal</a>
           @if (session()?.context?.permissions?.includes('platform.users.manage')) {
-            <a routerLink="/users">Administración</a>
+            <a routerLink="/admin">Administración</a>
           }
           <button type="button" (click)="signOut()">Cerrar sesión</button>
         </nav>

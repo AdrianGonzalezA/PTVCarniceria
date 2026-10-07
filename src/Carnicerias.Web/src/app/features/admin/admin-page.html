@@ -1,0 +1,49 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" routerLink="/" aria-label="Volver al inicio">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Administración</small></span>
+    </a>
+    @if (session(); as current) {
+      <div class="account-bar">
+        <span>{{ current.username }}</span>
+        <button type="button" [disabled]="signingOut()" (click)="signOut()">Cerrar sesión</button>
+      </div>
+    }
+  </header>
+
+  <div class="workspace">
+    <p class="eyebrow">Plataforma de gestión</p>
+    <h1>Administración</h1>
+    <p class="intro">Mantené los datos que utiliza el punto de venta.</p>
+
+    @if (loadError(); as error) {
+      <p class="error-message" role="alert">{{ error }}</p>
+    } @else if (!session()) {
+      <p class="loading-message" role="status">Cargando contexto administrativo…</p>
+    } @else if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Contexto de trabajo">
+        <div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Sucursal</span><strong>{{ context.branchName }}</strong></div>
+        <a routerLink="/">Cambiar contexto</a>
+      </section>
+
+      <section class="module-panel" aria-labelledby="modules-title">
+        <header>
+          <h2 id="modules-title">Áreas de trabajo</h2>
+          <p>Elegí qué datos querés consultar o mantener.</p>
+        </header>
+        <div class="module-list">
+          <a class="module-link" routerLink="/users">
+            <span><strong>Usuarios</strong><small>Consultar cuentas, modificar datos y controlar el acceso.</small></span>
+            <span aria-hidden="true">→</span>
+          </a>
+          <a class="module-link" routerLink="/pos">
+            <span><strong>Punto de venta</strong><small>Volver a la operación de la caja y los tickets.</small></span>
+            <span aria-hidden="true">→</span>
+          </a>
+        </div>
+      </section>
+    }
+  </div>
+</main>

@@ -47,7 +47,7 @@
               <p class="context-branch">{{ session.context.branchName }}</p>
               <a class="pos-link" routerLink="/pos">Abrir punto de venta</a>
               @if (session.context.permissions.includes('platform.users.manage')) {
-                <a class="admin-link" routerLink="/users">Administrar usuarios</a>
+                <a class="admin-link" routerLink="/admin">Abrir administración</a>
               }
               <button type="button" class="secondary-button" [disabled]="isSubmitting()" (click)="startContextChange()">
                 Cambiar empresa o sucursal

@@ -1,13 +1,14 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter, Router } from '@angular/router';
 import { WelcomePage } from './welcome-page';
 
 describe('WelcomePage', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [WelcomePage],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
     });
   });
 
@@ -47,6 +48,31 @@ describe('WelcomePage', () => {
     expect(page.querySelector('[role="status"]')?.textContent).toContain(
       'Sistema temporalmente no disponible',
     );
+  });
+
+  it('takes an administrator with a confirmed context to the admin area', () => {
+    const navigation = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    const fixture = TestBed.createComponent(WelcomePage);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/health').flush({ status: 'healthy' });
+    http.expectOne('/api/sessions/current').flush({
+      userId: 'admin-id',
+      username: 'visual-admin',
+      expiresAtUtc: '2026-10-08T00:00:00Z',
+      context: {
+        userId: 'admin-id',
+        companyId: 'company-id',
+        companyName: 'Empresa Visual',
+        branchId: 'branch-id',
+        branchName: 'Sucursal Visual',
+        permissions: ['platform.users.manage'],
+        sessionId: 'session-id',
+      },
+    });
+
+    expect(navigation).toHaveBeenCalledWith('/admin');
   });
 
   it('shows a generic message after a rejected sign-in', () => {

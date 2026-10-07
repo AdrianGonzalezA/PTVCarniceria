@@ -11,12 +11,18 @@ public sealed class SaleDraft
 {
     private SaleDraft() { }
 
-    public SaleDraft(Guid companyId, Guid branchId, Guid userId, Guid priceListId, DateTimeOffset createdAtUtc)
+    public SaleDraft(Guid companyId, Guid branchId, Guid userId, Guid priceListId,
+        DateTimeOffset createdAtUtc, Guid? posTerminalId = null, Guid? cashierShiftId = null)
     {
+        if (posTerminalId == Guid.Empty || cashierShiftId == Guid.Empty ||
+            (posTerminalId is null) != (cashierShiftId is null))
+            throw new ArgumentException("Terminal and shift ids must be provided together.");
         Id = Guid.NewGuid();
         CompanyId = companyId;
         BranchId = branchId;
         UserId = userId;
+        PosTerminalId = posTerminalId;
+        CashierShiftId = cashierShiftId;
         PriceListId = priceListId;
         CreatedAtUtc = createdAtUtc.ToUniversalTime();
         UpdatedAtUtc = CreatedAtUtc;
@@ -26,6 +32,8 @@ public sealed class SaleDraft
     public Guid CompanyId { get; private set; }
     public Guid BranchId { get; private set; }
     public Guid UserId { get; private set; }
+    public Guid? PosTerminalId { get; private set; }
+    public Guid? CashierShiftId { get; private set; }
     public Guid PriceListId { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; }
     public DateTimeOffset UpdatedAtUtc { get; private set; }

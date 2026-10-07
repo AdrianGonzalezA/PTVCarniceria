@@ -161,6 +161,9 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .HasForeignKey(session => new { session.CompanyId, session.BranchId })
                 .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<PosTerminal>().WithMany()
+                .HasForeignKey(session => session.PosTerminalId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<PriceList>(entity =>
@@ -287,6 +290,14 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<UserIdentity>().WithMany().HasForeignKey(draft => draft.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<PosTerminal>().WithMany()
+                .HasForeignKey(draft => new { draft.CompanyId, draft.BranchId, draft.PosTerminalId })
+                .HasPrincipalKey(terminal => new { terminal.CompanyId, terminal.BranchId, terminal.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CashierShift>().WithMany()
+                .HasForeignKey(draft => new { draft.CompanyId, draft.CashierShiftId })
+                .HasPrincipalKey(shift => new { shift.CompanyId, shift.Id })
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<UserIdentity>().WithMany().HasForeignKey(draft => draft.CancelledByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasMany(draft => draft.Lines).WithOne()
@@ -331,6 +342,10 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<UserIdentity>().WithMany().HasForeignKey(sale => sale.CashierId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<PosTerminal>().WithMany()
+                .HasForeignKey(sale => new { sale.CompanyId, sale.BranchId, sale.PosTerminalId })
+                .HasPrincipalKey(terminal => new { terminal.CompanyId, terminal.BranchId, terminal.Id })
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<CashierShift>().WithMany()
                 .HasForeignKey(sale => new { sale.CompanyId, sale.CashierShiftId })
@@ -399,6 +414,10 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasOne<CashierShift>().WithMany()
                 .HasForeignKey(movement => new { movement.CompanyId, movement.CashierShiftId })
                 .HasPrincipalKey(shift => new { shift.CompanyId, shift.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<PosTerminal>().WithMany()
+                .HasForeignKey(movement => new { movement.CompanyId, movement.BranchId, movement.PosTerminalId })
+                .HasPrincipalKey(terminal => new { terminal.CompanyId, terminal.BranchId, terminal.Id })
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<Branch>().WithMany()
                 .HasForeignKey(movement => new { movement.CompanyId, movement.BranchId })
@@ -474,6 +493,10 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<UserIdentity>().WithMany().HasForeignKey(shift => shift.CashierId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<PosTerminal>().WithMany()
+                .HasForeignKey(shift => new { shift.CompanyId, shift.BranchId, shift.PosTerminalId })
+                .HasPrincipalKey(terminal => new { terminal.CompanyId, terminal.BranchId, terminal.Id })
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(shift => new { shift.CompanyId, shift.BranchId, shift.CashierId })
                 .IsUnique().HasFilter("\"Status\" = 0");

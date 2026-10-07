@@ -8,13 +8,16 @@ public sealed class ConfirmedSale
 
     public ConfirmedSale(Guid companyId, Guid branchId, Guid cashierId, Guid cashierShiftId,
         Guid sourceDraftId, Guid priceListId, decimal total, string paymentRequestHash,
-        DateTimeOffset confirmedAtUtc)
+        DateTimeOffset confirmedAtUtc, Guid? posTerminalId = null)
     {
+        if (posTerminalId == Guid.Empty)
+            throw new ArgumentException("Terminal id cannot be empty.", nameof(posTerminalId));
         Id = Guid.NewGuid();
         CompanyId = companyId;
         BranchId = branchId;
         CashierId = cashierId;
         CashierShiftId = cashierShiftId;
+        PosTerminalId = posTerminalId;
         SourceDraftId = sourceDraftId;
         PriceListId = priceListId;
         Total = total;
@@ -27,6 +30,7 @@ public sealed class ConfirmedSale
     public Guid BranchId { get; private set; }
     public Guid CashierId { get; private set; }
     public Guid CashierShiftId { get; private set; }
+    public Guid? PosTerminalId { get; private set; }
     public Guid SourceDraftId { get; private set; }
     public Guid PriceListId { get; private set; }
     public decimal Total { get; private set; }
@@ -98,12 +102,16 @@ public sealed class CashLedgerMovement
 
     public CashLedgerMovement(Guid companyId, Guid branchId, Guid shiftId, Guid cashierId,
         Guid operationId, PaymentMethod method, CashLedgerMovementKind kind,
-        decimal amountDelta, DateTimeOffset createdAtUtc, Guid? saleId = null)
+        decimal amountDelta, DateTimeOffset createdAtUtc, Guid? saleId = null,
+        Guid? posTerminalId = null)
     {
+        if (posTerminalId == Guid.Empty)
+            throw new ArgumentException("Terminal id cannot be empty.", nameof(posTerminalId));
         Id = Guid.NewGuid();
         CompanyId = companyId;
         BranchId = branchId;
         CashierShiftId = shiftId;
+        PosTerminalId = posTerminalId;
         CashierId = cashierId;
         OperationId = operationId;
         Method = method;
@@ -117,6 +125,7 @@ public sealed class CashLedgerMovement
     public Guid CompanyId { get; private set; }
     public Guid BranchId { get; private set; }
     public Guid CashierShiftId { get; private set; }
+    public Guid? PosTerminalId { get; private set; }
     public Guid CashierId { get; private set; }
     public Guid? SaleId { get; private set; }
     public Guid OperationId { get; private set; }

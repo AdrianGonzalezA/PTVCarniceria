@@ -46,6 +46,18 @@ public sealed class UserSession
 
     public Guid? BranchId { get; private set; }
 
+    public Guid? PosTerminalId { get; private set; }
+
+    public void BindToTerminal(Guid terminalId)
+    {
+        if (terminalId == Guid.Empty)
+            throw new ArgumentException("Terminal id is required.", nameof(terminalId));
+        if (PosTerminalId is not null && PosTerminalId != terminalId)
+            throw new InvalidOperationException("A session cannot move to another terminal.");
+
+        PosTerminalId = terminalId;
+    }
+
     public void SelectOperationalContext(Guid companyId, Guid branchId)
     {
         if (companyId == Guid.Empty || branchId == Guid.Empty)

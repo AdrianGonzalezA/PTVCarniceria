@@ -446,9 +446,9 @@ export class PosPage implements OnInit {
       return;
     }
 
+    this.errorMessage.set(null);
     this.addProductLine(product, quantity);
     this.selectedProduct.set(null);
-    this.errorMessage.set(null);
   }
 
   protected updateLineQuantity(productId: string, event: Event): void {
@@ -550,19 +550,25 @@ export class PosPage implements OnInit {
   }
 
   protected continueToCheckout(): void {
-    this.errorMessage.set(null);
     if (this.isDemoPriceList()) {
+      this.errorMessage.set(null);
       this.checkoutNotice.set(true);
       return;
     }
     if (this.lines().length === 0) {
+      this.errorMessage.set(null);
       this.queueDraftOperation('cancel');
+      return;
+    }
+    if (this.draftStatus() === 'error') {
+      this.errorMessage.set(this.errorMessage() ?? 'No se pudo guardar el ticket. Revisá el detalle y reintentá el guardado.');
       return;
     }
     if (this.draftStatus() !== 'saved' || !this.draftId()) {
       this.errorMessage.set('Esperá a que el ticket termine de guardarse antes de cobrar.');
       return;
     }
+    this.errorMessage.set(null);
     if (!this.cashierShift()) {
       this.shiftDialog.set(true);
       this.shiftError.set('Abrí tu turno de caja para poder cobrar esta venta.');
@@ -588,7 +594,7 @@ export class PosPage implements OnInit {
 
   private draftSaveErrorMessage(error: HttpErrorResponse): string {
     const code = error.error?.error?.code;
-    if (code === 'INSUFFICIENT_STOCK') return 'No hay stock suficiente para reservar este producto. El detalle sigue en pantalla.';
+    if (code === 'INSUFFICIENT_STOCK') return 'No hay stock suficiente para reservar uno de los productos. Reducí la cantidad o ajustá las existencias; el detalle sigue en pantalla.';
     if (code === 'STOCK_RESERVATION_MISSING') return 'La reserva de stock cambió. Actualizá el ticket e intentá nuevamente.';
     if (code === 'PRICE_LIST_NOT_AVAILABLE') return 'La lista de precios ya no está habilitada para esta sucursal.';
     if (code === 'PRODUCT_PRICE_NOT_AVAILABLE') return 'Hay un producto sin precio vigente en esta lista.';

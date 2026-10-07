@@ -1,7 +1,8 @@
 import '@angular/compiler';
+import { HttpErrorResponse } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
 import { TestBed } from '@angular/core/testing';
-import { delay, of, Subject, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { CatalogClient } from '../../core/catalog/catalog-client';
 import { InventoryClient } from '../../core/inventory/inventory-client';
 import { CashierShiftClient } from '../../core/sales/cashier-shift-client';
@@ -107,6 +108,20 @@ describe('PosPage', () => {
     expect(receipt.textContent).toContain('sale-id');
     expect(receipt.textContent).toContain('2.400,00');
     expect(receipt.textContent).toContain('Efectivo');
+
+    (receipt.querySelector('.finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.sale-receipt')).toBeNull();
+    (fixture.nativeElement.querySelector('.product-card') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(saveAttempts).toBe(2);
+    expect(fixture.nativeElement.querySelector('.price-list-lock').textContent).toContain('Borrador guardado');
+    (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#checkout-title').textContent).toContain('Cobrar venta');
   });
 
   it('offers lists from the active branch without displaying demo prices as real prices', () => {
@@ -219,7 +234,9 @@ describe('PosPage', () => {
         { provide: SaleDraftClient, useValue: {
           current: () => of(null), save: () => {
             saveAttempts++;
-            if (saveAttempts === 1) return throwError(() => new Error('temporary failure')).pipe(delay(0));
+            if (saveAttempts === 1) return throwError(() => new HttpErrorResponse({
+              status: 409, error: { error: { code: 'INSUFFICIENT_STOCK' } },
+            }));
             return of({ id: 'draft-id', priceListId: 'list-id', updatedAtUtc: '2026-10-06T16:00:00Z', lines: [{
               productId: 'product-id', productCode: '1001', productName: 'Bife', unit: 'unidad',
               saleMode: 'unit' as const, quantity: 1, unitPrice: 1000,
@@ -251,6 +268,11 @@ describe('PosPage', () => {
     const retry = fixture.nativeElement.querySelector('.draft-retry') as HTMLButtonElement;
     expect(retry).not.toBeNull();
     expect(fixture.nativeElement.querySelector('.price-list-lock[role="alert"]').textContent).toContain('No se pudo sincronizar');
+    expect(fixture.nativeElement.querySelector('.pos-error').textContent).toContain('No hay stock suficiente');
+    (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#checkout-title')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.pos-error').textContent).toContain('No hay stock suficiente');
     retry.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();

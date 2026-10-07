@@ -19,7 +19,7 @@ namespace Carnicerias.IntegrationTests;
 public sealed class SaleDraftPersistenceTests
 {
     [PostgreSqlFact]
-    public async Task CashierCanSaveEditAndConfirmSaleWithStockAndPayment()
+    public async Task CashierCanConfirmAnotherSaleAfterAnInsufficientStockDraftIsCorrected()
     {
         var connectionString = Environment.GetEnvironmentVariable("CARNICERIAS_TEST_CONNECTION_STRING")!;
         var databaseName = new NpgsqlConnectionStringBuilder(connectionString).Database;
@@ -133,33 +133,61 @@ public sealed class SaleDraftPersistenceTests
                 new { payments = new[] { new { method = "cash", amount = 2000m } } });
             Assert.Equal(HttpStatusCode.Conflict, foreignRetry.StatusCode);
 
+            var insufficientSecondDraft = await client.PutAsJsonAsync("/api/sales/draft", new
+            {
+                priceListId,
+                lines = new[] { new { productId, quantity = 100m } }
+            });
+            Assert.Equal(HttpStatusCode.Conflict, insufficientSecondDraft.StatusCode);
+            using (var errorBody = JsonDocument.Parse(await insufficientSecondDraft.Content.ReadAsStringAsync()))
+                Assert.Equal("INSUFFICIENT_STOCK", errorBody.RootElement.GetProperty("error").GetProperty("code").GetString());
+            var secondSave = await client.PutAsJsonAsync("/api/sales/draft", new
+            {
+                priceListId,
+                lines = new[] { new { productId, quantity = 1m } }
+            });
+            Assert.Equal(HttpStatusCode.OK, secondSave.StatusCode);
+            using var secondBody = JsonDocument.Parse(await secondSave.Content.ReadAsStringAsync());
+            var secondDraftId = secondBody.RootElement.GetProperty("id").GetGuid();
+            Assert.NotEqual(draftId, secondDraftId);
+            Assert.Equal(HttpStatusCode.Created,
+                (await client.PostAsJsonAsync($"/api/sales/drafts/{secondDraftId}/confirmation", new
+                {
+                    payments = new[] { new { method = "cash", amount = 1000m } }
+                })).StatusCode);
+
             var currentShift = await client.GetAsync("/api/cashier-shifts/current");
             Assert.Equal(HttpStatusCode.OK, currentShift.StatusCode);
             using (var shiftBody = JsonDocument.Parse(await currentShift.Content.ReadAsStringAsync()))
             {
-                Assert.Equal(2000m, shiftBody.RootElement.GetProperty("salesTotal").GetDecimal());
-                Assert.Equal(2000m, shiftBody.RootElement.GetProperty("cashBalance").GetDecimal());
+                Assert.Equal(3000m, shiftBody.RootElement.GetProperty("salesTotal").GetDecimal());
+                Assert.Equal(3000m, shiftBody.RootElement.GetProperty("cashBalance").GetDecimal());
             }
             var closedShift = await client.PostAsync("/api/cashier-shifts/current/close", content: null);
             Assert.Equal(HttpStatusCode.OK, closedShift.StatusCode);
             using (var closedBody = JsonDocument.Parse(await closedShift.Content.ReadAsStringAsync()))
-                Assert.Equal(2000m, closedBody.RootElement.GetProperty("cashBalance").GetDecimal());
+                Assert.Equal(3000m, closedBody.RootElement.GetProperty("cashBalance").GetDecimal());
 
             await using var verification = new PlatformAccessDbContext(options);
-            var sale = await verification.ConfirmedSales.Include(item => item.Lines).Include(item => item.Payments).SingleAsync();
+            var sale = await verification.ConfirmedSales.Include(item => item.Lines).Include(item => item.Payments)
+                .SingleAsync(item => item.SourceDraftId == draftId);
             Assert.Equal(2000m, sale.Total);
             Assert.Single(sale.Lines);
             Assert.Single(sale.Payments);
             var savedDraft = await verification.SaleDrafts.SingleAsync(item => item.Id == draftId);
             Assert.Equal(SaleDraftStatus.Confirmed, savedDraft.Status);
+            var secondSavedDraft = await verification.SaleDrafts.SingleAsync(item => item.Id == secondDraftId);
+            Assert.Equal(SaleDraftStatus.Confirmed, secondSavedDraft.Status);
+            Assert.Equal(2, await verification.ConfirmedSales.CountAsync());
             var stock = await verification.BranchInventoryBalances.SingleAsync(item => item.ProductId == productId);
-            Assert.Equal(8m, stock.OnHand);
+            Assert.Equal(7m, stock.OnHand);
             Assert.Equal(0m, stock.Reserved);
-            Assert.Single(await verification.CashLedgerMovements.ToListAsync());
+            Assert.Equal(2, await verification.CashLedgerMovements.CountAsync());
         }
         finally
         {
             await using var cleanup = new PlatformAccessDbContext(options);
+            await cleanup.Database.ExecuteSqlRawAsync("TRUNCATE TABLE pos_sales.sale_drafts CASCADE");
             await cleanup.Database.MigrateAsync("0");
         }
     }

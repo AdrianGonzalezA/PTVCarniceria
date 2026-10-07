@@ -1,0 +1,222 @@
+using System.Data;
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+using Carnicerias.Api.Contracts;
+using Carnicerias.Api.Security;
+using Carnicerias.Domain.Sales;
+using Carnicerias.Infrastructure;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
+
+namespace Carnicerias.Api.Sales;
+
+public static class SaleConfirmationEndpoints
+{
+    public static IEndpointRouteBuilder MapSaleConfirmationEndpoints(this IEndpointRouteBuilder endpoints)
+    {
+        endpoints.MapPost("/api/sales/drafts/{draftId:guid}/confirmation", ConfirmAsync)
+            .RequireOperationalContext();
+        return endpoints;
+    }
+
+    private static async Task<IResult> ConfirmAsync(
+        Guid draftId,
+        ConfirmSaleRequest? request,
+        PlatformAccessDbContext db,
+        OperationalContextAccessor accessor,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        if (draftId == Guid.Empty || request?.Payments is null || request.Payments.Count is < 1 or > 6 ||
+            request.Payments.Any(payment => payment is null))
+            return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+
+        var tenders = new List<PaymentTender>(request.Payments.Count);
+        foreach (var payment in request.Payments)
+        {
+            if (!TryParseMethod(payment.Method, out var method))
+                return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+            tenders.Add(new PaymentTender(method, payment.Amount));
+        }
+
+        var requestHash = HashPaymentRequest(tenders);
+        var context = accessor.Context;
+        try
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable, cancellationToken);
+
+            var existingSale = await FindSaleAsync(db, context.CompanyId, context.BranchId,
+                context.UserId, draftId, cancellationToken);
+            if (existingSale is not null)
+                return ExistingSaleResult(existingSale, requestHash);
+
+            var draft = await db.SaleDrafts.Include(item => item.Lines).SingleOrDefaultAsync(item =>
+                item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
+                item.UserId == context.UserId && item.Id == draftId && item.Status == SaleDraftStatus.Draft,
+                cancellationToken);
+            if (draft is null || draft.Lines.Count == 0)
+                return Error(StatusCodes.Status409Conflict, "SALE_NOT_CONFIRMABLE");
+
+            var shift = await db.CashierShifts.SingleOrDefaultAsync(item =>
+                item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
+                item.CashierId == context.UserId && item.Status == CashierShiftStatus.Open,
+                cancellationToken);
+            if (shift is null) return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_REQUIRED");
+
+            var total = draft.Lines.Sum(line => decimal.Round(
+                line.Quantity * line.UnitPrice, 2, MidpointRounding.AwayFromZero));
+            PaymentSettlementResult settlement;
+            try
+            {
+                settlement = PaymentSettlement.Calculate(total, tenders);
+            }
+            catch (PaymentSettlementException exception)
+            {
+                return PaymentError(exception.Error);
+            }
+
+            var now = timeProvider.GetUtcNow();
+            var sale = new ConfirmedSale(context.CompanyId, context.BranchId, context.UserId,
+                shift.Id, draft.Id, draft.PriceListId, total, requestHash, now);
+            sale.Lines.AddRange(draft.Lines.Select(line => new ConfirmedSaleLine(
+                context.CompanyId, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
+                line.SaleMode, line.Quantity, line.UnitPrice)));
+            sale.Payments.AddRange(settlement.AppliedPayments.Select(payment => new SalePayment(
+                payment.Method, payment.TenderedAmount, payment.AppliedAmount)));
+            db.ConfirmedSales.Add(sale);
+
+            foreach (var line in draft.Lines)
+            {
+                var changed = await db.BranchInventoryBalances.Where(balance =>
+                        balance.CompanyId == context.CompanyId && balance.BranchId == context.BranchId &&
+                        balance.ProductId == line.ProductId && balance.OnHand >= line.Quantity &&
+                        balance.Reserved >= line.Quantity)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(balance => balance.OnHand, balance => balance.OnHand - line.Quantity)
+                        .SetProperty(balance => balance.Reserved, balance => balance.Reserved - line.Quantity),
+                        cancellationToken);
+                if (changed == 0)
+                    return Error(StatusCodes.Status409Conflict, "STOCK_RESERVATION_MISSING");
+
+                db.InventoryMovements.Add(new InventoryMovement(
+                    context.CompanyId, context.BranchId, line.ProductId, context.UserId,
+                    Guid.NewGuid(), InventoryMovementKind.Sale, -line.Quantity,
+                    $"Egreso por venta {sale.Id:N}", now));
+            }
+
+            foreach (var payment in settlement.AppliedPayments)
+            {
+                var amount = payment.Method == PaymentMethod.Cash
+                    ? payment.TenderedAmount
+                    : payment.AppliedAmount;
+                db.CashLedgerMovements.Add(new CashLedgerMovement(
+                    context.CompanyId, context.BranchId, shift.Id, context.UserId,
+                    Guid.NewGuid(), payment.Method, CashLedgerMovementKind.SalePayment,
+                    amount, now, sale.Id));
+            }
+            if (settlement.ChangeAmount > 0)
+                db.CashLedgerMovements.Add(new CashLedgerMovement(
+                    context.CompanyId, context.BranchId, shift.Id, context.UserId,
+                    Guid.NewGuid(), PaymentMethod.Cash, CashLedgerMovementKind.Change,
+                    -settlement.ChangeAmount, now, sale.Id));
+
+            draft.Confirm(sale.Id, now);
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return Results.Created($"/api/sales/{sale.Id}", ToResponse(sale, settlement.ChangeAmount));
+        }
+        catch (Exception exception) when (IsConcurrentConfirmation(exception))
+        {
+            db.ChangeTracker.Clear();
+            var existingSale = await FindSaleAsync(db, context.CompanyId, context.BranchId,
+                context.UserId, draftId, cancellationToken);
+            return existingSale is null
+                ? Error(StatusCodes.Status409Conflict, "SALE_CONFIRMATION_CONFLICT")
+                : ExistingSaleResult(existingSale, requestHash);
+        }
+    }
+
+    private static async Task<ConfirmedSale?> FindSaleAsync(
+        PlatformAccessDbContext db, Guid companyId, Guid branchId, Guid cashierId,
+        Guid draftId, CancellationToken cancellationToken) =>
+        await db.ConfirmedSales.AsNoTracking().Include(sale => sale.Lines).Include(sale => sale.Payments)
+            .SingleOrDefaultAsync(sale => sale.CompanyId == companyId && sale.BranchId == branchId &&
+                sale.CashierId == cashierId && sale.SourceDraftId == draftId,
+                cancellationToken);
+
+    private static IResult ExistingSaleResult(ConfirmedSale sale, string requestHash) =>
+        string.Equals(sale.PaymentRequestHash, requestHash, StringComparison.Ordinal)
+            ? Results.Ok(ToResponse(sale, sale.Payments.Where(payment => payment.Method == PaymentMethod.Cash)
+                .Sum(payment => payment.TenderedAmount - payment.AppliedAmount)))
+            : Error(StatusCodes.Status409Conflict, "IDEMPOTENCY_CONFLICT");
+
+    private static string HashPaymentRequest(IEnumerable<PaymentTender> tenders)
+    {
+        var canonical = string.Join('|', tenders.OrderBy(tender => tender.Method)
+            .Select(tender => $"{(int)tender.Method}:{tender.TenderedAmount.ToString("0.00", CultureInfo.InvariantCulture)}"));
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
+    }
+
+    private static bool TryParseMethod(string? value, out PaymentMethod method)
+    {
+        method = value?.Trim().ToLowerInvariant() switch
+        {
+            "cash" => PaymentMethod.Cash,
+            "debit" => PaymentMethod.Debit,
+            "credit" => PaymentMethod.Credit,
+            "transfer" => PaymentMethod.Transfer,
+            "mercadopago" => PaymentMethod.MercadoPago,
+            "cheque" => PaymentMethod.Cheque,
+            _ => (PaymentMethod)(-1)
+        };
+        return Enum.IsDefined(method);
+    }
+
+    private static bool IsConcurrentConfirmation(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException!)
+            if (current is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.SerializationFailure })
+                return true;
+        return false;
+    }
+
+    private static SaleConfirmationResponse ToResponse(ConfirmedSale sale, decimal change) => new(
+        sale.Id, sale.Total, change, sale.ConfirmedAtUtc,
+        sale.Lines.Select(line => new SaleConfirmationLineResponse(
+            line.ProductCode, line.ProductName, line.Unit, line.Quantity, line.UnitPrice, line.LineTotal)).ToArray(),
+        sale.Payments.Select(payment => new SaleConfirmationPaymentResponse(
+            MethodName(payment.Method), payment.TenderedAmount, payment.AppliedAmount)).ToArray());
+
+    private static string MethodName(PaymentMethod method) => method switch
+    {
+        PaymentMethod.Cash => "cash",
+        PaymentMethod.Debit => "debit",
+        PaymentMethod.Credit => "credit",
+        PaymentMethod.Transfer => "transfer",
+        PaymentMethod.MercadoPago => "mercadoPago",
+        PaymentMethod.Cheque => "cheque",
+        _ => throw new ArgumentOutOfRangeException(nameof(method))
+    };
+
+    private static IResult PaymentError(PaymentSettlementError error) => error switch
+    {
+        PaymentSettlementError.AmountPending => Error(StatusCodes.Status400BadRequest, "PAYMENT_TOTAL_MISMATCH"),
+        PaymentSettlementError.NonCashOverpayment => Error(StatusCodes.Status400BadRequest, "INVALID_CHANGE"),
+        PaymentSettlementError.DuplicateMethod => Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR"),
+        _ => Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR")
+    };
+
+    private static IResult Error(int statusCode, string code) => Results.Json(
+        new ErrorResponse(new ApiError(code, "No se pudo completar la solicitud", [])), statusCode: statusCode);
+
+    private sealed record ConfirmSaleRequest(IReadOnlyList<PaymentRequest>? Payments);
+    private sealed record PaymentRequest(string? Method, decimal Amount);
+    private sealed record SaleConfirmationResponse(Guid Id, decimal Total, decimal ChangeAmount,
+        DateTimeOffset ConfirmedAtUtc, IReadOnlyList<SaleConfirmationLineResponse> Lines,
+        IReadOnlyList<SaleConfirmationPaymentResponse> Payments);
+    private sealed record SaleConfirmationLineResponse(string Code, string Name, string Unit,
+        decimal Quantity, decimal UnitPrice, decimal LineTotal);
+    private sealed record SaleConfirmationPaymentResponse(string Method, decimal TenderedAmount, decimal AppliedAmount);
+}

@@ -1,0 +1,159 @@
+<main class="access-shell">
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Nombre del sistema</span>
+    </div>
+
+    @if (currentSession(); as session) {
+      <div class="account-bar">
+        <span>{{ session.username }}</span>
+        <button type="button" class="header-button" [disabled]="isSubmitting()" (click)="signOut()">
+          {{ isSubmitting() ? 'Cerrando…' : 'Cerrar sesión' }}
+        </button>
+      </div>
+    }
+  </header>
+
+  <div class="stage">
+    <section class="access-panel" aria-labelledby="page-title">
+      <div class="panel-accent" aria-hidden="true"></div>
+      <div class="panel-content">
+        <p class="eyebrow">Plataforma de gestión</p>
+        <h1 id="page-title">Carnicerías</h1>
+
+        <p class="api-status" role="status" aria-live="polite">
+          @if (apiStatus() === 'available') {
+            <span class="status-indicator" aria-hidden="true"></span>
+            Sistema disponible
+          } @else if (apiStatus() === 'unavailable') {
+            Sistema temporalmente no disponible
+          } @else {
+            Verificando disponibilidad…
+          }
+        </p>
+
+        @if (sessionError(); as error) {
+          <p class="form-error" role="alert">{{ error }}</p>
+        }
+
+        @if (!sessionChecked()) {
+          <p class="loading-message" role="status">Verificando sesión…</p>
+        } @else if (currentSession(); as session) {
+          @if (session.context && !isChangingContext()) {
+            <section class="context-summary" aria-labelledby="context-title">
+              <h2 id="context-title">Contexto confirmado</h2>
+              <p class="context-company">{{ session.context.companyName }}</p>
+              <p class="context-branch">{{ session.context.branchName }}</p>
+              <a class="pos-link" routerLink="/pos">Abrir punto de venta</a>
+              @if (session.context.permissions.includes('platform.users.manage')) {
+                <a class="admin-link" routerLink="/users">Administrar usuarios</a>
+              }
+              <button type="button" class="secondary-button" [disabled]="isSubmitting()" (click)="startContextChange()">
+                Cambiar empresa o sucursal
+              </button>
+            </section>
+          } @else {
+            <section class="context-picker" aria-labelledby="context-title" [attr.aria-busy]="isLoadingContexts()">
+              <h2 id="context-title">¿Dónde vas a trabajar?</h2>
+              <p class="context-help">
+                Elegí una empresa y una sucursal. Confirmá la selección aunque tengas una sola opción.
+              </p>
+
+              @if (isLoadingContexts()) {
+                <p class="loading-message" role="status">Cargando empresas y sucursales…</p>
+              } @else if (contextOptions().length === 0) {
+                <p class="empty-message" role="status">
+                  @if (contextError(); as error) {
+                    {{ error }}
+                  } @else {
+                    Tu usuario todavía no tiene empresas y sucursales habilitadas.
+                  }
+                </p>
+              } @else {
+                <form class="context-form" (ngSubmit)="confirmContext()" novalidate>
+                  <div class="field-group">
+                    <label for="company">Empresa</label>
+                    <select
+                      id="company"
+                      name="company"
+                      [value]="selectedCompanyId()"
+                      (change)="onCompanyChange($event)"
+                      required
+                    >
+                      <option value="">Seleccioná una empresa</option>
+                      @for (company of contextOptions(); track company.companyId) {
+                        <option [value]="company.companyId">{{ company.companyName }}</option>
+                      }
+                    </select>
+                  </div>
+
+                  <div class="field-group">
+                    <label for="branch">Sucursal</label>
+                    <select
+                      id="branch"
+                      name="branch"
+                      [value]="selectedBranchId()"
+                      (change)="onBranchChange($event)"
+                      [disabled]="availableBranches().length === 0"
+                      required
+                    >
+                      <option value="">Seleccioná una sucursal</option>
+                      @for (branch of availableBranches(); track branch.branchId) {
+                        <option [value]="branch.branchId">{{ branch.branchName }}</option>
+                      }
+                    </select>
+                  </div>
+
+                  @if (contextError(); as error) {
+                    <p class="form-error" role="alert">{{ error }}</p>
+                  }
+
+                  <div class="form-actions">
+                    @if (session.context) {
+                      <button type="button" class="secondary-button" [disabled]="isSubmitting()" (click)="cancelContextChange()">
+                        Volver
+                      </button>
+                    }
+                    <button type="submit" [disabled]="!canConfirmContext() || isSubmitting()">
+                      {{ isSubmitting() ? 'Confirmando…' : 'Confirmar sucursal' }}
+                    </button>
+                  </div>
+                </form>
+              }
+            </section>
+          }
+        } @else {
+          <form class="login-form" [formGroup]="credentialsForm" (ngSubmit)="signIn()" novalidate>
+            <h2>Iniciar sesión</h2>
+            <label for="credential">Usuario o correo</label>
+            <input
+              id="credential"
+              name="credential"
+              type="text"
+              formControlName="credential"
+              autocomplete="username"
+              maxlength="320"
+              required
+            />
+
+            <label for="password">Contraseña</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              formControlName="password"
+              autocomplete="current-password"
+              maxlength="1024"
+              required
+            />
+
+            <button type="submit" [disabled]="credentialsForm.invalid || isSubmitting()">
+              {{ isSubmitting() ? 'Ingresando…' : 'Ingresar' }}
+            </button>
+          </form>
+        }
+      </div>
+    </section>
+  </div>
+</main>

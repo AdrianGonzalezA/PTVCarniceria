@@ -1,0 +1,11 @@
+@use './app/features/pos/pos-page.scss';
+
+html {
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+
+body {
+  min-width: 20rem;
+  margin: 0;
+}

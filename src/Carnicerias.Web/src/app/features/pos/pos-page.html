@@ -1,0 +1,419 @@
+<div class="pos-shell">
+  <header class="pos-header">
+    <div class="pos-brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">Carnicerías <span>· Punto de venta</span></span>
+    </div>
+    <div class="pos-account">
+      <span class="context-label">{{ session()?.context?.branchName }}</span>
+      <span class="cashier-name">{{ session()?.username }}</span>
+      <button class="shift-status" type="button" (click)="openShiftDialog()">{{ cashierShift() ? 'Turno abierto' : 'Abrir turno' }}</button>
+      @if (session()?.context?.permissions?.includes('inventory.stock.manage')) {
+        <button class="stock-manage-button" type="button" aria-label="Administrar stock" title="Administrar stock" (click)="openInventory()">Stock</button>
+      }
+      <button class="menu-trigger" type="button" aria-label="Abrir menú" [attr.aria-expanded]="isMenuOpen()" (click)="isMenuOpen.update(value => !value)">
+        <span></span><span></span><span></span>
+      </button>
+      @if (isMenuOpen()) {
+        <nav class="account-menu" aria-label="Menú de usuario">
+          <a routerLink="/">Cambiar sucursal</a>
+          @if (session()?.context?.permissions?.includes('platform.users.manage')) {
+            <a routerLink="/users">Administración</a>
+          }
+          <button type="button" (click)="signOut()">Cerrar sesión</button>
+        </nav>
+      }
+    </div>
+  </header>
+
+  <main class="pos-workspace">
+    <section class="catalog-panel" aria-label="Catálogo de productos">
+      <div class="catalog-toolbar">
+        <label for="product-search">Producto</label>
+        <div class="search-control">
+          <input
+            id="product-search"
+            type="search"
+            placeholder="Buscar producto o ingresar código"
+            autocomplete="off"
+            [disabled]="!canSearchCatalog()"
+            [value]="searchText()"
+            (input)="updateSearch($event)"
+            (keydown.enter)="submitSearch($event)"
+          />
+          <span aria-hidden="true">⌕</span>
+        </div>
+        <span class="catalog-badge">{{ !selectedPriceListId() ? 'Elegí una lista' : isDemoPriceList() ? 'Catálogo de prueba' : 'Catálogo de la sucursal' }}</span>
+      </div>
+
+      <div class="catalog-content">
+        <nav class="category-rail" aria-label="Categorías de productos">
+          @for (category of categories(); track category.id) {
+            <button
+              type="button"
+              class="category-button"
+              [class.active]="activeCategory() === category.id && !searchReady()"
+              [attr.aria-pressed]="activeCategory() === category.id && !searchReady()"
+              (click)="selectCategory(category.id)"
+            >
+              <span class="category-icon" aria-hidden="true">{{ category.icon }}</span>
+              <span>{{ category.label }}</span>
+            </button>
+          }
+        </nav>
+
+        <section class="product-browser" aria-labelledby="product-list-title">
+          <div class="browser-heading">
+            <h1 id="product-list-title">{{ searchReady() ? 'Resultados de búsqueda' : activeCategoryName() }}</h1>
+            @if (!searchReady() && searchText().trim().length > 0) {
+              <span class="search-hint">Escribí al menos 3 caracteres para buscar</span>
+            }
+            @if (searchReady()) {
+              <span class="result-count">{{ visibleProducts().length }} resultados</span>
+            }
+          </div>
+
+          @if (!selectedPriceListId()) {
+            <div class="catalog-empty" role="status">
+              <span class="empty-mark" aria-hidden="true">▤</span>
+              <h2>Elegí una lista de precios</h2>
+              <p>Seleccioná la lista que corresponde a esta venta para ver los productos.</p>
+            </div>
+          } @else if (!isDemoPriceList() && catalogLoadState() === 'loading') {
+            <div class="catalog-empty" role="status">
+              <span class="empty-mark" aria-hidden="true">▤</span>
+              <h2>Cargando catálogo</h2>
+              <p>Buscando productos y precios vigentes para esta lista.</p>
+            </div>
+          } @else if (!isDemoPriceList() && catalogLoadState() === 'error') {
+            <div class="catalog-empty" role="alert">
+              <span class="empty-mark" aria-hidden="true">!</span>
+              <h2>No se pudo cargar el catálogo</h2>
+              <p>Revisá la conexión e intentá nuevamente.</p>
+              <button class="catalog-retry" type="button" (click)="retryCatalog()">Reintentar</button>
+            </div>
+          } @else if (visibleProducts().length > 0) {
+            <div class="product-grid">
+              @for (product of visibleProducts(); track product.id) {
+                <button class="product-card" type="button" (click)="openProduct(product)">
+                  <span class="product-name">{{ product.name }}</span>
+                  <span class="product-price">{{ formatMoney(product.price) }} <small>/ {{ product.mode === 'weight' ? 'kg' : 'unidad' }}</small></span>
+                  @if (!isDemoPriceList()) { <small class="product-stock">Disponible: {{ product.availableStock ?? 0 }} {{ product.mode === 'weight' ? 'kg' : 'un.' }}</small> }
+                </button>
+              }
+            </div>
+          } @else if (!isDemoPriceList()) {
+            <div class="catalog-empty" role="status">
+              <span class="empty-mark" aria-hidden="true">▤</span>
+              <h2>{{ searchReady() ? 'Producto no encontrado' : 'Sin productos con precio vigente' }}</h2>
+              <p>{{ searchReady() ? 'Probá con otro nombre o código.' : 'Esta lista todavía no tiene productos disponibles para vender.' }}</p>
+            </div>
+          } @else {
+            <div class="catalog-empty" role="status">
+              <span class="empty-mark" aria-hidden="true">{{ searchReady() ? '⌕' : '···' }}</span>
+              <h2>{{ searchReady() ? 'Producto no encontrado' : 'Sin productos disponibles' }}</h2>
+              <p>{{ searchReady() ? 'Probá con otro nombre o código.' : 'Elegí otra categoría para seguir vendiendo.' }}</p>
+            </div>
+          }
+        </section>
+      </div>
+    </section>
+
+    <section class="ticket-panel" aria-labelledby="ticket-title">
+      <div class="ticket-toolbar">
+        <div>
+          <p class="eyebrow">Venta en curso @if (selectedPriceListName()) { · {{ selectedPriceListName() }} }</p>
+          <h2 id="ticket-title">Detalle de venta</h2>
+          @if (draftStatus() === 'saving' || draftStatus() === 'loading') {
+            <p class="price-list-lock" role="status">{{ draftStatus() === 'saving' ? 'Guardando ticket…' : 'Recuperando ticket…' }}</p>
+          } @else if (draftStatus() === 'saved') {
+            <p class="price-list-lock" role="status">Borrador guardado · stock sin descontar</p>
+          } @else if (draftStatus() === 'error') {
+            <p class="price-list-lock" role="alert">No se pudo sincronizar el ticket. <button class="draft-retry" type="button" (click)="retryDraftSave()">Reintentar guardado</button></p>
+          }
+        </div>
+        <button class="cancel-sale-button" type="button" (click)="cancelSale()">⊘ <span>Cancelar venta</span></button>
+      </div>
+
+      <div class="sale-metadata">
+        <label class="price-list-field">
+          <span>Lista de precios</span>
+          <select [value]="selectedPriceListId()" [disabled]="lines().length > 0" (change)="selectPriceList($event)">
+            <option value="">Seleccioná una lista</option>
+            @if (realPriceLists().length > 0) {
+              <optgroup label="Habilitadas para esta sucursal">
+                @for (list of realPriceLists(); track list.id) {
+                  <option [value]="list.id" [selected]="list.id === selectedPriceListId()">{{ list.name }}</option>
+                }
+              </optgroup>
+            }
+          </select>
+        </label>
+        @if (priceListLoadState() === 'loading') {
+          <p class="price-list-lock" role="status">Cargando listas de esta sucursal…</p>
+        } @else if (priceListLoadState() === 'error') {
+          <p class="price-list-lock" role="alert">No se pudieron cargar las listas de esta sucursal. <button type="button" (click)="loadPriceLists()">Reintentar</button></p>
+        } @else if (realPriceLists().length === 0) {
+          <p class="price-list-lock">Esta sucursal no tiene listas de precios habilitadas.</p>
+        }
+        @if (lines().length > 0) {
+          <p class="price-list-lock">Para cambiar la lista, cancelá primero esta venta.</p>
+        }
+        <label>
+          <span>Comprobante</span>
+          <input value="Sin emisión fiscal" readonly aria-label="Comprobante" />
+        </label>
+        <label>
+          <span>Cliente</span>
+          <input value="Consumidor final" readonly aria-label="Cliente" />
+        </label>
+      </div>
+
+      @if (lines().length > 0) {
+        <div class="line-table-wrap">
+          <table class="line-table">
+            <thead>
+              <tr>
+                <th scope="col">Producto</th>
+                <th scope="col">Peso / Cant.</th>
+                <th scope="col">Precio</th>
+                <th scope="col">Desc.</th>
+                <th scope="col">Total</th>
+                <th scope="col"><span class="sr-only">Acciones</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (line of lines(); track line.product.id) {
+                <tr>
+                  <td>
+                    <span class="line-product-name">{{ line.product.name }}</span>
+                    <small>{{ line.product.code }}</small>
+                  </td>
+                  <td>
+                    <input
+                      class="quantity-input"
+                      type="number"
+                      [min]="line.product.mode === 'weight' ? 0.001 : 1"
+                      [step]="line.product.mode === 'weight' ? 0.001 : 1"
+                      [value]="line.quantity"
+                      [attr.aria-label]="line.product.mode === 'weight' ? 'Peso en kilogramos de ' + line.product.name : 'Cantidad de ' + line.product.name"
+                      (change)="updateLineQuantity(line.product.id, $event)"
+                    />
+                    <small>{{ line.product.mode === 'weight' ? 'kg' : 'un.' }}</small>
+                  </td>
+                  <td>{{ formatMoney(line.product.price) }}</td>
+                  <td>0,00%</td>
+                  <td class="line-total">{{ formatMoney(lineTotal(line)) }}</td>
+                  <td>
+                    <button class="remove-line-button" type="button" [attr.aria-label]="'Quitar ' + line.product.name" (click)="removeLine(line.product.id)">×</button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <div class="ticket-empty" role="status">
+          <span aria-hidden="true">▤</span>
+          <h3>Cargá los productos de la venta</h3>
+          <p>Buscá y agregá productos para armar el pedido.</p>
+          <p>El detalle persistirá automáticamente como borrador.</p>
+        </div>
+      }
+
+      @if (errorMessage(); as error) {
+        <p class="pos-error" role="alert">{{ error }}</p>
+      }
+
+      <footer class="sale-footer">
+        <button class="finish-button" type="button" [disabled]="lines().length === 0" (click)="continueToCheckout()">Finalizar compra</button>
+        <div class="total-field" aria-live="polite">
+          <span>Total</span>
+          <strong>{{ formatMoney(subtotal()) }}</strong>
+        </div>
+      </footer>
+    </section>
+  </main>
+
+  <footer class="ticket-strip" aria-label="Tickets de venta">
+    <button class="ticket-tab selected" type="button" aria-current="page">Ticket A</button>
+    <button class="ticket-tab" type="button" disabled>Ticket B</button>
+    <button class="ticket-tab" type="button" disabled>Ticket C</button>
+    <button class="ticket-tab" type="button" disabled>Ticket D</button>
+  </footer>
+
+  @if (selectedProduct(); as product) {
+    <div class="dialog-backdrop">
+      <section class="pos-dialog" role="dialog" aria-modal="true" aria-labelledby="product-dialog-title">
+        <button class="dialog-close" type="button" aria-label="Cerrar" (click)="closeProductDialog()">×</button>
+        <p class="eyebrow">Agregar al detalle</p>
+        <h2 id="product-dialog-title">{{ product.name }}</h2>
+        <dl class="product-facts">
+          <div><dt>Código</dt><dd>{{ product.code }}</dd></div>
+          <div><dt>Precio unitario</dt><dd>{{ formatMoney(product.price) }} / {{ product.mode === 'weight' ? 'kg' : 'unidad' }}</dd></div>
+        </dl>
+        @if (product.mode === 'weight') {
+          <p class="scale-status">Balanza no conectada · Ingreso manual para esta prueba</p>
+        }
+        <label class="quantity-field" for="product-quantity">
+          {{ product.mode === 'weight' ? 'Peso en kilogramos' : 'Cantidad de unidades' }}
+          <input
+            id="product-quantity"
+            type="number"
+            min="0.001"
+            [step]="product.mode === 'weight' ? 0.001 : 1"
+            [value]="quantityDraft()"
+            (input)="updateQuantity($event)"
+          />
+        </label>
+        @if (errorMessage(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
+        <div class="dialog-actions">
+          <button class="dialog-cancel" type="button" (click)="closeProductDialog()">Cancelar</button>
+          <button class="finish-button" type="button" (click)="addSelectedProduct()">Agregar al ticket</button>
+        </div>
+      </section>
+    </div>
+  }
+
+  @if (checkoutNotice()) {
+    <div class="dialog-backdrop">
+      <section class="pos-dialog checkout-dialog" role="dialog" aria-modal="true" aria-labelledby="checkout-title">
+        <button class="dialog-close" type="button" aria-label="Cerrar" [disabled]="checkoutBusy()" (click)="closeCheckout()">×</button>
+        <p class="eyebrow">Cobro · {{ session()?.username }} · turno abierto</p>
+        <h2 id="checkout-title">Cobrar venta</h2>
+        <p class="checkout-context">El cobro se registra en la sucursal y el turno del cajero actual. El stock se descuenta al confirmar.</p>
+        <div class="payment-methods" aria-label="Medios de pago">
+          @for (method of paymentMethods; track method.id) {
+            <label class="payment-option">
+              <span><input type="checkbox" [checked]="hasPayment(method.id)" (change)="togglePayment(method.id, $event)" /> {{ method.label }}</span>
+              @if (hasPayment(method.id)) {
+                <input class="payment-amount" type="number" min="0.01" step="0.01" [attr.aria-label]="'Importe en ' + method.label" [value]="paymentAmount(method.id)" (input)="updatePaymentAmount(method.id, $event)" />
+              }
+            </label>
+          }
+        </div>
+        <div class="checkout-total"><span>Total del ticket</span><strong>{{ formatMoney(subtotal()) }}</strong></div>
+        @if (paymentBalance() > 0) { <p class="payment-balance" role="status">Falta cubrir: <strong>{{ formatMoney(paymentBalance()) }}</strong></p> }
+        @if (paymentProblem(); as problem) { <p class="payment-guidance" role="status">{{ problem }}</p> }
+        @if (changePreview() > 0) { <p class="change-preview">Vuelto estimado en efectivo: <strong>{{ formatMoney(changePreview()) }}</strong></p> }
+        @if (checkoutError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
+        <div class="dialog-actions">
+          <button class="dialog-cancel" type="button" [disabled]="checkoutBusy()" (click)="closeCheckout()">Volver</button>
+          <button class="finish-button" type="button" [disabled]="checkoutBusy() || selectedPayments().length === 0" (click)="confirmSale()">{{ checkoutBusy() ? 'Confirmando…' : 'Confirmar venta' }}</button>
+        </div>
+      </section>
+    </div>
+  }
+
+  @if (confirmedSale(); as sale) {
+    <div class="dialog-backdrop">
+      <section class="pos-dialog sale-receipt" role="dialog" aria-modal="true" aria-labelledby="receipt-title">
+        <p class="eyebrow">Venta registrada · {{ session()?.context?.branchName }}</p>
+        <h2 id="receipt-title">Venta confirmada</h2>
+        <p class="receipt-reference">Operación {{ sale.id }}</p>
+        <div class="checkout-total"><span>Total cobrado</span><strong>{{ formatMoney(sale.total) }}</strong></div>
+        <ul class="receipt-payments" aria-label="Pagos registrados">
+          @for (payment of sale.payments; track payment.method) {
+            <li><span>{{ paymentMethodName(payment.method) }}</span><strong>{{ formatMoney(payment.appliedAmount) }}</strong></li>
+          }
+        </ul>
+        @if (sale.changeAmount > 0) {
+          <p class="change-preview">Vuelto en efectivo: <strong>{{ formatMoney(sale.changeAmount) }}</strong></p>
+        }
+        <p class="checkout-context">El stock y los pagos quedaron registrados. No se emitió comprobante fiscal.</p>
+        <div class="dialog-actions">
+          <button class="finish-button" type="button" (click)="confirmedSale.set(null)">Nueva venta</button>
+        </div>
+      </section>
+    </div>
+  }
+
+  @if (shiftDialog()) {
+    <div class="dialog-backdrop">
+      <section class="pos-dialog shift-dialog" role="dialog" aria-modal="true" aria-labelledby="shift-title">
+        <button class="dialog-close" type="button" aria-label="Cerrar turno" (click)="shiftDialog.set(false)">×</button>
+        <p class="eyebrow">{{ session()?.context?.branchName }} · {{ session()?.username }}</p>
+        <h2 id="shift-title">{{ cashierShift() ? 'Turno de caja activo' : 'Abrir turno de caja' }}</h2>
+        @if (cashierShift(); as shift) {
+          <div class="shift-summary">
+            <span>Fondo inicial</span><strong>{{ formatMoney(shift.openingCash) }}</strong>
+            <span>Ventas del turno</span><strong>{{ formatMoney(shift.salesTotal) }}</strong>
+            <span>De esas ventas, en efectivo</span><strong>{{ formatMoney(shift.cashSales) }}</strong>
+            <span>Otros medios</span><strong>{{ formatMoney(shift.nonCashSales) }}</strong>
+            <span>Efectivo registrado en caja</span><strong>{{ formatMoney(shift.cashBalance) }}</strong>
+            <small>Turno {{ shift.id.slice(0, 8) }} · El saldo no es un arqueo físico.</small>
+          </div>
+          @if (lines().length > 0) { <p class="price-list-lock">Hay un ticket abierto. Cerralo o cancelalo antes de cerrar el turno.</p> }
+          @if (shiftError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
+          <div class="dialog-actions">
+            <button class="dialog-cancel" type="button" (click)="shiftDialog.set(false)">Volver al POS</button>
+            <button class="finish-button" type="button" [disabled]="shiftBusy() || lines().length > 0" (click)="closeCashierShift()">{{ shiftBusy() ? 'Procesando…' : 'Cerrar turno' }}</button>
+          </div>
+        } @else {
+          @if (lastClosedShift(); as closed) {
+            <div class="shift-summary closed-shift-summary" role="status">
+              <h3 class="shift-summary-title">Último turno cerrado · {{ closed.id.slice(0, 8) }}</h3>
+              <span>Fondo inicial</span><strong>{{ formatMoney(closed.openingCash) }}</strong>
+              <span>Ventas registradas</span><strong>{{ formatMoney(closed.salesTotal) }}</strong>
+              <span>De esas ventas, en efectivo</span><strong>{{ formatMoney(closed.cashSales) }}</strong>
+              <span>Otros medios</span><strong>{{ formatMoney(closed.nonCashSales) }}</strong>
+              <span>Efectivo registrado al cierre</span><strong>{{ formatMoney(closed.cashBalance) }}</strong>
+              <small>Saldo calculado desde movimientos; no representa un arqueo físico.</small>
+            </div>
+          }
+          <p>El turno queda asociado a tu usuario y esta sucursal. Ingresá el fondo real de caja; puede ser $0.</p>
+          <label class="quantity-field" for="opening-cash">Fondo inicial en efectivo
+            <input id="opening-cash" type="number" min="0" step="0.01" [value]="shiftOpeningCash()" (input)="updateOpeningCash($event)" />
+          </label>
+          @if (shiftError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
+          <div class="dialog-actions">
+            <button class="dialog-cancel" type="button" (click)="shiftDialog.set(false)">Cancelar</button>
+            <button class="finish-button" type="button" [disabled]="shiftBusy()" (click)="openCashierShift()">{{ shiftBusy() ? 'Abriendo…' : 'Abrir turno' }}</button>
+          </div>
+        }
+      </section>
+    </div>
+  }
+
+  @if (inventoryOpen()) {
+    <div class="dialog-backdrop">
+      <section class="pos-dialog inventory-dialog" role="dialog" aria-modal="true" aria-labelledby="inventory-title">
+        <button class="dialog-close" type="button" aria-label="Cerrar inventario" (click)="closeInventory()">×</button>
+        <p class="eyebrow">{{ session()?.context?.branchName }}</p>
+        <h2 id="inventory-title">Stock de la sucursal</h2>
+        @if (inventoryStatus() === 'loading') {
+          <p role="status">Actualizando existencias…</p>
+        } @else if (inventoryStatus() === 'error') {
+          <p class="pos-error" role="alert">No se pudo consultar el inventario.</p>
+        } @else if (inventoryItems().length === 0) {
+          <p>No hay productos activos para cargar stock. Primero deben configurarse en el catálogo.</p>
+        } @else {
+          <div class="inventory-list">
+            @for (item of inventoryItems(); track item.productId) {
+              <div class="inventory-row">
+                <span><strong>{{ item.name }}</strong><small>{{ item.code }}</small></span>
+                <span>Físico {{ item.onHand }} · reservado {{ item.reserved }} · disponible {{ item.available }}</span>
+              </div>
+            }
+          </div>
+          <label class="quantity-field" for="inventory-product">Producto
+            <select id="inventory-product" [value]="adjustmentProductId()" (change)="updateAdjustmentProduct($event)">
+              @for (item of inventoryItems(); track item.productId) { <option [value]="item.productId">{{ item.name }} · {{ item.code }}</option> }
+            </select>
+          </label>
+          <label class="quantity-field" for="inventory-quantity">Ingreso / ajuste (+/-)
+            <input id="inventory-quantity" type="number" step="0.001" [value]="adjustmentQuantity()" (input)="updateAdjustmentQuantity($event)" />
+          </label>
+          <label class="quantity-field" for="inventory-reason">Motivo
+            <input id="inventory-reason" maxlength="240" [value]="adjustmentReason()" (input)="updateAdjustmentReason($event)" />
+          </label>
+          @if (inventoryMessage(); as message) { <p role="status">{{ message }}</p> }
+          <div class="dialog-actions">
+            <button class="dialog-cancel" type="button" (click)="closeInventory()">Cerrar</button>
+            <button class="finish-button" type="button" [disabled]="inventoryStatus() === 'loading'" (click)="submitStockAdjustment()">Guardar ajuste</button>
+          </div>
+        }
+      </section>
+    </div>
+  }
+</div>

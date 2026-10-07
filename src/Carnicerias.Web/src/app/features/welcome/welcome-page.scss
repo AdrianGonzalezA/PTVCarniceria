@@ -1,0 +1,277 @@
+:host {
+  --color-charcoal: #383a40;
+  --color-stage: #303238;
+  --color-surface: #c7c7c7;
+  --color-panel: #f4f4f2;
+  --color-text: #252822;
+  --color-muted: #60665b;
+  --color-border: #a6a6a2;
+  --color-teal: #008b8b;
+  --color-lime: #d3ff00;
+  --color-danger: #a32929;
+
+  display: block;
+  min-height: 100dvh;
+  color: var(--color-text);
+  background: var(--color-stage);
+}
+
+.access-shell {
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+}
+
+.app-header {
+  display: flex;
+  min-height: 3.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 1.25rem;
+  color: #fff;
+  background: var(--color-charcoal);
+}
+
+.brand,
+.account-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.brand {
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.brand-mark {
+  display: block;
+  width: 4.5rem;
+  height: 1.75rem;
+  background: #f5f5f5;
+}
+
+.account-bar {
+  font-weight: 600;
+}
+
+.header-button {
+  min-height: 2.25rem;
+  margin: 0;
+  padding: 0.4rem 0.75rem;
+  color: #fff;
+  background: transparent;
+  border-color: #777;
+}
+
+.stage {
+  display: grid;
+  flex: 1;
+  padding: clamp(1rem, 4vw, 3rem);
+  place-items: center;
+}
+
+.access-panel {
+  width: min(100%, 48rem);
+  overflow: hidden;
+  background: var(--color-surface);
+  border: 1px solid #777;
+  border-radius: 0.35rem;
+}
+
+.panel-accent {
+  height: 0.75rem;
+  background: var(--color-teal);
+}
+
+.panel-content {
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  color: var(--color-teal);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
+  line-height: 1.15;
+}
+
+h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.3;
+}
+
+.api-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.875rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.status-indicator {
+  width: 0.6rem;
+  height: 0.6rem;
+  background: var(--color-teal);
+  border-radius: 50%;
+}
+
+.login-form,
+.context-picker,
+.context-summary {
+  display: grid;
+  gap: 0.875rem;
+  margin-top: 1.75rem;
+  padding: clamp(1rem, 3vw, 1.75rem);
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 0.25rem;
+}
+
+.login-form label,
+.field-group label {
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.login-form input,
+.field-group select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.625rem 0.75rem;
+  color: var(--color-text);
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 0.25rem;
+  font: inherit;
+}
+
+.field-group select:disabled {
+  color: #777;
+  background: #e8e8e5;
+}
+
+.context-help,
+.context-company,
+.context-branch,
+.loading-message,
+.empty-message {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.context-help,
+.context-branch,
+.loading-message {
+  color: var(--color-muted);
+}
+
+.context-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 0.25rem;
+}
+
+.field-group {
+  display: grid;
+  align-content: start;
+  gap: 0.45rem;
+}
+
+.form-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.context-company {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.secondary-button {
+  justify-self: start;
+  color: var(--color-text);
+  background: #fff;
+  border-color: var(--color-border);
+}
+
+.admin-link {
+  justify-self: start;
+  color: #006b6b;
+  font-weight: 700;
+  text-underline-offset: 0.2em;
+}
+
+.pos-link {
+  justify-self: start;
+  padding: 0.75rem 1rem;
+  color: #252822;
+  background: var(--color-lime);
+  border: 1px solid #badf00;
+  border-radius: 0.3rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.form-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--color-danger);
+  line-height: 1.5;
+}
+
+button {
+  min-height: 2.75rem;
+  margin-top: 0.25rem;
+  padding: 0.625rem 1.125rem;
+  color: var(--color-text);
+  background: var(--color-lime);
+  border: 1px solid #badf00;
+  border-radius: 0.3rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+input:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 3px solid #537b9c;
+  outline-offset: 2px;
+}
+
+@media (max-width: 40rem) {
+  .app-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .account-bar {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .context-form {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,158 @@
+<main class="users-shell">
+  <header class="app-header">
+    <a class="brand" routerLink="/" aria-label="Volver al inicio">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Nombre del sistema</span>
+    </a>
+
+    <div class="account-bar">
+      <span>{{ currentUsername() }}</span>
+      <button type="button" class="header-button" [disabled]="isSigningOut()" (click)="signOut()">
+        {{ isSigningOut() ? 'Cerrando…' : 'Cerrar sesión' }}
+      </button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <a class="back-link" routerLink="/">← Volver al contexto</a>
+    <p class="eyebrow">Administración</p>
+    <h1>Usuarios</h1>
+    <p class="intro">Consultá las cuentas de esta instalación y su estado de acceso.</p>
+
+    <section class="users-panel" aria-labelledby="users-heading" [attr.aria-busy]="isLoading()">
+      <header class="panel-heading">
+        <div>
+          <h2 id="users-heading">Usuarios de la instalación</h2>
+          <p>La búsqueda incluye nombre de usuario y correo electrónico.</p>
+        </div>
+      </header>
+
+      <form class="search-form" (ngSubmit)="search()">
+        <div class="search-field">
+          <label for="user-search">Buscar usuario</label>
+          <input
+            id="user-search"
+            name="search"
+            type="search"
+            autocomplete="off"
+            maxlength="100"
+            [value]="searchDraft()"
+            (input)="updateSearch($event)"
+            placeholder="Nombre o correo"
+          />
+        </div>
+        <button type="submit" [disabled]="isLoading()">Buscar</button>
+      </form>
+
+      @if (isLoading()) {
+        <p class="state-message" role="status">Cargando usuarios…</p>
+      } @else if (loadError(); as error) {
+        <p class="error-message" role="alert">{{ error }}</p>
+      } @else if (pageData(); as page) {
+        @if (actionMessage(); as message) {
+          <p class="success-message" role="status">{{ message }}</p>
+        }
+        @if (actionError(); as error) {
+          <p class="error-message" role="alert">{{ error }}</p>
+        }
+        @if (page.items.length === 0) {
+          <p class="state-message" role="status">
+            {{ appliedSearch() ? 'No se encontraron usuarios con esa búsqueda.' : 'Todavía no hay usuarios para mostrar.' }}
+          </p>
+        } @else {
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Usuario</th>
+                  <th scope="col">Correo electrónico</th>
+                  <th scope="col">Estado</th>
+                  <th scope="col">Fecha de alta</th>
+                  <th scope="col">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (user of page.items; track user.userId) {
+                  <tr>
+                    <td class="username">
+                      @if (editingUserId() === user.userId) {
+                        <label class="visually-hidden" [for]="'username-' + user.userId">Nombre de usuario</label>
+                        <input [id]="'username-' + user.userId" [value]="draftUsername()" maxlength="100" (input)="updateDraftUsername($event)" />
+                      } @else {
+                        {{ user.username }}
+                      }
+                    </td>
+                    <td>
+                      @if (editingUserId() === user.userId) {
+                        <label class="visually-hidden" [for]="'email-' + user.userId">Correo electrónico</label>
+                        <input [id]="'email-' + user.userId" type="email" [value]="draftEmail()" maxlength="320" (input)="updateDraftEmail($event)" />
+                      } @else {
+                        {{ user.email }}
+                      }
+                    </td>
+                    <td>
+                      <span class="status" [class.status-active]="user.isActive">
+                        {{ user.isActive ? 'Activo' : 'Inactivo' }}
+                      </span>
+                    </td>
+                    <td>{{ user.createdAtUtc | date: 'dd/MM/yyyy' }}</td>
+                    <td>
+                      <div class="row-actions">
+                      @if (editingUserId() === user.userId) {
+                        <button
+                          type="button"
+                          class="secondary-button"
+                          [disabled]="actionUserId() === user.userId || !draftUsername().trim() || !draftEmail().trim()"
+                          (click)="saveUser(user.userId)"
+                        >
+                          {{ actionUserId() === user.userId ? 'Guardando…' : 'Guardar' }}
+                        </button>
+                        <button type="button" class="secondary-button" [disabled]="actionUserId() === user.userId" (click)="cancelEditing()">
+                          Cancelar
+                        </button>
+                      } @else {
+                        <button type="button" class="secondary-button" [disabled]="actionUserId() !== null" (click)="startEditing(user.userId)">
+                          Editar
+                        </button>
+                      <button
+                        type="button"
+                        class="secondary-button"
+                        [disabled]="actionUserId() !== null || currentUserId() === user.userId"
+                        (click)="toggleUser(user.userId, user.isActive)"
+                      >
+                        {{ actionUserId() === user.userId ? 'Guardando…' : user.isActive ? 'Inactivar' : 'Reactivar' }}
+                      </button>
+                      <button
+                        type="button"
+                        class="secondary-button"
+                        [disabled]="actionUserId() !== null || currentUserId() === user.userId"
+                        (click)="revokeSessions(user.userId)"
+                      >
+                        Cerrar sesiones
+                      </button>
+                      }
+                      </div>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <footer class="list-footer">
+            <p aria-live="polite">Mostrando {{ firstItem() }}–{{ lastItem() }} de {{ page.totalItems }} usuarios</p>
+            <nav class="pagination" aria-label="Paginación de usuarios">
+              <button type="button" class="secondary-button" [disabled]="page.page <= 1 || isLoading()" (click)="goToPage(page.page - 1)">
+                Anterior
+              </button>
+              <span>Página {{ page.page }} de {{ page.totalPages }}</span>
+              <button type="button" class="secondary-button" [disabled]="page.page >= page.totalPages || isLoading()" (click)="goToPage(page.page + 1)">
+                Siguiente
+              </button>
+            </nav>
+          </footer>
+        }
+      }
+    </section>
+  </div>
+</main>

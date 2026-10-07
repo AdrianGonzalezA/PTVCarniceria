@@ -54,7 +54,7 @@ Alcance aprobado por el usuario el 6 de octubre de 2026; contrato en `SPEC-pos-c
 - [x] Conectar apertura, pagos y resumen al POS sin habilitar ventas demo reales.
 - [ ] Completar el recorrido integrado desde Electron: observar directamente la confirmación y el resumen final del cobro. Apertura, ticket recuperado y cierre de turno ya fueron comprobados; evidencia y límites en `tasks/pos-checkout-plan.md`.
 
-## Cajas simultáneas y relevo (desglose pendiente de aprobación)
+## Cajas simultáneas y relevo (desglose aprobado; implementación en curso)
 
 Contrato aprobado en `SPEC-pos-checkout.md` y plan técnico aprobado en `tasks/pos-checkout-plan.md`. Prioridad POS; no reactivar por este corte la administración general de usuarios. Cada tarea se cierra con pruebas y evidencia; los checkpoints no requieren detener el trabajo si las reglas aprobadas se mantienen.
 
@@ -63,8 +63,8 @@ Contrato aprobado en `SPEC-pos-checkout.md` y plan técnico aprobado en `tasks/p
 **Descripción:** crear una identidad persistente de caja vinculada a empresa y sucursal, distinguible de la identidad del cajero.
 
 **Aceptación:**
-- [ ] La caja tiene ID estable, nombre, sucursal y estado; no puede vincularse a otra empresa/sucursal por un ID del cliente.
-- [ ] El modelo rechaza referencias inválidas y permite más de una caja activa en la misma sucursal.
+- [x] La caja tiene ID estable, nombre, sucursal y estado; no puede vincularse a otra empresa/sucursal por un ID del cliente.
+- [x] El modelo rechaza referencias inválidas y permite más de una caja activa en la misma sucursal.
 
 **Verificación:** pruebas de modelo y `dotnet build Carnicerias.sln --configuration Release`.
 **Dependencias:** ninguna. **Archivos probables:** nueva entidad de caja, `PlatformAccessDbContext.cs`, pruebas de dominio/integración. **Tamaño:** mediano.
@@ -74,7 +74,7 @@ Contrato aprobado en `SPEC-pos-checkout.md` y plan técnico aprobado en `tasks/p
 **Descripción:** preparar turno, borrador, venta, sesión y libro de caja para conservar explícitamente su caja; el borrador nuevo queda ligado además al turno que lo creó.
 
 **Aceptación:**
-- [ ] El modelo expresa pertenencia a caja sin cambiar importes, renglones ni reglas de stock.
+- [x] El modelo expresa pertenencia a caja sin cambiar importes, renglones ni reglas de stock.
 - [ ] Una venta o movimiento no puede atribuirse a una caja distinta de su turno; las transiciones de borrador preservan turno/cajero.
 
 **Verificación:** pruebas de modelo y compilación .NET. **Dependencias:** C1. **Archivos probables:** `CashierShift.cs`, `SaleDraft.cs`, `ConfirmedSale.cs`, `UserSession.cs`, `PlatformAccessDbContext.cs` (el libro de caja se ajusta con la persistencia). **Tamaño:** mediano.
@@ -84,16 +84,16 @@ Contrato aprobado en `SPEC-pos-checkout.md` y plan técnico aprobado en `tasks/p
 **Descripción:** crear las tablas, claves e índices de caja; atribuir datos anteriores a cajas históricas por sucursal y detectar borradores activos ambiguos antes de aplicar restricciones obligatorias.
 
 **Aceptación:**
-- [ ] Conteos, importes de ventas/caja y reservas anteriores coinciden antes y después de migrar; ninguna venta antigua se atribuye a Caja 1 o Caja 2 nuevas.
-- [ ] Un borrador activo sin turno atribuible detiene la migración con diagnóstico; no se cancela ni libera stock silenciosamente.
-- [ ] Restricciones únicas parciales impiden turnos abiertos duplicados por caja y por cajero/sucursal.
+- [x] Conteos, importes de ventas/caja y reservas anteriores coinciden antes y después de migrar; ninguna venta antigua se atribuye a Caja 1 o Caja 2 nuevas.
+- [x] Un borrador activo sin turno atribuible detiene la migración con diagnóstico; no se cancela ni libera stock silenciosamente.
+- [x] Restricciones únicas parciales impiden turnos abiertos duplicados por caja y por cajero/sucursal.
 
 **Verificación:** prueba de migración sobre copia desechable de PostgreSQL y `dotnet test Carnicerias.sln --configuration Release`. **Dependencias:** C1, C2. **Archivos probables:** migración EF y archivos generados, prueba de migración. **Tamaño:** mediano.
 
 ### Checkpoint A: Persistencia
 
-- [ ] Migración y rollback ensayados en base de prueba, sin pérdida ni cambio de saldos/reservas.
-- [ ] Solución .NET compila y sus pruebas pasan.
+- [x] Migración y rollback ensayados en base de prueba, sin pérdida ni cambio de saldos/reservas.
+- [x] Solución .NET compila y sus pruebas pasan (45 pruebas, PostgreSQL incluido; 7 de arquitectura y 38 de integración).
 
 ### Tarea C4: Validar la credencial de terminal en la API
 

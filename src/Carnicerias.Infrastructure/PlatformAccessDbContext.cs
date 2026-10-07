@@ -500,6 +500,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(shift => new { shift.CompanyId, shift.BranchId, shift.CashierId })
                 .IsUnique().HasFilter("\"Status\" = 0");
+            entity.HasIndex(shift => new { shift.CompanyId, shift.BranchId, shift.PosTerminalId })
+                .IsUnique().HasFilter("\"Status\" = 0 AND \"PosTerminalId\" IS NOT NULL");
         });
     }
 }

@@ -98,6 +98,24 @@ public sealed class PosTerminalTests
     }
 
     [Fact]
+    public void OpenShiftIsUniquePerTerminal()
+    {
+        var options = new DbContextOptionsBuilder<PlatformAccessDbContext>()
+            .UseNpgsql("Host=localhost;Database=model_only;Username=postgres")
+            .Options;
+        using var db = new PlatformAccessDbContext(options);
+
+        var shift = db.Model.FindEntityType(typeof(CashierShift));
+
+        Assert.NotNull(shift);
+        Assert.Contains(shift.GetIndexes(), index =>
+            index.IsUnique && index.Properties.Select(property => property.Name).SequenceEqual([
+                nameof(CashierShift.CompanyId), nameof(CashierShift.BranchId),
+                nameof(CashierShift.PosTerminalId)]) &&
+            index.GetFilter() == "\"Status\" = 0 AND \"PosTerminalId\" IS NOT NULL");
+    }
+
+    [Fact]
     public void SessionCanBeBoundToOnlyOneTerminal()
     {
         var now = DateTimeOffset.UtcNow;

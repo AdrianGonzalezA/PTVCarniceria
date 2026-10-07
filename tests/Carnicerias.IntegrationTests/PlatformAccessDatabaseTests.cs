@@ -32,7 +32,7 @@ public sealed class PlatformAccessDatabaseTests
             Assert.Null(existingSchema);
 
             await db.Database.MigrateAsync();
-            Assert.Equal(8, await db.Database.SqlQueryRaw<int>(
+            Assert.Equal(9, await db.Database.SqlQueryRaw<int>(
                 "SELECT count(*)::int AS \"Value\" FROM information_schema.tables WHERE table_schema = 'platform_access'")
                 .SingleAsync());
         }

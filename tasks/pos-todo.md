@@ -2,6 +2,8 @@
 
 **Prioridad:** acordada el 6 de octubre de 2026. El módulo de administración de usuarios queda en pausa para centrar el desarrollo en el POS y permitir probar el producto desde Electron.
 
+**Regla vigente de datos de desarrollo:** usar únicamente `carnicerias_test_visual` como base de la aplicación. No crear bases adicionales para pruebas o reinicios sin autorización explícita; limpiar y recargar los datos en esa misma base. El set actual tiene dos cajas, nueve productos con stock y cero ventas iniciales. Las pruebas de integración que exigen una base desechable separada quedan pendientes bajo esta regla.
+
 ## Estado del flujo de venta (7 de octubre de 2026)
 
 - El catálogo real, el borrador, la reserva de stock, el turno de cajero y la confirmación de venta ya están conectados al backend. Una confirmación registra venta, pagos, caja y egreso de stock en una transacción.

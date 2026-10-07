@@ -80,6 +80,21 @@ public sealed class SaleDraftPersistenceTests
                 Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(selectContext)).StatusCode);
             }
 
+            var beforeShift = await client.PutAsJsonAsync("/api/sales/draft", new
+            {
+                priceListId,
+                lines = new[] { new { productId, quantity = 1m } }
+            });
+            Assert.Equal(HttpStatusCode.Conflict, beforeShift.StatusCode);
+            using (var error = JsonDocument.Parse(await beforeShift.Content.ReadAsStringAsync()))
+                Assert.Equal("CASHIER_SHIFT_REQUIRED", error.RootElement.GetProperty("error").GetProperty("code").GetString());
+            var cancelBeforeShift = await client.DeleteAsync("/api/sales/draft");
+            Assert.Equal(HttpStatusCode.Conflict, cancelBeforeShift.StatusCode);
+            using (var error = JsonDocument.Parse(await cancelBeforeShift.Content.ReadAsStringAsync()))
+                Assert.Equal("CASHIER_SHIFT_REQUIRED", error.RootElement.GetProperty("error").GetProperty("code").GetString());
+            Assert.Equal(HttpStatusCode.Created,
+                (await client.PostAsJsonAsync("/api/cashier-shifts", new { openingCash = 0m })).StatusCode);
+
             var firstSave = await client.PutAsJsonAsync("/api/sales/draft", new
             {
                 priceListId,
@@ -98,8 +113,6 @@ public sealed class SaleDraftPersistenceTests
             using var updatedBody = JsonDocument.Parse(await updatedSave.Content.ReadAsStringAsync());
             Assert.Equal(draftId, updatedBody.RootElement.GetProperty("id").GetGuid());
 
-            Assert.Equal(HttpStatusCode.Created,
-                (await client.PostAsJsonAsync("/api/cashier-shifts", new { openingCash = 0m })).StatusCode);
             var confirmation = await client.PostAsJsonAsync($"/api/sales/drafts/{draftId}/confirmation", new
             {
                 payments = new[] { new { method = "cash", amount = 2000m } }

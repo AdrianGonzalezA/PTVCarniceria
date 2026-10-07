@@ -34,6 +34,8 @@ public sealed class CashierShiftEndpointTests
         {
             Guid companyId;
             Guid branchId;
+            Guid productId;
+            Guid priceListId;
             await using (var db = new PlatformAccessDbContext(options))
             {
                 await db.Database.MigrateAsync();
@@ -49,11 +51,22 @@ public sealed class CashierShiftEndpointTests
                 var secondTerminal = new PosTerminal(company.Id, branch.Id, "Caja 2");
                 firstTerminal.AssignCredentialHash(firstCredential.Hash);
                 secondTerminal.AssignCredentialHash(secondCredential.Hash);
+                var category = new ProductCategory(company.Id, "Meat");
+                var product = new CatalogProduct(company.Id, category.Id, "MEAT-1", "Test cut",
+                    "kg", ProductSaleMode.Weight, 500);
+                var priceList = new PriceList(company.Id, "Counter");
+                var stock = new BranchInventoryBalance(company.Id, branch.Id, product.Id);
+                stock.SetQuantities(10m, 0m);
                 db.AddRange(secondUser, new UserAssignment(secondUser.Id, role.Id, company.Id),
-                    firstTerminal, secondTerminal);
+                    firstTerminal, secondTerminal, category, product, priceList,
+                    new BranchPriceList(company.Id, branch.Id, priceList.Id),
+                    new ProductPrice(company.Id, priceList.Id, product.Id, 1000m,
+                        DateTimeOffset.UtcNow.AddMinutes(-1), (await db.Users.SingleAsync()).Id), stock);
                 await db.SaveChangesAsync();
                 companyId = company.Id;
                 branchId = branch.Id;
+                productId = product.Id;
+                priceListId = priceList.Id;
             }
 
             using var factory = new CashierShiftApiFactory(connectionString);
@@ -81,10 +94,31 @@ public sealed class CashierShiftEndpointTests
             Assert.Equal(100m, firstCurrent.RootElement.GetProperty("cashBalance").GetDecimal());
             Assert.Equal(200m, secondCurrent.RootElement.GetProperty("cashBalance").GetDecimal());
 
+            Assert.Equal(HttpStatusCode.OK,
+                (await first.PutAsJsonAsync("/api/sales/draft", new
+                { priceListId, lines = new[] { new { productId, quantity = 2m } } })).StatusCode);
+            Assert.Equal(HttpStatusCode.OK,
+                (await second.PutAsJsonAsync("/api/sales/draft", new
+                { priceListId, lines = new[] { new { productId, quantity = 3m } } })).StatusCode);
+            await using (var stockDb = new PlatformAccessDbContext(options))
+            {
+                Assert.Equal(5m, (await stockDb.BranchInventoryBalances.SingleAsync()).Reserved);
+                var drafts = await stockDb.SaleDrafts.ToArrayAsync();
+                Assert.Equal(2, drafts.Length);
+                Assert.Contains(drafts, draft => draft.CashierShiftId == firstShiftId);
+                Assert.Contains(drafts, draft => draft.CashierShiftId == secondShiftId);
+                Assert.NotEqual(drafts[0].PosTerminalId, drafts[1].PosTerminalId);
+            }
+
             using var sameCashierOtherTerminal = factory.CreateClient(new WebApplicationFactoryClientOptions
             { BaseAddress = new Uri("https://localhost"), HandleCookies = false });
             await LoginAndSelectTerminalAsync(sameCashierOtherTerminal, "cashier-one", password,
                 secondCredential.Token, companyId, branchId);
+            Assert.Equal(HttpStatusCode.NoContent,
+                (await sameCashierOtherTerminal.GetAsync("/api/sales/draft")).StatusCode);
+            Assert.Equal(HttpStatusCode.Conflict,
+                (await sameCashierOtherTerminal.PutAsJsonAsync("/api/sales/draft", new
+                { priceListId, lines = new[] { new { productId, quantity = 1m } } })).StatusCode);
             Assert.Equal(HttpStatusCode.Conflict,
                 (await sameCashierOtherTerminal.PostAsJsonAsync("/api/cashier-shifts", new { openingCash = 0m })).StatusCode);
 
@@ -94,6 +128,14 @@ public sealed class CashierShiftEndpointTests
                 firstCredential.Token, companyId, branchId);
             Assert.Equal(HttpStatusCode.Conflict,
                 (await otherCashierSameTerminal.PostAsJsonAsync("/api/cashier-shifts", new { openingCash = 0m })).StatusCode);
+
+            Assert.Equal(HttpStatusCode.NoContent, (await first.DeleteAsync("/api/sales/draft")).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await second.GetAsync("/api/sales/draft")).StatusCode);
+            await using (var stockDb = new PlatformAccessDbContext(options))
+                Assert.Equal(3m, (await stockDb.BranchInventoryBalances.SingleAsync()).Reserved);
+            Assert.Equal(HttpStatusCode.NoContent, (await second.DeleteAsync("/api/sales/draft")).StatusCode);
+            await using (var stockDb = new PlatformAccessDbContext(options))
+                Assert.Equal(0m, (await stockDb.BranchInventoryBalances.SingleAsync()).Reserved);
 
             Assert.Equal(HttpStatusCode.OK,
                 (await second.PostAsync("/api/cashier-shifts/current/close", null)).StatusCode);

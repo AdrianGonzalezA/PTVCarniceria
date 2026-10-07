@@ -21,9 +21,13 @@ public static class SaleDraftEndpoints
         CancellationToken cancellationToken)
     {
         var context = accessor.Context;
+        var shift = await FindOpenShiftAsync(db, accessor, cancellationToken);
+        if (shift is null) return Results.NoContent();
         var draft = await db.SaleDrafts.AsNoTracking().Include(item => item.Lines)
             .SingleOrDefaultAsync(item => item.CompanyId == context.CompanyId &&
                 item.BranchId == context.BranchId && item.UserId == context.UserId &&
+                item.PosTerminalId == accessor.TerminalId &&
+                (accessor.TerminalId == null || item.CashierShiftId == shift.Id) &&
                 item.Status == SaleDraftStatus.Draft, cancellationToken);
         return draft is null ? Results.NoContent() : Results.Ok(ToResponse(draft));
     }
@@ -44,6 +48,9 @@ public static class SaleDraftEndpoints
 
         var context = accessor.Context;
         var now = timeProvider.GetUtcNow();
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        var shift = await FindOpenShiftAsync(db, accessor, cancellationToken);
+        if (shift is null) return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_REQUIRED");
         var listAvailable = await (
             from assignment in db.BranchPriceLists
             join list in db.PriceLists on assignment.PriceListId equals list.Id
@@ -52,11 +59,16 @@ public static class SaleDraftEndpoints
             select assignment.PriceListId).AnyAsync(cancellationToken);
         if (!listAvailable) return Error(StatusCodes.Status403Forbidden, "PRICE_LIST_NOT_AVAILABLE");
 
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var draft = await db.SaleDrafts.Include(item => item.Lines)
             .SingleOrDefaultAsync(item => item.CompanyId == context.CompanyId &&
                 item.BranchId == context.BranchId && item.UserId == context.UserId &&
+                item.PosTerminalId == accessor.TerminalId &&
+                (accessor.TerminalId == null || item.CashierShiftId == shift.Id) &&
                 item.Status == SaleDraftStatus.Draft, cancellationToken);
+        if (draft is null && await db.SaleDrafts.AnyAsync(item =>
+                item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
+                item.UserId == context.UserId && item.Status == SaleDraftStatus.Draft, cancellationToken))
+            return Error(StatusCodes.Status409Conflict, "DRAFT_BELONGS_TO_OTHER_SHIFT");
         if (draft is not null && draft.PriceListId != request.PriceListId)
             return Error(StatusCodes.Status409Conflict, "DRAFT_PRICE_LIST_LOCKED");
 
@@ -89,7 +101,8 @@ public static class SaleDraftEndpoints
 
         if (draft is null)
         {
-            draft = new SaleDraft(context.CompanyId, context.BranchId, context.UserId, request.PriceListId, now);
+            draft = new SaleDraft(context.CompanyId, context.BranchId, context.UserId, request.PriceListId, now,
+                accessor.TerminalId, accessor.TerminalId is null ? null : shift.Id);
             db.SaleDrafts.Add(draft);
         }
         foreach (var productId in lines.Select(line => line.ProductId)
@@ -129,8 +142,12 @@ public static class SaleDraftEndpoints
         var context = accessor.Context;
         var now = timeProvider.GetUtcNow();
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        var shift = await FindOpenShiftAsync(db, accessor, cancellationToken);
+        if (shift is null) return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_REQUIRED");
         var draft = await db.SaleDrafts.Include(item => item.Lines).SingleOrDefaultAsync(item => item.CompanyId == context.CompanyId &&
             item.BranchId == context.BranchId && item.UserId == context.UserId &&
+            item.PosTerminalId == accessor.TerminalId &&
+            (accessor.TerminalId == null || item.CashierShiftId == shift.Id) &&
             item.Status == SaleDraftStatus.Draft, cancellationToken);
         if (draft is null) return Results.NoContent();
         foreach (var line in draft.Lines)
@@ -147,6 +164,16 @@ public static class SaleDraftEndpoints
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return Results.NoContent();
+    }
+
+    private static Task<CashierShift?> FindOpenShiftAsync(
+        PlatformAccessDbContext db, OperationalContextAccessor accessor, CancellationToken cancellationToken)
+    {
+        var context = accessor.Context;
+        return db.CashierShifts.SingleOrDefaultAsync(shift =>
+            shift.CompanyId == context.CompanyId && shift.BranchId == context.BranchId &&
+            shift.CashierId == context.UserId && shift.PosTerminalId == accessor.TerminalId &&
+            shift.Status == CashierShiftStatus.Open, cancellationToken);
     }
 
     private static SaleDraftResponse ToResponse(SaleDraft draft) => new(

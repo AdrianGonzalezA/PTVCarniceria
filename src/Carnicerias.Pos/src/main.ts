@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import {
   app,
@@ -7,13 +8,16 @@ import {
   ipcMain,
   net,
   protocol,
+  safeStorage,
   session,
   type IpcMainInvokeEvent,
 } from 'electron';
-import { resolveAppAsset, toBackendUrl } from './app-protocol';
+import { resolveAppAsset, toBackendRequest, toBackendUrl } from './app-protocol';
 import { createDiagnostic } from './diagnostic';
 import { diagnosticChannel } from './native-api';
+import { resolvePosProfile } from './pos-profile';
 import { createSecureWebPreferences, isAllowedNavigation } from './security-policy';
+import { loadTerminalCredential } from './terminal-credential';
 
 function createContentSecurityPolicy(nonce?: string): string {
   const nonceSource = nonce ? ` 'nonce-${nonce}'` : '';
@@ -34,6 +38,18 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { corsEnabled: true, secure: true, standard: true, supportFetchAPI: true } },
 ]);
 
+const profile = resolvePosProfile(process.argv, app.getPath('userData'));
+const initialTerminalCredential = process.env.CARNICERIAS_POS_TERMINAL_TOKEN;
+delete process.env.CARNICERIAS_POS_TERMINAL_TOKEN;
+if (initialTerminalCredential && !profile.name) {
+  throw new Error('A named POS profile is required for terminal provisioning');
+}
+if (profile.name) {
+  mkdirSync(profile.userDataPath, { recursive: true });
+  app.setPath('userData', profile.userDataPath);
+  app.setPath('sessionData', profile.userDataPath);
+}
+
 function validateIpcSender(event: IpcMainInvokeEvent): void {
   if (!event.senderFrame || !isAllowedNavigation(event.senderFrame.url)) {
     throw new Error('Rejected IPC sender');
@@ -47,13 +63,13 @@ function registerNativeApi(): void {
   });
 }
 
-function registerApplicationProtocol(): void {
+function registerApplicationProtocol(terminalCredential?: string): void {
   const webRoot = path.join(__dirname, '..', 'web');
 
   protocol.handle('app', async (request) => {
     const backendUrl = toBackendUrl(request.url);
     if (backendUrl) {
-      return net.fetch(new Request(backendUrl, request));
+      return net.fetch(toBackendRequest(request, terminalCredential));
     }
 
     if (request.method !== 'GET') {
@@ -103,16 +119,24 @@ function createWindow(): BrowserWindow {
   return window;
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const terminalCredential = await loadTerminalCredential(
+    app.getPath('userData'),
+    initialTerminalCredential,
+    safeStorage,
+  );
   session.defaultSession.setPermissionCheckHandler(() => false);
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
-  registerApplicationProtocol();
+  registerApplicationProtocol(terminalCredential);
   registerNativeApi();
   createWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+}).catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : 'POS startup failed');
+  app.quit();
 });
 
 app.on('window-all-closed', () => {

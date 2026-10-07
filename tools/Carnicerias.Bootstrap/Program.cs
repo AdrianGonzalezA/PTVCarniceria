@@ -1,3 +1,5 @@
 using Carnicerias.Bootstrap;
 
-return await BootstrapCommand.RunAsync(args);
+return args.FirstOrDefault() == "create-terminal"
+    ? await TerminalProvisionCommand.RunAsync(args)
+    : await BootstrapCommand.RunAsync(args);

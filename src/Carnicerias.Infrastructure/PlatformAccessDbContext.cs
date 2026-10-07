@@ -20,6 +20,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<Branch> Branches => Set<Branch>();
 
+    public DbSet<PosTerminal> PosTerminals => Set<PosTerminal>();
+
     public DbSet<UserSession> Sessions => Set<UserSession>();
 
     public DbSet<PriceList> PriceLists => Set<PriceList>();
@@ -107,6 +109,20 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(branch => branch.Name).HasMaxLength(200).IsRequired();
             entity.HasAlternateKey(branch => new { branch.CompanyId, branch.Id });
             entity.HasOne<Company>().WithMany().HasForeignKey(branch => branch.CompanyId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PosTerminal>(entity =>
+        {
+            entity.ToTable("pos_terminals");
+            entity.HasKey(terminal => terminal.Id);
+            entity.HasAlternateKey(terminal => new { terminal.CompanyId, terminal.BranchId, terminal.Id });
+            entity.Property(terminal => terminal.Name).HasMaxLength(120).IsRequired();
+            entity.HasOne<Branch>().WithMany()
+                .HasForeignKey(terminal => new { terminal.CompanyId, terminal.BranchId })
+                .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(terminal => new { terminal.CompanyId, terminal.BranchId, terminal.Name })
+                .IsUnique();
         });
 
         modelBuilder.Entity<UserAssignment>(entity =>

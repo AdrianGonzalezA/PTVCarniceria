@@ -7,10 +7,11 @@ internal static class TerminalProvisionCommand
 {
     public static async Task<int> RunAsync(string[] args)
     {
-        TerminalProvisionArguments arguments;
+        TerminalProvisionArguments? arguments = null;
+        var listBranches = args is ["list-branches"];
         try
         {
-            arguments = TerminalProvisionArgumentParser.Parse(args);
+            if (!listBranches) arguments = TerminalProvisionArgumentParser.Parse(args);
         }
         catch (ArgumentException exception)
         {
@@ -30,9 +31,21 @@ internal static class TerminalProvisionCommand
             var options = new DbContextOptionsBuilder<PlatformAccessDbContext>()
                 .UseNpgsql(connectionString).Options;
             await using var db = new PlatformAccessDbContext(options);
+            if (listBranches)
+            {
+                var branches = await db.Branches.AsNoTracking()
+                    .Where(branch => branch.IsActive)
+                    .OrderBy(branch => branch.Name)
+                    .Select(branch => new { branch.Id, branch.CompanyId, branch.Name })
+                    .ToArrayAsync();
+                foreach (var branch in branches)
+                    Console.WriteLine($"{branch.Id} | {branch.Name} | empresa {branch.CompanyId}");
+                return 0;
+            }
+
             await db.Database.MigrateAsync();
             var created = await new PosTerminalProvisioningService(db)
-                .CreateAsync(arguments.BranchId, arguments.Name);
+                .CreateAsync(arguments!.BranchId, arguments.Name);
             Console.WriteLine($"Caja creada: {created.Terminal.Name} ({created.Terminal.Id}).");
             Console.WriteLine($"Credencial de un solo uso para configurar Electron: {created.Credential.Token}");
             return 0;

@@ -1,5 +1,8 @@
 using Carnicerias.Bootstrap;
 
-return args.FirstOrDefault() == "create-terminal"
-    ? await TerminalProvisionCommand.RunAsync(args)
-    : await BootstrapCommand.RunAsync(args);
+return args.FirstOrDefault() switch
+{
+    "create-terminal" or "list-branches" => await TerminalProvisionCommand.RunAsync(args),
+    "seed-pos-visual" => await VisualPosSeedCommand.RunAsync(args),
+    _ => await BootstrapCommand.RunAsync(args)
+};

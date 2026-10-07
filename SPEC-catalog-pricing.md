@@ -23,6 +23,7 @@ Reemplazar el catálogo de demostración del punto de venta por productos activo
 
 1. Categorías y productos pertenecen a una empresa. El código principal de producto es único dentro de esa empresa y permanece inmutable después del alta.
 2. Cada producto tiene denominación, categoría, unidad, modalidad de venta (`weight` o `unit`), costo positivo, estado activo y códigos alternativos cuando correspondan.
+   La unidad de venta se define en el catálogo, no en la caja: un producto `weight` se cobra y controla por kg (hasta tres decimales); uno `unit` se cobra y controla en cantidades enteras de la unidad configurada (por ejemplo, unidad o paquete). Un paquete de cuatro se registra como un paquete, no como cuatro unidades sueltas.
 3. Una sucursal puede tener varias listas de precios habilitadas. El cajero elige explícitamente la lista correspondiente antes de agregar productos; la elección pertenece a la venta en curso y no se deduce solo de la sucursal.
 4. Cada cambio de precio conserva valor anterior, nuevo, vigencia, fecha de cambio y usuario. El POS recibe solo productos activos con precio vigente en la lista elegida para su contexto. Los importes se expresan en ARS con dos decimales. Los productos por peso muestran precio por kilogramo.
 5. La búsqueda por texto se inicia con tres caracteres y examina nombre y código. La búsqueda exacta por código puede ejecutarse con menos caracteres y devuelve un producto inequívoco o «Producto no encontrado».

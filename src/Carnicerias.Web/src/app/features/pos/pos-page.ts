@@ -19,6 +19,7 @@ interface PosProduct {
   readonly category: string;
   readonly price: number;
   readonly mode: SaleMode;
+  readonly unit?: string;
   readonly availableStock?: number;
 }
 
@@ -80,12 +81,14 @@ export class PosPage implements OnInit {
     readonly operation: 'cancel' | { readonly priceListId: string; readonly lines: readonly SaleLine[] };
   }>();
   private draftRevision = 0;
+  private stockRequestRevision = 0;
 
   protected readonly session = signal<CurrentSession | null>(null);
   protected readonly demoPriceLists = demoPriceLists;
   protected readonly realPriceLists = signal<readonly PriceListOption[]>([]);
   protected readonly catalogCategories = signal<readonly CatalogCategory[]>([]);
   protected readonly realProducts = signal<readonly PosProduct[]>([]);
+  private readonly stockByProduct = signal<ReadonlyMap<string, number>>(new Map());
   protected readonly priceListLoadState = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly catalogLoadState = signal<'idle' | 'loading' | 'ready' | 'error'>('idle');
   protected readonly selectedPriceListId = signal('');
@@ -119,6 +122,19 @@ export class PosPage implements OnInit {
   private readonly persistedLines = signal<readonly SaleLine[]>([]);
   protected readonly selectedProduct = signal<PosProduct | null>(null);
   protected readonly quantityDraft = signal('1');
+  protected readonly quantityProblem = computed(() => {
+    const product = this.selectedProduct();
+    if (!product) return null;
+    const quantity = Number(this.quantityDraft());
+    if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 10000 ||
+        Math.abs(Math.round(quantity * 1000) - quantity * 1000) > 0.000001)
+      return product.mode === 'weight' ? 'Ingresá un peso válido mayor a cero (hasta 3 decimales).' : 'Ingresá una cantidad válida mayor a cero.';
+    if (product.mode === 'unit' && !Number.isInteger(quantity)) return 'Ingresá una cantidad entera de unidades de venta.';
+    const available = this.availableStock(product);
+    if (!this.isDemoPriceList() && available !== undefined && quantity > available)
+      return `Stock insuficiente. Disponible: ${available.toLocaleString('es-AR', { maximumFractionDigits: 3 })} ${this.unitLabel(product)}.`;
+    return null;
+  });
   protected readonly isMenuOpen = signal(false);
   protected readonly checkoutNotice = signal(false);
   protected readonly cashierShift = signal<CashierShift | null>(null);
@@ -204,10 +220,17 @@ export class PosPage implements OnInit {
       if (error) {
         if (revision === this.draftRevision) {
           if (operation === 'cancel') this.lines.set(this.persistedLines());
-          this.draftStatus.set('error');
-          this.errorMessage.set(operation === 'cancel'
-            ? 'No se pudo cancelar el borrador guardado. Intentá de nuevo.'
-            : this.draftSaveErrorMessage(error));
+          if (error.error?.error?.code === 'INSUFFICIENT_STOCK') {
+            this.lines.set(this.persistedLines());
+            this.draftStatus.set('saved');
+            this.errorMessage.set('No hay stock suficiente. El producto o la cantidad rechazada no se agregó al ticket. Revisá las existencias.');
+            this.refreshStock();
+          } else {
+            this.draftStatus.set('error');
+            this.errorMessage.set(operation === 'cancel'
+              ? 'No se pudo cancelar el borrador guardado. Intentá de nuevo.'
+              : this.draftSaveErrorMessage(error));
+          }
         }
         return;
       }
@@ -229,6 +252,7 @@ export class PosPage implements OnInit {
             category: '',
             price: item.unitPrice,
             mode: item.saleMode,
+            unit: item.unit,
           },
           quantity: item.quantity,
         })));
@@ -236,6 +260,7 @@ export class PosPage implements OnInit {
       if (revision === this.draftRevision) {
         this.draftStatus.set('saved');
         this.errorMessage.set(null);
+        this.refreshStock();
       }
     });
   }
@@ -250,6 +275,7 @@ export class PosPage implements OnInit {
         this.session.set(session);
         this.loadCashierShift();
         this.loadPriceLists();
+        this.refreshStock();
       },
       error: () => void this.router.navigateByUrl('/'),
     });
@@ -310,13 +336,7 @@ export class PosPage implements OnInit {
     if (!product) return;
 
     this.searchText.set('');
-    if (product.mode === 'weight') {
-      this.openProduct(product);
-      return;
-    }
-
-    this.addProductLine(product, 1);
-    this.errorMessage.set(null);
+    this.openProduct(product);
   }
 
   protected selectCategory(id: string): void {
@@ -344,11 +364,7 @@ export class PosPage implements OnInit {
           this.realProducts.set([product]);
           this.catalogLoadState.set('ready');
           this.searchText.set('');
-          if (product.mode === 'weight') this.openProduct(product);
-          else {
-            this.addProductLine(product, 1);
-            this.errorMessage.set(null);
-          }
+          this.openProduct(product);
           return;
         }
         if (page.totalItems > 0 || query.length < 3) {
@@ -394,6 +410,7 @@ export class PosPage implements OnInit {
     readonly name: string;
     readonly categoryId: string;
     readonly saleMode: 'weight' | 'unit';
+    readonly unit?: string;
     readonly price: number;
     readonly availableStock: number;
   }[]): void {
@@ -407,6 +424,7 @@ export class PosPage implements OnInit {
     readonly name: string;
     readonly categoryId: string;
     readonly saleMode: 'weight' | 'unit';
+    readonly unit?: string;
     readonly price: number;
     readonly availableStock: number;
   }): PosProduct {
@@ -417,13 +435,14 @@ export class PosPage implements OnInit {
       category: item.categoryId,
       price: item.price,
       mode: item.saleMode,
+      unit: item.unit,
       availableStock: item.availableStock,
     };
   }
 
   protected openProduct(product: PosProduct): void {
     this.errorMessage.set(null);
-    if (!this.isDemoPriceList() && (product.availableStock ?? 0) <= 0) {
+    if (!this.isDemoPriceList() && (this.availableStock(product) ?? 0) <= 0) {
       this.errorMessage.set('No hay stock disponible para este producto en la sucursal.');
       return;
     }
@@ -438,11 +457,8 @@ export class PosPage implements OnInit {
   protected addSelectedProduct(): void {
     const product = this.selectedProduct();
     const quantity = Number(this.quantityDraft());
-    if (!product || !Number.isFinite(quantity) || quantity <= 0 ||
-        (product.mode === 'unit' && !Number.isInteger(quantity))) {
-      this.errorMessage.set(product?.mode === 'unit'
-        ? 'Ingresá una cantidad entera mayor a cero.'
-        : 'Ingresá un peso mayor a cero.');
+    if (!product || this.quantityProblem()) {
+      this.errorMessage.set(this.quantityProblem());
       return;
     }
 
@@ -452,11 +468,21 @@ export class PosPage implements OnInit {
   }
 
   protected updateLineQuantity(productId: string, event: Event): void {
-    const quantity = Number((event.target as HTMLInputElement).value.replace(',', '.'));
+    const input = event.target as HTMLInputElement;
+    const quantity = Number(input.value.replace(',', '.'));
     const line = this.lines().find((item) => item.product.id === productId);
     if (!line || !Number.isFinite(quantity) || quantity <= 0 ||
+        quantity > 10000 || Math.abs(Math.round(quantity * 1000) - quantity * 1000) > 0.000001 ||
         (line.product.mode === 'unit' && !Number.isInteger(quantity))) {
       this.errorMessage.set('La cantidad o el peso debe ser mayor a cero y válido para el producto.');
+      if (line) input.value = String(line.quantity);
+      return;
+    }
+    const available = this.availableStock(line.product);
+    const reservedByThisTicket = this.persistedLines().find((item) => item.product.id === productId)?.quantity ?? 0;
+    if (!this.isDemoPriceList() && available !== undefined && quantity > available + reservedByThisTicket) {
+      this.errorMessage.set(`Stock insuficiente. Disponible para agregar: ${available.toLocaleString('es-AR', { maximumFractionDigits: 3 })} ${this.unitLabel(line.product)}.`);
+      input.value = String(line.quantity);
       return;
     }
     this.errorMessage.set(null);
@@ -594,7 +620,6 @@ export class PosPage implements OnInit {
 
   private draftSaveErrorMessage(error: HttpErrorResponse): string {
     const code = error.error?.error?.code;
-    if (code === 'INSUFFICIENT_STOCK') return 'No hay stock suficiente para reservar uno de los productos. Reducí la cantidad o ajustá las existencias; el detalle sigue en pantalla.';
     if (code === 'STOCK_RESERVATION_MISSING') return 'La reserva de stock cambió. Actualizá el ticket e intentá nuevamente.';
     if (code === 'PRICE_LIST_NOT_AVAILABLE') return 'La lista de precios ya no está habilitada para esta sucursal.';
     if (code === 'PRODUCT_PRICE_NOT_AVAILABLE') return 'Hay un producto sin precio vigente en esta lista.';
@@ -770,7 +795,28 @@ export class PosPage implements OnInit {
   protected formatQuantity(line: SaleLine): string {
     return line.product.mode === 'weight'
       ? `${line.quantity.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`
-      : line.quantity.toLocaleString('es-AR');
+      : `${line.quantity.toLocaleString('es-AR')} ${this.unitLabel(line.product)}`;
+  }
+
+  protected unitLabel(product: PosProduct): string {
+    return product.mode === 'weight' ? 'kg' : product.unit || 'unidad';
+  }
+
+  protected availableStock(product: PosProduct): number | undefined {
+    return this.stockByProduct().get(product.id) ?? product.availableStock;
+  }
+
+  private refreshStock(): void {
+    const revision = ++this.stockRequestRevision;
+    this.inventoryClient.stock().subscribe({
+      next: (items) => {
+        if (revision === this.stockRequestRevision)
+          this.stockByProduct.set(new Map(items.map((item) => [item.productId, item.available])));
+      },
+      error: () => {
+        if (revision === this.stockRequestRevision) this.stockByProduct.set(new Map());
+      },
+    });
   }
 
   protected lineTotal(line: SaleLine): number {
@@ -825,6 +871,7 @@ export class PosPage implements OnInit {
             category: '',
             price: item.unitPrice,
             mode: item.saleMode,
+            unit: item.unit,
           },
           quantity: item.quantity,
         })));

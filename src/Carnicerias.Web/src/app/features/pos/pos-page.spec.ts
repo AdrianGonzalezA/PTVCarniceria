@@ -210,7 +210,7 @@ describe('PosPage', () => {
     expect(confirmedDraftId).toBe('draft-id');
   });
 
-  it('keeps the unsaved ticket visible and offers retry when saving fails', async () => {
+  it('keeps the unsaved ticket visible and offers retry for a server failure', async () => {
     const session: CurrentSession = {
       userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
       context: {
@@ -235,7 +235,7 @@ describe('PosPage', () => {
           current: () => of(null), save: () => {
             saveAttempts++;
             if (saveAttempts === 1) return throwError(() => new HttpErrorResponse({
-              status: 409, error: { error: { code: 'INSUFFICIENT_STOCK' } },
+              status: 500,
             }));
             return of({ id: 'draft-id', priceListId: 'list-id', updatedAtUtc: '2026-10-06T16:00:00Z', lines: [{
               productId: 'product-id', productCode: '1001', productName: 'Bife', unit: 'unidad',
@@ -267,13 +267,13 @@ describe('PosPage', () => {
     expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Bife');
     const retry = fixture.nativeElement.querySelector('.draft-retry') as HTMLButtonElement;
     expect(retry).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('.price-list-lock[role="alert"]').textContent).toContain('No hay stock suficiente');
+    expect(fixture.nativeElement.querySelector('.price-list-lock[role="alert"]').textContent).toContain('No se pudo guardar el ticket');
     expect(fixture.nativeElement.querySelector('.price-list-lock[role="alert"]').textContent).not.toContain('No se pudo sincronizar');
     expect(fixture.nativeElement.querySelector('.pos-error')).toBeNull();
     (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#checkout-title')).toBeNull();
-    expect(fixture.nativeElement.querySelector('.price-list-lock[role="alert"]').textContent).toContain('No hay stock suficiente');
+    expect(fixture.nativeElement.querySelector('.price-list-lock[role="alert"]').textContent).toContain('No se pudo guardar el ticket');
     expect(fixture.nativeElement.querySelector('.pos-error')).toBeNull();
     retry.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -281,6 +281,159 @@ describe('PosPage', () => {
     expect(saveAttempts).toBe(2);
     expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Bife');
     expect(fixture.nativeElement.querySelector('.price-list-lock').textContent).toContain('Borrador guardado');
+    expect(fixture.nativeElement.querySelector('.pos-error')).toBeNull();
+  });
+
+  it('checks kilograms and catalog-defined packages before adding a product', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    let savedLines: readonly { productId: string; quantity: number }[] = [];
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: {
+        priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
+        categories: () => of([{ id: 'category-id', name: 'Productos', productCount: 2 }]),
+        products: () => of({ items: [
+          { id: 'weight-id', code: '1001', name: 'Asado', categoryId: 'category-id',
+            unit: 'kg', saleMode: 'weight', price: 1000, availableStock: 0.5 },
+          { id: 'pack-id', code: '7001', name: 'Hamburguesas x 4', categoryId: 'category-id',
+            unit: 'paquete', saleMode: 'unit', price: 2000, availableStock: 2 },
+        ], page: 1, pageSize: 50, totalItems: 2 }),
+      } },
+      { provide: SaleDraftClient, useValue: {
+        current: () => of(null),
+        save: (_: string, lines: readonly { productId: string; quantity: number }[]) => {
+          savedLines = lines;
+          return of({ id: 'draft-id', priceListId: 'list-id', updatedAtUtc: '2026-10-06T16:00:00Z',
+            lines: lines.map((line) => ({ productId: line.productId, productCode: line.productId,
+              productName: line.productId, unit: line.productId === 'weight-id' ? 'kg' : 'paquete',
+              saleMode: line.productId === 'weight-id' ? 'weight' : 'unit', quantity: line.quantity, unitPrice: 1000 })) });
+        },
+      } },
+      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelectorAll('.product-card')[0] as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.pos-dialog [role="alert"]').textContent).toContain('0,5 kg');
+    expect((fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).disabled).toBe(true);
+    let quantity = fixture.nativeElement.querySelector('#product-quantity') as HTMLInputElement;
+    quantity.value = '0.25';
+    quantity.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(savedLines).toEqual([{ productId: 'weight-id', quantity: 0.25 }]);
+
+    (fixture.nativeElement.querySelectorAll('.product-card')[1] as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.product-facts').textContent).toContain('/ paquete');
+    quantity = fixture.nativeElement.querySelector('#product-quantity') as HTMLInputElement;
+    expect(quantity.step).toBe('1');
+    quantity.value = '3';
+    quantity.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.pos-dialog [role="alert"]').textContent).toContain('2 paquete');
+    expect((fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).disabled).toBe(true);
+    quantity.value = '1.5';
+    quantity.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.pos-dialog [role="alert"]').textContent).toContain('entera');
+    expect(savedLines).toEqual([{ productId: 'weight-id', quantity: 0.25 }]);
+  });
+
+  it('removes a rejected addition when stock changed after the catalog loaded', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: {
+        priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
+        categories: () => of([{ id: 'category-id', name: 'Vacuno', productCount: 1 }]),
+        products: () => of({ items: [{ id: 'product-id', code: '1001', name: 'Asado',
+          categoryId: 'category-id', unit: 'kg', saleMode: 'weight', price: 1000, availableStock: 10 }],
+          page: 1, pageSize: 50, totalItems: 1 }),
+      } },
+      { provide: SaleDraftClient, useValue: {
+        current: () => of(null),
+        save: () => throwError(() => new HttpErrorResponse({ status: 409,
+          error: { error: { code: 'INSUFFICIENT_STOCK' } } })),
+      } },
+      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.product-card') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.line-table')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.pos-error[role="alert"]').textContent).toContain('No hay stock suficiente');
+    expect((fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('does not increase a saved line beyond the available stock plus its own reservation', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const draft = { id: 'draft-id', priceListId: 'list-id', updatedAtUtc: '2026-10-06T16:00:00Z',
+      lines: [{ productId: 'product-id', productCode: '1001', productName: 'Asado', unit: 'kg',
+        saleMode: 'weight', quantity: 1, unitPrice: 1000 }] };
+    let savedQuantity = 1;
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: {
+        priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
+        categories: () => of([]),
+      } },
+      { provide: SaleDraftClient, useValue: {
+        current: () => of(draft),
+        save: (_: string, lines: readonly { quantity: number }[]) => {
+          savedQuantity = lines[0].quantity;
+          return of({ ...draft, lines: [{ ...draft.lines[0], quantity: savedQuantity }] });
+        },
+      } },
+      { provide: InventoryClient, useValue: { stock: () => of([{
+        productId: 'product-id', code: '1001', name: 'Asado', onHand: 3, reserved: 1, available: 2,
+      }]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const input = fixture.nativeElement.querySelector('.quantity-input') as HTMLInputElement;
+
+    input.value = '4';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    expect(input.value).toBe('1');
+    expect(savedQuantity).toBe(1);
+    expect(fixture.nativeElement.querySelector('.pos-error[role="alert"]').textContent).toContain('Stock insuficiente');
+
+    input.value = '3';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(savedQuantity).toBe(3);
     expect(fixture.nativeElement.querySelector('.pos-error')).toBeNull();
   });
 

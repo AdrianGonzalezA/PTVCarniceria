@@ -10,6 +10,7 @@ Guardar automáticamente el único ticket activo habilitado en el POS, recuperar
 - El servidor valida productos activos, modalidad y cantidades, lista asignada a sucursal y precio vigente. Ignora precios enviados por el cliente.
 - Un ticket en borrador no descuenta stock. El egreso ocurre al confirmar la venta, en la misma transacción que venta, pagos y caja.
 - El ticket sí reserva cantidades disponibles en la sucursal. La reserva se actualiza atómicamente con los renglones; quitar líneas o cancelar libera exactamente esas cantidades.
+- El POS muestra la unidad de venta definida en el catálogo y advierte al ingresar una cantidad superior al disponible antes de agregar o aumentar un renglón. Al editar un renglón ya guardado, su propia reserva cuenta dentro del máximo permitido. El servidor sigue siendo la autoridad: si el stock cambia entre la consulta y el guardado, rechaza la operación y el POS vuelve al último detalle persistido, sin presentar como agregado el renglón rechazado.
 - Guardar una lista distinta a la ya asociada al borrador devuelve conflicto; primero se debe cancelar.
 - El ticket de demostración no se persiste ni modifica existencias.
 - En este incremento se admite un borrador por usuario y sucursal. Persistencia por terminal y varios tickets requieren resolver e implementar identidad de terminal.
@@ -35,5 +36,6 @@ Este primer corte controla stock agregado por sucursal (los correlativos individ
 - Un usuario no puede consultar ni modificar tickets de otra empresa, sucursal o usuario.
 - Cambios de precio en catálogo no modifican los precios ya guardados en el borrador.
 - Los productos inactivos, precios vencidos, cantidades inválidas y listas no asignadas se rechazan.
+- No se agrega un producto sin stock ni una cantidad superior al disponible; los productos por unidad admiten solo enteros y los vendidos por peso hasta tres decimales.
 - Cancelar conserva el ticket con fecha/usuario de cancelación y libera la reserva sin generar egreso físico.
 - El flujo de demostración sigue explícitamente separado del registro real.

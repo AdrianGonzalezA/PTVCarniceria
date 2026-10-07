@@ -97,8 +97,8 @@
               @for (product of visibleProducts(); track product.id) {
                 <button class="product-card" type="button" (click)="openProduct(product)">
                   <span class="product-name">{{ product.name }}</span>
-                  <span class="product-price">{{ formatMoney(product.price) }} <small>/ {{ product.mode === 'weight' ? 'kg' : 'unidad' }}</small></span>
-                  @if (!isDemoPriceList()) { <small class="product-stock">Disponible: {{ product.availableStock ?? 0 }} {{ product.mode === 'weight' ? 'kg' : 'un.' }}</small> }
+                  <span class="product-price">{{ formatMoney(product.price) }} <small>/ {{ unitLabel(product) }}</small></span>
+                  @if (!isDemoPriceList()) { <small class="product-stock">Disponible: {{ availableStock(product) ?? 0 }} {{ unitLabel(product) }}</small> }
                 </button>
               }
             </div>
@@ -196,10 +196,10 @@
                       [min]="line.product.mode === 'weight' ? 0.001 : 1"
                       [step]="line.product.mode === 'weight' ? 0.001 : 1"
                       [value]="line.quantity"
-                      [attr.aria-label]="line.product.mode === 'weight' ? 'Peso en kilogramos de ' + line.product.name : 'Cantidad de ' + line.product.name"
+                      [attr.aria-label]="line.product.mode === 'weight' ? 'Peso en kilogramos de ' + line.product.name : 'Cantidad de ' + unitLabel(line.product) + ' de ' + line.product.name"
                       (change)="updateLineQuantity(line.product.id, $event)"
                     />
-                    <small>{{ line.product.mode === 'weight' ? 'kg' : 'un.' }}</small>
+                    <small>{{ unitLabel(line.product) }}</small>
                   </td>
                   <td>{{ formatMoney(line.product.price) }}</td>
                   <td>0,00%</td>
@@ -252,26 +252,27 @@
         <h2 id="product-dialog-title">{{ product.name }}</h2>
         <dl class="product-facts">
           <div><dt>Código</dt><dd>{{ product.code }}</dd></div>
-          <div><dt>Precio unitario</dt><dd>{{ formatMoney(product.price) }} / {{ product.mode === 'weight' ? 'kg' : 'unidad' }}</dd></div>
+          <div><dt>Precio unitario</dt><dd>{{ formatMoney(product.price) }} / {{ unitLabel(product) }}</dd></div>
         </dl>
         @if (product.mode === 'weight') {
-          <p class="scale-status">Balanza no conectada · Ingreso manual para esta prueba</p>
+          <p class="scale-status">Balanza no conectada · Ingreso manual de peso</p>
         }
         <label class="quantity-field" for="product-quantity">
-          {{ product.mode === 'weight' ? 'Peso en kilogramos' : 'Cantidad de unidades' }}
+          {{ product.mode === 'weight' ? 'Peso en kilogramos' : 'Cantidad (' + unitLabel(product) + ')' }}
           <input
             id="product-quantity"
             type="number"
-            min="0.001"
+            [min]="product.mode === 'weight' ? 0.001 : 1"
             [step]="product.mode === 'weight' ? 0.001 : 1"
             [value]="quantityDraft()"
             (input)="updateQuantity($event)"
           />
         </label>
-        @if (errorMessage(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
+        @if (quantityProblem(); as problem) { <p class="pos-error" role="alert">{{ problem }}</p> }
+        @else if (errorMessage(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
         <div class="dialog-actions">
           <button class="dialog-cancel" type="button" (click)="closeProductDialog()">Cancelar</button>
-          <button class="finish-button" type="button" (click)="addSelectedProduct()">Agregar al ticket</button>
+          <button class="finish-button" type="button" [disabled]="!!quantityProblem()" (click)="addSelectedProduct()">Agregar al ticket</button>
         </div>
       </section>
     </div>

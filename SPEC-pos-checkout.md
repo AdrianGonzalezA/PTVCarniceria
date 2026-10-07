@@ -72,3 +72,43 @@ Permitir que el cajero abra su turno, registre pagos combinados y confirme un bo
 ## Pregunta abierta
 
 - ¿El arqueo físico y la diferencia deben ser obligatorios para cerrar el turno? No bloquea el registro inicial de ventas; queda fuera de este corte.
+
+## Cambio propuesto para cajas simultáneas y relevo de cajero (pendiente de aprobación)
+
+**Origen:** definición del usuario del 7 de octubre de 2026. Puede haber varias cajas en una sucursal. El cierre y la nueva apertura representan un relevo de responsabilidad entre personas. Esta sección reemplazará las reglas anteriores que limitan el turno solo por cajero/sucursal una vez aprobada e implementada; hasta entonces describe el comportamiento objetivo, no el estado actual.
+
+### Objetivo y límites
+
+- Cada caja o puesto de venta tiene una identidad estable, propia de una terminal Electron y asignada a una sucursal. Dos instancias de prueba (`Caja 1` y `Caja 2`) usan perfiles locales, sesiones y cookies independientes, aunque compartan la API y la base de datos.
+- Un turno pertenece conjuntamente a empresa, sucursal, caja/terminal y cajero autenticado. La caja conserva el mismo identificador cuando cambia de cajero; cada relevo crea un turno nuevo y no mezcla movimientos ni saldos de ambos turnos.
+- Puede haber turnos simultáneos en cajas distintas de la misma sucursal. Solo puede haber un turno abierto por caja; se mantiene también el límite de un turno abierto por cajero y sucursal para evitar una atribución ambigua.
+- La identidad de la caja se configura/provisiona para Electron y se valida en el servidor contra la sucursal. Un identificador editable enviado por Angular no constituye prueba suficiente de identidad de terminal. El secreto de vinculación no se expone al renderizador ni se versiona.
+- La administración general de usuarios/productos queda fuera del bloqueo operativo del POS. Arqueo obligatorio, reapertura y toma forzada de una caja por un supervisor requieren reglas separadas.
+
+### Secuencia funcional
+
+1. Al iniciar Electron se muestra la caja asignada. El operador se autentica con su propio usuario y contraseña y confirma la sucursal habilitada para esa caja.
+2. Si la caja no tiene turno abierto, el POS no permite buscar/agregar productos, modificar o guardar borradores, ajustar stock desde el POS ni cobrar. Solo se puede consultar el estado necesario para abrir turno o salir. Las rutas de escritura de ventas aplican el mismo control en la API, sin confiar en el bloqueo visual.
+3. El cajero identificado abre su turno con fondo inicial. El servidor rechaza la apertura si esa caja ya tiene turno abierto, si la caja no pertenece a la sucursal activa o si ese cajero ya tiene otro turno abierto allí.
+4. Los borradores y sus reservas se aíslan por caja, cajero y turno, además de empresa y sucursal. No se puede cerrar el turno con un borrador pendiente: primero se confirma o cancela expresamente.
+5. Al cerrar se registra el usuario y la hora, se conserva el resumen de ese turno y se invalida la sesión operativa de esa terminal. El siguiente responsable debe iniciar sesión con sus propias credenciales y abrir un turno nuevo; no basta con pulsar «Abrir turno» en la sesión anterior.
+6. Ventas, pagos y movimientos de caja conservan caja, turno y cajero. El resumen de una caja no incluye movimientos de otra, aunque estén en la misma sucursal. El stock de la sucursal sí es compartido y las reservas concurrentes siguen siendo atómicas.
+
+### Verificación y datos de prueba
+
+- Crear al menos un segundo usuario cajero, habilitado para la misma sucursal, con contraseña de prueba generada fuera del repositorio. No registrar contraseñas ni secretos de terminal en documentación, logs o commits.
+- Provisionar dos cajas de prueba en esa sucursal y abrir dos instancias Electron con perfiles persistentes separados. Tras reiniciar cada una, debe recuperar su identidad de caja y su propia sesión, sin heredar cookies de la otra.
+- Abrir turnos simultáneos con cajeros distintos, vender en ambas cajas y comprobar que los cobros/saldos se separan por caja y turno, mientras el stock se comparte.
+- Comprobar que sin turno se rechaza tanto el gesto en pantalla como una solicitud directa de guardado de ticket; que un cajero no abre otra caja simultáneamente; que una caja no admite dos turnos abiertos; y que cerrar turno exige resolver el borrador e identificar al siguiente cajero.
+- Conservar los registros existentes durante la migración de desarrollo mediante una asignación explícita a una caja histórica; no atribuir ventas viejas a una caja nueva de prueba de forma silenciosa.
+
+### Comandos y ubicación de las pruebas
+
+- API/dominio y migración: `dotnet test Carnicerias.sln --configuration Release`, con pruebas de integración contra PostgreSQL para exclusividad y autorización concurrentes.
+- POS Angular: `npm test --prefix src/Carnicerias.Web -- --watch=false`, `npm run lint --prefix src/Carnicerias.Web`, `npm run build --prefix src/Carnicerias.Web`.
+- Contenedor Electron: `npm run electron:test --prefix src/Carnicerias.Pos` y `npm run electron:start --prefix src/Carnicerias.Pos` para cada perfil de caja. La verificación visual y funcional se hace en Electron.
+- Código esperado: identidad y sesiones en `platform-access`, perfiles de Electron en `devices-printing`, borradores en `pos-sales`, turnos/caja en `payments-cash`. No se cambian credenciales de usuarios existentes ni datos de venta fuera de la migración necesaria.
+
+### Decisión a validar
+
+Se propone que el cierre del turno invalide automáticamente la sesión de esa caja y lleve al acceso, incluso si el usuario también tiene permisos administrativos. Esto garantiza que la siguiente apertura identifique realmente a la persona entrante; la administración podrá usarse tras iniciar su propia sesión.

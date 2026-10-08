@@ -17,6 +17,7 @@ import { PosPage } from './pos-page';
 
 describe('PosPage', () => {
   beforeEach(() => {
+    window.localStorage.clear();
     TestBed.configureTestingModule({ providers: [
       { provide: PosTerminalClient, useValue: { current: () => of({
         id: 'terminal-id', name: 'Caja 1', companyId: 'company-id', branchId: 'branch-id',
@@ -26,6 +27,186 @@ describe('PosPage', () => {
       }) } },
       { provide: InventoryPieceClient, useValue: { lookup: () => throwError(() => new HttpErrorResponse({ status: 404 })) } },
     ] });
+  });
+
+  it('switches independent saved tickets and restores the active ticket after remount', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const drafts = {
+      A: { id: 'draft-a', ticketSlot: 'A', priceListId: 'list-id', updatedAtUtc: '2026-10-08T16:00:00Z',
+        lines: [{ id: 'line-a', productId: 'asado', productCode: '1002', productName: 'Asado',
+          unit: 'kg', saleMode: 'weight', quantity: 1, unitPrice: 1000 }] },
+      B: { id: 'draft-b', ticketSlot: 'B', priceListId: 'list-id', updatedAtUtc: '2026-10-08T16:00:00Z',
+        lines: [{ id: 'line-b', productId: 'bondiola', productCode: '2002', productName: 'Bondiola',
+          unit: 'kg', saleMode: 'weight', quantity: 2, unitPrice: 2000 }] },
+      C: { id: 'draft-c', ticketSlot: 'C', priceListId: 'list-id', updatedAtUtc: '2026-10-08T16:00:00Z',
+        lines: [{ id: 'line-c', productId: 'pollo', productCode: '3001', productName: 'Pollo',
+          unit: 'kg', saleMode: 'weight', quantity: 3, unitPrice: 3000 }] },
+      D: { id: 'draft-d', ticketSlot: 'D', priceListId: 'list-id', updatedAtUtc: '2026-10-08T16:00:00Z',
+        lines: [{ id: 'line-d', productId: 'pan', productCode: '8001', productName: 'Pan',
+          unit: 'unidad', saleMode: 'unit', quantity: 4, unitPrice: 4000 }] },
+    };
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: {
+        priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]), categories: () => of([]),
+      } },
+      { provide: SaleDraftClient, useValue: {
+        current: (slot = 'A') => of(drafts[slot as keyof typeof drafts] ?? null),
+      } },
+      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+    ] });
+
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Asado');
+
+    (fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Bondiola');
+    expect(fixture.nativeElement.querySelector('.line-table').textContent).not.toContain('Asado');
+    (fixture.nativeElement.querySelectorAll('.ticket-tab')[2] as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Pollo');
+    (fixture.nativeElement.querySelectorAll('.ticket-tab')[3] as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Pan');
+    fixture.destroy();
+
+    const reopened = TestBed.createComponent(PosPage);
+    reopened.detectChanges();
+    await reopened.whenStable();
+    reopened.detectChanges();
+    expect(reopened.nativeElement.querySelector('.line-table').textContent).toContain('Pan');
+    expect((reopened.nativeElement.querySelectorAll('.ticket-tab')[3] as HTMLButtonElement)
+      .getAttribute('aria-current')).toBe('page');
+  });
+
+  it('does not switch tickets while a changed ticket is still being saved', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const pendingSave = new Subject<unknown>();
+    const current = vi.fn().mockReturnValue(of(null));
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: {
+        priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
+        categories: () => of([{ id: 'meat', name: 'Carnes', productCount: 1 }]),
+        products: () => of({ items: [{ id: 'asado', code: '1002', name: 'Asado', categoryId: 'meat',
+          saleMode: 'unit', unit: 'unidad', price: 1000, availableStock: 10 }],
+          page: 1, pageSize: 50, totalItems: 1 }),
+      } },
+      { provide: SaleDraftClient, useValue: { current, save: () => pendingSave } },
+      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.product-card') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).disabled).toBe(true);
+    expect(current).toHaveBeenCalledTimes(1);
+    pendingSave.next({ id: 'draft-a', ticketSlot: 'A', priceListId: 'list-id',
+      updatedAtUtc: '2026-10-08T16:00:00Z', lines: [{ id: 'line-a', productId: 'asado',
+        productCode: '1002', productName: 'Asado', unit: 'unidad', saleMode: 'unit',
+        quantity: 1, unitPrice: 1000 }] });
+    pendingSave.complete();
+    fixture.detectChanges();
+    expect((fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).disabled).toBe(false);
+    (fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(current).toHaveBeenLastCalledWith('B');
+    expect(fixture.nativeElement.querySelector('.line-table')).toBeNull();
+  });
+
+  it('ignores a late barcode result from the previous ticket', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const pendingSearch = new Subject<unknown>();
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: {
+        priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]), categories: () => of([]),
+        products: () => pendingSearch,
+      } },
+      { provide: SaleDraftClient, useValue: { current: () => of(null) } },
+      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const search = fixture.nativeElement.querySelector('#product-search') as HTMLInputElement;
+    search.value = '1002';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).click();
+    fixture.detectChanges();
+    pendingSearch.next({ items: [{ id: 'asado', code: '1002', name: 'Asado', categoryId: 'meat',
+      saleMode: 'weight', unit: 'kg', price: 1000, availableStock: 10 }],
+      page: 1, pageSize: 50, totalItems: 1 });
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement)
+      .getAttribute('aria-current')).toBe('page');
+    expect(fixture.nativeElement.querySelector('#product-dialog-title')).toBeNull();
+  });
+
+  it('cancels only the current draft when its last line is removed', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const cancel = vi.fn().mockReturnValue(of(undefined));
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: {
+        priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]), categories: () => of([]),
+      } },
+      { provide: SaleDraftClient, useValue: {
+        current: (slot = 'A') => of(slot === 'A' ? { id: 'draft-a', ticketSlot: 'A',
+          priceListId: 'list-id', updatedAtUtc: '2026-10-08T16:00:00Z', lines: [{ id: 'line-a',
+            productId: 'asado', productCode: '1002', productName: 'Asado', unit: 'kg',
+            saleMode: 'weight', quantity: 1, unitPrice: 1000 }] } : null), cancel,
+      } },
+      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+    ] });
+    try {
+      const fixture = TestBed.createComponent(PosPage);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      (fixture.nativeElement.querySelector('.remove-line-button') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(cancel).toHaveBeenCalledExactlyOnceWith('A');
+      expect(fixture.nativeElement.querySelector('.line-table')).toBeNull();
+      expect((fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).disabled).toBe(false);
+    } finally {
+      confirm.mockRestore();
+    }
   });
 
   it.each([
@@ -734,7 +915,7 @@ describe('PosPage', () => {
     expect(measuredQuantity.readOnly).toBe(true);
     (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
-    expect(save).toHaveBeenCalledWith('list-id', [expect.objectContaining({ productId: asado.id, quantity: 0.5, inventoryPieceId: 'piece-id' })]);
+    expect(save).toHaveBeenCalledWith('list-id', [expect.objectContaining({ productId: asado.id, quantity: 0.5, inventoryPieceId: 'piece-id' })], 'A');
     expect((fixture.nativeElement.querySelector('.quantity-input') as HTMLInputElement).value).toBe('0.5');
     expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('5.750,00');
 
@@ -753,7 +934,7 @@ describe('PosPage', () => {
     expect(save).toHaveBeenLastCalledWith('list-id', [
       expect.objectContaining({ productId: asado.id, quantity: 0.5, inventoryPieceId: 'piece-id' }),
       expect.objectContaining({ productId: asado.id, quantity: 0.75, inventoryPieceId: 'piece-id-2' }),
-    ]);
+    ], 'A');
 
     search.value = '2999001005009';
     search.dispatchEvent(new Event('input', { bubbles: true }));

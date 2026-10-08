@@ -153,7 +153,7 @@
           } @else if (draftStatus() === 'saved') {
             <p class="price-list-lock" role="status">Borrador guardado · stock sin descontar</p>
           } @else if (draftStatus() === 'error') {
-            <p class="price-list-lock" role="alert">{{ errorMessage() ?? 'No se pudo guardar el ticket. Revisá el detalle e intentá nuevamente.' }} <button class="draft-retry" type="button" (click)="retryDraftSave()">Reintentar guardado</button></p>
+            <p class="price-list-lock" role="alert">{{ errorMessage() ?? 'No se pudo guardar el ticket. Revisá el detalle e intentá nuevamente.' }} <button class="draft-retry" type="button" (click)="retryDraftSave()">Reintentar</button></p>
           }
         </div>
         <button class="cancel-sale-button" type="button" (click)="cancelSale()">⊘ <span>Cancelar venta</span></button>
@@ -265,10 +265,12 @@
   }
 
   <footer class="ticket-strip" aria-label="Tickets de venta">
-    <button class="ticket-tab selected" type="button" aria-current="page">Ticket A</button>
-    <button class="ticket-tab" type="button" disabled>Ticket B</button>
-    <button class="ticket-tab" type="button" disabled>Ticket C</button>
-    <button class="ticket-tab" type="button" disabled>Ticket D</button>
+    @for (slot of ticketSlots; track slot) {
+      <button class="ticket-tab" type="button" [class.selected]="activeTicketSlot() === slot"
+        [attr.aria-current]="activeTicketSlot() === slot ? 'page' : null"
+        [disabled]="activeTicketSlot() !== slot && !canSwitchTicket()"
+        (click)="switchTicket(slot)">Ticket {{ slot }}</button>
+    }
   </footer>
 
   @if (selectedProduct(); as product) {

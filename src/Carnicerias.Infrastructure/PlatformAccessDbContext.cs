@@ -345,6 +345,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(draft => draft.CreatedAtUtc).IsRequired();
             entity.Property(draft => draft.UpdatedAtUtc).IsRequired();
             entity.Property(draft => draft.Status).HasConversion<int>().IsRequired();
+            entity.Property(draft => draft.TicketSlot).HasConversion<string>().HasMaxLength(1).IsRequired();
             entity.HasOne<Branch>().WithMany()
                 .HasForeignKey(draft => new { draft.CompanyId, draft.BranchId })
                 .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
@@ -368,7 +369,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasMany(draft => draft.Lines).WithOne()
                 .HasForeignKey(line => line.SaleDraftId)
                 .OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(draft => new { draft.CompanyId, draft.BranchId, draft.UserId })
+            entity.HasIndex(draft => new { draft.CompanyId, draft.BranchId, draft.UserId, draft.TicketSlot })
                 .IsUnique().HasFilter("\"Status\" = 0");
         });
 

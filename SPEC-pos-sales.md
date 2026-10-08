@@ -1,8 +1,8 @@
 # Especificación: borradores de venta del POS
 
-## Objetivo y alcance del primer corte
+## Objetivo y alcance
 
-Guardar automáticamente el único ticket activo habilitado en el POS, recuperarlo al volver a abrir Electron y permitir cancelarlo explícitamente. Una venta real debe provenir del catálogo del servidor y de una lista habilitada para la sucursal. Los renglones congelan descripción, unidad, modalidad, cantidad y precio aplicado. Este contrato trata el borrador; el cobro y el egreso de stock ya implementados se describen en `SPEC-pos-checkout.md`. No hay facturación fiscal.
+Guardar automáticamente hasta cuatro tickets A–D por caja y turno, alternar entre ellos sin mezclar ventas y recuperarlos al volver a abrir Electron. Cada ticket puede cancelarse explícitamente. Una venta real debe provenir del catálogo del servidor y de una lista habilitada para la sucursal. Los renglones congelan descripción, unidad, modalidad, cantidad y precio aplicado. Este contrato trata el borrador; el cobro y el egreso de stock se describen en `SPEC-pos-checkout.md`. No hay facturación fiscal.
 
 ## Contrato y reglas
 
@@ -13,13 +13,17 @@ Guardar automáticamente el único ticket activo habilitado en el POS, recuperar
 - El POS muestra la unidad de venta definida en el catálogo y advierte al ingresar una cantidad superior al disponible antes de agregar o aumentar un renglón. Al editar un renglón ya guardado, su propia reserva cuenta dentro del máximo permitido. El servidor sigue siendo la autoridad: si el stock cambia entre la consulta y el guardado, rechaza la operación y el POS vuelve al último detalle persistido, sin presentar como agregado el renglón rechazado.
 - Guardar una lista distinta a la ya asociada al borrador devuelve conflicto; primero se debe cancelar.
 - El ticket de demostración no se persiste ni modifica existencias.
-- En este incremento se admite un borrador por usuario y sucursal. Persistencia por terminal y varios tickets requieren resolver e implementar identidad de terminal.
+- Los tickets A–D se identifican en servidor por una ranura inmutable. Cada borrador pertenece a empresa, sucursal, caja, cajero y turno; cada ranura admite como máximo un borrador activo para ese contexto. Las ranuras vacías no reservan stock ni crean borradores.
+- El cambio de pestaña solo se admite cuando el último cambio del ticket actual terminó de guardarse. Ante un error de guardado se conserva el detalle visible y se exige reintentar o resolver el error antes de cambiar. Tras reiniciar Electron se recupera el último estado confirmado por PostgreSQL, no una edición que nunca llegó al servidor.
+- Confirmar o cancelar actúa solo sobre la ranura activa. Las otras ventas y sus reservas no cambian. El cierre de turno sigue bloqueado mientras exista cualquier borrador activo de A–D.
 
 ## API
 
-- `GET /api/sales/draft`: obtiene el borrador del usuario y contexto actuales, o `204` si no existe.
-- `PUT /api/sales/draft`: reemplaza las cantidades de hasta 100 productos; los precios se consultan en el servidor dentro de la lista elegida.
-- `DELETE /api/sales/draft`: cancela el borrador, conserva el detalle para auditoría y libera la reserva.
+- `GET /api/sales/drafts`: devuelve los borradores activos A–D del turno/caja/cajero autorizados; las ranuras vacías no se incluyen.
+- `GET /api/sales/drafts/{slot}`: obtiene el borrador de A, B, C o D, o `204` si la ranura está vacía.
+- `PUT /api/sales/drafts/{slot}`: reemplaza hasta 100 renglones solo en esa ranura; los precios se consultan en el servidor dentro de la lista elegida.
+- `DELETE /api/sales/drafts/{slot}`: cancela únicamente ese borrador, conserva el detalle para auditoría y libera su reserva.
+- Las rutas heredadas `/api/sales/draft` siguen representando A para no romper clientes existentes durante la transición.
 - `GET /api/inventory/stock`: consulta existencia física, reservada y disponible por producto en la sucursal activa.
 - `POST /api/inventory/adjustments`: aplica un ingreso/ajuste con identificador idempotente y motivo; requiere `inventory.stock.manage`.
 
@@ -32,6 +36,7 @@ Este primer corte controla stock agregado por sucursal (los correlativos individ
 ## Criterios de aceptación
 
 - El ticket real se recupera después de recargar o reiniciar Electron.
+- Se pueden armar cuatro ventas A–D, cambiar entre ellas sin perder lista, detalle ni reserva, y recuperarlas después de reiniciar Electron. Cobrar o cancelar B no modifica A, C ni D.
 - Las rutas Angular `/pos` y `/users` vuelven a cargar `index.html` en el protocolo `app://bundle`, sin ampliar el acceso a archivos empaquetados ni a otras rutas.
 - Un usuario no puede consultar ni modificar tickets de otra empresa, sucursal o usuario.
 - Cambios de precio en catálogo no modifican los precios ya guardados en el borrador.

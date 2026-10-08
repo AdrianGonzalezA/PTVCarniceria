@@ -49,6 +49,12 @@ La prioridad pasa al sitio administrativo sin modificar la base única `carnicer
 - [x] Consultar ventas, pagos, turnos y movimientos por sucursal/caja/fecha, sin mutaciones transaccionales.
 - [ ] Revisión integral de autorización, accesibilidad y recorrido funcional con dos Electron.
 
+### A7. Configuración de periféricos por caja
+
+- [ ] ABM administrativo de balanzas e impresoras, con asignación a sucursal/caja y parámetros de puerto, velocidad, bits, paridad y protocolo.
+- [ ] Prueba de conexión/lectura/impresión desde la caja, estado visible y fallback de peso manual sin afectar ventas confirmadas.
+- [ ] Retirar COM1/COM6 fijos del producto; el controlador virtual de desarrollo tiene licencia temporal de 14 días y no es requisito del despliegue.
+
 ## Riesgos y controles
 
 - Cambio de catálogo durante tickets abiertos: precio/detalle congelado en borrador y prohibición de borrado físico.

@@ -30,4 +30,6 @@ Probar desde el POS en Electron la recepción serial de una balanza y el envío 
 
 ## Pendiente
 
-Protocolo real de la balanza física (esta trama es de simulación), protocolo específico de impresora física (por ejemplo ESC/POS), cola durable y auditoría de impresión, selección/configuración de puerto por caja, impresora fiscal y ARCA. Estos requieren datos del hardware y reglas de implementación.
+La configuración de balanzas e impresoras será administrada desde el sitio administrativo y asignada a la caja/sucursal: puerto, velocidad, bits, paridad, protocolo y prueba de conexión. COM1/COM6 y el controlador virtual HHD son solamente una instalación de desarrollo con licencia de prueba de 14 días; no forman parte del contrato de despliegue ni deben quedar fijos en el producto.
+
+Faltan el protocolo real de la balanza física (esta trama es de simulación), el protocolo específico de impresora física (por ejemplo ESC/POS), cola durable y auditoría de impresión, impresora fiscal y ARCA. Requieren datos del hardware y reglas de implementación.

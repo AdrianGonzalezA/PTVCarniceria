@@ -7,15 +7,24 @@ public enum SaleDraftStatus
     Confirmed
 }
 
+public enum SaleTicketSlot
+{
+    A,
+    B,
+    C,
+    D
+}
+
 public sealed class SaleDraft
 {
     private SaleDraft() { }
 
     public SaleDraft(Guid companyId, Guid branchId, Guid userId, Guid priceListId,
-        DateTimeOffset createdAtUtc, Guid? posTerminalId = null, Guid? cashierShiftId = null)
+        DateTimeOffset createdAtUtc, Guid? posTerminalId = null, Guid? cashierShiftId = null,
+        SaleTicketSlot ticketSlot = SaleTicketSlot.A)
     {
         if (posTerminalId == Guid.Empty || cashierShiftId == Guid.Empty ||
-            (posTerminalId is null) != (cashierShiftId is null))
+            (posTerminalId is null) != (cashierShiftId is null) || !Enum.IsDefined(ticketSlot))
             throw new ArgumentException("Terminal and shift ids must be provided together.");
         Id = Guid.NewGuid();
         CompanyId = companyId;
@@ -23,6 +32,7 @@ public sealed class SaleDraft
         UserId = userId;
         PosTerminalId = posTerminalId;
         CashierShiftId = cashierShiftId;
+        TicketSlot = ticketSlot;
         PriceListId = priceListId;
         CreatedAtUtc = createdAtUtc.ToUniversalTime();
         UpdatedAtUtc = CreatedAtUtc;
@@ -34,6 +44,7 @@ public sealed class SaleDraft
     public Guid UserId { get; private set; }
     public Guid? PosTerminalId { get; private set; }
     public Guid? CashierShiftId { get; private set; }
+    public SaleTicketSlot TicketSlot { get; private set; }
     public Guid PriceListId { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; }
     public DateTimeOffset UpdatedAtUtc { get; private set; }

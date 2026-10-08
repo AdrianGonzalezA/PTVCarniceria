@@ -9,7 +9,7 @@ import { InventoryClient, InventoryStockItem } from '../../core/inventory/invent
 import { InventoryPieceClient, PosPieceLookup } from '../../core/inventory/inventory-piece-client';
 import { PosTerminal, PosTerminalClient } from '../../core/pos/pos-terminal-client';
 import { PosDeviceClient, SerialPrintResult } from '../../core/pos/pos-device-client';
-import { ConfirmedSale, SaleDraft, SaleDraftClient, SaleDraftLine, SalePaymentMethod } from '../../core/sales/sale-draft-client';
+import { ConfirmedSale, SaleDraft, SaleDraftClient, SaleDraftLine, SalePaymentMethod, SaleTicketSlot } from '../../core/sales/sale-draft-client';
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { CashierShift, CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
@@ -90,9 +90,11 @@ export class PosPage implements OnInit {
   @ViewChild('scanInput') private scanInput?: ElementRef<HTMLInputElement>;
   private readonly draftOperations = new Subject<{
     readonly revision: number;
+    readonly slot: SaleTicketSlot;
     readonly operation: 'cancel' | { readonly priceListId: string; readonly lines: readonly SaleLine[] };
   }>();
   private draftRevision = 0;
+  private ticketViewRevision = 0;
   private stockRequestRevision = 0;
   private scaleRequestRevision = 0;
   private scannedCode = '';
@@ -168,6 +170,8 @@ export class PosPage implements OnInit {
   protected readonly shiftBusy = signal(false);
   protected readonly shiftError = signal<string | null>(null);
   protected readonly draftId = signal('');
+  protected readonly ticketSlots: readonly SaleTicketSlot[] = ['A', 'B', 'C', 'D'];
+  protected readonly activeTicketSlot = signal<SaleTicketSlot>('A');
   protected readonly checkoutBusy = signal(false);
   protected readonly checkoutError = signal<string | null>(null);
   protected readonly confirmedSale = signal<ConfirmedSale | null>(null);
@@ -233,21 +237,22 @@ export class PosPage implements OnInit {
 
   constructor() {
     this.draftOperations.pipe(
-      concatMap(({ revision, operation }) => {
+      concatMap(({ revision, slot, operation }) => {
         const request: Observable<SaleDraft | void> = operation === 'cancel'
-          ? this.saleDraftClient.cancel()
+          ? this.saleDraftClient.cancel(slot)
           : this.saleDraftClient.save(operation.priceListId, operation.lines.map((line) => ({
               productId: line.product.id,
               quantity: line.quantity,
               ...(line.inventoryPieceId ? { inventoryPieceId: line.inventoryPieceId } : {}),
-            })));
+            })), slot);
         return request.pipe(
-          map((result) => ({ revision, operation, result, error: null as HttpErrorResponse | null })),
-          catchError((error: HttpErrorResponse) => of({ revision, operation, result: null, error })),
+          map((result) => ({ revision, slot, operation, result, error: null as HttpErrorResponse | null })),
+          catchError((error: HttpErrorResponse) => of({ revision, slot, operation, result: null, error })),
         );
       }),
       takeUntilDestroyed(),
-    ).subscribe(({ revision, operation, result, error }) => {
+    ).subscribe(({ revision, slot, operation, result, error }) => {
+      if (slot !== this.activeTicketSlot()) return;
       if (error) {
         if (revision === this.draftRevision) {
           if (operation === 'cancel') this.lines.set(this.persistedLines());
@@ -432,9 +437,11 @@ export class PosPage implements OnInit {
   }
 
   private searchRealProducts(priceListId: string, query: string): void {
+    const viewRevision = this.ticketViewRevision;
     this.catalogLoadState.set('loading');
     this.catalogClient.products({ priceListId, code: query }).subscribe({
       next: (page) => {
+        if (this.selectedPriceListId() !== priceListId || viewRevision !== this.ticketViewRevision) return;
         if (page.totalItems === 1) {
           const product = this.mapCatalogProduct(page.items[0]);
           this.realProducts.set([product]);
@@ -444,7 +451,7 @@ export class PosPage implements OnInit {
           return;
         }
         if (page.totalItems === 0 && /^\d+$/.test(query)) {
-          this.searchReceivedPiece(priceListId, query);
+          this.searchReceivedPiece(priceListId, query, viewRevision);
           return;
         }
         if (page.totalItems > 0 || query.length < 3) {
@@ -452,25 +459,34 @@ export class PosPage implements OnInit {
           return;
         }
         this.catalogClient.products({ priceListId, q: query }).subscribe({
-          next: (searchPage) => this.setRealProducts(searchPage.items),
-          error: () => this.catalogLoadState.set('error'),
+          next: (searchPage) => {
+            if (this.selectedPriceListId() === priceListId && viewRevision === this.ticketViewRevision)
+              this.setRealProducts(searchPage.items);
+          },
+          error: () => {
+            if (this.selectedPriceListId() === priceListId && viewRevision === this.ticketViewRevision)
+              this.catalogLoadState.set('error');
+          },
         });
       },
-      error: () => this.catalogLoadState.set('error'),
+      error: () => {
+        if (this.selectedPriceListId() === priceListId && viewRevision === this.ticketViewRevision)
+          this.catalogLoadState.set('error');
+      },
     });
   }
 
-  private searchReceivedPiece(priceListId: string, barcode: string): void {
+  private searchReceivedPiece(priceListId: string, barcode: string, viewRevision: number): void {
     this.pieceClient.lookup(barcode).subscribe({
       next: (piece) => {
-        if (this.selectedPriceListId() !== priceListId) return;
+        if (this.selectedPriceListId() !== priceListId || viewRevision !== this.ticketViewRevision) return;
         if (!this.validPieceLookup(piece, barcode)) {
           this.pieceLookupError('La etiqueta recibida contiene un peso inválido.');
           return;
         }
         this.catalogClient.products({ priceListId, code: piece.productCode }).subscribe({
           next: (page) => {
-            if (this.selectedPriceListId() !== priceListId) return;
+            if (this.selectedPriceListId() !== priceListId || viewRevision !== this.ticketViewRevision) return;
             const item = page.items[0];
             if (page.totalItems !== 1 || !item || item.id !== piece.productId || item.saleMode !== 'weight') {
               this.pieceLookupError('El artículo de esta pieza no está disponible en la lista de precios.');
@@ -482,16 +498,22 @@ export class PosPage implements OnInit {
             this.searchText.set('');
             this.openProduct(product, piece.receivedWeightKg, piece.externalIdentifier, piece.id);
           },
-          error: () => this.pieceLookupError('No se pudo consultar el artículo de la pieza.'),
+          error: () => {
+            if (viewRevision === this.ticketViewRevision)
+              this.pieceLookupError('No se pudo consultar el artículo de la pieza.');
+          },
         });
       },
-      error: (error: HttpErrorResponse) => this.pieceLookupError(error.status === 409
-        ? error.error?.error?.code === 'PIECE_ALREADY_SOLD'
-          ? 'Esta pieza ya fue vendida y no se puede agregar a otro ticket.'
-          : 'Hay más de una pieza con esa etiqueta en la sucursal. Revisá el origen antes de vender.'
-        : error.status === 404
-          ? 'El código no corresponde a un artículo ni a una pieza recibida en esta sucursal.'
-          : 'No se pudo consultar la pieza. Intentá nuevamente.'),
+      error: (error: HttpErrorResponse) => {
+        if (viewRevision !== this.ticketViewRevision) return;
+        this.pieceLookupError(error.status === 409
+          ? error.error?.error?.code === 'PIECE_ALREADY_SOLD'
+            ? 'Esta pieza ya fue vendida y no se puede agregar a otro ticket.'
+            : 'Hay más de una pieza con esa etiqueta en la sucursal. Revisá el origen antes de vender.'
+          : error.status === 404
+            ? 'El código no corresponde a un artículo ni a una pieza recibida en esta sucursal.'
+            : 'No se pudo consultar la pieza. Intentá nuevamente.');
+      },
     });
   }
 
@@ -509,10 +531,12 @@ export class PosPage implements OnInit {
   }
 
   private loadCategories(priceListId: string): void {
+    const viewRevision = this.ticketViewRevision;
     this.catalogLoadState.set('loading');
     this.catalogCategories.set([]);
     this.catalogClient.categories(priceListId).subscribe({
       next: (items) => {
+        if (this.selectedPriceListId() !== priceListId || viewRevision !== this.ticketViewRevision) return;
         this.catalogCategories.set(items);
         this.catalogLoadState.set('ready');
         const firstCategory = items[0]?.id;
@@ -520,15 +544,26 @@ export class PosPage implements OnInit {
         this.realProducts.set([]);
         if (firstCategory) this.loadProducts(priceListId, firstCategory);
       },
-      error: () => this.catalogLoadState.set('error'),
+      error: () => {
+        if (this.selectedPriceListId() === priceListId && viewRevision === this.ticketViewRevision)
+          this.catalogLoadState.set('error');
+      },
     });
   }
 
   private loadProducts(priceListId: string, categoryId?: string): void {
+    const viewRevision = this.ticketViewRevision;
     this.catalogLoadState.set('loading');
     this.catalogClient.products({ priceListId, ...(categoryId ? { categoryId } : {}) }).subscribe({
-      next: (page) => this.setRealProducts(page.items),
-      error: () => this.catalogLoadState.set('error'),
+      next: (page) => {
+        if (this.selectedPriceListId() === priceListId && viewRevision === this.ticketViewRevision &&
+            this.activeCategory() === (categoryId ?? ''))
+          this.setRealProducts(page.items);
+      },
+      error: () => {
+        if (this.selectedPriceListId() === priceListId && viewRevision === this.ticketViewRevision)
+          this.catalogLoadState.set('error');
+      },
     });
   }
 
@@ -683,7 +718,9 @@ export class PosPage implements OnInit {
     const line = this.lines().find((item) => item.id === lineId);
     if (!line || !window.confirm(`¿Querés quitar ${line.product.name} del detalle?`)) return;
     this.lines.update((lines) => lines.filter((item) => item.id !== lineId));
-    this.persistCurrentDraft();
+    if (this.lines().length === 0 && !this.isDemoPriceList() && this.selectedPriceListId())
+      this.queueDraftOperation('cancel');
+    else this.persistCurrentDraft();
   }
 
   protected cancelSale(): void {
@@ -695,6 +732,32 @@ export class PosPage implements OnInit {
     this.lines.set([]);
     this.checkoutNotice.set(false);
     this.errorMessage.set(null);
+  }
+
+  protected canSwitchTicket(): boolean {
+    return this.canOperate() && this.priceListLoadState() === 'ready' &&
+      (this.draftStatus() === 'saved' || (this.draftStatus() === 'demo' && this.lines().length === 0)) &&
+      !this.selectedProduct() && !this.checkoutNotice() && !this.checkoutBusy() &&
+      !this.confirmedSale() && !this.shiftDialog() && !this.inventoryOpen();
+  }
+
+  protected switchTicket(slot: SaleTicketSlot): void {
+    if (slot === this.activeTicketSlot() || !this.canSwitchTicket()) return;
+    this.ticketViewRevision++;
+    this.activeTicketSlot.set(slot);
+    this.rememberActiveTicket(slot);
+    this.lines.set([]);
+    this.persistedLines.set([]);
+    this.draftId.set('');
+    this.errorMessage.set(null);
+    this.searchText.set('');
+    this.realSearchSubmitted.set(false);
+    this.realProducts.set([]);
+    this.selectedPriceListId.set(this.realPriceLists()[0]?.id ?? '');
+    if (this.selectedPriceListId()) this.loadCategories(this.selectedPriceListId());
+    this.loadSavedDraft();
+    this.refreshStock();
+    this.focusScanInput();
   }
 
   protected openInventory(): void {
@@ -809,7 +872,8 @@ export class PosPage implements OnInit {
   }
 
   protected retryDraftSave(): void {
-    if (this.lines().length > 0) this.persistCurrentDraft();
+    if (this.errorMessage() === 'No se pudo recuperar el ticket. Intentá nuevamente.') this.loadSavedDraft();
+    else this.persistCurrentDraft();
   }
 
   private categoryIcon(name: string): string {
@@ -1009,6 +1073,7 @@ export class PosPage implements OnInit {
     this.cashierShiftClient.current().subscribe({
       next: (shift) => {
         this.cashierShift.set(shift);
+        if (shift) this.restoreActiveTicket(shift.id);
         this.shiftLoadState.set('ready');
         if (shift && this.priceListLoadState() === 'loading' && this.realPriceLists().length === 0) {
           this.loadPriceLists();
@@ -1115,14 +1180,18 @@ export class PosPage implements OnInit {
   private queueDraftOperation(operation: 'cancel' | { readonly priceListId: string; readonly lines: readonly SaleLine[] }): void {
     if (!this.canOperate()) return;
     this.draftStatus.set('saving');
-    this.draftOperations.next({ revision: ++this.draftRevision, operation });
+    this.draftOperations.next({ revision: ++this.draftRevision, slot: this.activeTicketSlot(), operation });
   }
 
   private loadSavedDraft(): void {
+    const slot = this.activeTicketSlot();
     this.draftStatus.set('loading');
-    this.saleDraftClient.current().subscribe({
+    this.saleDraftClient.current(slot).subscribe({
       next: (draft) => {
+        if (slot !== this.activeTicketSlot()) return;
         if (!draft) {
+          this.lines.set([]);
+          this.persistedLines.set([]);
           this.draftId.set('');
           this.draftStatus.set('saved');
           return;
@@ -1149,7 +1218,31 @@ export class PosPage implements OnInit {
         if (this.realPriceLists().some((item) => item.id === draft.priceListId))
           this.loadCategories(draft.priceListId);
       },
-      error: () => this.draftStatus.set('error'),
+      error: () => {
+        if (slot !== this.activeTicketSlot()) return;
+        this.draftStatus.set('error');
+        this.errorMessage.set('No se pudo recuperar el ticket. Intentá nuevamente.');
+      },
     });
+  }
+
+  private activeTicketStorageKey(shiftId: string): string {
+    return `carnicerias:ticket-slot:${this.terminal()?.id}:${shiftId}:${this.session()?.userId}`;
+  }
+
+  private restoreActiveTicket(shiftId: string): void {
+    try {
+      const saved = window.localStorage.getItem(this.activeTicketStorageKey(shiftId));
+      this.activeTicketSlot.set(this.ticketSlots.find((slot) => slot === saved) ?? 'A');
+    } catch {
+      this.activeTicketSlot.set('A');
+    }
+  }
+
+  private rememberActiveTicket(slot: SaleTicketSlot): void {
+    const shift = this.cashierShift();
+    if (!shift) return;
+    try { window.localStorage.setItem(this.activeTicketStorageKey(shift.id), slot); }
+    catch { /* The tickets themselves remain in PostgreSQL. */ }
   }
 }

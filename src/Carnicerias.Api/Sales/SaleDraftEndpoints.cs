@@ -9,17 +9,48 @@ public static class SaleDraftEndpoints
 {
     public static IEndpointRouteBuilder MapSaleDraftEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/api/sales/draft", GetAsync).RequireOperationalContext();
-        endpoints.MapPut("/api/sales/draft", SaveAsync).RequireOperationalContext();
-        endpoints.MapDelete("/api/sales/draft", CancelAsync).RequireOperationalContext();
+        endpoints.MapGet("/api/sales/draft", (PlatformAccessDbContext db,
+            OperationalContextAccessor accessor, CancellationToken cancellationToken) =>
+            GetAsync("A", db, accessor, cancellationToken)).RequireOperationalContext();
+        endpoints.MapPut("/api/sales/draft", (SaveSaleDraftRequest? request, PlatformAccessDbContext db,
+            OperationalContextAccessor accessor, TimeProvider timeProvider, CancellationToken cancellationToken) =>
+            SaveAsync("A", request, db, accessor, timeProvider, cancellationToken)).RequireOperationalContext();
+        endpoints.MapDelete("/api/sales/draft", (PlatformAccessDbContext db,
+            OperationalContextAccessor accessor, TimeProvider timeProvider, CancellationToken cancellationToken) =>
+            CancelAsync("A", db, accessor, timeProvider, cancellationToken)).RequireOperationalContext();
+        endpoints.MapGet("/api/sales/drafts", ListAsync).RequireOperationalContext();
+        endpoints.MapGet("/api/sales/drafts/{slot}", GetAsync).RequireOperationalContext();
+        endpoints.MapPut("/api/sales/drafts/{slot}", SaveAsync).RequireOperationalContext();
+        endpoints.MapDelete("/api/sales/drafts/{slot}", CancelAsync).RequireOperationalContext();
         return endpoints;
     }
 
-    private static async Task<IResult> GetAsync(
+    private static async Task<IResult> ListAsync(
         PlatformAccessDbContext db,
         OperationalContextAccessor accessor,
         CancellationToken cancellationToken)
     {
+        var context = accessor.Context;
+        var shift = await FindOpenShiftAsync(db, accessor, cancellationToken);
+        if (shift is null) return Results.Ok(Array.Empty<SaleDraftResponse>());
+        var drafts = await db.SaleDrafts.AsNoTracking().Include(item => item.Lines)
+            .Where(item => item.CompanyId == context.CompanyId &&
+                item.BranchId == context.BranchId && item.UserId == context.UserId &&
+                item.PosTerminalId == accessor.TerminalId &&
+                (accessor.TerminalId == null || item.CashierShiftId == shift.Id) &&
+                item.Status == SaleDraftStatus.Draft)
+            .ToArrayAsync(cancellationToken);
+        return Results.Ok(drafts.OrderBy(item => item.TicketSlot).Select(ToResponse).ToArray());
+    }
+
+    private static async Task<IResult> GetAsync(
+        string slot,
+        PlatformAccessDbContext db,
+        OperationalContextAccessor accessor,
+        CancellationToken cancellationToken)
+    {
+        if (!TryTicketSlot(slot, out var ticketSlot))
+            return Error(StatusCodes.Status400BadRequest, "INVALID_TICKET_SLOT");
         var context = accessor.Context;
         var shift = await FindOpenShiftAsync(db, accessor, cancellationToken);
         if (shift is null) return Results.NoContent();
@@ -28,17 +59,21 @@ public static class SaleDraftEndpoints
                 item.BranchId == context.BranchId && item.UserId == context.UserId &&
                 item.PosTerminalId == accessor.TerminalId &&
                 (accessor.TerminalId == null || item.CashierShiftId == shift.Id) &&
+                item.TicketSlot == ticketSlot &&
                 item.Status == SaleDraftStatus.Draft, cancellationToken);
         return draft is null ? Results.NoContent() : Results.Ok(ToResponse(draft));
     }
 
     private static async Task<IResult> SaveAsync(
+        string slot,
         SaveSaleDraftRequest? request,
         PlatformAccessDbContext db,
         OperationalContextAccessor accessor,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
+        if (!TryTicketSlot(slot, out var ticketSlot))
+            return Error(StatusCodes.Status400BadRequest, "INVALID_TICKET_SLOT");
         if (request is null || request.PriceListId == Guid.Empty || request.Lines is null ||
             request.Lines.Count is < 1 or > 100 || request.Lines.Any(line =>
                 line.ProductId == Guid.Empty || line.Quantity <= 0 || line.Quantity > 10000 ||
@@ -67,10 +102,12 @@ public static class SaleDraftEndpoints
                 item.BranchId == context.BranchId && item.UserId == context.UserId &&
                 item.PosTerminalId == accessor.TerminalId &&
                 (accessor.TerminalId == null || item.CashierShiftId == shift.Id) &&
+                item.TicketSlot == ticketSlot &&
                 item.Status == SaleDraftStatus.Draft, cancellationToken);
         if (draft is null && await db.SaleDrafts.AnyAsync(item =>
                 item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
-                item.UserId == context.UserId && item.Status == SaleDraftStatus.Draft, cancellationToken))
+                item.UserId == context.UserId && item.TicketSlot == ticketSlot &&
+                item.Status == SaleDraftStatus.Draft, cancellationToken))
             return Error(StatusCodes.Status409Conflict, "DRAFT_BELONGS_TO_OTHER_SHIFT");
         if (draft is not null && draft.PriceListId != request.PriceListId)
             return Error(StatusCodes.Status409Conflict, "DRAFT_PRICE_LIST_LOCKED");
@@ -125,7 +162,7 @@ public static class SaleDraftEndpoints
         if (draft is null)
         {
             draft = new SaleDraft(context.CompanyId, context.BranchId, context.UserId, request.PriceListId, now,
-                accessor.TerminalId, accessor.TerminalId is null ? null : shift.Id);
+                accessor.TerminalId, accessor.TerminalId is null ? null : shift.Id, ticketSlot);
             db.SaleDrafts.Add(draft);
         }
         foreach (var productId in lines.Select(line => line.ProductId)
@@ -157,11 +194,14 @@ public static class SaleDraftEndpoints
     }
 
     private static async Task<IResult> CancelAsync(
+        string slot,
         PlatformAccessDbContext db,
         OperationalContextAccessor accessor,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
+        if (!TryTicketSlot(slot, out var ticketSlot))
+            return Error(StatusCodes.Status400BadRequest, "INVALID_TICKET_SLOT");
         var context = accessor.Context;
         var now = timeProvider.GetUtcNow();
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
@@ -171,6 +211,7 @@ public static class SaleDraftEndpoints
             item.BranchId == context.BranchId && item.UserId == context.UserId &&
             item.PosTerminalId == accessor.TerminalId &&
             (accessor.TerminalId == null || item.CashierShiftId == shift.Id) &&
+            item.TicketSlot == ticketSlot &&
             item.Status == SaleDraftStatus.Draft, cancellationToken);
         if (draft is null) return Results.NoContent();
         foreach (var group in draft.Lines.GroupBy(line => line.ProductId))
@@ -200,8 +241,16 @@ public static class SaleDraftEndpoints
             shift.Status == CashierShiftStatus.Open, cancellationToken);
     }
 
+    private static bool TryTicketSlot(string raw, out SaleTicketSlot slot)
+    {
+        slot = SaleTicketSlot.A;
+        if (raw.Length != 1 || raw[0] is < 'A' or > 'D') return false;
+        slot = (SaleTicketSlot)(raw[0] - 'A');
+        return true;
+    }
+
     private static SaleDraftResponse ToResponse(SaleDraft draft) => new(
-        draft.Id, draft.PriceListId, draft.UpdatedAtUtc,
+        draft.Id, draft.TicketSlot.ToString(), draft.PriceListId, draft.UpdatedAtUtc,
         draft.Lines.OrderBy(line => line.ProductName).ThenBy(line => line.PieceIdentifier)
             .Select(line => new SaleDraftLineResponse(
                 line.Id, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
@@ -215,7 +264,7 @@ public static class SaleDraftEndpoints
 
     private sealed record SaveSaleDraftRequest(Guid PriceListId, IReadOnlyList<SaveSaleDraftLineRequest> Lines);
     private sealed record SaveSaleDraftLineRequest(Guid ProductId, decimal Quantity, Guid? InventoryPieceId = null);
-    private sealed record SaleDraftResponse(Guid Id, Guid PriceListId, DateTimeOffset UpdatedAtUtc,
+    private sealed record SaleDraftResponse(Guid Id, string TicketSlot, Guid PriceListId, DateTimeOffset UpdatedAtUtc,
         IReadOnlyList<SaleDraftLineResponse> Lines);
     private sealed record SaleDraftLineResponse(Guid Id, Guid ProductId, string ProductCode, string ProductName,
         string Unit, string SaleMode, decimal Quantity, decimal UnitPrice,

@@ -16,10 +16,13 @@ export interface SaleDraftLine {
 
 export interface SaleDraft {
   readonly id: string;
+  readonly ticketSlot: SaleTicketSlot;
   readonly priceListId: string;
   readonly updatedAtUtc: string;
   readonly lines: readonly SaleDraftLine[];
 }
+
+export type SaleTicketSlot = 'A' | 'B' | 'C' | 'D';
 
 export type SalePaymentMethod = 'cash' | 'debit' | 'credit' | 'transfer' | 'mercadoPago' | 'cheque';
 
@@ -36,19 +39,24 @@ export interface ConfirmedSale {
 export class SaleDraftClient {
   private readonly http = inject(HttpClient);
 
-  current() {
-    return this.http.get<SaleDraft | null>('/api/sales/draft', { withCredentials: true });
+  current(slot: SaleTicketSlot = 'A') {
+    return this.http.get<SaleDraft | null>(this.draftUrl(slot), { withCredentials: true });
   }
 
-  save(priceListId: string, lines: readonly { readonly productId: string; readonly quantity: number; readonly inventoryPieceId?: string }[]) {
-    return this.http.put<SaleDraft>('/api/sales/draft', { priceListId, lines }, { withCredentials: true });
+  save(priceListId: string, lines: readonly { readonly productId: string; readonly quantity: number; readonly inventoryPieceId?: string }[],
+    slot: SaleTicketSlot = 'A') {
+    return this.http.put<SaleDraft>(this.draftUrl(slot), { priceListId, lines }, { withCredentials: true });
   }
 
-  cancel() {
-    return this.http.delete<void>('/api/sales/draft', { withCredentials: true });
+  cancel(slot: SaleTicketSlot = 'A') {
+    return this.http.delete<void>(this.draftUrl(slot), { withCredentials: true });
   }
 
   confirm(draftId: string, payments: readonly { readonly method: SalePaymentMethod; readonly amount: number }[]) {
     return this.http.post<ConfirmedSale>(`/api/sales/drafts/${draftId}/confirmation`, { payments }, { withCredentials: true });
+  }
+
+  private draftUrl(slot: SaleTicketSlot): string {
+    return slot === 'A' ? '/api/sales/draft' : `/api/sales/drafts/${slot}`;
   }
 }

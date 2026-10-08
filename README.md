@@ -4,7 +4,7 @@ Sistema de punto de venta para carnicerías: API .NET 10 y PostgreSQL, interfaz 
 
 ## Estado del POS
 
-La lista real permite guardar un ticket, reservar stock, abrir un turno por cajero, registrar una venta con pagos y convertir la reserva en egreso físico dentro de una transacción. El cierre del turno conserva el saldo contable. Los datos actuales del catálogo son ficticios y la base visual es no productiva; no hay comprobante fiscal ni arqueo físico. Tras confirmar una venta, Electron puede generar un PDF de prueba no fiscal en la carpeta `tickets` de su perfil de usuario o enviar el mismo detalle en texto por COM1 a 9600 baudios. Ninguna de las dos salidas vuelve a cobrar ni modifica stock. El diálogo muestra la ruta del PDF o el estado del envío serial. `npm run electron:test:pdf --prefix src/Carnicerias.Pos` prueba el motor PDF nativo sin registrar una venta ni crear un archivo.
+La lista real permite guardar hasta cuatro tickets A–D independientes por caja, cajero y turno, reservar stock por cada uno y recuperar los borradores confirmados por PostgreSQL al reiniciar Electron. La pestaña activa se recuerda localmente para ese turno. Solo se puede cambiar de ticket cuando el último guardado terminó; una edición aún no enviada no se promete recuperable ante un corte. El POS permite registrar una venta con pagos y convertir su reserva en egreso físico dentro de una transacción. El cierre del turno conserva el saldo contable y se bloquea si aún quedan tickets abiertos. Los datos actuales del catálogo son ficticios y la base visual es no productiva; no hay comprobante fiscal ni arqueo físico. Tras confirmar una venta, Electron puede generar un PDF de prueba no fiscal en la carpeta `tickets` de su perfil de usuario o enviar el mismo detalle en texto por COM1 a 9600 baudios. Ninguna de las dos salidas vuelve a cobrar ni modifica stock. El diálogo muestra la ruta del PDF o el estado del envío serial. `npm run electron:test:pdf --prefix src/Carnicerias.Pos` prueba el motor PDF nativo sin registrar una venta ni crear un archivo.
 
 El estado detallado y los pendientes están en `tasks/pos-todo.md`. El contrato de cobro está en `SPEC-pos-checkout.md`; la evidencia de prueba en Electron y sus límites están en `tasks/pos-checkout-plan.md`.
 
@@ -40,9 +40,11 @@ Para simular la balanza, abrir PuTTY en COM5 a 9600/8N1 y escribir `ST,0.750,kg`
 
 Para comprobar el puerto sin vender ni tocar stock: `npm run serial:smoke --prefix src/Carnicerias.Pos`. PuTTY en COM2 debe mostrar el identificador `SERIAL-SMOKE`.
 
+Para repetir la prueba visual de tickets A/B en esta instalación de desarrollo, iniciar Caja 1 con `--remote-debugging-port=9224` solo en la máquina local y ejecutar `node src/Carnicerias.Pos/tests/ticket-slots-smoke.cjs --prepare` con A y B vacíos. El script agrega una Gaseosa a A y un Pan rallado a B, dejando reservas ficticias. Reiniciar el proceso de Electron y ejecutar `node src/Carnicerias.Pos/tests/ticket-slots-smoke.cjs --verify`: comprueba que ambos detalles vuelven separados. No usar la depuración remota en un despliegue ni apuntar esta prueba a datos reales.
+
 ```powershell
 dotnet test tests/Carnicerias.ArchitectureTests/Carnicerias.ArchitectureTests.csproj --configuration Debug --no-restore
-dotnet test tests/Carnicerias.IntegrationTests/Carnicerias.IntegrationTests.csproj --configuration Debug --no-restore --filter "FullyQualifiedName~UserManagementTests|FullyQualifiedName~OrganizationManagementTests|FullyQualifiedName~ProductManagementTests|FullyQualifiedName~ProductCategoryTests|FullyQualifiedName~PriceListManagementTests"
+dotnet test tests/Carnicerias.IntegrationTests/Carnicerias.IntegrationTests.csproj --configuration Debug --no-restore --filter "FullyQualifiedName~SaleTicketSlotsTests"
 npm test --prefix src/Carnicerias.Web -- --watch=false
 npm run lint --prefix src/Carnicerias.Web
 npm run electron:test --prefix src/Carnicerias.Pos

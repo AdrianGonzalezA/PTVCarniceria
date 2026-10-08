@@ -46,10 +46,10 @@ public sealed class SaleDraft
 
     public void ReplaceLines(IEnumerable<SaleDraftLine> lines, DateTimeOffset updatedAtUtc)
     {
-        var requestedLines = lines.ToDictionary(line => line.ProductId);
+        var requestedLines = lines.ToDictionary(line => (line.ProductId, line.InventoryPieceId));
         foreach (var existingLine in Lines.ToArray())
         {
-            if (requestedLines.Remove(existingLine.ProductId, out var requestedLine))
+            if (requestedLines.Remove((existingLine.ProductId, existingLine.InventoryPieceId), out var requestedLine))
                 existingLine.UpdateQuantity(requestedLine.Quantity);
             else
                 Lines.Remove(existingLine);
@@ -89,7 +89,8 @@ public sealed class SaleDraftLine
     }
 
     public SaleDraftLine(Guid companyId, Guid productId, string productCode, string productName,
-        string unit, ProductSaleMode saleMode, decimal quantity, decimal unitPrice)
+        string unit, ProductSaleMode saleMode, decimal quantity, decimal unitPrice,
+        Guid? inventoryPieceId = null, string? pieceIdentifier = null)
     {
         Id = Guid.NewGuid();
         CompanyId = companyId;
@@ -100,6 +101,8 @@ public sealed class SaleDraftLine
         SaleMode = saleMode;
         Quantity = quantity;
         UnitPrice = unitPrice;
+        InventoryPieceId = inventoryPieceId;
+        PieceIdentifier = pieceIdentifier;
     }
 
     public Guid Id { get; private set; }
@@ -112,6 +115,8 @@ public sealed class SaleDraftLine
     public ProductSaleMode SaleMode { get; private set; }
     public decimal Quantity { get; private set; }
     public decimal UnitPrice { get; private set; }
+    public Guid? InventoryPieceId { get; private set; }
+    public string? PieceIdentifier { get; private set; }
 
     public void UpdateQuantity(decimal quantity)
     {

@@ -9,6 +9,7 @@ export interface ReceiptRequest {
   readonly lines: readonly {
     readonly code: string; readonly name: string; readonly unit: string;
     readonly quantity: number; readonly unitPrice: number; readonly lineTotal: number;
+    readonly pieceIdentifier?: string | null;
   }[];
   readonly payments: readonly {
     readonly method: string; readonly tenderedAmount: number; readonly appliedAmount: number;
@@ -63,6 +64,7 @@ export function validateReceiptRequest(value: unknown): ReceiptRequest {
       return {
         code: label(line['code']), name: label(line['name']), unit: label(line['unit'], 30),
         quantity, unitPrice: amount(line['unitPrice']), lineTotal: amount(line['lineTotal']),
+        pieceIdentifier: line['pieceIdentifier'] == null ? null : label(line['pieceIdentifier'], 80),
       };
     }),
     payments: payments.map((input: unknown) => {
@@ -89,7 +91,7 @@ const money = (value: number): string => value.toLocaleString('es-AR', {
 });
 
 export function createReceiptHtml(receipt: ReceiptRequest): string {
-  const rows = receipt.lines.map((line) => `<tr><td>${escapeHtml(line.name)}<small>${escapeHtml(line.code)} · ${line.quantity.toLocaleString('es-AR', { maximumFractionDigits: 3 })} ${escapeHtml(line.unit)} × $ ${money(line.unitPrice)}</small></td><td>$ ${money(line.lineTotal)}</td></tr>`).join('');
+  const rows = receipt.lines.map((line) => `<tr><td>${escapeHtml(line.name)}<small>${escapeHtml(line.code)}${line.pieceIdentifier ? ` · Pieza ${escapeHtml(line.pieceIdentifier)}` : ''} · ${line.quantity.toLocaleString('es-AR', { minimumFractionDigits: line.unit === 'kg' ? 3 : 0, maximumFractionDigits: 3 })} ${escapeHtml(line.unit)} × $ ${money(line.unitPrice)}</small></td><td>$ ${money(line.lineTotal)}</td></tr>`).join('');
   const payments = receipt.payments.map((payment) => `<tr><td>${methods[payment.method]}</td><td>$ ${money(payment.appliedAmount)}</td></tr>`).join('');
   const date = new Date(receipt.confirmedAtUtc).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>Ticket de prueba</title><style>

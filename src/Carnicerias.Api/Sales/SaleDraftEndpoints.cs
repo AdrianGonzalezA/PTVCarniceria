@@ -42,8 +42,11 @@ public static class SaleDraftEndpoints
         if (request is null || request.PriceListId == Guid.Empty || request.Lines is null ||
             request.Lines.Count is < 1 or > 100 || request.Lines.Any(line =>
                 line.ProductId == Guid.Empty || line.Quantity <= 0 || line.Quantity > 10000 ||
-                decimal.Round(line.Quantity, 3) != line.Quantity) ||
-            request.Lines.Select(line => line.ProductId).Distinct().Count() != request.Lines.Count)
+                decimal.Round(line.Quantity, 3) != line.Quantity || line.InventoryPieceId == Guid.Empty) ||
+            request.Lines.Select(line => (line.ProductId, line.InventoryPieceId)).Distinct().Count() != request.Lines.Count ||
+            request.Lines.Where(line => line.InventoryPieceId is not null)
+                .Select(line => line.InventoryPieceId).Distinct().Count() !=
+            request.Lines.Count(line => line.InventoryPieceId is not null))
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var context = accessor.Context;
@@ -72,6 +75,7 @@ public static class SaleDraftEndpoints
         if (draft is not null && draft.PriceListId != request.PriceListId)
             return Error(StatusCodes.Status409Conflict, "DRAFT_PRICE_LIST_LOCKED");
 
+        var currentDraftId = draft?.Id ?? Guid.Empty;
         var lines = new List<SaleDraftLine>(request.Lines.Count);
         foreach (var requestedLine in request.Lines)
         {
@@ -79,11 +83,29 @@ public static class SaleDraftEndpoints
                 item.CompanyId == context.CompanyId && item.Id == requestedLine.ProductId && item.IsActive,
                 cancellationToken);
             if (product is null) return Error(StatusCodes.Status400BadRequest, "PRODUCT_NOT_AVAILABLE");
-            var existingLine = draft?.Lines.SingleOrDefault(line => line.ProductId == product.Id);
+            var existingLine = draft?.Lines.SingleOrDefault(line => line.ProductId == product.Id &&
+                line.InventoryPieceId == requestedLine.InventoryPieceId);
             var saleMode = existingLine?.SaleMode ?? product.SaleMode;
             if ((saleMode == ProductSaleMode.Unit && requestedLine.Quantity != decimal.Truncate(requestedLine.Quantity)) ||
                 (saleMode == ProductSaleMode.Weight && requestedLine.Quantity <= 0))
                 return Error(StatusCodes.Status400BadRequest, "INVALID_PRODUCT_QUANTITY");
+
+            InventoryPiece? piece = null;
+            if (requestedLine.InventoryPieceId is Guid pieceId)
+            {
+                piece = await db.InventoryPieces.AsNoTracking().SingleOrDefaultAsync(item =>
+                    item.Id == pieceId && item.CompanyId == context.CompanyId &&
+                    item.BranchId == context.BranchId && item.ProductId == product.Id,
+                    cancellationToken);
+                if (piece is null || saleMode != ProductSaleMode.Weight ||
+                    piece.ReceivedWeightKg != requestedLine.Quantity)
+                    return Error(StatusCodes.Status409Conflict, "PIECE_NOT_AVAILABLE");
+                if (await db.ConfirmedSaleLines.AnyAsync(line => line.InventoryPieceId == pieceId, cancellationToken) ||
+                    await db.Set<SaleDraftLine>().AnyAsync(line => line.InventoryPieceId == pieceId &&
+                        line.SaleDraftId != currentDraftId && db.SaleDrafts.Any(other =>
+                            other.Id == line.SaleDraftId && other.Status == SaleDraftStatus.Draft), cancellationToken))
+                    return Error(StatusCodes.Status409Conflict, "PIECE_ALREADY_USED");
+            }
 
             var price = existingLine?.UnitPrice ?? await db.ProductPrices.AsNoTracking()
                 .Where(item => item.CompanyId == context.CompanyId && item.PriceListId == request.PriceListId &&
@@ -96,7 +118,8 @@ public static class SaleDraftEndpoints
             lines.Add(new SaleDraftLine(context.CompanyId, product.Id,
                 existingLine?.ProductCode ?? product.Code,
                 existingLine?.ProductName ?? product.Name,
-                existingLine?.Unit ?? product.Unit, saleMode, requestedLine.Quantity, price));
+                existingLine?.Unit ?? product.Unit, saleMode, requestedLine.Quantity, price,
+                piece?.Id, piece?.ExternalIdentifier));
         }
 
         if (draft is null)
@@ -108,8 +131,8 @@ public static class SaleDraftEndpoints
         foreach (var productId in lines.Select(line => line.ProductId)
                      .Concat(draft.Lines.Select(line => line.ProductId)).Distinct())
         {
-            var previousQuantity = draft.Lines.SingleOrDefault(line => line.ProductId == productId)?.Quantity ?? 0;
-            var newQuantity = lines.SingleOrDefault(line => line.ProductId == productId)?.Quantity ?? 0;
+            var previousQuantity = draft.Lines.Where(line => line.ProductId == productId).Sum(line => line.Quantity);
+            var newQuantity = lines.Where(line => line.ProductId == productId).Sum(line => line.Quantity);
             var quantityDelta = newQuantity - previousQuantity;
             if (quantityDelta == 0) continue;
 
@@ -150,13 +173,14 @@ public static class SaleDraftEndpoints
             (accessor.TerminalId == null || item.CashierShiftId == shift.Id) &&
             item.Status == SaleDraftStatus.Draft, cancellationToken);
         if (draft is null) return Results.NoContent();
-        foreach (var line in draft.Lines)
+        foreach (var group in draft.Lines.GroupBy(line => line.ProductId))
         {
+            var quantity = group.Sum(line => line.Quantity);
             var updated = await db.BranchInventoryBalances.Where(balance =>
                     balance.CompanyId == context.CompanyId && balance.BranchId == context.BranchId &&
-                    balance.ProductId == line.ProductId && balance.Reserved >= line.Quantity)
+                    balance.ProductId == group.Key && balance.Reserved >= quantity)
                 .ExecuteUpdateAsync(setters => setters.SetProperty(
-                    balance => balance.Reserved, balance => balance.Reserved - line.Quantity), cancellationToken);
+                    balance => balance.Reserved, balance => balance.Reserved - quantity), cancellationToken);
             if (updated == 0)
                 return Error(StatusCodes.Status409Conflict, "STOCK_RESERVATION_MISSING");
         }
@@ -178,9 +202,11 @@ public static class SaleDraftEndpoints
 
     private static SaleDraftResponse ToResponse(SaleDraft draft) => new(
         draft.Id, draft.PriceListId, draft.UpdatedAtUtc,
-        draft.Lines.OrderBy(line => line.ProductName).Select(line => new SaleDraftLineResponse(
-            line.ProductId, line.ProductCode, line.ProductName, line.Unit,
-            line.SaleMode == ProductSaleMode.Weight ? "weight" : "unit", line.Quantity, line.UnitPrice)).ToArray());
+        draft.Lines.OrderBy(line => line.ProductName).ThenBy(line => line.PieceIdentifier)
+            .Select(line => new SaleDraftLineResponse(
+                line.Id, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
+                line.SaleMode == ProductSaleMode.Weight ? "weight" : "unit", line.Quantity, line.UnitPrice,
+                line.InventoryPieceId, line.PieceIdentifier)).ToArray());
 
     private static IResult Error(int statusCode, string code) => Results.Json(
         new Carnicerias.Api.Contracts.ErrorResponse(
@@ -188,9 +214,10 @@ public static class SaleDraftEndpoints
         statusCode: statusCode);
 
     private sealed record SaveSaleDraftRequest(Guid PriceListId, IReadOnlyList<SaveSaleDraftLineRequest> Lines);
-    private sealed record SaveSaleDraftLineRequest(Guid ProductId, decimal Quantity);
+    private sealed record SaveSaleDraftLineRequest(Guid ProductId, decimal Quantity, Guid? InventoryPieceId = null);
     private sealed record SaleDraftResponse(Guid Id, Guid PriceListId, DateTimeOffset UpdatedAtUtc,
         IReadOnlyList<SaleDraftLineResponse> Lines);
-    private sealed record SaleDraftLineResponse(Guid ProductId, string ProductCode, string ProductName,
-        string Unit, string SaleMode, decimal Quantity, decimal UnitPrice);
+    private sealed record SaleDraftLineResponse(Guid Id, Guid ProductId, string ProductCode, string ProductName,
+        string Unit, string SaleMode, decimal Quantity, decimal UnitPrice,
+        Guid? InventoryPieceId, string? PieceIdentifier);
 }

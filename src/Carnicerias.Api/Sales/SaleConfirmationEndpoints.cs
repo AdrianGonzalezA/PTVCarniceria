@@ -82,31 +82,36 @@ public static class SaleConfirmationEndpoints
             }
 
             var now = timeProvider.GetUtcNow();
+            foreach (var pieceId in draft.Lines.Where(line => line.InventoryPieceId is not null)
+                         .Select(line => line.InventoryPieceId!.Value))
+                if (await db.ConfirmedSaleLines.AnyAsync(line => line.InventoryPieceId == pieceId, cancellationToken))
+                    return Error(StatusCodes.Status409Conflict, "PIECE_ALREADY_USED");
             var sale = new ConfirmedSale(context.CompanyId, context.BranchId, context.UserId,
                 shift.Id, draft.Id, draft.PriceListId, total, requestHash, now, accessor.TerminalId);
             sale.Lines.AddRange(draft.Lines.Select(line => new ConfirmedSaleLine(
                 context.CompanyId, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
-                line.SaleMode, line.Quantity, line.UnitPrice)));
+                line.SaleMode, line.Quantity, line.UnitPrice, line.InventoryPieceId, line.PieceIdentifier)));
             sale.Payments.AddRange(settlement.AppliedPayments.Select(payment => new SalePayment(
                 payment.Method, payment.TenderedAmount, payment.AppliedAmount)));
             db.ConfirmedSales.Add(sale);
 
-            foreach (var line in draft.Lines)
+            foreach (var group in draft.Lines.GroupBy(line => line.ProductId))
             {
+                var quantity = group.Sum(line => line.Quantity);
                 var changed = await db.BranchInventoryBalances.Where(balance =>
                         balance.CompanyId == context.CompanyId && balance.BranchId == context.BranchId &&
-                        balance.ProductId == line.ProductId && balance.OnHand >= line.Quantity &&
-                        balance.Reserved >= line.Quantity)
+                        balance.ProductId == group.Key && balance.OnHand >= quantity &&
+                        balance.Reserved >= quantity)
                     .ExecuteUpdateAsync(setters => setters
-                        .SetProperty(balance => balance.OnHand, balance => balance.OnHand - line.Quantity)
-                        .SetProperty(balance => balance.Reserved, balance => balance.Reserved - line.Quantity),
+                        .SetProperty(balance => balance.OnHand, balance => balance.OnHand - quantity)
+                        .SetProperty(balance => balance.Reserved, balance => balance.Reserved - quantity),
                         cancellationToken);
                 if (changed == 0)
                     return Error(StatusCodes.Status409Conflict, "STOCK_RESERVATION_MISSING");
 
                 db.InventoryMovements.Add(new InventoryMovement(
-                    context.CompanyId, context.BranchId, line.ProductId, context.UserId,
-                    Guid.NewGuid(), InventoryMovementKind.Sale, -line.Quantity,
+                    context.CompanyId, context.BranchId, group.Key, context.UserId,
+                    Guid.NewGuid(), InventoryMovementKind.Sale, -quantity,
                     $"Egreso por venta {sale.Id:N}", now));
             }
 
@@ -189,8 +194,10 @@ public static class SaleConfirmationEndpoints
 
     private static SaleConfirmationResponse ToResponse(ConfirmedSale sale, decimal change) => new(
         sale.Id, sale.Total, change, sale.ConfirmedAtUtc,
-        sale.Lines.Select(line => new SaleConfirmationLineResponse(
-            line.ProductCode, line.ProductName, line.Unit, line.Quantity, line.UnitPrice, line.LineTotal)).ToArray(),
+        sale.Lines.OrderBy(line => line.ProductName).ThenBy(line => line.PieceIdentifier)
+            .Select(line => new SaleConfirmationLineResponse(
+                line.ProductCode, line.ProductName, line.Unit, line.Quantity, line.UnitPrice,
+                line.LineTotal, line.PieceIdentifier)).ToArray(),
         sale.Payments.Select(payment => new SaleConfirmationPaymentResponse(
             MethodName(payment.Method), payment.TenderedAmount, payment.AppliedAmount)).ToArray());
 
@@ -222,6 +229,6 @@ public static class SaleConfirmationEndpoints
         DateTimeOffset ConfirmedAtUtc, IReadOnlyList<SaleConfirmationLineResponse> Lines,
         IReadOnlyList<SaleConfirmationPaymentResponse> Payments);
     private sealed record SaleConfirmationLineResponse(string Code, string Name, string Unit,
-        decimal Quantity, decimal UnitPrice, decimal LineTotal);
+        decimal Quantity, decimal UnitPrice, decimal LineTotal, string? PieceIdentifier);
     private sealed record SaleConfirmationPaymentResponse(string Method, decimal TenderedAmount, decimal AppliedAmount);
 }

@@ -207,11 +207,12 @@
               </tr>
             </thead>
             <tbody>
-              @for (line of lines(); track line.product.id) {
+              @for (line of lines(); track line.id) {
                 <tr>
                   <td>
                     <span class="line-product-name">{{ line.product.name }}</span>
                     <small>{{ line.product.code }}</small>
+                    @if (line.pieceIdentifier) { <small>Pieza {{ line.pieceIdentifier }}</small> }
                   </td>
                   <td>
                     <input
@@ -220,8 +221,9 @@
                       [min]="line.product.mode === 'weight' ? 0.001 : 1"
                       [step]="line.product.mode === 'weight' ? 0.001 : 1"
                       [value]="line.quantity"
+                      [readOnly]="!!line.inventoryPieceId"
                       [attr.aria-label]="line.product.mode === 'weight' ? 'Peso en kilogramos de ' + line.product.name : 'Cantidad de ' + unitLabel(line.product) + ' de ' + line.product.name"
-                      (change)="updateLineQuantity(line.product.id, $event)"
+                      (change)="updateLineQuantity(line.id, $event)"
                     />
                     <small>{{ unitLabel(line.product) }}</small>
                   </td>
@@ -229,7 +231,7 @@
                   <td>0,00%</td>
                   <td class="line-total">{{ formatMoney(lineTotal(line)) }}</td>
                   <td>
-                    <button class="remove-line-button" type="button" [attr.aria-label]="'Quitar ' + line.product.name" (click)="removeLine(line.product.id)">×</button>
+                    <button class="remove-line-button" type="button" [attr.aria-label]="'Quitar ' + line.product.name + (line.pieceIdentifier ? ' pieza ' + line.pieceIdentifier : '')" (click)="removeLine(line.id)">×</button>
                   </td>
                 </tr>
               }
@@ -282,7 +284,7 @@
         @if (product.mode === 'weight') {
           @if (scannedPieceIdentifier(); as identifier) {
             <p class="scale-status" role="status">Pieza {{ identifier }} · {{ quantityDraft() }} kg leídos de la etiqueta · peso fijo</p>
-            <p class="scale-status">El ticket todavía no asigna la pieza vendida; conserva stock agregado.</p>
+            <p class="scale-status">La pieza se guarda por separado en el ticket; el saldo de stock se calcula por artículo.</p>
           } @else {
             <p class="scale-status">Balanza no conectada · Ingreso manual de peso</p>
           }

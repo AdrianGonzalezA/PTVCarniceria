@@ -648,10 +648,11 @@ describe('PosPage', () => {
     };
     const asado = { id: 'product-id', code: '1002', name: 'Asado', categoryId: 'category-id',
       saleMode: 'weight' as const, unit: 'kg', price: 11500, availableStock: 79.5 };
-    const save = vi.fn().mockImplementation((_listId, lines: readonly { productId: string; quantity: number }[]) =>
+    const save = vi.fn().mockImplementation((_listId, lines: readonly { id: string; productId: string; quantity: number; inventoryPieceId?: string }[]) =>
       of({ id: 'draft-id', priceListId: 'list-id', updatedAtUtc: '2026-10-08T16:00:00Z',
-        lines: [{ productId: asado.id, productCode: asado.code, productName: asado.name,
-          unit: 'kg', saleMode: 'weight', quantity: lines[0].quantity, unitPrice: asado.price }] }));
+        lines: lines.map(line => ({ ...line, productCode: asado.code, productName: asado.name,
+          unit: 'kg', saleMode: 'weight', unitPrice: asado.price,
+          pieceIdentifier: line.inventoryPieceId === 'piece-id' ? '999001' : '999002' })) }));
     TestBed.configureTestingModule({ providers: [
       provideRouter([]),
       { provide: SessionClient, useValue: { current: () => of(session) } },
@@ -663,9 +664,10 @@ describe('PosPage', () => {
           return of({ items, page: 1, pageSize: 50, totalItems: items.length });
         },
       } },
-      { provide: InventoryPieceClient, useValue: { lookup: (code: string) => code === '2999001005009'
-        ? of({ id: 'piece-id', productId: asado.id, productCode: asado.code,
-          externalIdentifier: '999001', receivedWeightKg: 0.5, rawBarcode: code })
+      { provide: InventoryPieceClient, useValue: { lookup: (code: string) => code === '2999001005009' || code === '2999002007507'
+        ? of({ id: code === '2999001005009' ? 'piece-id' : 'piece-id-2', productId: asado.id, productCode: asado.code,
+          externalIdentifier: code === '2999001005009' ? '999001' : '999002',
+          receivedWeightKg: code === '2999001005009' ? 0.5 : 0.75, rawBarcode: code })
         : throwError(() => new HttpErrorResponse({ status: 404 })) } },
       { provide: SaleDraftClient, useValue: { current: () => of(null), save } },
       { provide: InventoryClient, useValue: { stock: () => of([{ productId: asado.id, available: 79.5 }]) } },
@@ -687,16 +689,43 @@ describe('PosPage', () => {
     expect(measuredQuantity.readOnly).toBe(true);
     (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
-    expect(save).toHaveBeenCalledWith('list-id', [{ productId: asado.id, quantity: 0.5 }]);
+    expect(save).toHaveBeenCalledWith('list-id', [expect.objectContaining({ productId: asado.id, quantity: 0.5, inventoryPieceId: 'piece-id' })]);
     expect((fixture.nativeElement.querySelector('.quantity-input') as HTMLInputElement).value).toBe('0.5');
     expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('5.750,00');
+
+    search.value = '2999002007507';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const ticketRows = fixture.nativeElement.querySelectorAll('.line-table tbody tr');
+    expect(ticketRows).toHaveLength(2);
+    expect(ticketRows[0].textContent).toContain('999001');
+    expect(ticketRows[1].textContent).toContain('999002');
+    expect((ticketRows[0].querySelector('.quantity-input') as HTMLInputElement).value).toBe('0.5');
+    expect((ticketRows[1].querySelector('.quantity-input') as HTMLInputElement).value).toBe('0.75');
+    expect(save).toHaveBeenLastCalledWith('list-id', [
+      expect.objectContaining({ productId: asado.id, quantity: 0.5, inventoryPieceId: 'piece-id' }),
+      expect.objectContaining({ productId: asado.id, quantity: 0.75, inventoryPieceId: 'piece-id-2' }),
+    ]);
+
+    search.value = '2999001005009';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.line-table tbody tr')).toHaveLength(2);
+    expect(fixture.nativeElement.querySelector('.pos-error').textContent).toContain('ya está en el ticket');
+    (fixture.nativeElement.querySelector('.pos-dialog .dialog-close') as HTMLButtonElement).click();
 
     search.value = '2999001005999';
     search.dispatchEvent(new Event('input', { bubbles: true }));
     search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#product-dialog-title')).toBeNull();
-    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledTimes(2);
     expect(fixture.nativeElement.querySelector('.pos-error').textContent)
       .toContain('no corresponde a un artículo ni a una pieza');
   });

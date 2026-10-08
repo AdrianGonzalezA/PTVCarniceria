@@ -27,8 +27,11 @@ interface PosProduct {
 }
 
 interface SaleLine {
+  readonly id: string;
   readonly product: PosProduct;
   readonly quantity: number;
+  readonly inventoryPieceId?: string;
+  readonly pieceIdentifier?: string;
 }
 
 const categories = [
@@ -133,6 +136,7 @@ export class PosPage implements OnInit {
   private readonly persistedLines = signal<readonly SaleLine[]>([]);
   protected readonly selectedProduct = signal<PosProduct | null>(null);
   protected readonly scannedPieceIdentifier = signal<string | null>(null);
+  private readonly scannedPieceId = signal<string | null>(null);
   protected readonly quantityDraft = signal('1');
   protected readonly quantityProblem = computed(() => {
     const product = this.selectedProduct();
@@ -226,6 +230,7 @@ export class PosPage implements OnInit {
           : this.saleDraftClient.save(operation.priceListId, operation.lines.map((line) => ({
               productId: line.product.id,
               quantity: line.quantity,
+              ...(line.inventoryPieceId ? { inventoryPieceId: line.inventoryPieceId } : {}),
             })));
         return request.pipe(
           map((result) => ({ revision, operation, result, error: null as HttpErrorResponse | null })),
@@ -237,10 +242,12 @@ export class PosPage implements OnInit {
       if (error) {
         if (revision === this.draftRevision) {
           if (operation === 'cancel') this.lines.set(this.persistedLines());
-          if (error.error?.error?.code === 'INSUFFICIENT_STOCK') {
+          if (['INSUFFICIENT_STOCK', 'PIECE_ALREADY_USED', 'PIECE_NOT_AVAILABLE'].includes(error.error?.error?.code)) {
             this.lines.set(this.persistedLines());
             this.draftStatus.set('saved');
-            this.errorMessage.set('No hay stock suficiente. El producto o la cantidad rechazada no se agregó al ticket. Revisá las existencias.');
+            this.errorMessage.set(error.error?.error?.code === 'INSUFFICIENT_STOCK'
+              ? 'No hay stock suficiente. El producto o la cantidad rechazada no se agregó al ticket. Revisá las existencias.'
+              : 'Esta pieza ya no está disponible. No se agregó al ticket.');
             this.refreshStock();
           } else {
             this.draftStatus.set('error');
@@ -258,10 +265,12 @@ export class PosPage implements OnInit {
         const savedDraft = result as SaleDraft;
         this.draftId.set(savedDraft.id);
         this.lines.update((currentLines) => currentLines.map((line) => {
-          const savedLine = savedDraft.lines.find((item) => item.productId === line.product.id);
+          const savedLine = savedDraft.lines.find((item) => item.productId === line.product.id &&
+            (item.inventoryPieceId ?? null) === (line.inventoryPieceId ?? null));
           return savedLine ? { ...line, product: { ...line.product, price: savedLine.unitPrice } } : line;
         }));
         this.persistedLines.set(savedDraft.lines.map((item) => ({
+          id: item.id,
           product: {
             id: item.productId,
             code: item.productCode,
@@ -272,6 +281,8 @@ export class PosPage implements OnInit {
             unit: item.unit,
           },
           quantity: item.quantity,
+          ...(item.inventoryPieceId ? { inventoryPieceId: item.inventoryPieceId } : {}),
+          ...(item.pieceIdentifier ? { pieceIdentifier: item.pieceIdentifier } : {}),
         })));
       }
       if (revision === this.draftRevision) {
@@ -360,6 +371,7 @@ export class PosPage implements OnInit {
     this.searchText.set('');
     this.selectedProduct.set(null);
     this.scannedPieceIdentifier.set(null);
+    this.scannedPieceId.set(null);
     this.errorMessage.set(null);
     this.realSearchSubmitted.set(false);
     this.realProducts.set([]);
@@ -459,13 +471,15 @@ export class PosPage implements OnInit {
             this.realProducts.set([product]);
             this.catalogLoadState.set('ready');
             this.searchText.set('');
-            this.openProduct(product, piece.receivedWeightKg, piece.externalIdentifier);
+            this.openProduct(product, piece.receivedWeightKg, piece.externalIdentifier, piece.id);
           },
           error: () => this.pieceLookupError('No se pudo consultar el artículo de la pieza.'),
         });
       },
       error: (error: HttpErrorResponse) => this.pieceLookupError(error.status === 409
-        ? 'Hay más de una pieza con esa etiqueta en la sucursal. Revisá el origen antes de vender.'
+        ? error.error?.error?.code === 'PIECE_ALREADY_SOLD'
+          ? 'Esta pieza ya fue vendida y no se puede agregar a otro ticket.'
+          : 'Hay más de una pieza con esa etiqueta en la sucursal. Revisá el origen antes de vender.'
         : error.status === 404
           ? 'El código no corresponde a un artículo ni a una pieza recibida en esta sucursal.'
           : 'No se pudo consultar la pieza. Intentá nuevamente.'),
@@ -546,7 +560,8 @@ export class PosPage implements OnInit {
     };
   }
 
-  protected openProduct(product: PosProduct, quantity = 1, pieceIdentifier: string | null = null): void {
+  protected openProduct(product: PosProduct, quantity = 1, pieceIdentifier: string | null = null,
+    pieceId: string | null = null): void {
     if (!this.canOperate()) return;
     this.errorMessage.set(null);
     if (!this.isDemoPriceList() && (this.availableStock(product) ?? 0) <= 0) {
@@ -555,6 +570,7 @@ export class PosPage implements OnInit {
     }
     this.selectedProduct.set(product);
     this.scannedPieceIdentifier.set(pieceIdentifier);
+    this.scannedPieceId.set(pieceId);
     this.quantityDraft.set(String(quantity));
   }
 
@@ -576,17 +592,38 @@ export class PosPage implements OnInit {
     }
 
     this.errorMessage.set(null);
-    this.addProductLine(product, quantity);
+    const pieceId = this.scannedPieceId();
+    if (pieceId && this.lines().some(line => line.inventoryPieceId === pieceId)) {
+      this.errorMessage.set('Esta pieza ya está en el ticket.');
+      return;
+    }
+    const existingQuantity = this.lines().filter(line => line.product.id === product.id)
+      .reduce((sum, line) => sum + line.quantity, 0);
+    const reservedQuantity = this.persistedLines().filter(line => line.product.id === product.id)
+      .reduce((sum, line) => sum + line.quantity, 0);
+    const available = this.availableStock(product);
+    if (!this.isDemoPriceList() && available !== undefined &&
+        existingQuantity + quantity > available + reservedQuantity) {
+      this.errorMessage.set('Stock insuficiente para agregar esta pieza al ticket.');
+      return;
+    }
+    this.addProductLine(product, quantity, pieceId, this.scannedPieceIdentifier());
     this.selectedProduct.set(null);
     this.scannedPieceIdentifier.set(null);
+    this.scannedPieceId.set(null);
     this.focusScanInput();
   }
 
-  protected updateLineQuantity(productId: string, event: Event): void {
+  protected updateLineQuantity(lineId: string, event: Event): void {
     if (!this.canOperate()) return;
     const input = event.target as HTMLInputElement;
     const quantity = Number(input.value.replace(',', '.'));
-    const line = this.lines().find((item) => item.product.id === productId);
+    const line = this.lines().find((item) => item.id === lineId);
+    if (line?.inventoryPieceId) {
+      input.value = String(line.quantity);
+      this.errorMessage.set('El peso de una pieza leída no se puede modificar. Quitá la pieza si no corresponde.');
+      return;
+    }
     if (!line || !Number.isFinite(quantity) || quantity <= 0 ||
         quantity > 10000 || Math.abs(Math.round(quantity * 1000) - quantity * 1000) > 0.000001 ||
         (line.product.mode === 'unit' && !Number.isInteger(quantity))) {
@@ -595,24 +632,27 @@ export class PosPage implements OnInit {
       return;
     }
     const available = this.availableStock(line.product);
-    const reservedByThisTicket = this.persistedLines().find((item) => item.product.id === productId)?.quantity ?? 0;
-    if (!this.isDemoPriceList() && available !== undefined && quantity > available + reservedByThisTicket) {
+    const reservedByThisTicket = this.persistedLines().filter(item => item.product.id === line.product.id)
+      .reduce((sum, item) => sum + item.quantity, 0);
+    const otherQuantity = this.lines().filter(item => item.product.id === line.product.id && item.id !== lineId)
+      .reduce((sum, item) => sum + item.quantity, 0);
+    if (!this.isDemoPriceList() && available !== undefined && quantity + otherQuantity > available + reservedByThisTicket) {
       this.errorMessage.set(`Stock insuficiente. Disponible para agregar: ${available.toLocaleString('es-AR', { maximumFractionDigits: 3 })} ${this.unitLabel(line.product)}.`);
       input.value = String(line.quantity);
       return;
     }
     this.errorMessage.set(null);
-    this.lines.update((lines) => lines.map((item) => item.product.id === productId
+    this.lines.update((lines) => lines.map((item) => item.id === lineId
       ? { ...item, quantity: this.roundQuantity(quantity) }
       : item));
     this.persistCurrentDraft();
   }
 
-  protected removeLine(productId: string): void {
+  protected removeLine(lineId: string): void {
     if (!this.canOperate()) return;
-    const line = this.lines().find((item) => item.product.id === productId);
+    const line = this.lines().find((item) => item.id === lineId);
     if (!line || !window.confirm(`¿Querés quitar ${line.product.name} del detalle?`)) return;
-    this.lines.update((lines) => lines.filter((item) => item.product.id !== productId));
+    this.lines.update((lines) => lines.filter((item) => item.id !== lineId));
     this.persistCurrentDraft();
   }
 
@@ -693,6 +733,7 @@ export class PosPage implements OnInit {
   protected closeProductDialog(): void {
     this.selectedProduct.set(null);
     this.scannedPieceIdentifier.set(null);
+    this.scannedPieceId.set(null);
     this.errorMessage.set(null);
     this.focusScanInput();
   }
@@ -1000,11 +1041,14 @@ export class PosPage implements OnInit {
     return Math.round(value * 1000) / 1000;
   }
 
-  private addProductLine(product: PosProduct, quantity: number): void {
+  private addProductLine(product: PosProduct, quantity: number, pieceId: string | null = null,
+    pieceIdentifier: string | null = null): void {
     this.lines.update((lines) => {
-      const existing = lines.find((line) => line.product.id === product.id);
-      if (!existing) return [...lines, { product, quantity }];
-      return lines.map((line) => line.product.id === product.id
+      const existing = pieceId ? undefined : lines.find((line) => line.product.id === product.id && !line.inventoryPieceId);
+      if (!existing) return [...lines, { id: crypto.randomUUID(), product, quantity,
+        ...(pieceId ? { inventoryPieceId: pieceId } : {}),
+        ...(pieceIdentifier ? { pieceIdentifier } : {}) }];
+      return lines.map((line) => line.id === existing.id
         ? { ...line, quantity: this.roundQuantity(line.quantity + quantity) }
         : line);
     });
@@ -1039,6 +1083,7 @@ export class PosPage implements OnInit {
         this.draftId.set(draft.id);
         this.selectedPriceListId.set(draft.priceListId);
         this.lines.set(draft.lines.map((item: SaleDraftLine) => ({
+          id: item.id,
           product: {
             id: item.productId,
             code: item.productCode,
@@ -1049,6 +1094,8 @@ export class PosPage implements OnInit {
             unit: item.unit,
           },
           quantity: item.quantity,
+          ...(item.inventoryPieceId ? { inventoryPieceId: item.inventoryPieceId } : {}),
+          ...(item.pieceIdentifier ? { pieceIdentifier: item.pieceIdentifier } : {}),
         })));
         this.persistedLines.set(this.lines());
         this.draftStatus.set('saved');

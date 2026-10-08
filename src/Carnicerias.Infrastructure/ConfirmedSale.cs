@@ -45,7 +45,8 @@ public sealed class ConfirmedSaleLine
     private ConfirmedSaleLine() { ProductCode = string.Empty; ProductName = string.Empty; Unit = string.Empty; }
 
     public ConfirmedSaleLine(Guid companyId, Guid productId, string code, string name, string unit,
-        ProductSaleMode saleMode, decimal quantity, decimal unitPrice)
+        ProductSaleMode saleMode, decimal quantity, decimal unitPrice,
+        Guid? inventoryPieceId = null, string? pieceIdentifier = null)
     {
         CompanyId = companyId;
         ProductId = productId;
@@ -56,6 +57,8 @@ public sealed class ConfirmedSaleLine
         Quantity = quantity;
         UnitPrice = unitPrice;
         LineTotal = decimal.Round(quantity * unitPrice, 2, MidpointRounding.AwayFromZero);
+        InventoryPieceId = inventoryPieceId;
+        PieceIdentifier = pieceIdentifier;
     }
 
     public Guid Id { get; private set; }
@@ -69,6 +72,8 @@ public sealed class ConfirmedSaleLine
     public decimal Quantity { get; private set; }
     public decimal UnitPrice { get; private set; }
     public decimal LineTotal { get; private set; }
+    public Guid? InventoryPieceId { get; private set; }
+    public string? PieceIdentifier { get; private set; }
 }
 
 public sealed class SalePayment

@@ -387,6 +387,9 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(line => line.SaleMode).HasConversion<int>().IsRequired();
             entity.Property(line => line.Quantity).HasPrecision(12, 3);
             entity.Property(line => line.UnitPrice).HasPrecision(12, 2);
+            entity.Property(line => line.PieceIdentifier).HasMaxLength(80);
+            entity.HasOne<InventoryPiece>().WithMany().HasForeignKey(line => line.InventoryPieceId)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<CatalogProduct>().WithMany()
                 .HasForeignKey(line => new { line.CompanyId, line.ProductId })
                 .HasPrincipalKey(product => new { product.CompanyId, product.Id })
@@ -448,6 +451,11 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(line => line.Quantity).HasPrecision(12, 3);
             entity.Property(line => line.UnitPrice).HasPrecision(12, 2);
             entity.Property(line => line.LineTotal).HasPrecision(12, 2);
+            entity.Property(line => line.PieceIdentifier).HasMaxLength(80);
+            entity.HasOne<InventoryPiece>().WithMany().HasForeignKey(line => line.InventoryPieceId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(line => line.InventoryPieceId).IsUnique()
+                .HasFilter("\"InventoryPieceId\" IS NOT NULL");
             entity.HasOne<CatalogProduct>().WithMany()
                 .HasForeignKey(line => new { line.CompanyId, line.ProductId })
                 .HasPrincipalKey(product => new { product.CompanyId, product.Id })

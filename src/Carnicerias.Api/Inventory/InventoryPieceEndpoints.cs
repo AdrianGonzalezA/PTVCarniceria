@@ -47,6 +47,9 @@ public static class InventoryPieceEndpoints
                                  product.SaleMode
                              })
             .Take(2).ToArrayAsync(cancellationToken);
+        if (matches.Length == 1 && await db.ConfirmedSaleLines.AnyAsync(line =>
+                line.InventoryPieceId == matches[0].Id, cancellationToken))
+            return Error(StatusCodes.Status409Conflict, "PIECE_ALREADY_SOLD");
         return matches.Length switch
         {
             0 => Error(StatusCodes.Status404NotFound, "PIECE_NOT_FOUND"),

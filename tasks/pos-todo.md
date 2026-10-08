@@ -1,5 +1,11 @@
 # Desarrollo del punto de venta
 
+## Piezas trazables en el ticket (8 de octubre de 2026)
+
+- [x] Cada pieza leída conserva un renglón propio, su identificador y sus kilos en el borrador, la venta y el PDF de prueba, aunque comparta artículo con otra pieza.
+- [x] La reserva y el egreso del stock agregado suman todos los renglones del artículo. Se impide repetir la misma pieza en el ticket o confirmarla en una segunda venta.
+- [ ] Modelar el estado individual de la pieza (`disponible`, `reservada`, `vendida`) y el movimiento de egreso por pieza; el saldo físico continúa agregado por artículo.
+
 **Prioridad:** acordada el 6 de octubre de 2026. El módulo de administración de usuarios queda en pausa para centrar el desarrollo en el POS y permitir probar el producto desde Electron.
 
 **Regla vigente de datos de desarrollo:** usar únicamente `carnicerias_test_visual` como base de la aplicación. No crear bases adicionales para pruebas o reinicios sin autorización explícita; limpiar y recargar los datos en esa misma base. El set actual tiene dos cajas, nueve productos con stock y cero ventas iniciales. Las pruebas de integración que exigen una base desechable separada quedan pendientes bajo esta regla.

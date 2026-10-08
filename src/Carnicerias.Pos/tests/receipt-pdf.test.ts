@@ -18,6 +18,19 @@ describe('virtual receipt PDF content', () => {
     expect(html).toContain('2.400,00');
   });
 
+  it('prints each traceable piece with its own weight and identifier', () => {
+    const html = createReceiptHtml(validateReceiptRequest({ ...validRequest,
+      lines: [
+        { code: '1002', name: 'Asado', unit: 'kg', quantity: 0.5, unitPrice: 11500,
+          lineTotal: 5750, pieceIdentifier: '999001' },
+        { code: '1002', name: 'Asado', unit: 'kg', quantity: 0.75, unitPrice: 11500,
+          lineTotal: 8625, pieceIdentifier: '999002' },
+      ],
+    }));
+    expect(html).toContain('Pieza 999001 · 0,500 kg');
+    expect(html).toContain('Pieza 999002 · 0,750 kg');
+  });
+
   it('escapes untrusted sale text and does not load remote assets', () => {
     const html = createReceiptHtml(validateReceiptRequest({
       ...validRequest, lines: [{ ...validRequest.lines[0], name: '<img src=x onerror=alert(1)>' }],

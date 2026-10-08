@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 
 export interface SaleDraftLine {
+  readonly id: string;
   readonly productId: string;
   readonly productCode: string;
   readonly productName: string;
@@ -9,6 +10,8 @@ export interface SaleDraftLine {
   readonly saleMode: 'weight' | 'unit';
   readonly quantity: number;
   readonly unitPrice: number;
+  readonly inventoryPieceId?: string | null;
+  readonly pieceIdentifier?: string | null;
 }
 
 export interface SaleDraft {
@@ -25,7 +28,7 @@ export interface ConfirmedSale {
   readonly total: number;
   readonly changeAmount: number;
   readonly confirmedAtUtc: string;
-  readonly lines: readonly { readonly code: string; readonly name: string; readonly unit: string; readonly quantity: number; readonly unitPrice: number; readonly lineTotal: number }[];
+  readonly lines: readonly { readonly code: string; readonly name: string; readonly unit: string; readonly quantity: number; readonly unitPrice: number; readonly lineTotal: number; readonly pieceIdentifier?: string | null }[];
   readonly payments: readonly { readonly method: SalePaymentMethod; readonly tenderedAmount: number; readonly appliedAmount: number }[];
 }
 
@@ -37,7 +40,7 @@ export class SaleDraftClient {
     return this.http.get<SaleDraft | null>('/api/sales/draft', { withCredentials: true });
   }
 
-  save(priceListId: string, lines: readonly { readonly productId: string; readonly quantity: number }[]) {
+  save(priceListId: string, lines: readonly { readonly productId: string; readonly quantity: number; readonly inventoryPieceId?: string }[]) {
     return this.http.put<SaleDraft>('/api/sales/draft', { priceListId, lines }, { withCredentials: true });
   }
 

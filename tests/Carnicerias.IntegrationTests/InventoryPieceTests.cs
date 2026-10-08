@@ -6,6 +6,47 @@ namespace Carnicerias.IntegrationTests;
 public sealed class InventoryPieceTests
 {
     [Fact]
+    public void DraftKeepsTwoPiecesOfTheSameProductAsSeparateLines()
+    {
+        var companyId = Guid.NewGuid();
+        var productId = Guid.NewGuid();
+        var firstId = Guid.NewGuid();
+        var secondId = Guid.NewGuid();
+        var draft = new SaleDraft(companyId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), DateTimeOffset.UtcNow);
+        draft.ReplaceLines([
+            new SaleDraftLine(companyId, productId, "1002", "Asado", "kg", ProductSaleMode.Weight,
+                0.500m, 11500m, firstId, "999001"),
+            new SaleDraftLine(companyId, productId, "1002", "Asado", "kg", ProductSaleMode.Weight,
+                0.750m, 11500m, secondId, "999002")
+        ], DateTimeOffset.UtcNow);
+
+        Assert.Equal(2, draft.Lines.Count);
+        Assert.Contains(draft.Lines, line => line.InventoryPieceId == firstId && line.Quantity == 0.500m);
+        Assert.Contains(draft.Lines, line => line.InventoryPieceId == secondId && line.Quantity == 0.750m);
+        var retainedId = draft.Lines.Single(line => line.InventoryPieceId == firstId).Id;
+        draft.ReplaceLines([
+            new SaleDraftLine(companyId, productId, "1002", "Asado", "kg", ProductSaleMode.Weight,
+                0.500m, 11500m, firstId, "999001")
+        ], DateTimeOffset.UtcNow);
+        Assert.Single(draft.Lines);
+        Assert.Equal(retainedId, draft.Lines[0].Id);
+    }
+
+    [Fact]
+    public void ConfirmedLineModelPreventsSellingTheSamePieceTwice()
+    {
+        var options = new DbContextOptionsBuilder<PlatformAccessDbContext>()
+            .UseNpgsql("Host=localhost;Database=model_only;Username=postgres").Options;
+        using var db = new PlatformAccessDbContext(options);
+        var entity = db.Model.FindEntityType(typeof(ConfirmedSaleLine));
+
+        Assert.NotNull(entity);
+        Assert.Contains(entity.GetIndexes(), index => index.IsUnique &&
+            index.Properties.Select(property => property.Name).SequenceEqual([
+                nameof(ConfirmedSaleLine.InventoryPieceId)]));
+    }
+
+    [Fact]
     public void ReceiptKeepsPieceIdentitySeparateFromCatalogProductAndWeight()
     {
         var companyId = Guid.NewGuid();

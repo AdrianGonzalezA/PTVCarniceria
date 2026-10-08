@@ -1,17 +1,13 @@
-import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron';
 import { EmulatorChannel, type EmulatorState } from './emulator-api';
-import { createReceiptHtml, validateReceiptRequest } from './receipt-pdf';
 import { createVirtualDeviceServer, virtualDevicePipe, type ScaleReading,
   type VirtualDeviceRequest, type VirtualDeviceResponse } from './virtual-device-protocol';
 
 app.setPath('userData', path.join(app.getPath('userData'), 'device-emulator'));
 
 let reading: ScaleReading = { weightKg: 0, stable: false, observedAtUtc: new Date().toISOString() };
-const printed: { saleId: string; total: number; path: string }[] = [];
 let consoleWindow: BrowserWindow;
 
 function verifyConsoleSender(event: IpcMainInvokeEvent): void {
@@ -20,21 +16,8 @@ function verifyConsoleSender(event: IpcMainInvokeEvent): void {
     throw new Error('Rejected emulator sender');
 }
 
-async function handleDeviceRequest(request: VirtualDeviceRequest): Promise<VirtualDeviceResponse> {
-  if (request.action === 'read-scale')
-    return { ok: true, reading: { ...reading, observedAtUtc: new Date().toISOString() } };
-  try {
-    const receipt = validateReceiptRequest(request.receipt);
-    const directory = path.join(app.getPath('userData'), 'printed-tickets');
-    await mkdir(directory, { recursive: true });
-    const filePath = path.join(directory, `ticket-${randomUUID()}.html`);
-    await writeFile(filePath, createReceiptHtml(receipt), { flag: 'wx', encoding: 'utf8' });
-    printed.unshift({ saleId: receipt.saleId, total: receipt.total, path: filePath });
-    printed.splice(30);
-    return { ok: true, path: filePath };
-  } catch {
-    return { ok: false, error: 'PRINT_REJECTED' };
-  }
+async function handleDeviceRequest(_request: VirtualDeviceRequest): Promise<VirtualDeviceResponse> {
+  return { ok: true, reading: { ...reading, observedAtUtc: new Date().toISOString() } };
 }
 
 app.whenReady().then(async () => {
@@ -47,7 +30,7 @@ app.whenReady().then(async () => {
 
   consoleWindow = new BrowserWindow({
     width: 640, height: 760, minWidth: 480, minHeight: 520,
-    title: 'Dispositivos virtuales · Carnicerías',
+    title: 'Balanza virtual · Carnicerías',
     webPreferences: {
       preload: path.join(__dirname, 'emulator-preload.js'),
       contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true,
@@ -57,7 +40,7 @@ app.whenReady().then(async () => {
   consoleWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   ipcMain.handle(EmulatorChannel.State, (event): EmulatorState => {
     verifyConsoleSender(event);
-    return { weightKg: reading.weightKg, stable: reading.stable, printed: [...printed] };
+    return { weightKg: reading.weightKg, stable: reading.stable };
   });
   ipcMain.handle(EmulatorChannel.SetWeight, (event, weightKg: unknown, stable: unknown) => {
     verifyConsoleSender(event);

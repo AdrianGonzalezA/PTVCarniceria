@@ -8,7 +8,7 @@ import { CatalogCategory, CatalogClient, PriceListOption } from '../../core/cata
 import { InventoryClient, InventoryStockItem } from '../../core/inventory/inventory-client';
 import { InventoryPieceClient, PosPieceLookup } from '../../core/inventory/inventory-piece-client';
 import { PosTerminal, PosTerminalClient } from '../../core/pos/pos-terminal-client';
-import { PosDeviceClient } from '../../core/pos/pos-device-client';
+import { PosDeviceClient, SerialPrintResult } from '../../core/pos/pos-device-client';
 import { ConfirmedSale, SaleDraft, SaleDraftClient, SaleDraftLine, SalePaymentMethod } from '../../core/sales/sale-draft-client';
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { CashierShift, CashierShiftClient } from '../../core/sales/cashier-shift-client';
@@ -174,9 +174,9 @@ export class PosPage implements OnInit {
   protected readonly receiptPdfBusy = signal(false);
   protected readonly receiptPdfPath = signal<string | null>(null);
   protected readonly receiptPdfError = signal<string | null>(null);
-  protected readonly virtualPrintBusy = signal(false);
-  protected readonly virtualPrintPath = signal<string | null>(null);
-  protected readonly virtualPrintError = signal<string | null>(null);
+  protected readonly serialPrintBusy = signal(false);
+  protected readonly serialPrintResult = signal<SerialPrintResult | null>(null);
+  protected readonly serialPrintError = signal<string | null>(null);
   protected readonly selectedPayments = signal<readonly { method: SalePaymentMethod; amount: number }[]>([]);
   protected readonly paymentMethods: readonly { readonly id: SalePaymentMethod; readonly label: string }[] = [
     { id: 'cash', label: 'Efectivo' }, { id: 'debit', label: 'Débito' },
@@ -595,7 +595,7 @@ export class PosPage implements OnInit {
     this.scaleNotice.set(null);
   }
 
-  protected readVirtualScale(): void {
+  protected readSerialScale(): void {
     if (this.scaleBusy() || this.selectedProduct()?.mode !== 'weight' || this.scannedPieceIdentifier()) return;
     const productId = this.selectedProduct()?.id;
     const revision = ++this.scaleRequestRevision;
@@ -605,10 +605,10 @@ export class PosPage implements OnInit {
     void this.posDeviceClient.readScale().then((weightKg) => {
       if (this.selectedProduct()?.id !== productId || this.scaleRequestRevision !== revision) return;
       this.quantityDraft.set(String(weightKg));
-      this.scaleNotice.set(`Balanza virtual: ${weightKg.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`);
+      this.scaleNotice.set(`Balanza COM6: ${weightKg.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`);
     }).catch(() => {
       if (this.selectedProduct()?.id === productId && this.scaleRequestRevision === revision)
-        this.scaleError.set('No hay una lectura estable de la balanza virtual. Ingresá el peso manualmente o reintentá.');
+        this.scaleError.set('No hay una lectura estable y reciente en COM6. Enviá ST,peso,kg desde COM5 o ingresá el peso manualmente.');
     }).finally(() => this.scaleBusy.set(false));
   }
 
@@ -950,8 +950,8 @@ export class PosPage implements OnInit {
     this.confirmedSale.set(sale);
     this.receiptPdfPath.set(null);
     this.receiptPdfError.set(null);
-    this.virtualPrintPath.set(null);
-    this.virtualPrintError.set(null);
+    this.serialPrintResult.set(null);
+    this.serialPrintError.set(null);
     this.lines.set([]);
     this.persistedLines.set([]);
     this.draftId.set('');
@@ -976,18 +976,18 @@ export class PosPage implements OnInit {
     }).finally(() => this.receiptPdfBusy.set(false));
   }
 
-  protected printVirtualReceipt(sale: ConfirmedSale): void {
-    if (this.virtualPrintBusy()) return;
-    this.virtualPrintBusy.set(true);
-    this.virtualPrintError.set(null);
+  protected printSerialReceipt(sale: ConfirmedSale): void {
+    if (this.serialPrintBusy()) return;
+    this.serialPrintBusy.set(true);
+    this.serialPrintError.set(null);
     void this.posDeviceClient.print(
       sale,
       this.session()?.context?.branchName ?? 'Sucursal',
       this.terminal()?.name ?? 'Caja',
       this.session()?.username ?? 'Cajero',
-    ).then((path) => this.virtualPrintPath.set(path)).catch(() => {
-      this.virtualPrintError.set('No se pudo enviar el ticket al emulador. La venta sigue confirmada; abrí el emulador y reintentá.');
-    }).finally(() => this.virtualPrintBusy.set(false));
+    ).then((result) => this.serialPrintResult.set(result)).catch(() => {
+      this.serialPrintError.set('No se pudo completar el envío por COM1. La venta sigue confirmada; revisá PuTTY y el puerto antes de reintentar para evitar duplicados.');
+    }).finally(() => this.serialPrintBusy.set(false));
   }
 
   protected paymentMethodName(method: SalePaymentMethod): string {

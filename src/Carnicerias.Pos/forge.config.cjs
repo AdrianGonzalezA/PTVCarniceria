@@ -1,6 +1,6 @@
 module.exports = {
   packagerConfig: {
-    asar: true,
+    asar: { unpack: '**/*.node' },
     executableName: 'Carnicerias.Pos',
     ignore: [
       /^\/(?:scripts|src|tests)(?:\/|$)/,
@@ -8,5 +8,7 @@ module.exports = {
     ],
     name: 'Carnicerias POS',
   },
+  // SerialPort ships a Node-API Windows binary; rebuilding it requires MSVC and is unnecessary here.
+  rebuildConfig: { ignoreModules: ['@serialport/bindings-cpp'] },
   makers: [],
 };

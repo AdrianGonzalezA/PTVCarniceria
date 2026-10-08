@@ -13,7 +13,8 @@
     "electron:start:admin": "npm run build:web && npm run build:electron && npm run stage:web && electron .",
     "devices:start": "npm run build:electron && electron dist/emulator-main.js",
     "electron:test": "vitest run",
-    "electron:test:pdf": "npm run build:electron && electron tests/receipt-pdf-smoke.cjs"
+    "electron:test:pdf": "npm run build:electron && electron tests/receipt-pdf-smoke.cjs",
+    "serial:smoke": "npm run build:electron && node tests/serial-port-smoke.cjs"
   },
   "packageManager": "npm@11.19.0",
   "engines": {
@@ -26,5 +27,8 @@
     "electron": "44.5.0",
     "typescript": "7.0.2",
     "vitest": "5.0.2"
+  },
+  "dependencies": {
+    "serialport": "13.0.0"
   }
 }

@@ -1,5 +1,4 @@
 import net from 'node:net';
-import type { ReceiptRequest } from './receipt-pdf';
 
 export const virtualDevicePipe = process.platform === 'win32'
   ? String.raw`\\.\pipe\carnicerias-pos-devices-v1`
@@ -11,13 +10,10 @@ export interface ScaleReading {
   readonly observedAtUtc: string;
 }
 
-export type VirtualDeviceRequest =
-  | { readonly action: 'read-scale' }
-  | { readonly action: 'print-receipt'; readonly receipt: ReceiptRequest };
+export type VirtualDeviceRequest = { readonly action: 'read-scale' };
 
 export type VirtualDeviceResponse =
   | { readonly ok: true; readonly reading: ScaleReading }
-  | { readonly ok: true; readonly path: string }
   | { readonly ok: false; readonly error: string };
 
 const maximumFrameBytes = 64 * 1024;
@@ -42,7 +38,7 @@ export function createVirtualDeviceServer(
         const parsed: unknown = JSON.parse(frame.subarray(0, end).toString('utf8'));
         if (!parsed || typeof parsed !== 'object' ||
             !('action' in parsed) ||
-            (parsed.action !== 'read-scale' && parsed.action !== 'print-receipt'))
+            parsed.action !== 'read-scale')
           throw new Error('Invalid device action');
         request = parsed as VirtualDeviceRequest;
       } catch {

@@ -17,9 +17,9 @@ function pipeName(): string {
 describe('virtual devices', () => {
   it('reads a stable scale measurement from an independent process', async () => {
     const pipe = pipeName();
-    const server = createVirtualDeviceServer(async (request) => request.action === 'read-scale'
-      ? { ok: true, reading: { weightKg: 0.75, stable: true, observedAtUtc: '2026-10-08T15:00:00Z' } }
-      : { ok: false, error: 'UNSUPPORTED' });
+    const server = createVirtualDeviceServer(async () => ({
+      ok: true, reading: { weightKg: 0.75, stable: true, observedAtUtc: '2026-10-08T15:00:00Z' },
+    }));
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(pipe, resolve));
 
@@ -33,24 +33,17 @@ describe('virtual devices', () => {
       .rejects.toThrow('VIRTUAL_DEVICE_UNAVAILABLE');
   });
 
-  it('delivers receipt detail with UTF-8 product names to the virtual printer', async () => {
+  it('rejects the retired virtual printer action', async () => {
     const pipe = pipeName();
-    let receivedName = '';
-    const server = createVirtualDeviceServer(async (request) => {
-      if (request.action !== 'print-receipt') return { ok: false, error: 'UNSUPPORTED' };
-      receivedName = request.receipt.lines[0].name;
-      return { ok: true, path: 'ticket-virtual.html' };
-    });
+    const server = createVirtualDeviceServer(async () => ({ ok: false, error: 'UNSUPPORTED' }));
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(pipe, resolve));
-    const response = await requestVirtualDevice(pipe, { action: 'print-receipt', receipt: {
-      saleId: 'venta-1', branch: 'Sucursal', terminal: 'Caja 1', cashier: 'cajero',
-      confirmedAtUtc: '2026-10-08T15:00:00Z', total: 2450, changeAmount: 0,
-      lines: [{ code: '1002', name: 'Asado de tira ñ', unit: 'kg', quantity: 0.5,
-        unitPrice: 4900, lineTotal: 2450 }],
-      payments: [{ method: 'cash', tenderedAmount: 2450, appliedAmount: 2450 }],
-    } });
-    expect(response).toEqual({ ok: true, path: 'ticket-virtual.html' });
-    expect(receivedName).toBe('Asado de tira ñ');
+    const response = await new Promise<string>((resolve, reject) => {
+      const socket = net.createConnection(pipe);
+      socket.once('connect', () => socket.write('{"action":"print-receipt"}\n'));
+      socket.once('data', (data) => { resolve(data.toString('utf8')); socket.end(); });
+      socket.once('error', reject);
+    });
+    expect(JSON.parse(response)).toEqual({ ok: false, error: 'INVALID_REQUEST' });
   });
 });

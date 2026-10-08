@@ -18,7 +18,8 @@ import { createDiagnostic } from './diagnostic';
 import { NativeChannel } from './native-api';
 import { resolvePosProfile } from './pos-profile';
 import { createReceiptHtml, validateReceiptRequest } from './receipt-pdf';
-import { requestVirtualDevice, virtualDevicePipe } from './virtual-device-protocol';
+import { sendSerialReceipt } from './serial-printer';
+import { SerialScale } from './serial-scale';
 import { createSecureWebPreferences, isAllowedNavigation } from './security-policy';
 import { loadTerminalCredential } from './terminal-credential';
 
@@ -42,6 +43,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const profile = resolvePosProfile(process.argv, app.getPath('userData'));
+const serialScale = new SerialScale();
 const initialTerminalCredential = process.env.CARNICERIAS_POS_TERMINAL_TOKEN;
 delete process.env.CARNICERIAS_POS_TERMINAL_TOKEN;
 if (initialTerminalCredential && !profile.name) {
@@ -93,23 +95,14 @@ function registerNativeApi(): void {
       receiptWindow.destroy();
     }
   });
-  ipcMain.handle(NativeChannel.ReadVirtualScale, async (event) => {
+  ipcMain.handle(NativeChannel.ReadSerialScale, (event) => {
     validateIpcSender(event);
-    const response = await requestVirtualDevice(virtualDevicePipe, { action: 'read-scale' });
-    if (!response.ok || !('reading' in response)) throw new Error('VIRTUAL_SCALE_UNAVAILABLE');
-    const { weightKg, stable, observedAtUtc } = response.reading;
-    if (typeof weightKg !== 'number' || !Number.isFinite(weightKg) ||
-        typeof stable !== 'boolean' || typeof observedAtUtc !== 'string' ||
-        Number.isNaN(Date.parse(observedAtUtc))) throw new Error('VIRTUAL_SCALE_INVALID_READING');
-    return response.reading;
+    return serialScale.read();
   });
-  ipcMain.handle(NativeChannel.PrintVirtualReceipt, async (event, payload: unknown) => {
+  ipcMain.handle(NativeChannel.PrintSerialReceipt, async (event, payload: unknown) => {
     validateIpcSender(event);
     const receipt = validateReceiptRequest(payload);
-    const response = await requestVirtualDevice(virtualDevicePipe, { action: 'print-receipt', receipt });
-    if (!response.ok || !('path' in response) || typeof response.path !== 'string' ||
-        response.path.length > 4096) throw new Error('VIRTUAL_PRINTER_UNAVAILABLE');
-    return { path: response.path };
+    return sendSerialReceipt(receipt);
   });
 }
 
@@ -179,6 +172,7 @@ app.whenReady().then(async () => {
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   registerApplicationProtocol(terminalCredential);
   registerNativeApi();
+  serialScale.start();
   createWindow();
 
   app.on('activate', () => {
@@ -192,3 +186,5 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
+app.on('before-quit', () => { void serialScale.stop(); });

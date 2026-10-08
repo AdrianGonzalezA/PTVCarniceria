@@ -4,16 +4,16 @@
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Dispositivos virtuales · Carnicerías</title>
+  <title>Balanza virtual · Carnicerías</title>
   <link rel="stylesheet" href="emulator.css" />
   <script src="../dist/ui/emulator-ui.js" defer></script>
 </head>
 <body>
-  <header><span class="eyebrow">ENTORNO DE DESARROLLO</span><h1>Dispositivos virtuales</h1>
-    <p>Balanza e impresora externas para probar Caja 1. No emite comprobantes fiscales.</p></header>
+  <header><span class="eyebrow">ENTORNO DE DESARROLLO</span><h1>Balanza virtual</h1>
+    <p>Inyectá un peso para probar Caja 1. Los tickets ahora se envían por COM1.</p></header>
   <main>
     <section aria-labelledby="scale-title">
-      <span class="device-label">01 / BALANZA</span><h2 id="scale-title">Inyectar peso</h2>
+      <span class="device-label">BALANZA</span><h2 id="scale-title">Inyectar peso</h2>
       <form id="weight-form">
         <label for="weight">Kilogramos</label>
         <div class="weight-row"><input id="weight" type="number" min="0" max="10000" step="0.001" value="0.750" inputmode="decimal" /><span>kg</span></div>
@@ -21,11 +21,6 @@
         <button type="submit">Enviar lectura</button>
       </form>
       <p id="status" role="status">Balanza sin lectura estable</p>
-    </section>
-    <section aria-labelledby="printer-title">
-      <span class="device-label">02 / IMPRESORA</span><h2 id="printer-title">Tickets recibidos</h2>
-      <p>Al tocar «Imprimir en emulador» después de cobrar, el ticket aparece aquí y se guarda como HTML no fiscal.</p>
-      <ol id="tickets" aria-live="polite"></ol>
     </section>
   </main>
 </body>

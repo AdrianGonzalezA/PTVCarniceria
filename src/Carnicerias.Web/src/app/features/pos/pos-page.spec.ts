@@ -115,12 +115,13 @@ describe('PosPage', () => {
     let saveAttempts = 0;
     let confirmationAttempts = 0;
     const receiptPdf = vi.fn().mockResolvedValue('C:\\tickets\\ticket-test.pdf');
-    const virtualPrint = vi.fn().mockResolvedValue('C:\\tickets\\external.html');
+    const serialPrint = vi.fn().mockResolvedValue({ port: 'COM1', bytesWritten: 480,
+      confirmation: 'write-only' });
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
         { provide: ReceiptPdfClient, useValue: { save: receiptPdf } },
-        { provide: PosDeviceClient, useValue: { print: virtualPrint } },
+        { provide: PosDeviceClient, useValue: { print: serialPrint } },
         { provide: SessionClient, useValue: { current: () => of(session) } },
         { provide: CatalogClient, useValue: {
           priceLists: () => of([{ id: 'list-id', name: 'Mostrador (datos ficticios)' }]),
@@ -208,11 +209,11 @@ describe('PosPage', () => {
     expect(receipt.textContent).toContain('sale-id');
     expect(receipt.textContent).toContain('2.400,00');
     expect(receipt.textContent).toContain('Efectivo');
-    (receipt.querySelector('.virtual-print-button') as HTMLButtonElement).click();
+    (receipt.querySelector('.serial-print-button') as HTMLButtonElement).click();
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(virtualPrint).toHaveBeenCalledWith(expect.objectContaining({ id: 'sale-id' }), 'Sucursal', 'Caja 1', 'cajero');
-    expect(receipt.textContent).toContain('external.html');
+    expect(serialPrint).toHaveBeenCalledWith(expect.objectContaining({ id: 'sale-id' }), 'Sucursal', 'Caja 1', 'cajero');
+    expect(receipt.textContent).toContain('COM1');
     (receipt.querySelector('.save-pdf-button') as HTMLButtonElement).click();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -234,7 +235,7 @@ describe('PosPage', () => {
     expect(fixture.nativeElement.querySelector('#checkout-title').textContent).toContain('Cobrar venta');
   });
 
-  it('fills a weighed product from the virtual scale without changing a sale or a unit item', async () => {
+  it('fills a weighed product from the serial scale without changing a sale or a unit item', async () => {
     const session: CurrentSession = {
       userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
       context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',

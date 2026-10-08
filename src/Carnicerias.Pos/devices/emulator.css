@@ -17,5 +17,3 @@ button { justify-self: start; padding: .7rem 1.1rem; background: #d3ff00; border
 button:hover { filter: brightness(.96); }
 button:focus-visible, input:focus-visible { outline: 3px solid #71b8da; outline-offset: 2px; }
 #status { padding: .65rem; background: #ececd9; }
-ol { padding-left: 1.4rem; max-height: 17rem; overflow: auto; }
-li { margin: .7rem 0; } li small { display: block; color: #60665b; overflow-wrap: anywhere; margin-top: .2rem; }

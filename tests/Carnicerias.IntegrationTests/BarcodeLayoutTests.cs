@@ -38,6 +38,18 @@ public sealed class BarcodeLayoutTests
         Assert.Equal(12, layout.Length);
     }
 
+    [Fact]
+    public void ProposedCycleTwoExampleSeparatesProductIdentifierAnd51Kilos600Grams()
+    {
+        var layout = BarcodeLayout.Parse("pro_identif(6) peso(5)");
+
+        var read = layout.Decode("25066151600");
+
+        Assert.Equal("250661", read.Field("PRO_IDENTIF"));
+        Assert.Equal("51600", read.Field("peso"));
+        Assert.Equal(51.600m, read.ScaledDecimal("peso", 3));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("pro_numero(0) peso(4)")]

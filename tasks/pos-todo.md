@@ -32,6 +32,8 @@
 
 **Lectura trazable (8 de octubre de 2026):** ya existe un analizador probado de fórmulas de campos fijos y un probador administrativo en Electron. Los perfiles se guardan por empresa como revisiones inmutables; la fórmula, el código y la escala decimal se pueden probar sin crear pieza, movimiento ni venta. El ejemplo `pro_numero(5) pro_item(3) peso(4)` es ilustrativo hasta recibir etiquetas reales. Continuar con recepción de piezas por lote y lectura manual, luego reserva/venta por pieza y captura permanente del lector en POS. La regla de segunda lectura manual queda abierta; nunca deduplicar por producto y kilos.
 
+Ejemplo provisional para validar: `25066151600` = `PRO_IDENTIF 250661` + `peso 51600` con 3 decimales = `51,600 kg`. Configuración de prueba: `pro_identif(6) peso(5)`. **No** activarlo como formato definitivo ni inferir identidad de pieza; resolver más adelante qué hacer al releer manualmente la misma cadena.
+
 **Ticket virtual (8 de octubre de 2026):** desde una venta confirmada se puede guardar un PDF de prueba dentro de `userData/tickets` del perfil Electron. El archivo lleva la leyenda **NO FISCAL**; no invoca una impresora física ni ARCA. La ruta no es elegida por el renderer y un error de archivo no revierte la venta. Pendiente: verificar visualmente un PDF generado con una venta real y definir formato físico de impresora para despliegue.
 
 1. Resolver si el MVP admite cuatro tickets simultáneos por terminal. La maqueta muestra Ticket A–D, pero el relevamiento considera esta decisión pendiente; por ahora solo Ticket A está habilitado.

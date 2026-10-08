@@ -26,6 +26,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<PriceList> PriceLists => Set<PriceList>();
 
+    public DbSet<CustomerAccount> CustomerAccounts => Set<CustomerAccount>();
+
     public DbSet<BranchPriceList> BranchPriceLists => Set<BranchPriceList>();
 
     public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
@@ -184,6 +186,21 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasIndex(list => new { list.CompanyId, list.Name }).IsUnique();
             entity.HasOne<Company>().WithMany().HasForeignKey(list => list.CompanyId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CustomerAccount>(entity =>
+        {
+            entity.ToTable("customers", "customers_credit");
+            entity.HasKey(customer => customer.Id);
+            entity.HasAlternateKey(customer => new { customer.CompanyId, customer.Id });
+            entity.Property(customer => customer.Code).HasMaxLength(80).IsRequired();
+            entity.Property(customer => customer.NormalizedCode).HasMaxLength(80).IsRequired();
+            entity.Property(customer => customer.Name).HasMaxLength(200).IsRequired();
+            entity.Ignore(customer => customer.CanChargeToAccount);
+            entity.HasOne<Company>().WithMany().HasForeignKey(customer => customer.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(customer => new { customer.CompanyId, customer.NormalizedCode }).IsUnique();
+            entity.HasIndex(customer => new { customer.CompanyId, customer.Name });
         });
 
         modelBuilder.Entity<BranchPriceList>(entity =>

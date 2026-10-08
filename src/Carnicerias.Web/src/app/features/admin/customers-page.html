@@ -1,0 +1,104 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" routerLink="/admin" aria-label="Volver a administración">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Administración</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+
+  <div class="workspace">
+    <a class="back-link" routerLink="/admin">← Volver a administración</a>
+    <p class="eyebrow">Clientes</p>
+    <h1>Clientes</h1>
+    <p class="intro">Registrá clientes y habilitá explícitamente su cuenta corriente cuando corresponda.</p>
+
+    @if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Contexto de trabajo">
+        <div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Sucursal</span><strong>{{ context.branchName }}</strong></div>
+      </section>
+    }
+
+    <section class="category-panel" aria-labelledby="customer-list-title" [attr.aria-busy]="isLoading()">
+      <header class="panel-heading">
+        <div>
+          <h2 id="customer-list-title">Clientes de la empresa</h2>
+          <p>Los clientes inactivos se conservan; no pueden generar nuevas ventas a cuenta.</p>
+        </div>
+        <button type="button" [disabled]="isSaving()" (click)="startCreate()">Nuevo cliente</button>
+      </header>
+
+      @if (actionMessage(); as message) { <p class="success-message" role="status">{{ message }}</p> }
+      @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+
+      @if (editorOpen()) {
+        <form class="editor-form" [formGroup]="editorForm" (ngSubmit)="save()">
+          <h3>{{ editingId() ? 'Editar cliente' : 'Nuevo cliente' }}</h3>
+          <label for="customer-code">Código</label>
+          <input id="customer-code" formControlName="code" maxlength="80" autocomplete="off" required />
+          @if (editorForm.controls.code.touched && editorForm.controls.code.invalid) {
+            <p class="field-error" role="alert">Ingresá un código de hasta 80 caracteres.</p>
+          }
+          <label for="customer-name">Nombre o razón social</label>
+          <input id="customer-name" formControlName="name" maxlength="200" autocomplete="off" required />
+          @if (editorForm.controls.name.touched && editorForm.controls.name.invalid) {
+            <p class="field-error" role="alert">Ingresá un nombre de hasta 200 caracteres.</p>
+          }
+          <p>El cliente se crea sin cuenta corriente; podés habilitarla después desde la lista.</p>
+          <div class="editor-actions">
+            <button type="submit" [disabled]="isSaving()">{{ isSaving() ? 'Guardando…' : 'Guardar' }}</button>
+            <button type="button" class="secondary-button" [disabled]="isSaving()" (click)="cancelEdit()">Cancelar</button>
+          </div>
+        </form>
+      }
+
+      <form class="search-form" (submit)="$event.preventDefault(); search()">
+        <label for="customer-search">Buscar cliente</label>
+        <div>
+          <input id="customer-search" type="search" maxlength="100" [value]="searchDraft()" (input)="updateSearch($event)" placeholder="Código o nombre" />
+          <button type="submit" [disabled]="isLoading()">Buscar</button>
+        </div>
+      </form>
+
+      @if (isLoading()) {
+        <p class="state-message" role="status">Cargando clientes…</p>
+      } @else if (loadError(); as error) {
+        <p class="error-message" role="alert">{{ error }} <button type="button" (click)="load(1)">Reintentar</button></p>
+      } @else if (pageData(); as page) {
+        @if (page.items.length === 0) {
+          <p class="state-message" role="status">{{ appliedSearch() ? 'No se encontraron clientes.' : 'Todavía no hay clientes registrados.' }}</p>
+        } @else {
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th scope="col">Código</th><th scope="col">Nombre</th><th scope="col">Estado</th><th scope="col">Cuenta corriente</th><th scope="col">Acciones</th></tr></thead>
+              <tbody>
+                @for (customer of page.items; track customer.id) {
+                  <tr>
+                    <td>{{ customer.code }}</td>
+                    <td><strong>{{ customer.name }}</strong></td>
+                    <td><span class="status" [class.status-active]="customer.isActive">{{ customer.isActive ? 'Activo' : 'Inactivo' }}</span></td>
+                    <td><span class="status" [class.status-active]="customer.creditEnabled">{{ customer.creditEnabled ? 'Habilitada' : 'No habilitada' }}</span></td>
+                    <td class="row-actions">
+                      <button type="button" class="secondary-button" [disabled]="isSaving() || actionId() !== null" (click)="startEdit(customer)">Editar</button>
+                      <button type="button" class="secondary-button" [disabled]="isSaving() || actionId() !== null || !customer.isActive" (click)="toggleCredit(customer)">{{ customer.creditEnabled ? 'Quitar cuenta' : 'Habilitar cuenta' }}</button>
+                      <button type="button" class="secondary-button" [disabled]="isSaving() || actionId() !== null" (click)="toggleActive(customer)">{{ customer.isActive ? 'Inactivar' : 'Activar' }}</button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <footer class="list-footer">
+            <p>Mostrando {{ firstItem() }}–{{ lastItem() }} de {{ page.totalItems }} clientes</p>
+            <nav aria-label="Paginación de clientes">
+              <button type="button" [disabled]="page.page <= 1 || isLoading()" (click)="goToPage(page.page - 1)">Anterior</button>
+              <span>Página {{ page.page }} de {{ page.totalPages }}</span>
+              <button type="button" [disabled]="page.page >= page.totalPages || isLoading()" (click)="goToPage(page.page + 1)">Siguiente</button>
+            </nav>
+          </footer>
+        }
+      }
+    </section>
+  </div>
+</main>

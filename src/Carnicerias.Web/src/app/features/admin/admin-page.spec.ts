@@ -41,4 +41,28 @@ describe('AdminPage', () => {
     expect(page.querySelector('a[href="/users"]')?.textContent).toContain('Usuarios');
     expect(page.querySelector('a[href="/pos"]')?.textContent).toContain('Punto de venta');
   });
+
+  it('offers customer administration to the organization administrator', () => {
+    const fixture = TestBed.createComponent(AdminPage);
+    fixture.detectChanges();
+
+    TestBed.inject(HttpTestingController).expectOne('/api/sessions/current').flush({
+      userId: 'admin-id',
+      username: 'visual-admin',
+      expiresAtUtc: '2026-10-08T00:00:00Z',
+      context: {
+        userId: 'admin-id',
+        companyId: 'company-id',
+        companyName: 'Empresa Visual',
+        branchId: 'branch-id',
+        branchName: 'Sucursal Visual',
+        permissions: ['platform.users.manage', 'organization.manage'],
+        sessionId: 'session-id',
+      },
+    });
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('a[href="/admin/customers"]')?.textContent)
+      .toContain('Clientes');
+  });
 });

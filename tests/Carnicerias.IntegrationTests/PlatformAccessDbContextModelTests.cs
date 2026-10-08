@@ -43,4 +43,23 @@ public sealed class PlatformAccessDbContextModelTests
             key.Properties.Select(property => property.Name).SequenceEqual([
                 nameof(BranchPriceList.CompanyId), nameof(BranchPriceList.PriceListId)]));
     }
+
+    [Fact]
+    public void CustomerCodesAreUniquePerCompanyWithoutDatabaseConnection()
+    {
+        var options = new DbContextOptionsBuilder<PlatformAccessDbContext>()
+            .UseNpgsql("Host=localhost;Database=model_only;Username=postgres")
+            .Options;
+        using var db = new PlatformAccessDbContext(options);
+
+        var customer = db.Model.FindEntityType(typeof(CustomerAccount));
+
+        Assert.NotNull(customer);
+        Assert.Equal("customers_credit", customer.GetSchema());
+        Assert.Contains(customer.GetIndexes(), index =>
+            index.IsUnique && index.Properties.Select(property => property.Name).SequenceEqual([
+                nameof(CustomerAccount.CompanyId), nameof(CustomerAccount.NormalizedCode)]));
+        Assert.Contains(customer.GetForeignKeys(), key =>
+            key.PrincipalEntityType.ClrType == typeof(Company));
+    }
 }

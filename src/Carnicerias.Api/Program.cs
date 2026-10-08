@@ -9,6 +9,7 @@ using Carnicerias.Api.Inventory;
 using Carnicerias.Api.Pos;
 using Carnicerias.Api.Organization;
 using Carnicerias.Api.History;
+using Carnicerias.Api.Customers;
 using Carnicerias.Domain.PlatformAccess;
 using Microsoft.EntityFrameworkCore;
 
@@ -42,6 +43,7 @@ app.MapAdminProductPriceEndpoints();
 app.MapAdminOrganizationEndpoints();
 app.MapAdminTerminalEndpoints();
 app.MapAdminHistoryEndpoints();
+app.MapAdminCustomerEndpoints();
 app.MapSaleDraftEndpoints();
 app.MapSaleConfirmationEndpoints();
 app.MapInventoryEndpoints();

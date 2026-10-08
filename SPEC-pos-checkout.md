@@ -17,7 +17,7 @@ Permitir que el cajero abra su turno, registre pagos combinados y confirme un bo
 - El backend recalcula el total con los renglones y precios del borrador. No acepta total, precio ni vuelto calculado por el cliente.
 - Se admiten pagos combinados. Débito, crédito, transferencia, Mercado Pago y cheque son registros manuales, sin integración con adquirentes.
 - Solo efectivo puede exceder el saldo pendiente. El vuelto se calcula en servidor y se registra como egreso de efectivo; otros medios no pueden exceder el total.
-- Cuenta corriente se excluye hasta definir cliente, autorización, pagos parciales y saldo.
+- Cuenta corriente sigue excluida del **flujo implementado** de cierre de venta. Las reglas provisionales de cliente, autorización, pagos parciales y saldo se registran en `SPEC-customers-credit.md`; se incorporarán por cortes verificables.
 - La venta real no emite comprobante fiscal en este corte. Impuestos, descuentos, correlativos de piezas, devolución/anulación y facturación ARCA quedan fuera.
 - La venta de demostración nunca se confirma como operación comercial.
 

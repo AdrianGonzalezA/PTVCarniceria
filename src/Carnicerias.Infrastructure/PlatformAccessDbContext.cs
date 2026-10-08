@@ -42,6 +42,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<InventoryMovement> InventoryMovements => Set<InventoryMovement>();
 
+    public DbSet<BarcodeProfile> BarcodeProfiles => Set<BarcodeProfile>();
+
     public DbSet<CashierShift> CashierShifts => Set<CashierShift>();
 
     public DbSet<ConfirmedSale> ConfirmedSales => Set<ConfirmedSale>();
@@ -206,6 +208,20 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasOne<Company>().WithMany().HasForeignKey(category => category.CompanyId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(category => new { category.CompanyId, category.Name }).IsUnique();
+        });
+
+        modelBuilder.Entity<BarcodeProfile>(entity =>
+        {
+            entity.ToTable("barcode_profiles", "inventory");
+            entity.HasKey(profile => profile.Id);
+            entity.Property(profile => profile.Name).HasMaxLength(120).IsRequired();
+            entity.Property(profile => profile.NormalizedName).HasMaxLength(120).IsRequired();
+            entity.Property(profile => profile.Formula).HasMaxLength(512).IsRequired();
+            entity.Property(profile => profile.WeightField).HasMaxLength(80).IsRequired();
+            entity.HasOne<Company>().WithMany().HasForeignKey(profile => profile.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(profile => new { profile.CompanyId, profile.NormalizedName, profile.Revision })
+                .IsUnique();
         });
 
         modelBuilder.Entity<CatalogProduct>(entity =>

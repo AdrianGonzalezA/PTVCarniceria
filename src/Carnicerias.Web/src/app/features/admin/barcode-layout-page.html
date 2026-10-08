@@ -10,8 +10,8 @@
   <div class="workspace">
     <a class="back-link" routerLink="/admin">← Volver a administración</a>
     <p class="eyebrow">Inventario · Códigos de barras</p>
-    <h1>Probar una fórmula de lectura</h1>
-    <p class="intro">Definí los campos y escribí un código como si lo enviaras desde el lector. Esta prueba no guarda un perfil, stock ni tickets.</p>
+    <h1>Perfiles de lectura</h1>
+    <p class="intro">Definí los campos y guardá el perfil con un nombre. Podés probar un código escrito como si llegara del lector. Guardar el perfil no modifica stock ni tickets.</p>
 
     @if (session()?.context; as context) {
       <section class="context-bar" aria-label="Contexto de trabajo">
@@ -29,6 +29,8 @@
       </header>
 
       <form class="editor-form barcode-form" [formGroup]="form" (ngSubmit)="preview()">
+        <label for="barcode-name">Nombre del perfil</label>
+        <input id="barcode-name" formControlName="name" placeholder="Frigorífico ciclo 2" maxlength="120" autocomplete="off" />
         <label for="barcode-formula">Fórmula</label>
         <input id="barcode-formula" formControlName="formula" placeholder="pro_numero(5) pro_item(3) peso(4)" maxlength="512" autocomplete="off" required />
         <label for="barcode-code">Código leído o escrito</label>
@@ -44,9 +46,14 @@
           </div>
         </div>
         <p class="field-hint">Si <code>peso(4)</code> lee <code>0245</code>, con 2 decimales representa 2,45 kg; con 3, representa 0,245 kg.</p>
-        <div class="editor-actions"><button type="submit" [disabled]="busy()">{{ busy() ? 'Interpretando…' : 'Probar lectura' }}</button></div>
+        <div class="editor-actions">
+          <button type="submit" [disabled]="busy()">{{ busy() ? 'Interpretando…' : 'Probar lectura' }}</button>
+          <button class="profile-save-button" type="button" [disabled]="saving()" (click)="saveProfile()">{{ saving() ? 'Guardando…' : 'Guardar nueva revisión' }}</button>
+        </div>
       </form>
 
+      @if (saveNotice(); as notice) { <p class="barcode-result" role="status">{{ notice }}</p> }
+      @if (profileError(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
       @if (error(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
       @if (result(); as decoded) {
         <div class="barcode-result" role="status">
@@ -57,8 +64,19 @@
               <div><dt>{{ field.name }}</dt><dd>{{ field.value }}</dd></div>
             }
           </dl>
-          <p class="field-hint">Todavía no se consultó el artículo ni se modificó el stock. La asociación con la pieza llegará con el perfil de origen y los ejemplos reales.</p>
+          <p class="field-hint">Todavía no se consultó el artículo ni se modificó el stock. La asociación con la pieza llegará con el origen y los ejemplos reales.</p>
         </div>
+      }
+    </section>
+    <section class="category-panel barcode-panel" aria-labelledby="saved-layouts-title">
+      <h2 id="saved-layouts-title">Perfiles guardados</h2>
+      <p class="field-hint">Las revisiones son inmutables: los ingresos futuros podrán referir el formato exacto usado.</p>
+      @if (profiles().length === 0) { <p>Aún no hay perfiles guardados.</p> }
+      @for (profile of profiles(); track profile.id) {
+        <button class="saved-profile" type="button" (click)="useProfile(profile)">
+          <strong>{{ profile.name }} · rev. {{ profile.revision }}</strong>
+          <code>{{ profile.formula }}</code>
+        </button>
       }
     </section>
   </div>

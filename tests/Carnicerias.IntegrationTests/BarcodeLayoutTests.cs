@@ -29,6 +29,15 @@ public sealed class BarcodeLayoutTests
         Assert.Equal("1234", result.Field("pro_numero"));
     }
 
+    [Fact]
+    public void AcceptsSpacesBetweenFieldNamesAndWidthsAsInTheProposedFormula()
+    {
+        var layout = BarcodeLayout.Parse("pro_numero(5) pro_item (3) peso (4)");
+
+        Assert.Equal("007", layout.Decode("123450070245").Field("pro_item"));
+        Assert.Equal(12, layout.Length);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("pro_numero(0) peso(4)")]

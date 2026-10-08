@@ -28,9 +28,9 @@ Cada pieza tendrá un ID interno estable, empresa, sucursal, producto, cantidad 
 1. Modelo y migración aditiva para piezas y recepción; ninguna venta ni saldo existente se borra o reinicia.
 2. Servicio de recepción compartido para lote y entrada manual, con validación de catálogo, sucursal, kilos y permisos. La importación recibe identificadores de operación y renglón estables para que repetir el mismo lote no duplique piezas. Un identificador de operación reutilizado con otro contenido se rechaza.
 3. Consulta de piezas y saldos por producto/sucursal para verificar lo recibido. El POS actual conserva su flujo de venta agregada hasta que `barcode-input` y la reserva/venta de pieza estén completos; no se presentará trazabilidad de venta como terminada antes de esa integración.
-4. Como primer incremento independiente, analizador de fórmulas y decodificador puro con pruebas de campos, longitudes, escala decimal y rechazos; sin activar una etiqueta de producción antes de recibir muestras reales.
+4. Implementado: analizador de fórmulas y decodificador puro con pruebas de campos, longitudes, escala decimal y rechazos; perfiles por empresa guardados como revisiones inmutables y probador administrativo en Electron. Guardar un perfil no activa una etiqueta ni modifica inventario.
 
-No incluye todavía un decodificador de etiquetas, conexión directa con el sistema de frigorífico, emisión fiscal, balanza ni impresión. Estos pertenecen a los otros módulos del mapa.
+No incluye todavía asociación del código con artículo/pieza/origen ni recepción o venta trazable, conexión directa con el sistema de frigorífico, emisión fiscal o balanza. La impresión PDF de prueba no fiscal está implementada aparte; no equivale a una impresora física ni a ARCA.
 
 ## Estructura y contratos
 

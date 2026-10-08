@@ -6,7 +6,7 @@ namespace Carnicerias.Domain.Inventory;
 public sealed class BarcodeLayout
 {
     private static readonly Regex FieldPattern = new(
-        @"\A([a-z][a-z0-9_]*)\(([0-9]{1,3})\)\z",
+        @"\G\s*([a-z][a-z0-9_]*)\s*\(\s*([0-9]{1,3})\s*\)",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private readonly IReadOnlyList<(string Name, int Width)> fields;
@@ -19,22 +19,25 @@ public sealed class BarcodeLayout
 
     public int Length { get; }
 
+    public int FieldWidth(string name) => fields.FirstOrDefault(field =>
+        string.Equals(field.Name, name, StringComparison.OrdinalIgnoreCase)).Width;
+
     public static BarcodeLayout Parse(string formula)
     {
-        if (string.IsNullOrWhiteSpace(formula))
+        if (string.IsNullOrWhiteSpace(formula) || formula.Length > 512)
             throw new ArgumentException("A barcode formula is required.", nameof(formula));
 
-        var tokens = formula.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-        if (tokens.Length is < 1 or > 16)
+        var matches = FieldPattern.Matches(formula);
+        if (matches.Count is < 1 or > 16 ||
+            !string.IsNullOrWhiteSpace(formula[(matches[^1].Index + matches[^1].Length)..]))
             throw new ArgumentException("A barcode formula must have 1 to 16 fields.", nameof(formula));
 
-        var fields = new List<(string Name, int Width)>(tokens.Length);
+        var fields = new List<(string Name, int Width)>(matches.Count);
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var length = 0;
-        foreach (var token in tokens)
+        foreach (Match match in matches)
         {
-            var match = FieldPattern.Match(token);
-            if (!match.Success || !int.TryParse(match.Groups[2].Value, out var width) || width < 1 ||
+            if (!int.TryParse(match.Groups[2].Value, out var width) || width < 1 ||
                 !names.Add(match.Groups[1].Value))
                 throw new ArgumentException("The barcode formula has an invalid or repeated field.", nameof(formula));
 

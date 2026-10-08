@@ -14,9 +14,36 @@ export interface BarcodePreviewResponse {
   readonly weightKg: number;
 }
 
+export interface BarcodeProfile {
+  readonly id: string;
+  readonly name: string;
+  readonly revision: number;
+  readonly formula: string;
+  readonly weightField: string;
+  readonly weightDecimals: number;
+  readonly createdAtUtc: string;
+}
+
+export interface BarcodeProfileRequest {
+  readonly name: string;
+  readonly formula: string;
+  readonly weightField: string;
+  readonly weightDecimals: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class BarcodeLayoutClient {
   private readonly http = inject(HttpClient);
+
+  profiles() {
+    return this.http.get<readonly BarcodeProfile[]>('/api/admin/barcode-layouts',
+      { withCredentials: true });
+  }
+
+  saveProfile(request: BarcodeProfileRequest) {
+    return this.http.post<BarcodeProfile>('/api/admin/barcode-layouts', request,
+      { withCredentials: true });
+  }
 
   preview(request: BarcodePreviewRequest) {
     return this.http.post<BarcodePreviewResponse>('/api/admin/barcode-layouts/preview', request,

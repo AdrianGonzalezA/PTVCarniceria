@@ -10,3 +10,6 @@
 .barcode-result dt { min-width: 9rem; font-weight: 700; }
 .barcode-result dd { margin: 0; font-family: monospace; }
 @media (max-width: 36rem) { .barcode-options { grid-template-columns: 1fr; } }
+.saved-profile { display: flex; flex-wrap: wrap; align-items: center; gap: 0.7rem; width: 100%; padding: 0.7rem; margin-top: 0.5rem; border: 1px solid #ddd; border-radius: 0.5rem; background: #fff; text-align: left; cursor: pointer; }
+.saved-profile:hover, .saved-profile:focus-visible { border-color: #9a4f39; }
+.saved-profile code { overflow-wrap: anywhere; }

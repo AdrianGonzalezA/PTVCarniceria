@@ -16,6 +16,7 @@ export const routes: Routes = [
   { path: 'admin/organization', loadComponent: () => import('./features/admin/organization-page').then((page) => page.OrganizationPage), canActivate: [organizationAdminGuard] },
   { path: 'admin/stock', loadComponent: () => import('./features/admin/stock-page').then((page) => page.StockPage), canActivate: [inventoryAdminGuard] },
   { path: 'admin/barcode-layouts', loadComponent: () => import('./features/admin/barcode-layout-page').then((page) => page.BarcodeLayoutPage), canActivate: [inventoryAdminGuard] },
+  { path: 'admin/pieces', loadComponent: () => import('./features/admin/piece-receipt-page').then((page) => page.PieceReceiptPage), canActivate: [inventoryAdminGuard] },
   { path: 'admin/history', loadComponent: () => import('./features/admin/history-page').then((page) => page.HistoryPage), canActivate: [organizationAdminGuard] },
   { path: 'pos', loadComponent: () => import('./features/pos/pos-page').then((page) => page.PosPage), canActivate: [posGuard], canDeactivate: [posCanDeactivateGuard] },
   { path: '**', redirectTo: '' },

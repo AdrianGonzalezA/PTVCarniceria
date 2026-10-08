@@ -1,0 +1,99 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" routerLink="/admin" aria-label="Volver a administración">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Administración</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+
+  <div class="workspace">
+    <a class="back-link" routerLink="/admin">← Volver a administración</a>
+    <p class="eyebrow">Inventario · Ciclo 2</p>
+    <h1>Recepción de piezas</h1>
+    <p class="intro">Leé o escribí una etiqueta por vez. Cada ingreso guarda la pieza, el movimiento y el stock de la sucursal juntos. El artículo se elige porque no está en el EAN-13 de prueba.</p>
+
+    @if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Contexto de trabajo">
+        <div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Sucursal</span><strong>{{ context.branchName }}</strong></div>
+      </section>
+    }
+
+    @if (loadingError(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
+
+    <section class="category-panel piece-panel" aria-labelledby="piece-receive-title">
+      <header class="panel-heading">
+        <div>
+          <h2 id="piece-receive-title">Ingresar una pieza</h2>
+          <p>Usá un <a routerLink="/admin/barcode-layouts">perfil guardado</a>. El código se valida antes de sumar kilos.</p>
+        </div>
+      </header>
+      @if (profiles().length === 0) {
+        <p class="field-hint piece-empty">Todavía no hay perfiles guardados. Guardá primero la fórmula de la etiqueta.</p>
+      }
+      <form class="editor-form piece-form" [formGroup]="form" (ngSubmit)="receive()">
+        <label for="piece-profile">Perfil de lectura</label>
+        <select id="piece-profile" formControlName="barcodeProfileId" required>
+          <option value="">Elegí un perfil</option>
+          @for (profile of profiles(); track profile.id) {
+            <option [value]="profile.id">{{ profile.name }} · rev. {{ profile.revision }}</option>
+          }
+        </select>
+
+        <label for="piece-product">Artículo del catálogo</label>
+        <select id="piece-product" formControlName="productId" required>
+          <option value="">Elegí un artículo vendido por peso</option>
+          @for (product of products(); track product.productId) {
+            <option [value]="product.productId">{{ product.code }} · {{ product.name }}</option>
+          }
+        </select>
+
+        <div class="piece-options">
+          <div>
+            <label for="piece-source">Origen / sistema emisor</label>
+            <input id="piece-source" formControlName="sourceSystem" maxlength="120" autocomplete="off" required />
+          </div>
+          <div>
+            <label for="piece-identifier-field">Campo identificador de pieza</label>
+            <input id="piece-identifier-field" formControlName="identifierField" maxlength="80" autocomplete="off" required />
+          </div>
+        </div>
+        <label for="piece-code">Código de barras</label>
+        <input #scanInput id="piece-code" formControlName="code" maxlength="80" autocomplete="off" required />
+        <p class="field-hint">El lector puede escribir en este campo y enviar Enter. Después de cada ingreso, queda listo para la próxima pieza.</p>
+        <div class="editor-actions">
+          <button type="submit" [disabled]="saving() || profiles().length === 0 || products().length === 0">{{ saving() ? 'Registrando…' : 'Registrar pieza' }}</button>
+        </div>
+      </form>
+      @if (saveError(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
+      @if (received(); as piece) {
+        <p class="success-message" role="status">Pieza {{ piece.externalIdentifier }} recibida: {{ formatWeight(piece.receivedWeightKg) }} kg. Operación {{ piece.operationId }}.</p>
+      }
+    </section>
+
+    <section class="category-panel piece-panel" aria-labelledby="recent-pieces-title">
+      <h2 id="recent-pieces-title">Últimas piezas recibidas</h2>
+      <p class="field-hint">Esta lista registra ingresos. La venta por pieza y su estado posterior todavía no están integrados al POS.</p>
+      @if (pieces().length === 0) {
+        <p class="piece-empty">Todavía no hay piezas recibidas en esta sucursal.</p>
+      } @else {
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Pieza</th><th scope="col">Artículo</th><th scope="col">Peso</th><th scope="col">Origen</th></tr></thead>
+            <tbody>
+              @for (piece of pieces(); track piece.id) {
+                <tr>
+                  <td><strong>{{ piece.externalIdentifier }}</strong><small>{{ piece.rawBarcode }}</small></td>
+                  <td>{{ piece.productCode }} · {{ piece.productName }}</td>
+                  <td>{{ formatWeight(piece.receivedWeightKg) }} kg</td>
+                  <td>{{ piece.sourceSystem }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  </div>
+</main>

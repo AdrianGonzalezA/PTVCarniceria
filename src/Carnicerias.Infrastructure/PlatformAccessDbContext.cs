@@ -44,6 +44,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<BarcodeProfile> BarcodeProfiles => Set<BarcodeProfile>();
 
+    public DbSet<InventoryPiece> InventoryPieces => Set<InventoryPiece>();
+
     public DbSet<CashierShift> CashierShifts => Set<CashierShift>();
 
     public DbSet<ConfirmedSale> ConfirmedSales => Set<ConfirmedSale>();
@@ -222,6 +224,47 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(profile => new { profile.CompanyId, profile.NormalizedName, profile.Revision })
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<InventoryPiece>(entity =>
+        {
+            entity.ToTable("pieces", "inventory", table =>
+                table.HasCheckConstraint("CK_pieces_received_weight_positive", "\"ReceivedWeightKg\" > 0"));
+            entity.HasKey(piece => piece.Id);
+            entity.Property(piece => piece.SourceSystem).HasMaxLength(120).IsRequired();
+            entity.Property(piece => piece.NormalizedSourceSystem).HasMaxLength(120).IsRequired();
+            entity.Property(piece => piece.ExternalIdentifier).HasMaxLength(80).IsRequired();
+            entity.Property(piece => piece.RawBarcode).HasMaxLength(80).IsRequired();
+            entity.Property(piece => piece.IdentifierField).HasMaxLength(80).IsRequired();
+            entity.Property(piece => piece.ReceivedWeightKg).HasPrecision(12, 3);
+            entity.HasOne<Branch>().WithMany()
+                .HasForeignKey(piece => new { piece.CompanyId, piece.BranchId })
+                .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CatalogProduct>().WithMany()
+                .HasForeignKey(piece => new { piece.CompanyId, piece.ProductId })
+                .HasPrincipalKey(product => new { product.CompanyId, product.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<BarcodeProfile>().WithMany().HasForeignKey(piece => piece.BarcodeProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<InventoryMovement>().WithMany().HasForeignKey(piece => piece.InventoryMovementId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany().HasForeignKey(piece => piece.ReceivedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(piece => new
+            {
+                piece.CompanyId,
+                piece.NormalizedSourceSystem,
+                piece.ExternalIdentifier
+            }).IsUnique();
+            entity.HasIndex(piece => new { piece.CompanyId, piece.BranchId, piece.OperationId }).IsUnique();
+            entity.HasIndex(piece => new
+            {
+                piece.CompanyId,
+                piece.BranchId,
+                piece.ProductId,
+                piece.ReceivedAtUtc
+            });
         });
 
         modelBuilder.Entity<CatalogProduct>(entity =>
@@ -484,7 +527,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.ToTable("inventory_movements", "inventory", table =>
             {
                 table.HasCheckConstraint("CK_inventory_movements_delta_nonzero", "\"QuantityDelta\" <> 0");
-                table.HasCheckConstraint("CK_inventory_movements_kind", "\"Kind\" IN (0, 1, 2)");
+                table.HasCheckConstraint("CK_inventory_movements_kind", "\"Kind\" IN (0, 1, 2, 3)");
             });
             entity.HasKey(movement => movement.Id);
             entity.Property(movement => movement.QuantityDelta).HasPrecision(12, 3);

@@ -4,7 +4,8 @@ public enum InventoryMovementKind
 {
     OpeningBalance,
     Adjustment,
-    Sale
+    Sale,
+    PieceReceipt
 }
 
 public sealed class BranchInventoryBalance

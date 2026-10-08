@@ -15,6 +15,7 @@ Guardar automáticamente hasta cuatro tickets A–D por caja y turno, alternar e
 - El ticket de demostración no se persiste ni modifica existencias.
 - Los tickets A–D se identifican en servidor por una ranura inmutable. Cada borrador pertenece a empresa, sucursal, caja, cajero y turno; cada ranura admite como máximo un borrador activo para ese contexto. Las ranuras vacías no reservan stock ni crean borradores.
 - El cambio de pestaña solo se admite cuando el último cambio del ticket actual terminó de guardarse. Ante un error de guardado se conserva el detalle visible y se exige reintentar o resolver el error antes de cambiar. Tras reiniciar Electron se recupera el último estado confirmado por PostgreSQL, no una edición que nunca llegó al servidor.
+- Las pestañas A–D indican cuáles tienen un borrador guardado en el servidor para el cajero, caja y turno actuales. El indicador se consulta al abrir el POS y se actualiza después de guardar, cancelar o confirmar. Si la consulta falla, no se presupone que una ranura esté vacía: se muestra un error con opción de reintento.
 - Confirmar o cancelar actúa solo sobre la ranura activa. Las otras ventas y sus reservas no cambian. El cierre de turno sigue bloqueado mientras exista cualquier borrador activo de A–D.
 
 ## API

@@ -39,6 +39,10 @@ export interface ConfirmedSale {
 export class SaleDraftClient {
   private readonly http = inject(HttpClient);
 
+  list() {
+    return this.http.get<readonly SaleDraft[]>('/api/sales/drafts', { withCredentials: true });
+  }
+
   current(slot: SaleTicketSlot = 'A') {
     return this.http.get<SaleDraft | null>(this.draftUrl(slot), { withCredentials: true });
   }

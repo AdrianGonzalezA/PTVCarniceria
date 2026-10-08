@@ -269,7 +269,12 @@
       <button class="ticket-tab" type="button" [class.selected]="activeTicketSlot() === slot"
         [attr.aria-current]="activeTicketSlot() === slot ? 'page' : null"
         [disabled]="activeTicketSlot() !== slot && !canSwitchTicket()"
-        (click)="switchTicket(slot)">Ticket {{ slot }}</button>
+        (click)="switchTicket(slot)">Ticket {{ slot }}@if (ticketSlotsLoadState() === 'ready' && savedTicketSlots().has(slot)) { <span class="ticket-tab-saved">&nbsp;· Guardado</span> }</button>
+    }
+    @if (ticketSlotsLoadState() === 'loading') {
+      <span class="ticket-strip-status" role="status">Consultando tickets…</span>
+    } @else if (ticketSlotsLoadState() === 'error') {
+      <button class="ticket-strip-retry" type="button" (click)="loadTicketSlots()">No se pudieron consultar los tickets · Reintentar</button>
     }
   </footer>
 

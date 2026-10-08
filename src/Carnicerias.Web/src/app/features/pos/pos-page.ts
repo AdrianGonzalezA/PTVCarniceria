@@ -94,6 +94,7 @@ export class PosPage implements OnInit {
     readonly operation: 'cancel' | { readonly priceListId: string; readonly lines: readonly SaleLine[] };
   }>();
   private draftRevision = 0;
+  private ticketSlotsRequestRevision = 0;
   private ticketViewRevision = 0;
   private stockRequestRevision = 0;
   private scaleRequestRevision = 0;
@@ -172,6 +173,8 @@ export class PosPage implements OnInit {
   protected readonly draftId = signal('');
   protected readonly ticketSlots: readonly SaleTicketSlot[] = ['A', 'B', 'C', 'D'];
   protected readonly activeTicketSlot = signal<SaleTicketSlot>('A');
+  protected readonly savedTicketSlots = signal<ReadonlySet<SaleTicketSlot>>(new Set());
+  protected readonly ticketSlotsLoadState = signal<'idle' | 'loading' | 'ready' | 'error'>('idle');
   protected readonly checkoutBusy = signal(false);
   protected readonly checkoutError = signal<string | null>(null);
   protected readonly confirmedSale = signal<ConfirmedSale | null>(null);
@@ -304,6 +307,7 @@ export class PosPage implements OnInit {
         this.errorMessage.set(null);
         this.refreshStock();
       }
+      this.loadTicketSlots();
     });
   }
 
@@ -760,6 +764,24 @@ export class PosPage implements OnInit {
     this.focusScanInput();
   }
 
+  protected loadTicketSlots(): void {
+    const requestRevision = ++this.ticketSlotsRequestRevision;
+    this.ticketSlotsLoadState.set('loading');
+    this.saleDraftClient.list().subscribe({
+      next: (drafts) => {
+        if (requestRevision !== this.ticketSlotsRequestRevision) return;
+        this.savedTicketSlots.set(new Set(drafts.map((draft) => draft.ticketSlot)
+          .filter((slot) => this.ticketSlots.includes(slot))));
+        this.ticketSlotsLoadState.set('ready');
+      },
+      error: () => {
+        if (requestRevision !== this.ticketSlotsRequestRevision) return;
+        this.savedTicketSlots.set(new Set());
+        this.ticketSlotsLoadState.set('error');
+      },
+    });
+  }
+
   protected openInventory(): void {
     if (!this.canOperate()) return;
     this.inventoryOpen.set(true);
@@ -1073,7 +1095,14 @@ export class PosPage implements OnInit {
     this.cashierShiftClient.current().subscribe({
       next: (shift) => {
         this.cashierShift.set(shift);
-        if (shift) this.restoreActiveTicket(shift.id);
+        if (shift) {
+          this.restoreActiveTicket(shift.id);
+          this.loadTicketSlots();
+        } else {
+          this.ticketSlotsRequestRevision++;
+          this.savedTicketSlots.set(new Set());
+          this.ticketSlotsLoadState.set('idle');
+        }
         this.shiftLoadState.set('ready');
         if (shift && this.priceListLoadState() === 'loading' && this.realPriceLists().length === 0) {
           this.loadPriceLists();

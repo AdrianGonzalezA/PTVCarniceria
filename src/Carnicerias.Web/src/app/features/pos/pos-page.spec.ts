@@ -56,6 +56,7 @@ describe('PosPage', () => {
         priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]), categories: () => of([]),
       } },
       { provide: SaleDraftClient, useValue: {
+        list: () => of(Object.values(drafts)),
         current: (slot = 'A') => of(drafts[slot as keyof typeof drafts] ?? null),
       } },
       { provide: InventoryClient, useValue: { stock: () => of([]) } },
@@ -91,6 +92,76 @@ describe('PosPage', () => {
       .getAttribute('aria-current')).toBe('page');
   });
 
+  it('shows which tickets were saved after reopening the POS', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const draftA = { id: 'draft-a', ticketSlot: 'A', priceListId: 'list-id',
+      updatedAtUtc: '2026-10-08T16:00:00Z', lines: [{ id: 'line-a', productId: 'asado',
+        productCode: '1002', productName: 'Asado', unit: 'kg', saleMode: 'weight',
+        quantity: 1, unitPrice: 1000 }] };
+    const draftC = { ...draftA, id: 'draft-c', ticketSlot: 'C' };
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: {
+        priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]), categories: () => of([]),
+      } },
+      { provide: SaleDraftClient, useValue: {
+        list: () => of([draftA, draftC]),
+        current: (slot = 'A') => of(slot === 'A' ? draftA : slot === 'C' ? draftC : null),
+      } },
+      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const labels = [...fixture.nativeElement.querySelectorAll('.ticket-tab') as NodeListOf<HTMLButtonElement>]
+      .map((button) => button.textContent?.trim().replace(/\s+/g, ' '));
+    expect(labels).toEqual(['Ticket A · Guardado', 'Ticket B', 'Ticket C · Guardado', 'Ticket D']);
+  });
+
+  it('does not guess which tickets are saved when the list fails, and allows retry', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const savedDraft = { id: 'draft-b', ticketSlot: 'B', priceListId: 'list-id',
+      updatedAtUtc: '2026-10-08T16:00:00Z', lines: [] };
+    let listAttempts = 0;
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: {
+        priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]), categories: () => of([]),
+      } },
+      { provide: SaleDraftClient, useValue: {
+        list: () => ++listAttempts === 1
+          ? throwError(() => new HttpErrorResponse({ status: 503 })) : of([savedDraft]),
+        current: () => of(null),
+      } },
+      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const retry = fixture.nativeElement.querySelector('.ticket-strip-retry') as HTMLButtonElement;
+    expect(retry.textContent).toContain('Reintentar');
+    expect(fixture.nativeElement.querySelector('.ticket-tab-saved')).toBeNull();
+    retry.click();
+    fixture.detectChanges();
+    expect((fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement)
+      .textContent).toContain('Guardado');
+    expect(fixture.nativeElement.querySelector('.ticket-strip-retry')).toBeNull();
+  });
+
   it('does not switch tickets while a changed ticket is still being saved', async () => {
     const session: CurrentSession = {
       userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
@@ -99,6 +170,11 @@ describe('PosPage', () => {
     };
     const pendingSave = new Subject<unknown>();
     const current = vi.fn().mockReturnValue(of(null));
+    const savedDraft = { id: 'draft-a', ticketSlot: 'A', priceListId: 'list-id',
+      updatedAtUtc: '2026-10-08T16:00:00Z', lines: [{ id: 'line-a', productId: 'asado',
+        productCode: '1002', productName: 'Asado', unit: 'unidad', saleMode: 'unit',
+        quantity: 1, unitPrice: 1000 }] };
+    let saved = false;
     TestBed.configureTestingModule({ providers: [
       provideRouter([]),
       { provide: SessionClient, useValue: { current: () => of(session) } },
@@ -109,7 +185,9 @@ describe('PosPage', () => {
           saleMode: 'unit', unit: 'unidad', price: 1000, availableStock: 10 }],
           page: 1, pageSize: 50, totalItems: 1 }),
       } },
-      { provide: SaleDraftClient, useValue: { current, save: () => pendingSave } },
+      { provide: SaleDraftClient, useValue: {
+        list: () => of(saved ? [savedDraft] : []), current, save: () => pendingSave,
+      } },
       { provide: InventoryClient, useValue: { stock: () => of([]) } },
     ] });
     const fixture = TestBed.createComponent(PosPage);
@@ -123,12 +201,12 @@ describe('PosPage', () => {
 
     expect((fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).disabled).toBe(true);
     expect(current).toHaveBeenCalledTimes(1);
-    pendingSave.next({ id: 'draft-a', ticketSlot: 'A', priceListId: 'list-id',
-      updatedAtUtc: '2026-10-08T16:00:00Z', lines: [{ id: 'line-a', productId: 'asado',
-        productCode: '1002', productName: 'Asado', unit: 'unidad', saleMode: 'unit',
-        quantity: 1, unitPrice: 1000 }] });
+    saved = true;
+    pendingSave.next(savedDraft);
     pendingSave.complete();
     fixture.detectChanges();
+    expect((fixture.nativeElement.querySelectorAll('.ticket-tab')[0] as HTMLButtonElement)
+      .textContent).toContain('Guardado');
     expect((fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).disabled).toBe(false);
     (fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).click();
     fixture.detectChanges();
@@ -150,7 +228,7 @@ describe('PosPage', () => {
         priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]), categories: () => of([]),
         products: () => pendingSearch,
       } },
-      { provide: SaleDraftClient, useValue: { current: () => of(null) } },
+      { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of(null) } },
       { provide: InventoryClient, useValue: { stock: () => of([]) } },
     ] });
     const fixture = TestBed.createComponent(PosPage);
@@ -188,6 +266,7 @@ describe('PosPage', () => {
         priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]), categories: () => of([]),
       } },
       { provide: SaleDraftClient, useValue: {
+        list: () => of([]),
         current: (slot = 'A') => of(slot === 'A' ? { id: 'draft-a', ticketSlot: 'A',
           priceListId: 'list-id', updatedAtUtc: '2026-10-08T16:00:00Z', lines: [{ id: 'line-a',
             productId: 'asado', productCode: '1002', productName: 'Asado', unit: 'kg',
@@ -251,7 +330,8 @@ describe('PosPage', () => {
         }); },
       } },
       { provide: CatalogClient, useValue: { priceLists: () => of([]) } },
-      { provide: SaleDraftClient, useValue: { current: () => of(null), save: () => { saved = true; return of(null); } } },
+      { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of(null),
+        save: () => { saved = true; return of(null); } } },
       { provide: InventoryClient, useValue: { stock: () => of([]) } },
     ] });
 
@@ -313,6 +393,7 @@ describe('PosPage', () => {
           }], page: 1, pageSize: 50, totalItems: 1 }),
         } },
         { provide: SaleDraftClient, useValue: {
+          list: () => of([]),
           current: () => of(null),
           save: (priceListId: string, lines: readonly { productId: string; quantity: number }[]) => {
             saveAttempts++;
@@ -434,7 +515,7 @@ describe('PosPage', () => {
           categoryId: 'res', saleMode: 'weight' as const, price: 4900, availableStock: 10 }],
           page: 1, pageSize: 50, totalItems: 1 }),
       } },
-      { provide: SaleDraftClient, useValue: { current: () => of(null) } },
+      { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of(null) } },
       { provide: InventoryClient, useValue: { stock: () => of([]) } },
     ] });
     const fixture = TestBed.createComponent(PosPage);
@@ -465,7 +546,8 @@ describe('PosPage', () => {
         provideRouter([]),
         { provide: SessionClient, useValue: { current: () => of(session) } },
         { provide: CatalogClient, useValue: { priceLists: () => of([{ id: 'list-id', name: 'Mayorista' }]), categories: () => of([]), products: () => of({ items: [], page: 1, pageSize: 50, totalItems: 0 }) } },
-        { provide: SaleDraftClient, useValue: { current: () => of(null), save: () => of(null), cancel: () => of(null) } },
+        { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of(null),
+          save: () => of(null), cancel: () => of(null) } },
         { provide: InventoryClient, useValue: { stock: () => of([]), adjust: () => of(null) } },
       ],
     });
@@ -507,6 +589,7 @@ describe('PosPage', () => {
         { provide: SessionClient, useValue: { current: () => of(session) } },
         { provide: CatalogClient, useValue: { priceLists: () => of([{ id: 'list-id', name: 'Mayorista' }]), categories: () => of([]), products: () => of({ items: [], page: 1, pageSize: 50, totalItems: 0 }) } },
         { provide: SaleDraftClient, useValue: {
+          list: () => of([]),
           current: () => of(savedDraft), save: () => of(savedDraft), cancel: () => of(null),
           confirm: (draftId: string) => {
             confirmedDraftId = draftId;
@@ -560,6 +643,7 @@ describe('PosPage', () => {
           }], page: 1, pageSize: 50, totalItems: 1 }),
         } },
         { provide: SaleDraftClient, useValue: {
+          list: () => of([]),
           current: () => of(null), save: () => {
             saveAttempts++;
             if (saveAttempts === 1) return throwError(() => new HttpErrorResponse({
@@ -633,6 +717,7 @@ describe('PosPage', () => {
         ], page: 1, pageSize: 50, totalItems: 2 }),
       } },
       { provide: SaleDraftClient, useValue: {
+        list: () => of([]),
         current: () => of(null),
         save: (_: string, lines: readonly { productId: string; quantity: number }[]) => {
           savedLines = lines;
@@ -695,6 +780,7 @@ describe('PosPage', () => {
           page: 1, pageSize: 50, totalItems: 1 }),
       } },
       { provide: SaleDraftClient, useValue: {
+        list: () => of([]),
         current: () => of(null),
         save: () => throwError(() => new HttpErrorResponse({ status: 409,
           error: { error: { code: 'INSUFFICIENT_STOCK' } } })),
@@ -734,6 +820,7 @@ describe('PosPage', () => {
         categories: () => of([]),
       } },
       { provide: SaleDraftClient, useValue: {
+        list: () => of([]),
         current: () => of(draft),
         save: (_: string, lines: readonly { quantity: number }[]) => {
           savedQuantity = lines[0].quantity;
@@ -783,6 +870,7 @@ describe('PosPage', () => {
           page: 1, pageSize: 50, totalItems: 1 }),
       } },
       { provide: SaleDraftClient, useValue: {
+        list: () => of([]),
         current: () => of(null),
         save: () => { const response = new Subject<unknown>(); saves.push(response); return response; },
         cancel: () => of(null),
@@ -837,7 +925,7 @@ describe('PosPage', () => {
       provideRouter([]),
       { provide: SessionClient, useValue: { current: () => of(session) } },
       { provide: CatalogClient, useValue: { priceLists: () => of([]) } },
-      { provide: SaleDraftClient, useValue: { current: () => of(null) } },
+      { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of(null) } },
       { provide: CashierShiftClient, useValue: {
         current: () => of(isOpen ? openShift : null),
         lastClosed: () => of(isOpen ? null : closedShift),
@@ -895,7 +983,7 @@ describe('PosPage', () => {
           externalIdentifier: code === '2999001005009' ? '999001' : '999002',
           receivedWeightKg: code === '2999001005009' ? 0.5 : 0.75, rawBarcode: code })
         : throwError(() => new HttpErrorResponse({ status: 404 })) } },
-      { provide: SaleDraftClient, useValue: { current: () => of(null), save } },
+      { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of(null), save } },
       { provide: InventoryClient, useValue: { stock: () => of([{ productId: asado.id, available: 79.5 }]) } },
     ] });
     const fixture = TestBed.createComponent(PosPage);

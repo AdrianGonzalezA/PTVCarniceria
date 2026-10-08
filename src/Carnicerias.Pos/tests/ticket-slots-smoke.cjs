@@ -42,8 +42,8 @@ async function main() {
   const activeSlot = () => evaluate("document.querySelector('.ticket-tab[aria-current=page]')?.innerText.trim()");
   const lineCount = () => evaluate("document.querySelectorAll('.line-table tbody tr').length");
   const switchTo = async (slot) => {
-    await evaluate(`([...document.querySelectorAll('.ticket-tab')].find(button => button.innerText.trim() === 'Ticket ${slot}'))?.click()`);
-    await waitFor(`document.querySelector('.ticket-tab[aria-current=page]')?.innerText.trim() === 'Ticket ${slot}' && !!document.querySelector('.price-list-lock')?.innerText.includes('Borrador guardado')`);
+    await evaluate(`([...document.querySelectorAll('.ticket-tab')].find(button => button.innerText.trim().startsWith('Ticket ${slot}')))?.click()`);
+    await waitFor(`document.querySelector('.ticket-tab[aria-current=page]')?.innerText.trim().startsWith('Ticket ${slot}') && !!document.querySelector('.price-list-lock')?.innerText.includes('Borrador guardado')`);
   };
   const addProduct = async (name) => {
     await evaluate(`([...document.querySelectorAll('.product-card')].find(button => button.innerText.includes(${JSON.stringify(name)})))?.click()`);
@@ -54,13 +54,21 @@ async function main() {
 
   if (process.argv.includes('--reload')) {
     await send('Page.reload', { ignoreCache: true });
-    await waitFor("document.querySelectorAll('.ticket-tab').length === 4 && !!document.querySelector('.price-list-lock')?.innerText.includes('Borrador guardado')");
+    await waitFor("document.querySelectorAll('.ticket-tab').length === 4 && !!document.querySelector('.price-list-lock')?.innerText.includes('Borrador guardado') && !!document.querySelector('.ticket-tab[aria-current=page]')?.innerText.includes('Guardado')");
   }
   const switchOption = process.argv.find((argument) => /^--switch=[ABCD]$/.test(argument));
   if (switchOption) await switchTo(switchOption.at(-1));
 
+  if (process.argv.includes('--check-saved-marker')) {
+    if (!(await activeSlot())?.startsWith('Ticket C') || await lineCount() !== 0)
+      throw new Error('El Ticket C no está vacío; se omite la carga para conservar los datos existentes.');
+    await addProduct('Pan rallado');
+    await waitFor("document.querySelector('.ticket-tab[aria-current=page]')?.innerText.includes('Guardado')");
+    console.log('El Ticket C quedó guardado y marcado como ocupado en Electron.');
+  }
+
   if (process.argv.includes('--prepare')) {
-    if (await activeSlot() !== 'Ticket A' || await lineCount() !== 0)
+    if (!(await activeSlot())?.startsWith('Ticket A') || await lineCount() !== 0)
       throw new Error('El Ticket A no está vacío; se omite la prueba para conservar los datos existentes.');
     await switchTo('B');
     if (await lineCount() !== 0)
@@ -74,7 +82,7 @@ async function main() {
 
   if (process.argv.includes('--verify')) {
     await waitFor("!!document.querySelector('.price-list-lock')?.innerText.includes('Borrador guardado')");
-    if (await activeSlot() !== 'Ticket B' || await lineCount() !== 1 ||
+    if (!(await activeSlot())?.startsWith('Ticket B') || await lineCount() !== 1 ||
         !await evaluate("document.querySelector('.line-table')?.innerText.includes('Pan rallado')"))
       throw new Error('El Ticket B no se recuperó después de reiniciar Electron.');
     await switchTo('A');

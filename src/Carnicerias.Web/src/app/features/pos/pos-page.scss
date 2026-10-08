@@ -143,6 +143,9 @@
 .ticket-tab { min-height: 2.2rem; padding: 0.45rem 0.85rem; color: #fff; background: #383a40; border: 0; border-radius: 0.35rem; font: inherit; cursor: pointer; }
 .ticket-tab.selected { color: #222; background: var(--pos-lime); }
 .ticket-tab:disabled { color: #b8b8b8; cursor: not-allowed; }
+.ticket-tab-saved { display: block; font-size: 0.68rem; line-height: 1; }
+.ticket-strip-status { margin-left: auto; color: #c9c9c9; font-size: 0.75rem; }
+.ticket-strip-retry { margin-left: auto; padding: 0.35rem 0.6rem; color: #fff; background: transparent; border: 1px solid #777; border-radius: 0.35rem; font: inherit; font-size: 0.75rem; cursor: pointer; }
 
 .dialog-backdrop { position: fixed; z-index: 5; inset: 0; display: grid; padding: 1rem; background: #0009; place-items: center; }
 .pos-dialog { position: relative; box-sizing: border-box; width: min(100%, 33rem); padding: 1.5rem; background: #f4f4f2; border-radius: 0.45rem; box-shadow: 0 1rem 3rem #0006; }

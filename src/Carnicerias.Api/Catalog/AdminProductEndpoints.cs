@@ -136,6 +136,8 @@ public static class AdminProductEndpoints
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var companyId = contextAccessor.Context.CompanyId;
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await ProductPriceConsistencyLock.AcquireAsync(db, companyId, productId, cancellationToken);
         var product = await db.CatalogProducts.SingleOrDefaultAsync(item =>
             item.CompanyId == companyId && item.Id == productId, cancellationToken);
         if (product is null) return Error(StatusCodes.Status404NotFound, "PRODUCT_NOT_FOUND");
@@ -155,6 +157,14 @@ public static class AdminProductEndpoints
         if ((nextUnit.Trim() != product.Unit || nextMode != product.SaleMode) &&
             await HasQuantityHistoryAsync(db, companyId, productId, cancellationToken))
             return Error(StatusCodes.Status409Conflict, "PRODUCT_QUANTITY_HISTORY_EXISTS");
+        if (request.Cost is decimal requestedCost)
+        {
+            var roundedCost = decimal.Round(requestedCost, 2, MidpointRounding.AwayFromZero);
+            if (await db.ProductPrices.AnyAsync(price => price.CompanyId == companyId &&
+                price.ProductId == productId && price.EffectiveToUtc == null &&
+                price.Amount < roundedCost, cancellationToken))
+                return Error(StatusCodes.Status409Conflict, "COST_ABOVE_CURRENT_PRICE");
+        }
 
         if (request.CategoryId is not null || request.Name is not null || request.Unit is not null ||
             request.SaleMode is not null || request.Cost is not null)
@@ -167,6 +177,7 @@ public static class AdminProductEndpoints
         }
 
         await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         var alternateCodeCount = await db.ProductCodes.CountAsync(code =>
             code.CompanyId == companyId && code.ProductId == productId && code.IsActive, cancellationToken);
         return Results.Ok(ToResponse(product, category.Name, alternateCodeCount));

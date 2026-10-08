@@ -1,0 +1,213 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" routerLink="/admin" aria-label="Volver a administración">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Administración</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+
+  <div class="workspace">
+    <a class="back-link" routerLink="/admin">← Volver a administración</a>
+    <p class="eyebrow">Catálogo y precios</p>
+    <h1>Listas de precios</h1>
+    <p class="intro">Habilitá cada lista en las sucursales y mantené sus precios con historial.</p>
+
+    @if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Contexto de trabajo">
+        <div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Sucursal de sesión</span><strong>{{ context.branchName }}</strong></div>
+      </section>
+    }
+
+    <section class="category-panel" aria-labelledby="price-lists-title" [attr.aria-busy]="isLoading()">
+      <header class="panel-heading">
+        <div>
+          <h2 id="price-lists-title">Listas de la empresa</h2>
+          <p>Una lista puede estar disponible en varias sucursales. El cajero elige entre las habilitadas.</p>
+        </div>
+        <button type="button" class="create-button" [disabled]="isSaving()" (click)="startCreate()">Nueva lista</button>
+      </header>
+
+      @if (actionMessage(); as message) { <p class="success-message" role="status">{{ message }}</p> }
+      @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+
+      @if (editorOpen()) {
+        <form class="editor-form" [formGroup]="editorForm" (ngSubmit)="save()">
+          <h3>{{ editingList() ? 'Editar lista' : 'Nueva lista' }}</h3>
+          <label for="price-list-name">Nombre</label>
+          <input id="price-list-name" formControlName="name" maxlength="160" required />
+          @if (editorForm.controls.name.touched && editorForm.controls.name.invalid) {
+            <p class="field-error" role="alert">Ingresá un nombre de hasta 160 caracteres.</p>
+          }
+          <div class="editor-actions">
+            <button type="submit" [disabled]="isSaving()">{{ isSaving() ? 'Guardando…' : 'Guardar' }}</button>
+            <button type="button" class="secondary-button" [disabled]="isSaving()" (click)="cancelEdit()">Cancelar</button>
+          </div>
+        </form>
+      }
+
+      <form class="search-form" (submit)="$event.preventDefault(); search()">
+        <label for="price-list-search">Buscar lista</label>
+        <div>
+          <input id="price-list-search" type="search" maxlength="100" [value]="searchDraft()" (input)="updateSearch($event)" placeholder="Nombre de lista" />
+          <button type="submit" [disabled]="isLoading()">Buscar</button>
+        </div>
+      </form>
+
+      @if (isLoading()) {
+        <p class="state-message" role="status">Cargando listas…</p>
+      } @else if (loadError(); as error) {
+        <p class="error-message" role="alert">{{ error }} <button type="button" (click)="load(1)">Reintentar</button></p>
+      } @else if (pageData(); as page) {
+        @if (page.items.length === 0) {
+          <p class="state-message" role="status">No hay listas para la búsqueda.</p>
+        } @else {
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th scope="col">Lista</th><th scope="col">Sucursales</th><th scope="col">Precios vigentes</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr></thead>
+              <tbody>
+                @for (list of page.items; track list.id) {
+                  <tr>
+                    <td><strong>{{ list.name }}</strong></td>
+                    <td>{{ list.activeBranchCount }} {{ list.activeBranchCount === 1 ? 'sucursal' : 'sucursales' }}</td>
+                    <td>{{ list.currentPriceCount }} {{ list.currentPriceCount === 1 ? 'precio' : 'precios' }}</td>
+                    <td><span class="status" [class.status-active]="list.isActive">{{ list.isActive ? 'Activa' : 'Inactiva' }}</span></td>
+                    <td class="row-actions">
+                      <button type="button" class="secondary-button" [disabled]="actionId() !== null" (click)="startEdit(list)">Editar</button>
+                      <button type="button" class="secondary-button branches-button" (click)="showBranches(list)">Sucursales</button>
+                      <button type="button" class="secondary-button prices-button" (click)="showPrices(list)">Precios</button>
+                      <button type="button" class="secondary-button" [disabled]="actionId() !== null" (click)="toggleList(list)">{{ list.isActive ? 'Inactivar' : 'Activar' }}</button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <footer class="list-footer">
+            <p>Mostrando {{ firstItem() }}–{{ lastItem() }} de {{ page.totalItems }} listas</p>
+            <nav aria-label="Paginación de listas">
+              <button type="button" [disabled]="page.page <= 1 || isLoading()" (click)="goToPage(page.page - 1)">Anterior</button>
+              <span>Página {{ page.page }} de {{ page.totalPages }}</span>
+              <button type="button" [disabled]="page.page >= page.totalPages || isLoading()" (click)="goToPage(page.page + 1)">Siguiente</button>
+            </nav>
+          </footer>
+        }
+      }
+    </section>
+
+    @if (selectedList(); as selected) {
+      <section class="detail-panel" aria-labelledby="detail-title">
+        <header>
+          <div>
+            <p class="eyebrow">{{ detailMode() === 'branches' ? 'Disponibilidad' : 'Historial y valores' }}</p>
+            <h2 id="detail-title">{{ selected.name }}</h2>
+          </div>
+          <button type="button" class="secondary-button" (click)="closeDetails()">Cerrar</button>
+        </header>
+
+        @if (detailMode() === 'branches') {
+          <p>Habilitá la lista en cada sucursal donde pueda elegirla el cajero.</p>
+          @if (branchesError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+          @if (branchesLoading()) {
+            <p role="status">Cargando sucursales…</p>
+          } @else if (branches().length === 0) {
+            <p>La empresa todavía no tiene sucursales.</p>
+          } @else {
+            <ul class="branch-list">
+              @for (branch of branches(); track branch.branchId) {
+                <li class="branch-row">
+                  <strong>{{ branch.branchName }}</strong>
+                  <span>{{ !branch.branchActive ? 'Sucursal inactiva' : branch.isAssigned ? 'Habilitada' : 'No habilitada' }}</span>
+                  <button type="button" [disabled]="branchActionId() !== null || (!branch.branchActive && !branch.isAssigned) || (!selected.isActive && !branch.isAssigned)" (click)="toggleBranch(branch)">
+                    {{ branchActionId() === branch.branchId ? 'Guardando…' : branch.isAssigned ? 'Deshabilitar' : 'Habilitar' }}
+                  </button>
+                </li>
+              }
+            </ul>
+          }
+        } @else if (detailMode() === 'prices') {
+          <form class="price-search" (submit)="$event.preventDefault(); searchPrices()">
+            <label for="price-product-search">Buscar artículo</label>
+            <input id="price-product-search" type="search" maxlength="100" [value]="priceSearchDraft()" (input)="updatePriceSearch($event)" placeholder="Nombre o código" />
+            <button type="submit" [disabled]="priceLoading()">Buscar</button>
+          </form>
+          @if (priceError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+          @if (priceLoading()) {
+            <p role="status">Cargando precios…</p>
+          } @else if (pricePage(); as prices) {
+            @if (prices.items.length === 0) {
+              <p>No se encontraron artículos.</p>
+            } @else {
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th scope="col">Artículo</th><th scope="col">Costo</th><th scope="col">Precio vigente</th><th scope="col">Acciones</th></tr></thead>
+                  <tbody>
+                    @for (product of prices.items; track product.productId) {
+                      <tr class="price-row">
+                        <td><strong>{{ product.name }}</strong><small>{{ product.code }} · {{ product.unit }} {{ product.isActive ? '' : '· Inactivo' }}</small></td>
+                        <td>ARS {{ product.cost.toFixed(2) }}</td>
+                        <td>{{ product.currentPrice === null ? 'Sin precio' : 'ARS ' + product.currentPrice.toFixed(2) }}</td>
+                        <td class="row-actions">
+                          <button type="button" class="secondary-button set-price-button" (click)="editPrice(product)">Fijar precio</button>
+                          <button type="button" class="secondary-button history-button" (click)="showHistory(product)">Historial</button>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+              <footer class="list-footer">
+                <p>Página {{ prices.page }} de {{ prices.totalPages }} · {{ prices.totalItems }} artículos</p>
+                <nav aria-label="Paginación de precios">
+                  <button type="button" [disabled]="prices.page <= 1 || priceLoading()" (click)="loadPrices(prices.page - 1)">Anterior</button>
+                  <button type="button" [disabled]="prices.page >= prices.totalPages || priceLoading()" (click)="loadPrices(prices.page + 1)">Siguiente</button>
+                </nav>
+              </footer>
+            }
+          }
+
+          @if (priceEditing(); as product) {
+            <form class="price-form" [formGroup]="priceForm" (ngSubmit)="savePrice()">
+              <h3>Precio de {{ product.name }}</h3>
+              <p>Costo actual: ARS {{ product.cost.toFixed(2) }}. El nuevo precio será vigente desde ahora.</p>
+              <label for="new-price">Nuevo precio (ARS)</label>
+              <input id="new-price" formControlName="amount" inputmode="decimal" placeholder="0,00" required />
+              @if (priceForm.touched && priceForm.invalid) { <p class="field-error" role="alert">Ingresá un precio positivo de hasta dos decimales.</p> }
+              <div class="editor-actions">
+                <button type="submit" [disabled]="priceSaving()">{{ priceSaving() ? 'Guardando…' : 'Guardar precio' }}</button>
+                <button type="button" class="secondary-button" [disabled]="priceSaving()" (click)="cancelPrice()">Cancelar</button>
+              </div>
+            </form>
+          }
+
+          @if (historyProduct(); as product) {
+            <section class="price-history" aria-labelledby="history-title">
+              <h3 id="history-title">Historial de {{ product.name }}</h3>
+              @if (historyError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+              @if (historyLoading()) {
+                <p role="status">Cargando historial…</p>
+              } @else if (historyRows().length === 0) {
+                <p>Este artículo todavía no tiene precios en la lista.</p>
+              } @else {
+                <div class="table-wrap"><table>
+                  <thead><tr><th scope="col">Desde</th><th scope="col">Hasta</th><th scope="col">Precio</th><th scope="col">Registró</th></tr></thead>
+                  <tbody>
+                    @for (row of historyRows(); track row.id) {
+                      <tr>
+                        <td>{{ row.effectiveFromUtc | date:'dd/MM/yyyy HH:mm' }}</td>
+                        <td>{{ row.effectiveToUtc ? (row.effectiveToUtc | date:'dd/MM/yyyy HH:mm') : 'Vigente' }}</td>
+                        <td>ARS {{ row.amount.toFixed(2) }}</td>
+                        <td>{{ row.changedByUsername }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table></div>
+              }
+            </section>
+          }
+        }
+      </section>
+    }
+  </div>
+</main>

@@ -175,6 +175,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasKey(list => list.Id);
             entity.HasAlternateKey(list => new { list.CompanyId, list.Id });
             entity.Property(list => list.Name).HasMaxLength(160).IsRequired();
+            entity.HasIndex(list => new { list.CompanyId, list.Name }).IsUnique();
             entity.HasOne<Company>().WithMany().HasForeignKey(list => list.CompanyId)
                 .OnDelete(DeleteBehavior.Restrict);
         });

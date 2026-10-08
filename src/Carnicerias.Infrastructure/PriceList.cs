@@ -11,9 +11,7 @@ public sealed class PriceList
             throw new ArgumentException("Company id is required.", nameof(companyId));
         }
 
-        Name = string.IsNullOrWhiteSpace(name)
-            ? throw new ArgumentException("Price list name is required.", nameof(name))
-            : name.Trim();
+        Name = NormalizeName(name);
         Id = Guid.NewGuid();
         CompanyId = companyId;
         IsActive = true;
@@ -26,6 +24,19 @@ public sealed class PriceList
     public string Name { get; private set; }
 
     public bool IsActive { get; private set; }
+
+    public void Rename(string name) => Name = NormalizeName(name);
+
+    public void Activate() => IsActive = true;
+
+    public void Deactivate() => IsActive = false;
+
+    private static string NormalizeName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 160)
+            throw new ArgumentException("Price list name must be between 1 and 160 characters.", nameof(name));
+        return name.Trim();
+    }
 }
 
 public sealed class BranchPriceList
@@ -52,4 +63,8 @@ public sealed class BranchPriceList
     public Guid PriceListId { get; private set; }
 
     public bool IsActive { get; private set; }
+
+    public void Activate() => IsActive = true;
+
+    public void Deactivate() => IsActive = false;
 }

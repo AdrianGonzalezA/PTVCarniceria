@@ -33,8 +33,8 @@ La prioridad pasa al sitio administrativo sin modificar la base única `carnicer
 
 ### A4. Listas y precios
 
-- [ ] ABM de listas de precios y habilitación por sucursal.
-- [ ] Cambio de precio con vigencia/historial y regla precio ≥ costo, sin alterar tickets ya guardados.
+- [x] ABM de listas de precios y habilitación por sucursal.
+- [x] Cambio de precio con vigencia/historial y regla precio ≥ costo, sin alterar tickets ya guardados.
 - [ ] Pruebas de visibilidad por sucursal y selección en POS.
 
 ### A5. Organización y stock

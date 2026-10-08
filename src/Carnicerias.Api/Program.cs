@@ -34,6 +34,8 @@ app.MapCatalogEndpoints();
 app.MapAdminCategoryEndpoints();
 app.MapAdminProductEndpoints();
 app.MapAdminProductCodeEndpoints();
+app.MapAdminPriceListEndpoints();
+app.MapAdminProductPriceEndpoints();
 app.MapSaleDraftEndpoints();
 app.MapSaleConfirmationEndpoints();
 app.MapInventoryEndpoints();

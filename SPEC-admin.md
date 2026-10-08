@@ -33,6 +33,13 @@ El primer incremento publicable comprende navegación administrativa y ABM de ca
 - Los códigos alternativos se gestionan aparte y no pueden coincidir con códigos principales ni con otros alternativos de la empresa.
 - Los códigos alternativos tienen estado activo/inactivo; inactivarlos no borra la fila ni libera el código para otro artículo. El POS ignora los inactivos al buscar. Las altas de artículos y códigos alternativos serializan la reserva por empresa para impedir colisiones entre ambas tablas.
 
+## Tercer incremento: listas y precios
+
+- Cada lista pertenece a una empresa y puede habilitarse en varias sucursales; una sucursal puede ofrecer varias listas. El cajero elige entre las listas activas asignadas a su sucursal.
+- La baja de lista o asignación es lógica. Se rechaza mientras existan borradores de venta abiertos que dependan de ella, para no interrumpir una caja en uso.
+- El precio de un artículo se define por lista, debe ser positivo y no inferior al costo vigente. Un cambio cierra el precio anterior y abre otro con fecha y usuario responsables en una transacción. Los tickets ya guardados mantienen sus importes snapshot.
+- Si el costo de un artículo sube por encima de alguno de sus precios vigentes, la edición se rechaza hasta ajustar primero esos precios.
+
 ## Tecnología y comandos
 
 - Angular 22, formularios reactivos, rutas protegidas y `HttpClient` en `src/Carnicerias.Web`.

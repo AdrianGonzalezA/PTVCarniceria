@@ -1,0 +1,25 @@
+.detail-panel { margin-top: 1.5rem; padding: 1.25rem; color: #202322; background: #ededed; border-radius: 0.35rem; }
+.detail-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.detail-panel h2 { margin: 0; color: #005e60; }
+.detail-panel .eyebrow { margin: 0 0 0.25rem; }
+.detail-panel button { min-height: 2.5rem; }
+.branch-list { list-style: none; padding: 0; margin: 1rem 0 0; }
+.branch-row { display: flex; align-items: center; gap: 1rem; padding: 0.75rem; border-top: 1px solid #ccc; }
+.branch-row strong { min-width: 12rem; }
+.branch-row button { margin-left: auto; }
+.price-search { display: flex; align-items: end; gap: 0.5rem; padding: 1rem 0; }
+.price-search label { font-weight: 700; }
+.price-search input { max-width: 22rem; }
+.price-row small { display: block; margin-top: 0.2rem; color: #555; }
+.price-form, .price-history { margin-top: 1rem; padding: 1rem; background: #dcdcdc; border-radius: 0.25rem; }
+.price-form { display: grid; gap: 0.5rem; max-width: 30rem; }
+.price-form h3, .price-history h3 { margin: 0; color: #005e60; }
+.price-form p { margin: 0.25rem 0; }
+.field-error { margin: 0; color: #a32222; }
+.secondary-button { background: #fff; border-color: #b2b2b2; }
+
+@media (max-width: 50rem) {
+  .branch-row, .price-search { align-items: stretch; flex-direction: column; }
+  .branch-row button { margin-left: 0; }
+  .detail-panel > header { align-items: flex-start; }
+}

@@ -315,6 +315,8 @@ export class ProductsPage implements OnInit {
     if (code === 'PRODUCT_QUANTITY_HISTORY_EXISTS')
       return 'No se puede cambiar la unidad o modalidad: el artículo ya tiene stock o tickets.';
     if (code === 'CATEGORY_NOT_ACTIVE') return 'Elegí una categoría activa.';
+    if (code === 'COST_ABOVE_CURRENT_PRICE')
+      return 'El costo supera un precio vigente. Actualizá primero las listas de precios.';
     if (error.status === 409) return 'El código ya existe o el cambio entra en conflicto con el catálogo.';
     if (error.status === 400) return 'Revisá los datos del artículo.';
     if (error.status === 401 || error.status === 403) return 'La sesión no tiene permiso para editar artículos.';

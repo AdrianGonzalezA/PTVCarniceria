@@ -15,9 +15,25 @@ public static class AdminCategoryEndpoints
         var categories = endpoints.MapGroup("/api/admin/categories")
             .RequireOperationalPermission(PlatformPermissionCatalog.CatalogManage);
         categories.MapGet("", ListAsync);
+        categories.MapGet("/options", OptionsAsync);
         categories.MapPost("", CreateAsync);
         categories.MapPatch("/{categoryId:guid}", UpdateAsync);
         return endpoints;
+    }
+
+    private static async Task<IResult> OptionsAsync(
+        PlatformAccessDbContext db,
+        OperationalContextAccessor contextAccessor,
+        CancellationToken cancellationToken)
+    {
+        var companyId = contextAccessor.Context.CompanyId;
+        var options = await db.ProductCategories.AsNoTracking()
+            .Where(category => category.CompanyId == companyId && category.IsActive)
+            .OrderBy(category => category.Name)
+            .ThenBy(category => category.Id)
+            .Select(category => new CategoryOption(category.Id, category.Name))
+            .ToArrayAsync(cancellationToken);
+        return Results.Ok(options);
     }
 
     private static async Task<IResult> ListAsync(
@@ -149,6 +165,7 @@ public static class AdminCategoryEndpoints
     private sealed record CategoryCreateRequest(string Name);
     private sealed record CategoryUpdateRequest(string? Name, bool? IsActive);
     private sealed record CategoryResponse(Guid Id, string Name, bool IsActive, int ProductCount);
+    private sealed record CategoryOption(Guid Id, string Name);
     private sealed record CategoryPage(
         IReadOnlyList<CategoryResponse> Items,
         int Page,

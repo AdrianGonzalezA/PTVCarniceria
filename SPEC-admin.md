@@ -24,6 +24,15 @@ El primer incremento publicable comprende navegación administrativa y ABM de ca
 - Todos los endpoints exigen sesión, contexto operativo y permiso `catalog.manage`; las mutaciones validan origen. Errores usan el sobre `ErrorResponse` actual, con 400 por datos inválidos, 401/403 por acceso, 404 por recurso fuera de alcance y 409 por duplicado.
 - La UI ofrece listado, búsqueda, alta, edición e inactivación/reactivación, con estados de carga, vacío, error y éxito. No usa datos simulados.
 
+## Segundo incremento: artículos
+
+- `GET /api/admin/products` lista artículos activos e inactivos de la empresa, con búsqueda, categoría y paginación. No depende de que exista precio vigente.
+- `POST /api/admin/products` crea un artículo activo con código principal único, categoría activa, nombre, unidad de venta, modalidad (`weight` o `unit`) y costo positivo. Nace sin precio ni stock: no aparece en el POS hasta completar esos datos.
+- `PATCH /api/admin/products/{id}` permite cambiar categoría, nombre, unidad, modalidad, costo y estado, pero nunca el código principal. Una baja es inactivación lógica.
+- La unidad o modalidad no se modifica si el artículo ya tiene movimientos/existencias o renglones de ticket, para no reinterpretar cantidades históricas. La edición de nombre, categoría, costo y estado conserva los snapshots de tickets existentes.
+- Los códigos alternativos se gestionan aparte y no pueden coincidir con códigos principales ni con otros alternativos de la empresa.
+- Los códigos alternativos tienen estado activo/inactivo; inactivarlos no borra la fila ni libera el código para otro artículo. El POS ignora los inactivos al buscar. Las altas de artículos y códigos alternativos serializan la reserva por empresa para impedir colisiones entre ambas tablas.
+
 ## Tecnología y comandos
 
 - Angular 22, formularios reactivos, rutas protegidas y `HttpClient` en `src/Carnicerias.Web`.

@@ -26,9 +26,9 @@ La prioridad pasa al sitio administrativo sin modificar la base única `carnicer
 
 ### A3. Productos y códigos
 
-- [ ] Listado de todos los productos, incluidos inactivos, con filtros y paginación.
-- [ ] Alta/edición de categoría, denominación, unidad, modalidad, costo y estado; código principal inmutable.
-- [ ] ABM de códigos alternativos sin colisiones y con historial de uso preservado.
+- [x] Listado de todos los productos, incluidos inactivos, con filtros y paginación.
+- [x] Alta/edición de categoría, denominación, unidad, modalidad, costo y estado; código principal inmutable.
+- [x] ABM de códigos alternativos sin colisiones y con historial de uso preservado.
 - [ ] Formulario alineado a `Articulo agregar- desktop.png`; pruebas de validación y reflejo en POS.
 
 ### A4. Listas y precios

@@ -1,0 +1,168 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" routerLink="/admin" aria-label="Volver a administración">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Administración</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+
+  <div class="workspace">
+    <a class="back-link" routerLink="/admin">← Volver a administración</a>
+    <p class="eyebrow">Catálogo</p>
+    <h1>Artículos</h1>
+    <p class="intro">Definí cada producto, su unidad de venta y costo. Los precios por lista y el stock se gestionan por separado.</p>
+
+    @if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Contexto de trabajo">
+        <div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Sucursal</span><strong>{{ context.branchName }}</strong></div>
+      </section>
+    }
+
+    <section class="category-panel" aria-labelledby="product-list-title" [attr.aria-busy]="isLoading()">
+      <header class="panel-heading">
+        <div>
+          <h2 id="product-list-title">Artículos de la empresa</h2>
+          <p>El código principal no se cambia. Inactivar conserva tickets y movimientos.</p>
+        </div>
+        <button type="button" class="create-button" [disabled]="isSaving() || categoriesLoading()" (click)="startCreate()">Nuevo artículo</button>
+      </header>
+
+      @if (categoriesError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+      @if (actionMessage(); as message) { <p class="success-message" role="status">{{ message }}</p> }
+      @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+
+      @if (editorOpen()) {
+        <form class="editor-form product-editor" [formGroup]="editorForm" (ngSubmit)="save()">
+          <h3>{{ editingProduct() ? 'Información del artículo' : 'Nuevo artículo' }}</h3>
+          <div class="field-grid">
+            <label>Código principal
+              <input id="product-code" formControlName="code" maxlength="80" [readOnly]="editingProduct() !== null" required />
+            </label>
+            <label>Denominación
+              <input id="product-name" formControlName="name" maxlength="200" required />
+            </label>
+            <label>Categoría
+              <select id="product-category" formControlName="categoryId" required>
+                @for (category of editorCategories(); track category.id) {
+                  <option [value]="category.id">{{ category.name }}</option>
+                }
+              </select>
+            </label>
+            <label>Modalidad de venta
+              <select id="product-sale-mode" formControlName="saleMode" required>
+                <option value="weight">Por peso</option>
+                <option value="unit">Por unidad</option>
+              </select>
+            </label>
+            <label>Unidad de medida
+              <input id="product-unit" formControlName="unit" maxlength="24" placeholder="kg o un" required />
+            </label>
+            <label>Costo (ARS)
+              <input id="product-cost" formControlName="cost" inputmode="decimal" placeholder="0,00" required />
+            </label>
+          </div>
+          @if (editorForm.touched && editorForm.invalid) {
+            <p class="field-error" role="alert">Completá todos los campos. El costo debe ser positivo y tener hasta dos decimales.</p>
+          }
+          <p class="editor-note">Los precios de venta se asignan por lista. Un artículo nuevo no se muestra en caja hasta tener precio y stock.</p>
+          @if (editingProduct(); as editing) {
+            <section class="alternate-codes" aria-labelledby="alternate-codes-title">
+              <h4 id="alternate-codes-title">Códigos alternativos</h4>
+              <p>Otros códigos para encontrar {{ editing.name }} en caja. Inactivar conserva el registro.</p>
+              @if (codesError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
+              <div class="alternate-add">
+                <label for="alternate-code">Nuevo código</label>
+                <input id="alternate-code" maxlength="80" [value]="alternateDraft()" (input)="updateAlternateDraft($event)" />
+                <button type="button" class="add-code-button" [disabled]="codeSaving() || codesLoading() || !alternateDraft().trim()" (click)="addCode()">Agregar</button>
+              </div>
+              @if (codesLoading()) {
+                <p role="status">Cargando códigos…</p>
+              } @else if (alternateCodes().length === 0) {
+                <p>Todavía no tiene códigos alternativos.</p>
+              } @else {
+                <ul>
+                  @for (code of alternateCodes(); track code.code) {
+                    <li>
+                      <span>{{ code.code }}</span>
+                      <span>{{ code.isActive ? 'Activo' : 'Inactivo' }}</span>
+                      <button type="button" class="secondary-button toggle-code-button" [disabled]="codeSaving()" (click)="toggleCode(code)">
+                        {{ codeAction() === code.code ? 'Guardando…' : code.isActive ? 'Inactivar' : 'Activar' }}
+                      </button>
+                    </li>
+                  }
+                </ul>
+              }
+            </section>
+          }
+          <div class="editor-actions">
+            <button type="submit" [disabled]="isSaving() || codeSaving()">{{ isSaving() ? 'Guardando…' : 'Guardar' }}</button>
+            <button type="button" class="secondary-button" [disabled]="isSaving() || codeSaving()" (click)="cancelEdit()">Cancelar</button>
+          </div>
+        </form>
+      }
+
+      <form class="product-filters" (submit)="$event.preventDefault(); search()">
+        <label>Buscar por nombre o código
+          <input type="search" maxlength="100" [value]="searchDraft()" (input)="updateSearch($event)" placeholder="Nombre o código" />
+        </label>
+        <label>Categoría
+          <select [value]="categoryFilter()" (change)="updateCategoryFilter($event)">
+            <option value="">Todas</option>
+            @for (category of categories(); track category.id) { <option [value]="category.id">{{ category.name }}</option> }
+          </select>
+        </label>
+        <label>Estado
+          <select [value]="statusFilter()" (change)="updateStatusFilter($event)">
+            <option value="">Todos</option>
+            <option value="active">Activos</option>
+            <option value="inactive">Inactivos</option>
+          </select>
+        </label>
+        <button type="submit" [disabled]="isLoading()">Buscar</button>
+      </form>
+
+      @if (isLoading()) {
+        <p class="state-message" role="status">Cargando artículos…</p>
+      } @else if (loadError(); as error) {
+        <p class="error-message" role="alert">{{ error }} <button type="button" (click)="load(1)">Reintentar</button></p>
+      } @else if (pageData(); as page) {
+        @if (page.items.length === 0) {
+          <p class="state-message" role="status">No hay artículos para los filtros elegidos.</p>
+        } @else {
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th scope="col">Código / artículo</th><th scope="col">Categoría</th><th scope="col">Venta</th><th scope="col">Costo</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr></thead>
+              <tbody>
+                @for (product of page.items; track product.id) {
+                  <tr>
+                    <td><strong>{{ product.name }}</strong><small>{{ product.code }} · {{ product.alternateCodeCount }} alternativos</small></td>
+                    <td>{{ product.categoryName }}</td>
+                    <td>{{ product.saleMode === 'weight' ? 'Por peso' : 'Por unidad' }} · {{ product.unit }}</td>
+                    <td>ARS {{ product.cost.toFixed(2) }}</td>
+                    <td><span class="status" [class.status-active]="product.isActive">{{ product.isActive ? 'Activo' : 'Inactivo' }}</span></td>
+                    <td class="row-actions">
+                      <button type="button" class="secondary-button edit-button" [disabled]="isSaving() || actionId() !== null" (click)="startEdit(product)">Editar</button>
+                      <button type="button" class="secondary-button" [disabled]="isSaving() || actionId() !== null" (click)="toggleActive(product)">
+                        {{ actionId() === product.id ? 'Guardando…' : product.isActive ? 'Inactivar' : 'Activar' }}
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <footer class="list-footer">
+            <p>Mostrando {{ firstItem() }}–{{ lastItem() }} de {{ page.totalItems }} artículos</p>
+            <nav aria-label="Paginación de artículos">
+              <button type="button" [disabled]="page.page <= 1 || isLoading()" (click)="goToPage(page.page - 1)">Anterior</button>
+              <span>Página {{ page.page }} de {{ page.totalPages }}</span>
+              <button type="button" [disabled]="page.page >= page.totalPages || isLoading()" (click)="goToPage(page.page + 1)">Siguiente</button>
+            </nav>
+          </footer>
+        }
+      }
+    </section>
+  </div>
+</main>

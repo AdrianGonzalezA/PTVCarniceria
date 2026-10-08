@@ -62,22 +62,12 @@ public sealed class CatalogProduct
             throw new ArgumentException("Company and category ids are required.");
         if (string.IsNullOrWhiteSpace(code) || code.Trim().Length > 80)
             throw new ArgumentException("Product code is required and must not exceed 80 characters.", nameof(code));
-        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 200)
-            throw new ArgumentException("Product name is required and must not exceed 200 characters.", nameof(name));
-        if (string.IsNullOrWhiteSpace(unit) || unit.Trim().Length > 24)
-            throw new ArgumentException("Product unit is required and must not exceed 24 characters.", nameof(unit));
-        if (!Enum.IsDefined(saleMode)) throw new ArgumentOutOfRangeException(nameof(saleMode));
-        if (cost <= 0) throw new ArgumentOutOfRangeException(nameof(cost), "Product cost must be positive.");
 
         Id = Guid.NewGuid();
         CompanyId = companyId;
-        CategoryId = categoryId;
         Code = code.Trim();
         NormalizedCode = Code.ToUpperInvariant();
-        Name = name.Trim();
-        Unit = unit.Trim();
-        SaleMode = saleMode;
-        Cost = decimal.Round(cost, 2, MidpointRounding.AwayFromZero);
+        UpdateDetails(categoryId, name, unit, saleMode, cost);
         IsActive = true;
     }
 
@@ -86,11 +76,34 @@ public sealed class CatalogProduct
     public Guid CategoryId { get; private set; }
     public string Code { get; private set; }
     public string NormalizedCode { get; private set; }
-    public string Name { get; private set; }
-    public string Unit { get; private set; }
+    public string Name { get; private set; } = string.Empty;
+    public string Unit { get; private set; } = string.Empty;
     public ProductSaleMode SaleMode { get; private set; }
     public decimal Cost { get; private set; }
     public bool IsActive { get; private set; }
+
+    public void UpdateDetails(Guid categoryId, string name, string unit, ProductSaleMode saleMode, decimal cost)
+    {
+        if (categoryId == Guid.Empty) throw new ArgumentException("Category id is required.", nameof(categoryId));
+        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 200)
+            throw new ArgumentException("Product name is required and must not exceed 200 characters.", nameof(name));
+        if (string.IsNullOrWhiteSpace(unit) || unit.Trim().Length > 24)
+            throw new ArgumentException("Product unit is required and must not exceed 24 characters.", nameof(unit));
+        if (!Enum.IsDefined(saleMode)) throw new ArgumentOutOfRangeException(nameof(saleMode));
+        var roundedCost = decimal.Round(cost, 2, MidpointRounding.AwayFromZero);
+        if (roundedCost <= 0 || roundedCost > 9_999_999_999.99m)
+            throw new ArgumentOutOfRangeException(nameof(cost), "Product cost must fit a positive 12,2 amount.");
+
+        CategoryId = categoryId;
+        Name = name.Trim();
+        Unit = unit.Trim();
+        SaleMode = saleMode;
+        Cost = roundedCost;
+    }
+
+    public void Activate() => IsActive = true;
+
+    public void Deactivate() => IsActive = false;
 }
 
 public sealed class ProductCode
@@ -112,12 +125,18 @@ public sealed class ProductCode
         ProductId = productId;
         Code = code.Trim();
         NormalizedCode = Code.ToUpperInvariant();
+        IsActive = true;
     }
 
     public Guid CompanyId { get; private set; }
     public Guid ProductId { get; private set; }
     public string Code { get; private set; }
     public string NormalizedCode { get; private set; }
+    public bool IsActive { get; private set; }
+
+    public void Activate() => IsActive = true;
+
+    public void Deactivate() => IsActive = false;
 }
 
 public sealed class ProductPrice

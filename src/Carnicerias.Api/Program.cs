@@ -32,6 +32,8 @@ app.MapSessionEndpoints();
 app.MapUserEndpoints();
 app.MapCatalogEndpoints();
 app.MapAdminCategoryEndpoints();
+app.MapAdminProductEndpoints();
+app.MapAdminProductCodeEndpoints();
 app.MapSaleDraftEndpoints();
 app.MapSaleConfirmationEndpoints();
 app.MapInventoryEndpoints();

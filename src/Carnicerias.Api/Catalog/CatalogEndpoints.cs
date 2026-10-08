@@ -96,7 +96,8 @@ public static class CatalogEndpoints
         {
             products = products.Where(product => product.NormalizedCode == exactCode ||
                 db.ProductCodes.Any(alternate => alternate.CompanyId == context.CompanyId &&
-                    alternate.ProductId == product.Id && alternate.NormalizedCode == exactCode));
+                    alternate.ProductId == product.Id && alternate.IsActive &&
+                    alternate.NormalizedCode == exactCode));
         }
         else if (!string.IsNullOrEmpty(query))
         {
@@ -104,7 +105,8 @@ public static class CatalogEndpoints
             products = products.Where(product => EF.Functions.ILike(product.Name, pattern) ||
                 EF.Functions.ILike(product.Code, pattern) ||
                 db.ProductCodes.Any(alternate => alternate.CompanyId == context.CompanyId &&
-                    alternate.ProductId == product.Id && EF.Functions.ILike(alternate.Code, pattern)));
+                    alternate.ProductId == product.Id && alternate.IsActive &&
+                    EF.Functions.ILike(alternate.Code, pattern)));
         }
 
         var totalItems = await products.CountAsync(cancellationToken);

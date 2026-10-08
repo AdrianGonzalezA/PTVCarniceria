@@ -21,6 +21,11 @@ export interface AdminCategoryUpdate {
   readonly isActive?: boolean;
 }
 
+export interface AdminCategoryOption {
+  readonly id: string;
+  readonly name: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AdminCategoryClient {
   private readonly http = inject(HttpClient);
@@ -30,6 +35,10 @@ export class AdminCategoryClient {
     let params = new HttpParams().set('page', page).set('pageSize', 20);
     if (search) params = params.set('search', search);
     return this.http.get<AdminCategoryPage>(this.endpoint, { params, withCredentials: true });
+  }
+
+  options() {
+    return this.http.get<readonly AdminCategoryOption[]>(`${this.endpoint}/options`, { withCredentials: true });
   }
 
   create(name: string) {

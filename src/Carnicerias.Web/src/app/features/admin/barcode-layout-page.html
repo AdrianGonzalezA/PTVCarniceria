@@ -1,0 +1,65 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" routerLink="/admin" aria-label="Volver a administración">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Administración</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+
+  <div class="workspace">
+    <a class="back-link" routerLink="/admin">← Volver a administración</a>
+    <p class="eyebrow">Inventario · Códigos de barras</p>
+    <h1>Probar una fórmula de lectura</h1>
+    <p class="intro">Definí los campos y escribí un código como si lo enviaras desde el lector. Esta prueba no guarda un perfil, stock ni tickets.</p>
+
+    @if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Contexto de trabajo">
+        <div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Sucursal</span><strong>{{ context.branchName }}</strong></div>
+      </section>
+    }
+
+    <section class="category-panel barcode-panel" aria-labelledby="layout-title">
+      <header class="panel-heading">
+        <div>
+          <h2 id="layout-title">Formato de la etiqueta</h2>
+          <p>Ejemplo ilustrativo: <code>pro_numero(5) pro_item(3) peso(4)</code>. Cada número indica la cantidad de caracteres, no los decimales.</p>
+        </div>
+      </header>
+
+      <form class="editor-form barcode-form" [formGroup]="form" (ngSubmit)="preview()">
+        <label for="barcode-formula">Fórmula</label>
+        <input id="barcode-formula" formControlName="formula" placeholder="pro_numero(5) pro_item(3) peso(4)" maxlength="512" autocomplete="off" required />
+        <label for="barcode-code">Código leído o escrito</label>
+        <input id="barcode-code" formControlName="code" placeholder="Escribí el código completo" maxlength="80" autocomplete="off" required />
+        <div class="barcode-options">
+          <div>
+            <label for="barcode-weight-field">Campo de peso</label>
+            <input id="barcode-weight-field" formControlName="weightField" maxlength="80" autocomplete="off" required />
+          </div>
+          <div>
+            <label for="barcode-decimals">Decimales del peso</label>
+            <input id="barcode-decimals" type="number" formControlName="weightDecimals" min="0" max="6" step="1" required />
+          </div>
+        </div>
+        <p class="field-hint">Si <code>peso(4)</code> lee <code>0245</code>, con 2 decimales representa 2,45 kg; con 3, representa 0,245 kg.</p>
+        <div class="editor-actions"><button type="submit" [disabled]="busy()">{{ busy() ? 'Interpretando…' : 'Probar lectura' }}</button></div>
+      </form>
+
+      @if (error(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
+      @if (result(); as decoded) {
+        <div class="barcode-result" role="status">
+          <h3>Lectura interpretada</h3>
+          <p><strong>{{ formatWeight(decoded.weightKg) }} kg</strong> · {{ decoded.length }} caracteres</p>
+          <dl>
+            @for (field of fields(); track field.name) {
+              <div><dt>{{ field.name }}</dt><dd>{{ field.value }}</dd></div>
+            }
+          </dl>
+          <p class="field-hint">Todavía no se consultó el artículo ni se modificó el stock. La asociación con la pieza llegará con el perfil de origen y los ejemplos reales.</p>
+        </div>
+      }
+    </section>
+  </div>
+</main>

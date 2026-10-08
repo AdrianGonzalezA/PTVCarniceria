@@ -12,6 +12,8 @@ El estado detallado y los pendientes están en `tasks/pos-todo.md`. El contrato 
 
 `visual-admin` ingresa y elige empresa/sucursal antes de abrir `/admin`. Allí puede mantener categorías, artículos y códigos alternativos, listas/precios, empresas, sucursales, cajas, existencias y cajeros. Puede restablecer la contraseña de cualquier usuario de la empresa, incluida la propia cuenta; al hacerlo se revocan todas las sesiones de esa persona. Por ahora no se crean otros administradores ni roles desde la interfaz. El historial de ventas, pagos, turnos y movimientos es de solo lectura y permite filtros por sucursal, caja (cuando corresponde) y fecha. El cajero no tiene acceso a estas API. Contrato y pendientes: `SPEC-admin.md` y `tasks/admin-plan.md`.
 
+La sección **Lectura de etiquetas** permite probar dentro de Electron una fórmula de campos fijos (por ejemplo `pro_numero(5) pro_item(3) peso(4)`) con un código escrito y decimales de peso configurables. El resultado separa campos y kilos, pero todavía no guarda perfiles, ingresa piezas al stock ni agrega productos al ticket. No hay ningún formato real de ciclo 2 activado por defecto; el diseño aprobado y los puntos pendientes están en `CAPABILITY-MAP-pos-peripherals.md` y `SPEC-inventory-traceability.md`.
+
 ## Desarrollo local
 
 Requisitos: SDK .NET 10, PostgreSQL, Node.js compatible con `src/Carnicerias.Web/package.json` y npm 11.19.0. Con una base local previamente inicializada, configurar `CARNICERIAS_CONNECTION_STRING` en el entorno y ejecutar el API en `http://localhost:5197`:

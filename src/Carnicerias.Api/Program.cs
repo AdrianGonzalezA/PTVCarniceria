@@ -45,6 +45,7 @@ app.MapAdminHistoryEndpoints();
 app.MapSaleDraftEndpoints();
 app.MapSaleConfirmationEndpoints();
 app.MapInventoryEndpoints();
+app.MapBarcodePreviewEndpoints();
 app.MapCashierShiftEndpoints();
 app.MapPosTerminalEndpoints();
 

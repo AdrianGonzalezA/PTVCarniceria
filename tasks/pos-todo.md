@@ -30,6 +30,8 @@
 
 ## Pendientes del POS
 
+**Lectura trazable (8 de octubre de 2026):** ya existe un analizador probado de fórmulas de campos fijos y un probador administrativo en Electron. La fórmula, el código y la escala decimal se envían a un endpoint protegido que solo devuelve campos y peso; no persiste perfil, pieza, movimiento ni venta. El ejemplo `pro_numero(5) pro_item(3) peso(4)` es ilustrativo hasta recibir etiquetas reales. Continuar con perfil persistido/versionado, recepción de piezas por lote y lectura manual, luego reserva/venta por pieza y captura permanente del lector en POS. La regla de segunda lectura manual queda abierta; nunca deduplicar por producto y kilos.
+
 1. Resolver si el MVP admite cuatro tickets simultáneos por terminal. La maqueta muestra Ticket A–D, pero el relevamiento considera esta decisión pendiente; por ahora solo Ticket A está habilitado.
 2. Continuar `catalog-pricing`: ya existen listas por sucursal, categorías, productos, códigos alternativos, historial de precios, `GET /api/catalog/price-lists`, `GET /api/catalog/categories` y `GET /api/catalog/products` conectados al POS. Falta la gestión para cargar y mantener esos datos. Contrato en `SPEC-catalog-pricing.md`.
 3. Extender borradores a varios tickets por terminal y agregar identificación de terminal; el corte actual permite uno por usuario/sucursal. Contrato en `SPEC-pos-sales.md`.

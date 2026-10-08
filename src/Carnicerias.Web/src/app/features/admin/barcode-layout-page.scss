@@ -1,0 +1,12 @@
+.barcode-panel { max-width: 54rem; }
+.barcode-form { display: grid; gap: 0.5rem; padding: 1rem; }
+.barcode-form input { width: 100%; }
+.barcode-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.barcode-options > div { display: grid; gap: 0.5rem; }
+.barcode-result { margin: 1rem; padding: 1rem; background: #f6f8f7; border-left: 0.25rem solid var(--color-teal); }
+.barcode-result h3 { margin-top: 0; }
+.barcode-result dl { display: grid; gap: 0.5rem; }
+.barcode-result dl div { display: flex; gap: 1rem; }
+.barcode-result dt { min-width: 9rem; font-weight: 700; }
+.barcode-result dd { margin: 0; font-family: monospace; }
+@media (max-width: 36rem) { .barcode-options { grid-template-columns: 1fr; } }

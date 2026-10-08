@@ -6,6 +6,7 @@ import { Observable, of, Subject } from 'rxjs';
 import { catchError, concatMap, map } from 'rxjs/operators';
 import { CatalogCategory, CatalogClient, PriceListOption } from '../../core/catalog/catalog-client';
 import { InventoryClient, InventoryStockItem } from '../../core/inventory/inventory-client';
+import { InventoryPieceClient, PosPieceLookup } from '../../core/inventory/inventory-piece-client';
 import { PosTerminal, PosTerminalClient } from '../../core/pos/pos-terminal-client';
 import { ConfirmedSale, SaleDraft, SaleDraftClient, SaleDraftLine, SalePaymentMethod } from '../../core/sales/sale-draft-client';
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
@@ -78,6 +79,7 @@ export class PosPage implements OnInit {
   private readonly receiptPdfClient = inject(ReceiptPdfClient);
   private readonly cashierShiftClient = inject(CashierShiftClient);
   private readonly inventoryClient = inject(InventoryClient);
+  private readonly pieceClient = inject(InventoryPieceClient);
   private readonly terminalClient = inject(PosTerminalClient);
   private readonly router = inject(Router);
   @ViewChild('scanInput') private scanInput?: ElementRef<HTMLInputElement>;
@@ -130,6 +132,7 @@ export class PosPage implements OnInit {
   protected readonly lines = signal<readonly SaleLine[]>([]);
   private readonly persistedLines = signal<readonly SaleLine[]>([]);
   protected readonly selectedProduct = signal<PosProduct | null>(null);
+  protected readonly scannedPieceIdentifier = signal<string | null>(null);
   protected readonly quantityDraft = signal('1');
   protected readonly quantityProblem = computed(() => {
     const product = this.selectedProduct();
@@ -356,6 +359,7 @@ export class PosPage implements OnInit {
     this.selectedPriceListId.set(priceListId);
     this.searchText.set('');
     this.selectedProduct.set(null);
+    this.scannedPieceIdentifier.set(null);
     this.errorMessage.set(null);
     this.realSearchSubmitted.set(false);
     this.realProducts.set([]);
@@ -418,6 +422,10 @@ export class PosPage implements OnInit {
           this.openProduct(product);
           return;
         }
+        if (page.totalItems === 0 && /^\d+$/.test(query)) {
+          this.searchReceivedPiece(priceListId, query);
+          return;
+        }
         if (page.totalItems > 0 || query.length < 3) {
           this.setRealProducts(page.items);
           return;
@@ -429,6 +437,52 @@ export class PosPage implements OnInit {
       },
       error: () => this.catalogLoadState.set('error'),
     });
+  }
+
+  private searchReceivedPiece(priceListId: string, barcode: string): void {
+    this.pieceClient.lookup(barcode).subscribe({
+      next: (piece) => {
+        if (this.selectedPriceListId() !== priceListId) return;
+        if (!this.validPieceLookup(piece, barcode)) {
+          this.pieceLookupError('La etiqueta recibida contiene un peso inválido.');
+          return;
+        }
+        this.catalogClient.products({ priceListId, code: piece.productCode }).subscribe({
+          next: (page) => {
+            if (this.selectedPriceListId() !== priceListId) return;
+            const item = page.items[0];
+            if (page.totalItems !== 1 || !item || item.id !== piece.productId || item.saleMode !== 'weight') {
+              this.pieceLookupError('El artículo de esta pieza no está disponible en la lista de precios.');
+              return;
+            }
+            const product = this.mapCatalogProduct(item);
+            this.realProducts.set([product]);
+            this.catalogLoadState.set('ready');
+            this.searchText.set('');
+            this.openProduct(product, piece.receivedWeightKg, piece.externalIdentifier);
+          },
+          error: () => this.pieceLookupError('No se pudo consultar el artículo de la pieza.'),
+        });
+      },
+      error: (error: HttpErrorResponse) => this.pieceLookupError(error.status === 409
+        ? 'Hay más de una pieza con esa etiqueta en la sucursal. Revisá el origen antes de vender.'
+        : error.status === 404
+          ? 'El código no corresponde a un artículo ni a una pieza recibida en esta sucursal.'
+          : 'No se pudo consultar la pieza. Intentá nuevamente.'),
+    });
+  }
+
+  private validPieceLookup(piece: PosPieceLookup, barcode: string): boolean {
+    const weight = piece.receivedWeightKg;
+    return piece.rawBarcode === barcode && !!piece.productCode &&
+      Number.isFinite(weight) && weight > 0 && weight <= 10000 &&
+      Math.abs(Math.round(weight * 1000) - weight * 1000) < 0.000001;
+  }
+
+  private pieceLookupError(message: string): void {
+    this.catalogLoadState.set('ready');
+    this.realProducts.set([]);
+    this.errorMessage.set(message);
   }
 
   private loadCategories(priceListId: string): void {
@@ -492,7 +546,7 @@ export class PosPage implements OnInit {
     };
   }
 
-  protected openProduct(product: PosProduct): void {
+  protected openProduct(product: PosProduct, quantity = 1, pieceIdentifier: string | null = null): void {
     if (!this.canOperate()) return;
     this.errorMessage.set(null);
     if (!this.isDemoPriceList() && (this.availableStock(product) ?? 0) <= 0) {
@@ -500,10 +554,15 @@ export class PosPage implements OnInit {
       return;
     }
     this.selectedProduct.set(product);
-    this.quantityDraft.set('1');
+    this.scannedPieceIdentifier.set(pieceIdentifier);
+    this.quantityDraft.set(String(quantity));
   }
 
   protected updateQuantity(event: Event): void {
+    if (this.scannedPieceIdentifier()) {
+      (event.target as HTMLInputElement).value = this.quantityDraft();
+      return;
+    }
     this.quantityDraft.set((event.target as HTMLInputElement).value.replace(',', '.'));
   }
 
@@ -519,6 +578,7 @@ export class PosPage implements OnInit {
     this.errorMessage.set(null);
     this.addProductLine(product, quantity);
     this.selectedProduct.set(null);
+    this.scannedPieceIdentifier.set(null);
     this.focusScanInput();
   }
 
@@ -632,6 +692,7 @@ export class PosPage implements OnInit {
 
   protected closeProductDialog(): void {
     this.selectedProduct.set(null);
+    this.scannedPieceIdentifier.set(null);
     this.errorMessage.set(null);
     this.focusScanInput();
   }

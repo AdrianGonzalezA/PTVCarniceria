@@ -41,6 +41,15 @@ export interface ReceivePieceRequest {
   readonly code: string;
 }
 
+export interface PosPieceLookup {
+  readonly id: string;
+  readonly productId: string;
+  readonly productCode: string;
+  readonly externalIdentifier: string;
+  readonly receivedWeightKg: number;
+  readonly rawBarcode: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class InventoryPieceClient {
   private readonly http = inject(HttpClient);
@@ -54,5 +63,11 @@ export class InventoryPieceClient {
   receive(request: ReceivePieceRequest) {
     return this.http.post<InventoryPieceReceipt>('/api/inventory/pieces', request,
       { withCredentials: true });
+  }
+
+  lookup(code: string) {
+    return this.http.get<PosPieceLookup>('/api/pos/pieces/lookup', {
+      params: new HttpParams().set('code', code), withCredentials: true,
+    });
   }
 }

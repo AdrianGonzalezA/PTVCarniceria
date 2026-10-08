@@ -18,7 +18,45 @@ public static class InventoryPieceEndpoints
         pieces.MapGet("", ListAsync);
         pieces.MapGet("/{id:guid}", GetAsync);
         pieces.MapPost("", ReceiveAsync);
+        endpoints.MapGet("/api/pos/pieces/lookup", LookupForPosAsync).RequireOperationalContext();
         return endpoints;
+    }
+
+    private static async Task<IResult> LookupForPosAsync(string? code, PlatformAccessDbContext db,
+        OperationalContextAccessor accessor, CancellationToken cancellationToken)
+    {
+        var barcode = code?.Trim();
+        if (string.IsNullOrEmpty(barcode) || barcode.Length > 80)
+            return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+        var context = accessor.Context;
+        var matches = await (from piece in db.InventoryPieces.AsNoTracking()
+                             join product in db.CatalogProducts.AsNoTracking()
+                                 on piece.ProductId equals product.Id
+                             where piece.CompanyId == context.CompanyId &&
+                                 piece.BranchId == context.BranchId && piece.RawBarcode == barcode &&
+                                 product.CompanyId == context.CompanyId
+                             select new
+                             {
+                                 piece.Id,
+                                 piece.ProductId,
+                                 ProductCode = product.Code,
+                                 piece.ExternalIdentifier,
+                                 piece.ReceivedWeightKg,
+                                 piece.RawBarcode,
+                                 product.IsActive,
+                                 product.SaleMode
+                             })
+            .Take(2).ToArrayAsync(cancellationToken);
+        return matches.Length switch
+        {
+            0 => Error(StatusCodes.Status404NotFound, "PIECE_NOT_FOUND"),
+            > 1 => Error(StatusCodes.Status409Conflict, "PIECE_BARCODE_AMBIGUOUS"),
+            _ when !matches[0].IsActive || matches[0].SaleMode != ProductSaleMode.Weight =>
+                Error(StatusCodes.Status404NotFound, "WEIGHT_PRODUCT_NOT_AVAILABLE"),
+            _ => Results.Ok(new PosPieceLookupResponse(matches[0].Id, matches[0].ProductId,
+                matches[0].ProductCode, matches[0].ExternalIdentifier, matches[0].ReceivedWeightKg,
+                matches[0].RawBarcode))
+        };
     }
 
     private static async Task<IResult> GetAsync(Guid id, PlatformAccessDbContext db,
@@ -167,4 +205,6 @@ public static class InventoryPieceEndpoints
         string SourceSystem, string ExternalIdentifier, decimal ReceivedWeightKg, string RawBarcode,
         DateTimeOffset ReceivedAtUtc);
     private sealed record PieceListResponse(IReadOnlyList<PieceListItem> Items, int Page, int PageSize, int Total);
+    private sealed record PosPieceLookupResponse(Guid Id, Guid ProductId, string ProductCode,
+        string ExternalIdentifier, decimal ReceivedWeightKg, string RawBarcode);
 }

@@ -7,6 +7,7 @@ import { vi } from 'vitest';
 import { CatalogClient } from '../../core/catalog/catalog-client';
 import { PosTerminalClient } from '../../core/pos/pos-terminal-client';
 import { InventoryClient } from '../../core/inventory/inventory-client';
+import { InventoryPieceClient } from '../../core/inventory/inventory-piece-client';
 import { CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { SaleDraftClient } from '../../core/sales/sale-draft-client';
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
@@ -22,6 +23,7 @@ describe('PosPage', () => {
       { provide: CashierShiftClient, useValue: { current: () => of({
         id: 'shift-id', openingCash: 0, openedAtUtc: '2026-10-06T15:00:00Z', closedAtUtc: null,
       }) } },
+      { provide: InventoryPieceClient, useValue: { lookup: () => throwError(() => new HttpErrorResponse({ status: 404 })) } },
     ] });
   });
 
@@ -636,5 +638,66 @@ describe('PosPage', () => {
     (reopened.nativeElement.querySelector('.shift-status') as HTMLButtonElement).click();
     reopened.detectChanges();
     expect(reopened.nativeElement.querySelector('.closed-shift-summary').textContent).toContain('1.100,00');
+  });
+
+  it('prefills kilograms from a received piece barcode before adding the product', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero1', expiresAtUtc: '2026-10-08T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const asado = { id: 'product-id', code: '1002', name: 'Asado', categoryId: 'category-id',
+      saleMode: 'weight' as const, unit: 'kg', price: 11500, availableStock: 79.5 };
+    const save = vi.fn().mockImplementation((_listId, lines: readonly { productId: string; quantity: number }[]) =>
+      of({ id: 'draft-id', priceListId: 'list-id', updatedAtUtc: '2026-10-08T16:00:00Z',
+        lines: [{ productId: asado.id, productCode: asado.code, productName: asado.name,
+          unit: 'kg', saleMode: 'weight', quantity: lines[0].quantity, unitPrice: asado.price }] }));
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: {
+        priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
+        categories: () => of([{ id: 'category-id', name: 'Carnes', productCount: 1 }]),
+        products: (query: { code?: string }) => {
+          const items = !query.code || query.code === asado.code ? [asado] : [];
+          return of({ items, page: 1, pageSize: 50, totalItems: items.length });
+        },
+      } },
+      { provide: InventoryPieceClient, useValue: { lookup: (code: string) => code === '2999001005009'
+        ? of({ id: 'piece-id', productId: asado.id, productCode: asado.code,
+          externalIdentifier: '999001', receivedWeightKg: 0.5, rawBarcode: code })
+        : throwError(() => new HttpErrorResponse({ status: 404 })) } },
+      { provide: SaleDraftClient, useValue: { current: () => of(null), save } },
+      { provide: InventoryClient, useValue: { stock: () => of([{ productId: asado.id, available: 79.5 }]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const search = fixture.nativeElement.querySelector('#product-search') as HTMLInputElement;
+    search.value = '2999001005009';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('#product-dialog-title').textContent).toContain('Asado');
+    const measuredQuantity = fixture.nativeElement.querySelector('#product-quantity') as HTMLInputElement;
+    expect(measuredQuantity.value).toBe('0.5');
+    expect(measuredQuantity.readOnly).toBe(true);
+    (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(save).toHaveBeenCalledWith('list-id', [{ productId: asado.id, quantity: 0.5 }]);
+    expect((fixture.nativeElement.querySelector('.quantity-input') as HTMLInputElement).value).toBe('0.5');
+    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('5.750,00');
+
+    search.value = '2999001005999';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#product-dialog-title')).toBeNull();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(fixture.nativeElement.querySelector('.pos-error').textContent)
+      .toContain('no corresponde a un artículo ni a una pieza');
   });
 });

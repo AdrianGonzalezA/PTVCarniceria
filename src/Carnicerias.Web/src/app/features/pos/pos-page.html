@@ -280,7 +280,12 @@
           <div><dt>Precio unitario</dt><dd>{{ formatMoney(product.price) }} / {{ unitLabel(product) }}</dd></div>
         </dl>
         @if (product.mode === 'weight') {
-          <p class="scale-status">Balanza no conectada · Ingreso manual de peso</p>
+          @if (scannedPieceIdentifier(); as identifier) {
+            <p class="scale-status" role="status">Pieza {{ identifier }} · {{ quantityDraft() }} kg leídos de la etiqueta · peso fijo</p>
+            <p class="scale-status">El ticket todavía no asigna la pieza vendida; conserva stock agregado.</p>
+          } @else {
+            <p class="scale-status">Balanza no conectada · Ingreso manual de peso</p>
+          }
         }
         <label class="quantity-field" for="product-quantity">
           {{ product.mode === 'weight' ? 'Peso en kilogramos' : 'Cantidad (' + unitLabel(product) + ')' }}
@@ -289,6 +294,7 @@
             type="number"
             [min]="product.mode === 'weight' ? 0.001 : 1"
             [step]="product.mode === 'weight' ? 0.001 : 1"
+            [readOnly]="!!scannedPieceIdentifier()"
             [value]="quantityDraft()"
             (input)="updateQuantity($event)"
           />

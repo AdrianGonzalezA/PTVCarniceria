@@ -17,6 +17,11 @@ export interface UserListPage {
   readonly totalPages: number;
 }
 
+export interface UserAssignments {
+  readonly role: 'administrator' | 'cashier';
+  readonly branchIds: readonly string[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class UserDirectoryClient {
   private readonly http = inject(HttpClient);
@@ -26,6 +31,28 @@ export class UserDirectoryClient {
     if (search) params = params.set('search', search);
 
     return this.http.get<UserListPage>('/api/users', { params, withCredentials: true });
+  }
+
+  createCashier(username: string, email: string, password: string, branchIds: readonly string[]) {
+    return this.http.post<UserListItem>('/api/users', { username, email, password, branchIds }, {
+      withCredentials: true,
+    });
+  }
+
+  assignments(userId: string) {
+    return this.http.get<UserAssignments>(`/api/users/${encodeURIComponent(userId)}/assignments`, {
+      withCredentials: true,
+    });
+  }
+
+  replaceAssignments(userId: string, branchIds: readonly string[]) {
+    return this.http.put<UserAssignments>(`/api/users/${encodeURIComponent(userId)}/assignments`,
+      { branchIds }, { withCredentials: true });
+  }
+
+  resetCashierPassword(userId: string, password: string) {
+    return this.http.put<void>(`/api/users/${encodeURIComponent(userId)}/password`,
+      { password }, { withCredentials: true });
   }
 
   update(userId: string, changes: { readonly username?: string; readonly email?: string; readonly isActive?: boolean }) {

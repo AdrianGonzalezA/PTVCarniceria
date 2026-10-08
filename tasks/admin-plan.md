@@ -45,7 +45,7 @@ La prioridad pasa al sitio administrativo sin modificar la base única `carnicer
 
 ### A6. Usuarios y consulta histórica
 
-- [ ] Completar alta y asignación de usuarios; conservar un único rol administrador en este corte.
+- [x] Completar alta y asignación de cajeros; conservar un único rol y usuario administrador en este corte.
 - [ ] Consultar ventas, pagos, turnos y movimientos por sucursal/caja/fecha, sin mutaciones transaccionales.
 - [ ] Revisión integral de autorización, accesibilidad y recorrido funcional con dos Electron.
 

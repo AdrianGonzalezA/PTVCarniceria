@@ -2,7 +2,7 @@
   <header class="app-header">
     <a class="brand" routerLink="/" aria-label="Volver al inicio">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span>Nombre del sistema</span>
+      <span>Carnicerías <small>· Administración</small></span>
     </a>
 
     <div class="account-bar">
@@ -14,18 +14,84 @@
   </header>
 
   <div class="workspace">
-    <a class="back-link" routerLink="/">← Volver al contexto</a>
+    <a class="back-link" routerLink="/admin">← Volver a administración</a>
     <p class="eyebrow">Administración</p>
     <h1>Usuarios</h1>
-    <p class="intro">Consultá las cuentas de esta instalación y su estado de acceso.</p>
+    <p class="intro">Administrá las cuentas asignadas a {{ currentCompanyName() }}. En esta etapa sólo se pueden dar de alta cajeros; el administrador existente permanece único.</p>
 
     <section class="users-panel" aria-labelledby="users-heading" [attr.aria-busy]="isLoading()">
       <header class="panel-heading">
         <div>
-          <h2 id="users-heading">Usuarios de la instalación</h2>
+          <h2 id="users-heading">Usuarios de {{ currentCompanyName() }}</h2>
           <p>La búsqueda incluye nombre de usuario y correo electrónico.</p>
         </div>
+        <button type="button" class="create-user-button" [disabled]="creating() || branches().length === 0" (click)="openCreate()">Nuevo cajero</button>
       </header>
+
+      @if (createOpen()) {
+        <form class="user-editor" (submit)="$event.preventDefault(); createCashier()">
+          <h3>Nuevo cajero</h3>
+          <label for="create-username">Usuario</label>
+          <input id="create-username" name="username" autocomplete="off" maxlength="100" required [value]="createUsername()" (input)="updateCreateField('username', $event)" />
+          <label for="create-email">Correo electrónico</label>
+          <input id="create-email" name="email" type="email" autocomplete="off" maxlength="320" required [value]="createEmail()" (input)="updateCreateField('email', $event)" />
+          <label for="create-password">Contraseña inicial</label>
+          <input id="create-password" name="password" type="password" autocomplete="new-password" minlength="12" required [value]="createPassword()" (input)="updateCreateField('password', $event)" />
+          <p class="form-help">Mínimo 12 caracteres. Se guarda como hash; no se vuelve a mostrar.</p>
+          <fieldset>
+            <legend>Sucursales habilitadas</legend>
+            @for (branch of branches(); track branch.branchId) {
+              <label class="branch-choice">
+                <input type="checkbox" [checked]="createBranchIds().includes(branch.branchId)" (change)="toggleCreateBranch(branch.branchId, $event)" />
+                {{ branch.branchName }}
+              </label>
+            }
+          </fieldset>
+          <div class="editor-actions">
+            <button type="submit" [disabled]="creating()">{{ creating() ? 'Creando…' : 'Crear cajero' }}</button>
+            <button type="button" class="secondary-button" [disabled]="creating()" (click)="closeCreate()">Cancelar</button>
+          </div>
+        </form>
+      }
+
+      @if (assignmentUserId(); as userId) {
+        <section class="user-editor" aria-labelledby="assignments-title">
+          <h3 id="assignments-title">Asignaciones de {{ assignmentUsername() }}</h3>
+          @if (assignmentLoading()) {
+            <p role="status">Cargando asignaciones…</p>
+          } @else if (assignmentData(); as assignments) {
+            @if (assignments.role === 'administrator') {
+              <p>La asignación del administrador único no se modifica aquí.</p>
+            } @else {
+              <p>Seleccioná las sucursales del cajero. Cambiarlas cerrará sus sesiones anteriores.</p>
+              <fieldset>
+                <legend>Sucursales habilitadas</legend>
+                @for (branch of branches(); track branch.branchId) {
+                  <label class="branch-choice">
+                    <input type="checkbox" [checked]="assignmentBranchIds().includes(branch.branchId)" (change)="toggleAssignmentBranch(branch.branchId, $event)" />
+                    {{ branch.branchName }}
+                  </label>
+                }
+              </fieldset>
+              <button type="button" [disabled]="assignmentSaving()" (click)="saveAssignments()">{{ assignmentSaving() ? 'Guardando…' : 'Guardar asignaciones' }}</button>
+            }
+          }
+          <button type="button" class="secondary-button" [disabled]="assignmentSaving()" (click)="closeAssignments()">Cerrar</button>
+        </section>
+      }
+
+      @if (passwordUserId()) {
+        <form class="user-editor" (submit)="$event.preventDefault(); resetCashierPassword()">
+          <h3>Restablecer contraseña de {{ passwordUsername() }}</h3>
+          <p>El cajero deberá usar la contraseña nueva para ingresar. Sus sesiones actuales se cerrarán.</p>
+          <label for="reset-password">Contraseña nueva</label>
+          <input id="reset-password" name="new-password" type="password" autocomplete="new-password" minlength="12" required [value]="resetPasswordDraft()" (input)="updateResetPassword($event)" />
+          <div class="editor-actions">
+            <button type="submit" [disabled]="resettingPassword()">{{ resettingPassword() ? 'Guardando…' : 'Restablecer' }}</button>
+            <button type="button" class="secondary-button" [disabled]="resettingPassword()" (click)="closePasswordReset()">Cancelar</button>
+          </div>
+        </form>
+      }
 
       <form class="search-form" (ngSubmit)="search()">
         <div class="search-field">
@@ -130,6 +196,8 @@
                       >
                         Cerrar sesiones
                       </button>
+                      <button type="button" class="secondary-button" [disabled]="actionUserId() !== null" (click)="openAssignments(user.userId)">Sucursales</button>
+                      <button type="button" class="secondary-button" [disabled]="actionUserId() !== null || currentUserId() === user.userId" (click)="openPasswordReset(user.userId)">Contraseña</button>
                       }
                       </div>
                     </td>

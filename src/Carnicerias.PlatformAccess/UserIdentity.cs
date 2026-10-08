@@ -78,6 +78,13 @@ public sealed class UserIdentity
         EmailNormalized = normalizedEmail.ToLowerInvariant();
     }
 
+    public void SetPasswordHash(string passwordHash)
+    {
+        if (string.IsNullOrWhiteSpace(passwordHash))
+            throw new ArgumentException("Password hash is required.", nameof(passwordHash));
+        PasswordHash = passwordHash;
+    }
+
     public static UserIdentity Create(string username, string email, string passwordHash) =>
         new(username, email, passwordHash);
 

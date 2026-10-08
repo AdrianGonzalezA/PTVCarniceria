@@ -48,6 +48,12 @@ El primer incremento publicable comprende navegación administrativa y ABM de ca
 - La pantalla de existencias opera exclusivamente sobre la sucursal del contexto activo. Para otra sucursal, el administrador cambia el contexto de su sesión; la API no acepta un identificador de sucursal arbitrario en el ajuste. Se muestran existencia, reserva y disponible. El ajuste de productos por unidad exige enteros y el de peso admite hasta tres decimales. El motivo es obligatorio y una salida que deje menos que lo reservado se rechaza. Ante una respuesta fallida, el mismo envío puede reintentarse con la misma clave de operación.
 - Las cajas se administran dentro de su sucursal, con nombre y estado. Crear, reactivar o rotar emite una credencial nueva que se muestra una sola vez; el listado no incluye secretos. Inactivar o rotar una caja con turno o borrador abierto se rechaza y el cambio revoca sus sesiones.
 
+## Usuarios y asignaciones
+
+- El administrador existente es el único usuario con rol `administrator` en este corte. El alta desde el sitio crea únicamente cuentas con el rol `cashier`, contraseña inicial de al menos 12 caracteres y asignación a una o más sucursales activas de la empresa del contexto actual. No se crea otro rol.
+- El listado, la edición de datos y las asignaciones sólo muestran usuarios vinculados a la empresa del contexto. Las asignaciones del administrador no se pueden reemplazar desde el sitio. Al cambiar las sucursales del cajero, se cierran sus sesiones anteriores; no se puede quitar una sucursal donde tenga turno o ticket abierto ni dejarlo sin sucursales.
+- La inactivación de una cuenta se rechaza si el usuario mantiene turnos o tickets abiertos, incluso en otra empresa. Restablecer la contraseña de un cajero revoca sus sesiones y nunca devuelve el hash ni la contraseña anterior. El administrador no puede restablecer su propia contraseña por este flujo de terceros.
+
 ## Tecnología y comandos
 
 - Angular 22, formularios reactivos, rutas protegidas y `HttpClient` en `src/Carnicerias.Web`.

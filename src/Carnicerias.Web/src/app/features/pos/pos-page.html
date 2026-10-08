@@ -52,12 +52,13 @@
   <main class="pos-workspace">
     <section class="catalog-panel" aria-label="Catálogo de productos">
       <div class="catalog-toolbar">
-        <label for="product-search">Producto</label>
+        <label for="product-search">Producto / lector</label>
         <div class="search-control">
           <input
+            #scanInput
             id="product-search"
             type="search"
-            placeholder="Buscar producto o ingresar código"
+            placeholder="Buscar o escanear código"
             autocomplete="off"
             [disabled]="!canSearchCatalog()"
             [value]="searchText()"

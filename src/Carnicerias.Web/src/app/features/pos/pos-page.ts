@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, ElementRef, inject, HostListener, OnInit, signal, ViewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { Observable, of, Subject } from 'rxjs';
@@ -80,12 +80,15 @@ export class PosPage implements OnInit {
   private readonly inventoryClient = inject(InventoryClient);
   private readonly terminalClient = inject(PosTerminalClient);
   private readonly router = inject(Router);
+  @ViewChild('scanInput') private scanInput?: ElementRef<HTMLInputElement>;
   private readonly draftOperations = new Subject<{
     readonly revision: number;
     readonly operation: 'cancel' | { readonly priceListId: string; readonly lines: readonly SaleLine[] };
   }>();
   private draftRevision = 0;
   private stockRequestRevision = 0;
+  private scannedCode = '';
+  private lastScanKeyAt = 0;
 
   protected readonly session = signal<CurrentSession | null>(null);
   protected readonly terminal = signal<PosTerminal | null>(null);
@@ -324,6 +327,29 @@ export class PosPage implements OnInit {
     if (!this.isDemoPriceList()) this.realSearchSubmitted.set(false);
   }
 
+  @HostListener('window:keydown', ['$event'])
+  protected captureScannerKeys(event: KeyboardEvent): void {
+    if (!this.canOperate() || !this.canSearchCatalog() || this.selectedProduct() ||
+        this.checkoutNotice() || this.shiftDialog() || this.inventoryOpen() || this.confirmedSale()) {
+      this.scannedCode = '';
+      return;
+    }
+    if (event.target instanceof HTMLElement &&
+        event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+    if (Date.now() - this.lastScanKeyAt > 1500) this.scannedCode = '';
+    if (/^[0-9]$/.test(event.key)) {
+      this.scannedCode = (this.scannedCode + event.key).slice(0, 80);
+      this.lastScanKeyAt = Date.now();
+    } else if (event.key === 'Enter' && this.scannedCode) {
+      event.preventDefault();
+      this.searchText.set(this.scannedCode);
+      this.scannedCode = '';
+      this.submitSearch(event);
+    } else if (event.key !== 'Shift') {
+      this.scannedCode = '';
+    }
+  }
+
   protected selectPriceList(event: Event): void {
     if (this.lines().length > 0) return;
     const priceListId = (event.target as HTMLSelectElement).value;
@@ -336,6 +362,7 @@ export class PosPage implements OnInit {
     if (priceListId.startsWith('demo:')) {
       this.catalogCategories.set([]);
       this.catalogLoadState.set('ready');
+      this.focusScanInput();
     } else if (priceListId) {
       this.loadCategories(priceListId);
     } else {
@@ -440,6 +467,7 @@ export class PosPage implements OnInit {
   }[]): void {
     this.realProducts.set(items.map((item) => this.mapCatalogProduct(item)));
     this.catalogLoadState.set('ready');
+    this.focusScanInput();
   }
 
   private mapCatalogProduct(item: {
@@ -491,6 +519,7 @@ export class PosPage implements OnInit {
     this.errorMessage.set(null);
     this.addProductLine(product, quantity);
     this.selectedProduct.set(null);
+    this.focusScanInput();
   }
 
   protected updateLineQuantity(productId: string, event: Event): void {
@@ -604,6 +633,15 @@ export class PosPage implements OnInit {
   protected closeProductDialog(): void {
     this.selectedProduct.set(null);
     this.errorMessage.set(null);
+    this.focusScanInput();
+  }
+
+  private focusScanInput(): void {
+    setTimeout(() => {
+      if (this.canOperate() && this.canSearchCatalog() && !this.selectedProduct() &&
+          !this.checkoutNotice() && !this.shiftDialog() && !this.inventoryOpen() && !this.confirmedSale())
+        this.scanInput?.nativeElement.focus();
+    }, 0);
   }
 
   protected continueToCheckout(): void {

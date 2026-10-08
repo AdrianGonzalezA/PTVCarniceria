@@ -81,6 +81,9 @@ describe('PosPage', () => {
     expect(fixture.nativeElement.querySelector('#product-search')).toBeNull();
     expect(fixture.nativeElement.querySelector('.sale-footer')).toBeNull();
     expect(saved).toBe(false);
+    for (const key of ['8', '0', '0', '1', 'Enter'])
+      window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    expect(fixture.nativeElement.querySelector('#product-dialog-title')).toBeNull();
 
     (fixture.nativeElement.querySelector('.shift-gate .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
@@ -159,6 +162,16 @@ describe('PosPage', () => {
     expect(search.disabled).toBe(false);
     expect(fixture.nativeElement.querySelector('.product-card').textContent).toContain('Pan rallado');
     expect(fixture.nativeElement.querySelector('.category-icon').textContent).toContain('🧺');
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: '8', bubbles: true }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#product-dialog-title')).toBeNull();
+    for (const key of ['8', '0', '0', '1', 'Enter'])
+      window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#product-dialog-title').textContent).toContain('Pan rallado');
+    (fixture.nativeElement.querySelector('.pos-dialog .dialog-close') as HTMLButtonElement).click();
+    fixture.detectChanges();
     (fixture.nativeElement.querySelector('.product-card') as HTMLButtonElement).click();
     fixture.detectChanges();
     (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();

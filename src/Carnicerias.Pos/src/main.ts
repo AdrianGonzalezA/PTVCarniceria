@@ -1,6 +1,7 @@
 import path from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import {
   app,
@@ -14,8 +15,9 @@ import {
 } from 'electron';
 import { resolveAppAsset, toBackendRequest, toBackendUrl } from './app-protocol';
 import { createDiagnostic } from './diagnostic';
-import { diagnosticChannel } from './native-api';
+import { diagnosticChannel, saveReceiptPdfChannel } from './native-api';
 import { resolvePosProfile } from './pos-profile';
+import { createReceiptHtml, validateReceiptRequest } from './receipt-pdf';
 import { createSecureWebPreferences, isAllowedNavigation } from './security-policy';
 import { loadTerminalCredential } from './terminal-credential';
 
@@ -60,6 +62,35 @@ function registerNativeApi(): void {
   ipcMain.handle(diagnosticChannel, (event) => {
     validateIpcSender(event);
     return createDiagnostic(process.platform, process.versions.electron);
+  });
+  ipcMain.handle(saveReceiptPdfChannel, async (event, payload: unknown) => {
+    validateIpcSender(event);
+    const receipt = validateReceiptRequest(payload);
+    const receiptWindow = new BrowserWindow({
+      show: false,
+      skipTaskbar: true,
+      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true },
+    });
+    receiptWindow.webContents.on('will-navigate', (navigationEvent) => navigationEvent.preventDefault());
+    receiptWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    try {
+      // Electron's loadURL promise completes after load; printToPDF returns the PDF bytes.
+      // https://www.electronjs.org/docs/latest/api/browser-window#winloadurlurl-options
+      // https://www.electronjs.org/docs/latest/api/web-contents#contentsprinttopdfoptions
+      await receiptWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(createReceiptHtml(receipt))}`);
+      const pdf = await receiptWindow.webContents.printToPDF({
+        printBackground: true,
+        pageSize: { width: 3.15, height: 11.7 },
+        margins: { top: 0.12, bottom: 0.12, left: 0.12, right: 0.12 },
+      });
+      const directory = path.join(app.getPath('userData'), 'tickets');
+      await mkdir(directory, { recursive: true });
+      const filePath = path.join(directory, `ticket-${randomUUID()}.pdf`);
+      await writeFile(filePath, pdf, { flag: 'wx' });
+      return { path: filePath };
+    } finally {
+      receiptWindow.destroy();
+    }
   });
 }
 

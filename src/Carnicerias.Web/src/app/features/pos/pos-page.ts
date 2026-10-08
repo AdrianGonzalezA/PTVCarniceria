@@ -8,6 +8,7 @@ import { CatalogCategory, CatalogClient, PriceListOption } from '../../core/cata
 import { InventoryClient, InventoryStockItem } from '../../core/inventory/inventory-client';
 import { PosTerminal, PosTerminalClient } from '../../core/pos/pos-terminal-client';
 import { ConfirmedSale, SaleDraft, SaleDraftClient, SaleDraftLine, SalePaymentMethod } from '../../core/sales/sale-draft-client';
+import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { CashierShift, CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 
@@ -74,6 +75,7 @@ export class PosPage implements OnInit {
   private readonly sessionClient = inject(SessionClient);
   private readonly catalogClient = inject(CatalogClient);
   private readonly saleDraftClient = inject(SaleDraftClient);
+  private readonly receiptPdfClient = inject(ReceiptPdfClient);
   private readonly cashierShiftClient = inject(CashierShiftClient);
   private readonly inventoryClient = inject(InventoryClient);
   private readonly terminalClient = inject(PosTerminalClient);
@@ -153,6 +155,9 @@ export class PosPage implements OnInit {
   protected readonly checkoutBusy = signal(false);
   protected readonly checkoutError = signal<string | null>(null);
   protected readonly confirmedSale = signal<ConfirmedSale | null>(null);
+  protected readonly receiptPdfBusy = signal(false);
+  protected readonly receiptPdfPath = signal<string | null>(null);
+  protected readonly receiptPdfError = signal<string | null>(null);
   protected readonly selectedPayments = signal<readonly { method: SalePaymentMethod; amount: number }[]>([]);
   protected readonly paymentMethods: readonly { readonly id: SalePaymentMethod; readonly label: string }[] = [
     { id: 'cash', label: 'Efectivo' }, { id: 'debit', label: 'Débito' },
@@ -772,6 +777,8 @@ export class PosPage implements OnInit {
     this.checkoutBusy.set(false);
     this.checkoutNotice.set(false);
     this.confirmedSale.set(sale);
+    this.receiptPdfPath.set(null);
+    this.receiptPdfError.set(null);
     this.lines.set([]);
     this.persistedLines.set([]);
     this.draftId.set('');
@@ -780,6 +787,20 @@ export class PosPage implements OnInit {
     this.errorMessage.set(null);
     this.loadCashierShift();
     this.loadPriceLists();
+  }
+
+  protected saveReceiptPdf(sale: ConfirmedSale): void {
+    if (this.receiptPdfBusy()) return;
+    this.receiptPdfBusy.set(true);
+    this.receiptPdfError.set(null);
+    void this.receiptPdfClient.save(
+      sale,
+      this.session()?.context?.branchName ?? 'Sucursal',
+      this.terminal()?.name ?? 'Caja',
+      this.session()?.username ?? 'Cajero',
+    ).then((path) => this.receiptPdfPath.set(path)).catch(() => {
+      this.receiptPdfError.set('No se pudo generar el PDF. La venta sigue confirmada; podés reintentar.');
+    }).finally(() => this.receiptPdfBusy.set(false));
   }
 
   protected paymentMethodName(method: SalePaymentMethod): string {

@@ -348,7 +348,16 @@
           <p class="change-preview">Vuelto en efectivo: <strong>{{ formatMoney(sale.changeAmount) }}</strong></p>
         }
         <p class="checkout-context">El stock y los pagos quedaron registrados. No se emitió comprobante fiscal.</p>
+        @if (receiptPdfPath(); as path) {
+          <p class="receipt-file" role="status">Ticket de prueba guardado en: {{ path }}</p>
+        }
+        @if (receiptPdfError(); as error) {
+          <p class="pos-error" role="alert">{{ error }}</p>
+        }
         <div class="dialog-actions">
+          <button class="receipt-pdf-button" type="button" [disabled]="receiptPdfBusy()" (click)="saveReceiptPdf(sale)">
+            {{ receiptPdfBusy() ? 'Generando PDF…' : 'Guardar ticket PDF' }}
+          </button>
           <button class="finish-button" type="button" (click)="confirmedSale.set(null)">Nueva venta</button>
         </div>
       </section>

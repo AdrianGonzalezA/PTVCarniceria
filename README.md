@@ -4,7 +4,7 @@ Sistema de punto de venta para carnicerías: API .NET 10 y PostgreSQL, interfaz 
 
 ## Estado del POS
 
-La lista real permite guardar un ticket, reservar stock, abrir un turno por cajero, registrar una venta con pagos y convertir la reserva en egreso físico dentro de una transacción. El cierre del turno conserva el saldo contable. Los datos actuales del catálogo son ficticios y la base visual es no productiva; no hay comprobante fiscal ni arqueo físico.
+La lista real permite guardar un ticket, reservar stock, abrir un turno por cajero, registrar una venta con pagos y convertir la reserva en egreso físico dentro de una transacción. El cierre del turno conserva el saldo contable. Los datos actuales del catálogo son ficticios y la base visual es no productiva; no hay comprobante fiscal ni arqueo físico. Tras confirmar una venta, Electron puede generar un PDF de prueba no fiscal en la carpeta `tickets` de su perfil de usuario; la generación del archivo no vuelve a cobrar ni modifica stock. La ruta concreta aparece en el diálogo al guardarlo. `npm run electron:test:pdf --prefix src/Carnicerias.Pos` prueba el motor PDF nativo sin registrar una venta ni crear un archivo.
 
 El estado detallado y los pendientes están en `tasks/pos-todo.md`. El contrato de cobro está en `SPEC-pos-checkout.md`; la evidencia de prueba en Electron y sus límites están en `tasks/pos-checkout-plan.md`.
 
@@ -12,7 +12,7 @@ El estado detallado y los pendientes están en `tasks/pos-todo.md`. El contrato 
 
 `visual-admin` ingresa y elige empresa/sucursal antes de abrir `/admin`. Allí puede mantener categorías, artículos y códigos alternativos, listas/precios, empresas, sucursales, cajas, existencias y cajeros. Puede restablecer la contraseña de cualquier usuario de la empresa, incluida la propia cuenta; al hacerlo se revocan todas las sesiones de esa persona. Por ahora no se crean otros administradores ni roles desde la interfaz. El historial de ventas, pagos, turnos y movimientos es de solo lectura y permite filtros por sucursal, caja (cuando corresponde) y fecha. El cajero no tiene acceso a estas API. Contrato y pendientes: `SPEC-admin.md` y `tasks/admin-plan.md`.
 
-La sección **Lectura de etiquetas** permite probar dentro de Electron una fórmula de campos fijos (por ejemplo `pro_numero(5) pro_item(3) peso(4)`) con un código escrito y decimales de peso configurables. El resultado separa campos y kilos, pero todavía no guarda perfiles, ingresa piezas al stock ni agrega productos al ticket. No hay ningún formato real de ciclo 2 activado por defecto; el diseño aprobado y los puntos pendientes están en `CAPABILITY-MAP-pos-peripherals.md` y `SPEC-inventory-traceability.md`.
+La sección **Lectura de etiquetas** permite guardar revisiones inmutables de perfiles de campos fijos por empresa (por ejemplo `pro_numero(5) pro_item(3) peso(4)`), y probarlas dentro de Electron con un código escrito y decimales de peso configurables. El resultado separa campos y kilos, pero todavía no ingresa piezas al stock ni agrega productos al ticket. No hay ningún formato real de ciclo 2 activado por defecto; el diseño aprobado y los puntos pendientes están en `CAPABILITY-MAP-pos-peripherals.md` y `SPEC-inventory-traceability.md`.
 
 ## Desarrollo local
 

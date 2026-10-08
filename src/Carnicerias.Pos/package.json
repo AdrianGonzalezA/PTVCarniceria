@@ -11,7 +11,8 @@
     "electron:start": "npm run build:web && npm run build:electron && npm run stage:web && electron . --pos-profile=caja-1",
     "electron:start:caja2": "npm run build:web && npm run build:electron && npm run stage:web && electron . --pos-profile=caja-2",
     "electron:start:admin": "npm run build:web && npm run build:electron && npm run stage:web && electron .",
-    "electron:test": "vitest run"
+    "electron:test": "vitest run",
+    "electron:test:pdf": "npm run build:electron && electron tests/receipt-pdf-smoke.cjs"
   },
   "packageManager": "npm@11.19.0",
   "engines": {

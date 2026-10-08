@@ -9,6 +9,7 @@ import { PosTerminalClient } from '../../core/pos/pos-terminal-client';
 import { InventoryClient } from '../../core/inventory/inventory-client';
 import { CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { SaleDraftClient } from '../../core/sales/sale-draft-client';
+import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { PosPage } from './pos-page';
 
@@ -107,9 +108,11 @@ describe('PosPage', () => {
     };
     let saveAttempts = 0;
     let confirmationAttempts = 0;
+    const receiptPdf = vi.fn().mockResolvedValue('C:\\tickets\\ticket-test.pdf');
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
+        { provide: ReceiptPdfClient, useValue: { save: receiptPdf } },
         { provide: SessionClient, useValue: { current: () => of(session) } },
         { provide: CatalogClient, useValue: {
           priceLists: () => of([{ id: 'list-id', name: 'Mostrador (datos ficticios)' }]),
@@ -187,6 +190,11 @@ describe('PosPage', () => {
     expect(receipt.textContent).toContain('sale-id');
     expect(receipt.textContent).toContain('2.400,00');
     expect(receipt.textContent).toContain('Efectivo');
+    (receipt.querySelector('.receipt-pdf-button') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(receiptPdf).toHaveBeenCalledWith(expect.objectContaining({ id: 'sale-id' }), 'Sucursal', 'Caja 1', 'cajero');
+    expect(receipt.textContent).toContain('ticket-test.pdf');
 
     (receipt.querySelector('.finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();

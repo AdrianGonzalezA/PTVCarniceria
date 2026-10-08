@@ -22,6 +22,10 @@ export interface UserAssignments {
   readonly branchIds: readonly string[];
 }
 
+export interface UserPasswordPolicy {
+  readonly minimumLength: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class UserDirectoryClient {
   private readonly http = inject(HttpClient);
@@ -31,6 +35,10 @@ export class UserDirectoryClient {
     if (search) params = params.set('search', search);
 
     return this.http.get<UserListPage>('/api/users', { params, withCredentials: true });
+  }
+
+  passwordPolicy() {
+    return this.http.get<UserPasswordPolicy>('/api/users/password-policy', { withCredentials: true });
   }
 
   createCashier(username: string, email: string, password: string, branchIds: readonly string[]) {
@@ -50,7 +58,7 @@ export class UserDirectoryClient {
       { branchIds }, { withCredentials: true });
   }
 
-  resetCashierPassword(userId: string, password: string) {
+  resetUserPassword(userId: string, password: string) {
     return this.http.put<void>(`/api/users/${encodeURIComponent(userId)}/password`,
       { password }, { withCredentials: true });
   }

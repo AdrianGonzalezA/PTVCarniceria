@@ -30,6 +30,7 @@ describe('UsersPage', () => {
     http.expectOne('/api/operational-contexts').flush([{ companyId: 'company-1',
       companyName: 'Empresa Visual', branches: [{ branchId: 'branch-1', branchName: 'Centro' },
         { branchId: 'branch-2', branchName: 'Norte' }] }]);
+    http.expectOne('/api/users/password-policy').flush({ minimumLength: 6 });
     http.expectOne((request) => request.url === '/api/users').flush({
       items: [admin, cashier], page: 1, pageSize: 20, totalItems: 2, totalPages: 1,
     });
@@ -115,6 +116,29 @@ describe('UsersPage', () => {
       fixture.detectChanges();
       expect(page.querySelector('#reset-password')).toBeNull();
       expect(page.querySelector('tbody')?.textContent).not.toContain('clave-nueva-de-prueba');
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
+  it('allows the administrator to reset their own password with the local policy', () => {
+    const { fixture, http, page } = load();
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      const adminRow = page.querySelectorAll('tbody tr')[0];
+      const button = Array.from(adminRow.querySelectorAll('button'))
+        .find((item) => item.textContent?.includes('Contraseña')) as HTMLButtonElement;
+      expect(button.disabled).toBe(false);
+      button.click();
+      fixture.detectChanges();
+      const input = page.querySelector<HTMLInputElement>('#reset-password')!;
+      input.value = 'abcdef';
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      input.closest('form')!.dispatchEvent(new Event('submit'));
+      const request = http.expectOne('/api/users/admin-id/password');
+      expect(request.request.body).toEqual({ password: 'abcdef' });
+      request.flush(null, { status: 204, statusText: 'No Content' });
     } finally {
       confirm.mockRestore();
     }

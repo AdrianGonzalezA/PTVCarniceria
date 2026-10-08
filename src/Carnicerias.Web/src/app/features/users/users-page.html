@@ -36,8 +36,8 @@
           <label for="create-email">Correo electrónico</label>
           <input id="create-email" name="email" type="email" autocomplete="off" maxlength="320" required [value]="createEmail()" (input)="updateCreateField('email', $event)" />
           <label for="create-password">Contraseña inicial</label>
-          <input id="create-password" name="password" type="password" autocomplete="new-password" minlength="12" required [value]="createPassword()" (input)="updateCreateField('password', $event)" />
-          <p class="form-help">Mínimo 12 caracteres. Se guarda como hash; no se vuelve a mostrar.</p>
+          <input id="create-password" name="password" type="password" autocomplete="new-password" [attr.minlength]="minimumPasswordLength()" required [value]="createPassword()" (input)="updateCreateField('password', $event)" />
+          <p class="form-help">Mínimo {{ minimumPasswordLength() }} caracteres. Se guarda como hash; no se vuelve a mostrar.</p>
           <fieldset>
             <legend>Sucursales habilitadas</legend>
             @for (branch of branches(); track branch.branchId) {
@@ -81,11 +81,12 @@
       }
 
       @if (passwordUserId()) {
-        <form class="user-editor" (submit)="$event.preventDefault(); resetCashierPassword()">
+        <form class="user-editor" (submit)="$event.preventDefault(); resetUserPassword()">
           <h3>Restablecer contraseña de {{ passwordUsername() }}</h3>
-          <p>El cajero deberá usar la contraseña nueva para ingresar. Sus sesiones actuales se cerrarán.</p>
+          <p>Este usuario deberá usar la contraseña nueva para ingresar. Sus sesiones actuales se cerrarán.</p>
           <label for="reset-password">Contraseña nueva</label>
-          <input id="reset-password" name="new-password" type="password" autocomplete="new-password" minlength="12" required [value]="resetPasswordDraft()" (input)="updateResetPassword($event)" />
+          <input id="reset-password" name="new-password" type="password" autocomplete="new-password" [attr.minlength]="minimumPasswordLength()" required [value]="resetPasswordDraft()" (input)="updateResetPassword($event)" />
+          <p class="form-help">Mínimo {{ minimumPasswordLength() }} caracteres.@if (passwordUserId() === currentUserId()) { Al cambiar tu propia clave, volverás al ingreso. }</p>
           <div class="editor-actions">
             <button type="submit" [disabled]="resettingPassword()">{{ resettingPassword() ? 'Guardando…' : 'Restablecer' }}</button>
             <button type="button" class="secondary-button" [disabled]="resettingPassword()" (click)="closePasswordReset()">Cancelar</button>
@@ -197,7 +198,7 @@
                         Cerrar sesiones
                       </button>
                       <button type="button" class="secondary-button" [disabled]="actionUserId() !== null" (click)="openAssignments(user.userId)">Sucursales</button>
-                      <button type="button" class="secondary-button" [disabled]="actionUserId() !== null || currentUserId() === user.userId" (click)="openPasswordReset(user.userId)">Contraseña</button>
+                      <button type="button" class="secondary-button" [disabled]="actionUserId() !== null" (click)="openPasswordReset(user.userId)">Contraseña</button>
                       }
                       </div>
                     </td>

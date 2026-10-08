@@ -50,9 +50,10 @@ El primer incremento publicable comprende navegación administrativa y ABM de ca
 
 ## Usuarios y asignaciones
 
-- El administrador existente es el único usuario con rol `administrator` en este corte. El alta desde el sitio crea únicamente cuentas con el rol `cashier`, contraseña inicial de al menos 12 caracteres y asignación a una o más sucursales activas de la empresa del contexto actual. No se crea otro rol.
+- El administrador existente es el único usuario con rol `administrator` en este corte. El alta desde el sitio crea únicamente cuentas con el rol `cashier` y asignación a una o más sucursales activas de la empresa del contexto actual. La contraseña inicial requiere al menos 12 caracteres, salvo en la base visual local de desarrollo, donde se admiten 6. No se crea otro rol.
 - El listado, la edición de datos y las asignaciones sólo muestran usuarios vinculados a la empresa del contexto. Las asignaciones del administrador no se pueden reemplazar desde el sitio. Al cambiar las sucursales del cajero, se cierran sus sesiones anteriores; no se puede quitar una sucursal donde tenga turno o ticket abierto ni dejarlo sin sucursales.
-- La inactivación de una cuenta se rechaza si el usuario mantiene turnos o tickets abiertos, incluso en otra empresa. Restablecer la contraseña de un cajero revoca sus sesiones y nunca devuelve el hash ni la contraseña anterior. El administrador no puede restablecer su propia contraseña por este flujo de terceros.
+- La inactivación de una cuenta se rechaza si el usuario mantiene turnos o tickets abiertos, incluso en otra empresa. El administrador puede restablecer la contraseña de cualquier usuario vinculado a la empresa del contexto, incluida su propia cuenta y otra cuenta administrativa si existiera. El restablecimiento revoca todas las sesiones de ese usuario; si es la propia cuenta, la interfaz vuelve al ingreso. Nunca se devuelve el hash ni la contraseña anterior. La longitud mínima es 12, salvo en la base visual local de desarrollo (`127.0.0.1:55433/carnicerias_test_visual`), donde es 6 y la interfaz consulta la política al API.
+- `GET /api/users/password-policy` devuelve `{ "minimumLength": número }` y `PUT /api/users/{userId}/password` recibe `{ "password": texto }`, devuelve `204` y no es idempotente respecto de sesiones activas. Ambos requieren `platform.users.manage`; el restablecimiento devuelve `404` si el usuario no pertenece a la empresa del contexto y `400` para una clave inválida.
 
 ## Consulta histórica
 

@@ -19,6 +19,7 @@ export class UsersPage implements OnInit {
   protected readonly currentUsername = signal('');
   protected readonly currentUserId = signal('');
   protected readonly currentCompanyName = signal('');
+  protected readonly minimumPasswordLength = signal(12);
   protected readonly branches = signal<readonly OperationalBranchOption[]>([]);
   protected readonly createOpen = signal(false);
   protected readonly createUsername = signal('');
@@ -70,6 +71,10 @@ export class UsersPage implements OnInit {
         this.currentUserId.set(session.userId);
         this.currentCompanyName.set(session.context.companyName);
         this.loadUsers(1);
+        this.usersClient.passwordPolicy().subscribe({
+          next: (policy) => this.minimumPasswordLength.set(policy.minimumLength),
+          error: () => this.actionError.set('No se pudo consultar la política de contraseñas.'),
+        });
         this.sessionClient.operationalContexts().subscribe({
           next: (companies) => this.branches.set(companies.find((company) =>
             company.companyId === session.context?.companyId)?.branches ?? []),
@@ -113,8 +118,8 @@ export class UsersPage implements OnInit {
     const email = this.createEmail().trim();
     const password = this.createPassword();
     const branchIds = this.createBranchIds();
-    if (!username || !email || password.length < 12 || branchIds.length === 0 || this.creating()) {
-      this.actionError.set('Completá usuario, correo, contraseña de al menos 12 caracteres y una sucursal.');
+    if (!username || !email || password.length < this.minimumPasswordLength() || branchIds.length === 0 || this.creating()) {
+      this.actionError.set(`Completá usuario, correo, contraseña de al menos ${this.minimumPasswordLength()} caracteres y una sucursal.`);
       return;
     }
     this.creating.set(true);
@@ -192,7 +197,6 @@ export class UsersPage implements OnInit {
   }
 
   protected openPasswordReset(userId: string): void {
-    if (userId === this.currentUserId()) return;
     this.passwordUserId.set(userId);
     this.resetPasswordDraft.set('');
     this.actionError.set(null);
@@ -208,25 +212,26 @@ export class UsersPage implements OnInit {
     this.resetPasswordDraft.set((event.target as HTMLInputElement).value);
   }
 
-  protected resetCashierPassword(): void {
+  protected resetUserPassword(): void {
     const userId = this.passwordUserId();
     const password = this.resetPasswordDraft();
-    if (!userId || password.length < 12 || this.resettingPassword()) {
-      this.actionError.set('La contraseña nueva debe tener al menos 12 caracteres.');
+    if (!userId || password.length < this.minimumPasswordLength() || this.resettingPassword()) {
+      this.actionError.set(`La contraseña nueva debe tener al menos ${this.minimumPasswordLength()} caracteres.`);
       return;
     }
-    if (!window.confirm('¿Restablecer la contraseña y cerrar las sesiones de este cajero?')) return;
+    if (!window.confirm('¿Restablecer la contraseña y cerrar las sesiones de este usuario?')) return;
     this.resettingPassword.set(true);
     this.actionError.set(null);
-    this.usersClient.resetCashierPassword(userId, password).subscribe({
+    this.usersClient.resetUserPassword(userId, password).subscribe({
       next: () => {
         this.resettingPassword.set(false);
         this.closePasswordReset();
         this.actionMessage.set('Contraseña actualizada. Las sesiones anteriores se cerraron.');
+        if (userId === this.currentUserId()) void this.router.navigateByUrl('/');
       },
       error: () => {
         this.resettingPassword.set(false);
-        this.actionError.set('No se pudo restablecer la contraseña del cajero.');
+        this.actionError.set('No se pudo restablecer la contraseña del usuario.');
       },
     });
   }

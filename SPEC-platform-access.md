@@ -277,7 +277,7 @@ Los errores de autenticación utilizarán un mensaje genérico idéntico para us
 5. Al completar el restablecimiento se invalidarán los demás tokens de recuperación y las sesiones activas del usuario.
 6. El correo incluirá la identificación de la instalación y una URL base configurada externamente; no se construirá desde encabezados no confiables de la solicitud.
 7. La solicitud y el resultado del restablecimiento emitirán eventos para `audit-operations` sin incluir el token ni la contraseña.
-8. El Administrador podrá iniciar un restablecimiento o exigir cambio de contraseña, pero nunca establecer o visualizar secretamente la contraseña definitiva del usuario.
+8. El Administrador podrá establecer una contraseña nueva para cualquier usuario de la empresa administrada, incluida su propia cuenta. El sistema sólo almacena su hash y revoca las sesiones anteriores; nunca devuelve ni permite consultar la contraseña anterior o el hash. La recuperación por correo con token de un solo uso permanece como capacidad futura independiente.
 
 ## Autorización y aislamiento
 

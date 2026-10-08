@@ -17,13 +17,17 @@ public static class UserEndpoints
     {
         endpoints.MapGet("/api/users", ListUsersAsync)
             .RequireOperationalPermission(PlatformPermissionCatalog.UsersManage);
+        endpoints.MapGet("/api/users/password-policy", (PlatformAccessDbContext db) =>
+                Results.Ok(new PasswordPolicyResponse(
+                    VisualDevelopmentPasswordPolicy.MinimumLength(db.Database.GetConnectionString()))))
+            .RequireOperationalPermission(PlatformPermissionCatalog.UsersManage);
         endpoints.MapPost("/api/users", CreateCashierAsync)
             .RequireOperationalPermission(PlatformPermissionCatalog.UsersManage);
         endpoints.MapGet("/api/users/{userId:guid}/assignments", ListAssignmentsAsync)
             .RequireOperationalPermission(PlatformPermissionCatalog.UsersManage);
         endpoints.MapPut("/api/users/{userId:guid}/assignments", ReplaceCashierAssignmentsAsync)
             .RequireOperationalPermission(PlatformPermissionCatalog.UsersManage);
-        endpoints.MapPut("/api/users/{userId:guid}/password", ResetCashierPasswordAsync)
+        endpoints.MapPut("/api/users/{userId:guid}/password", ResetUserPasswordAsync)
             .RequireOperationalPermission(PlatformPermissionCatalog.UsersManage);
         endpoints.MapPatch("/api/users/{userId:guid}", UpdateUserAsync)
             .RequireOperationalPermission(PlatformPermissionCatalog.UsersManage);
@@ -101,7 +105,8 @@ public static class UserEndpoints
     {
         if (!AllowedOrigin(httpContext)) return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
         if (request is null || !ValidUsername(request.Username) || !IsValidEmail(request.Email) ||
-            !ValidPassword(request.Password) || !ValidBranchIds(request.BranchIds))
+            !VisualDevelopmentPasswordPolicy.IsValid(request.Password, db.Database.GetConnectionString()) ||
+            !ValidBranchIds(request.BranchIds))
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var companyId = operationalContext.Context.CompanyId;
@@ -201,7 +206,7 @@ public static class UserEndpoints
         return Results.Ok(new UserAssignmentsResponse("cashier", requested.Order().ToArray()));
     }
 
-    private static async Task<IResult> ResetCashierPasswordAsync(
+    private static async Task<IResult> ResetUserPasswordAsync(
         Guid userId,
         ResetPasswordRequest? request,
         PlatformAccessDbContext db,
@@ -212,22 +217,15 @@ public static class UserEndpoints
         CancellationToken cancellationToken)
     {
         if (!AllowedOrigin(httpContext)) return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
-        if (userId == Guid.Empty || request is null || !ValidPassword(request.Password))
+        if (userId == Guid.Empty || request is null ||
+            !VisualDevelopmentPasswordPolicy.IsValid(request.Password, db.Database.GetConnectionString()))
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
-        if (userId == operationalContext.Context.UserId)
-            return Error(StatusCodes.Status409Conflict, "SELF_ACCESS_CHANGE_REJECTED");
 
         var companyId = operationalContext.Context.CompanyId;
         var user = await db.Users.SingleOrDefaultAsync(item => item.Id == userId &&
             db.UserAssignments.Any(assignment => assignment.UserId == item.Id &&
                 assignment.CompanyId == companyId), cancellationToken);
         if (user is null) return Error(StatusCodes.Status404NotFound, "USER_NOT_FOUND");
-        var cashierRoleId = await db.Roles.AsNoTracking().Where(role => role.Code == "cashier")
-            .Select(role => (Guid?)role.Id).SingleOrDefaultAsync(cancellationToken);
-        if (cashierRoleId is null || await db.UserAssignments.AnyAsync(assignment =>
-            assignment.UserId == userId && db.Roles.Any(role => role.Id == assignment.RoleId &&
-                role.Code == "administrator"), cancellationToken))
-            return Error(StatusCodes.Status409Conflict, "ADMIN_PASSWORD_RESET_REJECTED");
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         user.SetPasswordHash(passwordHasher.Hash(request.Password));
@@ -385,10 +383,6 @@ public static class UserEndpoints
         !string.IsNullOrWhiteSpace(username) &&
         username.Trim().Normalize(NormalizationForm.FormKC).Length <= 100;
 
-    private static bool ValidPassword(string? password) =>
-        !string.IsNullOrWhiteSpace(password) && password.Length >= 12 &&
-        Encoding.UTF8.GetByteCount(password) <= 1024;
-
     private static bool ValidBranchIds(Guid[]? branchIds) =>
         branchIds is { Length: > 0 and <= 100 } &&
         branchIds.All(id => id != Guid.Empty) && branchIds.Distinct().Count() == branchIds.Length;
@@ -431,5 +425,6 @@ public static class UserEndpoints
     private sealed record CreateCashierRequest(string Username, string Email, string Password, Guid[] BranchIds);
     private sealed record ReplaceAssignmentsRequest(Guid[] BranchIds);
     private sealed record ResetPasswordRequest(string Password);
+    private sealed record PasswordPolicyResponse(int MinimumLength);
     private sealed record UserAssignmentsResponse(string Role, Guid[] BranchIds);
 }

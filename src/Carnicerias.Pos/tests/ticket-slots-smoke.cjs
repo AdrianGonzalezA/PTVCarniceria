@@ -56,15 +56,35 @@ async function main() {
     await send('Page.reload', { ignoreCache: true });
     await waitFor("document.querySelectorAll('.ticket-tab').length === 4 && !!document.querySelector('.price-list-lock')?.innerText.includes('Borrador guardado') && !!document.querySelector('.ticket-tab[aria-current=page]')?.innerText.includes('Guardado')");
   }
+  if (process.argv.includes('--dismiss-receipt')) {
+    await evaluate("document.querySelector('.sale-receipt .finish-button')?.click()");
+    await waitFor("!document.querySelector('.sale-receipt')");
+  }
   const switchOption = process.argv.find((argument) => /^--switch=[ABCD]$/.test(argument));
   if (switchOption) await switchTo(switchOption.at(-1));
 
-  if (process.argv.includes('--check-saved-marker')) {
-    if (!(await activeSlot())?.startsWith('Ticket C') || await lineCount() !== 0)
-      throw new Error('El Ticket C no está vacío; se omite la carga para conservar los datos existentes.');
-    await addProduct('Pan rallado');
+  const addOption = process.argv.find((argument) => argument.startsWith('--add-current='));
+  if (addOption) {
+    const productName = addOption.slice('--add-current='.length);
+    if (!productName || await lineCount() !== 0)
+      throw new Error('El ticket no está vacío; se omite la carga para conservar los datos existentes.');
+    await addProduct(productName);
     await waitFor("document.querySelector('.ticket-tab[aria-current=page]')?.innerText.includes('Guardado')");
-    console.log('El Ticket C quedó guardado y marcado como ocupado en Electron.');
+    console.log(`${await activeSlot()} quedó guardado y marcado como ocupado en Electron.`);
+  }
+
+  const confirmOption = process.argv.find((argument) => argument.startsWith('--confirm-current='));
+  if (confirmOption) {
+    const productName = confirmOption.slice('--confirm-current='.length);
+    if (!productName || await lineCount() !== 1 ||
+        !await evaluate(`document.querySelector('.line-table')?.innerText.includes(${JSON.stringify(productName)})`))
+      throw new Error('El ticket no contiene solo el producto esperado; se omite la confirmación.');
+    await evaluate("document.querySelector('.sale-footer .finish-button')?.click()");
+    await waitFor("!!document.querySelector('.checkout-dialog')");
+    await evaluate("document.querySelector('.checkout-dialog .finish-button')?.click()");
+    await waitFor("!!document.querySelector('.sale-receipt')");
+    await waitFor("!document.querySelector('.ticket-tab[aria-current=page]')?.innerText.includes('Guardado')");
+    console.log(`${await activeSlot()} confirmado en Electron; la marca de borrador desapareció.`);
   }
 
   if (process.argv.includes('--prepare')) {

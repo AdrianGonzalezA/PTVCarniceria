@@ -28,6 +28,14 @@ public sealed class PosTerminal
 
     public string? CredentialHash { get; private set; }
 
+    public void Rename(string name)
+    {
+        if (IsHistorical) throw new InvalidOperationException("Historical terminals cannot be renamed.");
+        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 120)
+            throw new ArgumentException("Terminal name must be between 1 and 120 characters.", nameof(name));
+        Name = name.Trim();
+    }
+
     public void AssignCredentialHash(string hash)
     {
         if (IsHistorical)
@@ -39,4 +47,10 @@ public sealed class PosTerminal
     }
 
     public void Deactivate() => IsActive = false;
+
+    public void ReactivateWithCredentialHash(string hash)
+    {
+        AssignCredentialHash(hash);
+        IsActive = true;
+    }
 }

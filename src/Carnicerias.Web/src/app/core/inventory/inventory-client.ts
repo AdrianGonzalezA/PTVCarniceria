@@ -5,6 +5,8 @@ export interface InventoryStockItem {
   readonly productId: string;
   readonly code: string;
   readonly name: string;
+  readonly unit?: string;
+  readonly saleMode?: 'weight' | 'unit';
   readonly onHand: number;
   readonly reserved: number;
   readonly available: number;

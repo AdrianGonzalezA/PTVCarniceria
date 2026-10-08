@@ -40,6 +40,14 @@ El primer incremento publicable comprende navegación administrativa y ABM de ca
 - El precio de un artículo se define por lista, debe ser positivo y no inferior al costo vigente. Un cambio cierra el precio anterior y abre otro con fecha y usuario responsables en una transacción. Los tickets ya guardados mantienen sus importes snapshot.
 - Si el costo de un artículo sube por encima de alguno de sus precios vigentes, la edición se rechaza hasta ajustar primero esos precios.
 
+## Organización y existencias
+
+- Una empresa nueva nace con su primera sucursal, indicada en el formulario, y el administrador que la crea recibe allí la asignación de su rol existente. No se crea otro usuario ni otro rol.
+- Sucursales y empresas se renombran o inactivan sin borrado físico. Se rechaza la inactivación de la sucursal del contexto actual y de cualquier sucursal con turno o borrador abierto. No se inactiva una empresa desde su propio contexto ni si alguna sucursal tiene operaciones abiertas.
+- El stock se consulta por sucursal y los ajustes reutilizan el ledger de movimientos, con motivo y clave de idempotencia; nunca se edita un saldo directamente.
+- La pantalla de existencias opera exclusivamente sobre la sucursal del contexto activo. Para otra sucursal, el administrador cambia el contexto de su sesión; la API no acepta un identificador de sucursal arbitrario en el ajuste. Se muestran existencia, reserva y disponible. El ajuste de productos por unidad exige enteros y el de peso admite hasta tres decimales. El motivo es obligatorio y una salida que deje menos que lo reservado se rechaza. Ante una respuesta fallida, el mismo envío puede reintentarse con la misma clave de operación.
+- Las cajas se administran dentro de su sucursal, con nombre y estado. Crear, reactivar o rotar emite una credencial nueva que se muestra una sola vez; el listado no incluye secretos. Inactivar o rotar una caja con turno o borrador abierto se rechaza y el cambio revoca sus sesiones.
+
 ## Tecnología y comandos
 
 - Angular 22, formularios reactivos, rutas protegidas y `HttpClient` en `src/Carnicerias.Web`.

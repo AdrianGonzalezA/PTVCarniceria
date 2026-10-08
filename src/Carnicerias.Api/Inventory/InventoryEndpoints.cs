@@ -36,6 +36,8 @@ public static class InventoryEndpoints
                         product.Id,
                         product.Code,
                         product.Name,
+                        product.Unit,
+                        product.SaleMode == ProductSaleMode.Unit ? "unit" : "weight",
                         stock == null ? 0 : stock.OnHand,
                         stock == null ? 0 : stock.Reserved,
                         stock == null ? 0 : stock.OnHand - stock.Reserved);
@@ -131,6 +133,7 @@ public static class InventoryEndpoints
         statusCode: statusCode);
 
     private sealed record AdjustStockRequest(Guid ProductId, Guid OperationId, decimal QuantityDelta, string Reason);
-    private sealed record StockItem(Guid ProductId, string Code, string Name, decimal OnHand, decimal Reserved, decimal Available);
+    private sealed record StockItem(Guid ProductId, string Code, string Name, string Unit,
+        string SaleMode, decimal OnHand, decimal Reserved, decimal Available);
     private sealed record StockAdjustmentResponse(Guid OperationId, decimal OnHand, decimal Reserved, decimal Available);
 }

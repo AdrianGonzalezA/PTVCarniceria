@@ -1,0 +1,83 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" routerLink="/admin" aria-label="Volver a administración">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Administración</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+
+  <div class="workspace">
+    <a class="back-link" routerLink="/admin">← Volver a administración</a>
+    <p class="eyebrow">Inventario</p>
+    <h1>Existencias</h1>
+    <p class="intro">Consultá el stock disponible y registrá entradas o salidas con un motivo.</p>
+
+    @if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Contexto de trabajo">
+        <div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Sucursal</span><strong>{{ context.branchName }}</strong></div>
+        <a routerLink="/">Cambiar sucursal</a>
+      </section>
+    }
+
+    <section class="category-panel" aria-labelledby="stock-title" [attr.aria-busy]="loading()">
+      <header class="panel-heading">
+        <div>
+          <h2 id="stock-title">Stock de esta sucursal</h2>
+          <p>Disponible = existencia − reservado en tickets abiertos. Cada ajuste deja un movimiento.</p>
+        </div>
+        <button type="button" class="secondary-button" [disabled]="loading()" (click)="load()">Actualizar</button>
+      </header>
+
+      @if (actionMessage(); as message) { <p class="success-message" role="status">{{ message }}</p> }
+      @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+
+      @if (selected(); as item) {
+        <form class="editor-form stock-form" [formGroup]="adjustmentForm" (ngSubmit)="saveAdjustment()">
+          <h3>Ajustar {{ item.name }}</h3>
+          <p>Actual: {{ item.onHand }} {{ item.unit ?? 'u.' }} · Reservado: {{ item.reserved }} · Disponible: {{ item.available }}</p>
+          <label for="stock-delta">Variación de cantidad (positiva para entrada, negativa para salida)</label>
+          <input id="stock-delta" type="number" formControlName="quantityDelta" [attr.step]="item.saleMode === 'unit' ? '1' : '0.001'" [attr.aria-describedby]="'stock-delta-help'" required />
+          <p id="stock-delta-help" class="field-hint">{{ item.saleMode === 'unit' ? 'Sólo unidades enteras.' : 'Hasta tres decimales.' }}</p>
+          <label for="stock-reason">Motivo</label>
+          <input id="stock-reason" formControlName="reason" maxlength="240" autocomplete="off" required />
+          <div class="editor-actions">
+            <button type="submit" [disabled]="saving()">{{ saving() ? 'Guardando…' : 'Registrar ajuste' }}</button>
+            <button type="button" class="secondary-button" [disabled]="saving()" (click)="cancelAdjustment()">Cancelar</button>
+          </div>
+        </form>
+      }
+
+      <div class="search-form">
+        <label for="stock-search">Buscar artículo</label>
+        <input id="stock-search" type="search" [value]="search()" (input)="updateSearch($event)" placeholder="Nombre o código" />
+      </div>
+
+      @if (loading()) {
+        <p class="state-message" role="status">Cargando existencias…</p>
+      } @else if (loadError(); as error) {
+        <p class="error-message" role="alert">{{ error }} <button type="button" (click)="load()">Reintentar</button></p>
+      } @else if (visibleItems().length === 0) {
+        <p class="state-message" role="status">{{ search() ? 'No se encontraron artículos.' : 'Todavía no hay artículos activos.' }}</p>
+      } @else {
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Artículo</th><th scope="col">Existencia</th><th scope="col">Reservado</th><th scope="col">Disponible</th><th scope="col">Acción</th></tr></thead>
+            <tbody>
+              @for (item of visibleItems(); track item.productId) {
+                <tr class="stock-row">
+                  <td><strong>{{ item.name }}</strong><small>{{ item.code }}</small></td>
+                  <td>{{ item.onHand }} {{ item.unit ?? 'u.' }}</td>
+                  <td>{{ item.reserved }} {{ item.unit ?? 'u.' }}</td>
+                  <td>{{ item.available }} {{ item.unit ?? 'u.' }}</td>
+                  <td><button type="button" class="secondary-button" [disabled]="saving()" (click)="startAdjustment(item)">Ajustar</button></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  </div>
+</main>

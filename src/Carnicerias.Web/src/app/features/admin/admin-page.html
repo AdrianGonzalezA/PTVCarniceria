@@ -48,6 +48,18 @@
               <span aria-hidden="true">→</span>
             </a>
           }
+          @if (context.permissions.includes('organization.manage')) {
+            <a class="module-link" routerLink="/admin/organization">
+              <span><strong>Organización</strong><small>Empresas, sucursales y su estado operativo.</small></span>
+              <span aria-hidden="true">→</span>
+            </a>
+          }
+          @if (context.permissions.includes('inventory.stock.manage')) {
+            <a class="module-link" routerLink="/admin/stock">
+              <span><strong>Existencias</strong><small>Consultar stock y registrar entradas o salidas de la sucursal.</small></span>
+              <span aria-hidden="true">→</span>
+            </a>
+          }
           <a class="module-link" routerLink="/users">
             <span><strong>Usuarios</strong><small>Consultar cuentas, modificar datos y controlar el acceso.</small></span>
             <span aria-hidden="true">→</span>

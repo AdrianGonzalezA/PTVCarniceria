@@ -39,9 +39,9 @@ La prioridad pasa al sitio administrativo sin modificar la base única `carnicer
 
 ### A5. Organización y stock
 
-- [ ] ABM seguro de empresas y sucursales con inactivación restringida por operaciones pendientes.
-- [ ] Gestión de terminales y credenciales de un solo uso.
-- [ ] Pantalla de existencias/ajustes que reutilice el endpoint de movimientos existente.
+- [x] ABM seguro de empresas y sucursales con inactivación restringida por operaciones pendientes.
+- [x] Gestión de terminales y credenciales de un solo uso.
+- [x] Pantalla de existencias/ajustes que reutilice el endpoint de movimientos existente.
 
 ### A6. Usuarios y consulta histórica
 

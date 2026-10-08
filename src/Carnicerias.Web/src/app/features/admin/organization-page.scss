@@ -1,0 +1,16 @@
+.branches-panel { margin-top: 1.5rem; }
+.terminals-panel { margin-top: 1.5rem; }
+.header-actions { display: flex; gap: 0.5rem; }
+.credential-notice { display: grid; gap: 0.5rem; margin: 1rem; padding: 1rem; color: #003b3b; background: #c6e8e3; border: 2px solid #008b8b; }
+.credential-notice code { overflow-wrap: anywhere; font-size: 1.15rem; }
+.credential-notice button { justify-self: start; }
+.panel-eyebrow { margin: 0 0 0.25rem !important; color: #005e60; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; }
+.selected-row { background: #dceeed; }
+.field-error { margin: 0; color: #a32222; }
+.secondary-button { background: #fff; border-color: #b2b2b2; }
+.editor-form { max-width: 40rem; }
+
+@media (max-width: 42rem) {
+  .panel-heading { align-items: stretch; flex-direction: column; }
+  .header-actions { flex-wrap: wrap; }
+}

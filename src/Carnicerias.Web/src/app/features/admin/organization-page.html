@@ -1,0 +1,200 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" routerLink="/admin" aria-label="Volver a administración">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Administración</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+
+  <div class="workspace">
+    <a class="back-link" routerLink="/admin">← Volver a administración</a>
+    <p class="eyebrow">Configuración</p>
+    <h1>Organización</h1>
+    <p class="intro">Administrá empresas y sucursales sin borrar movimientos ni tickets.</p>
+
+    @if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Contexto de trabajo">
+        <div><span>Empresa de sesión</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Sucursal de sesión</span><strong>{{ context.branchName }}</strong></div>
+      </section>
+    }
+
+    @if (actionMessage(); as message) { <p class="success-message" role="status">{{ message }}</p> }
+    @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+
+    <section class="category-panel" aria-labelledby="companies-title" [attr.aria-busy]="companiesLoading()">
+      <header class="panel-heading">
+        <div>
+          <h2 id="companies-title">Empresas asignadas</h2>
+          <p>Una empresa nueva se crea con su primera sucursal y tu rol administrador existente.</p>
+        </div>
+        <button type="button" class="create-company-button" (click)="startCreateCompany()">Nueva empresa</button>
+      </header>
+
+      @if (companyEditorOpen()) {
+        <form class="editor-form company-form" [formGroup]="companyForm" (ngSubmit)="saveCompany()">
+          <h3>{{ editingCompany() ? 'Editar empresa' : 'Nueva empresa' }}</h3>
+          <label for="company-name">Nombre de la empresa</label>
+          <input id="company-name" formControlName="name" maxlength="200" required />
+          @if (!editingCompany()) {
+            <label for="initial-branch-name">Primera sucursal</label>
+            <input id="initial-branch-name" formControlName="initialBranchName" maxlength="200" required />
+          }
+          @if (companyForm.touched && companyForm.invalid) {
+            <p class="field-error" role="alert">Ingresá nombres de hasta 200 caracteres.</p>
+          }
+          <div class="editor-actions">
+            <button type="submit" [disabled]="companySaving()">{{ companySaving() ? 'Guardando…' : 'Guardar' }}</button>
+            <button type="button" class="secondary-button" [disabled]="companySaving()" (click)="cancelCompany()">Cancelar</button>
+          </div>
+        </form>
+      }
+
+      @if (companiesError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+      @if (companiesLoading()) {
+        <p class="state-message" role="status">Cargando empresas…</p>
+      } @else if (companies().length === 0) {
+        <p class="state-message">No tenés empresas asignadas.</p>
+      } @else {
+        <div class="table-wrap"><table>
+          <thead><tr><th scope="col">Empresa</th><th scope="col">Sucursales activas</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr></thead>
+          <tbody>
+            @for (company of companies(); track company.id) {
+              <tr class="company-row" [class.selected-row]="selectedCompany()?.id === company.id">
+                <td><strong>{{ company.name }}</strong></td>
+                <td>{{ company.activeBranchCount }}</td>
+                <td><span class="status" [class.status-active]="company.isActive">{{ company.isActive ? 'Activa' : 'Inactiva' }}</span></td>
+                <td class="row-actions">
+                  <button type="button" class="secondary-button" (click)="selectCompany(company)">Sucursales</button>
+                  <button type="button" class="secondary-button" (click)="startEditCompany(company)">Editar</button>
+                  <button type="button" class="secondary-button toggle-button" [disabled]="companyActionId() !== null || (company.isActive && session()?.context?.companyId === company.id)" (click)="toggleCompany(company)">
+                    {{ companyActionId() === company.id ? 'Guardando…' : company.isActive ? 'Inactivar' : 'Activar' }}
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table></div>
+      }
+    </section>
+
+    @if (selectedCompany(); as company) {
+      <section class="category-panel branches-panel" aria-labelledby="branches-title" [attr.aria-busy]="branchesLoading()">
+        <header class="panel-heading">
+          <div>
+            <p class="panel-eyebrow">{{ company.name }}</p>
+            <h2 id="branches-title">Sucursales</h2>
+          </div>
+          <button type="button" class="create-branch-button" [disabled]="!company.isActive" (click)="startCreateBranch()">Nueva sucursal</button>
+        </header>
+
+        @if (branchEditorOpen()) {
+          <form class="editor-form branch-form" [formGroup]="branchForm" (ngSubmit)="saveBranch()">
+            <h3>{{ editingBranch() ? 'Editar sucursal' : 'Nueva sucursal' }}</h3>
+            <label for="branch-name">Nombre</label>
+            <input id="branch-name" formControlName="name" maxlength="200" required />
+            @if (branchForm.controls.name.touched && branchForm.controls.name.invalid) {
+              <p class="field-error" role="alert">Ingresá un nombre de hasta 200 caracteres.</p>
+            }
+            <div class="editor-actions">
+              <button type="submit" [disabled]="branchSaving()">{{ branchSaving() ? 'Guardando…' : 'Guardar' }}</button>
+              <button type="button" class="secondary-button" [disabled]="branchSaving()" (click)="cancelBranch()">Cancelar</button>
+            </div>
+          </form>
+        }
+
+        @if (branchesError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+        @if (branchesLoading()) {
+          <p class="state-message" role="status">Cargando sucursales…</p>
+        } @else if (branches().length === 0) {
+          <p class="state-message">Esta empresa no tiene sucursales.</p>
+        } @else {
+          <div class="table-wrap"><table>
+            <thead><tr><th scope="col">Sucursal</th><th scope="col">Terminales activas</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr></thead>
+            <tbody>
+              @for (branch of branches(); track branch.id) {
+                <tr class="branch-row">
+                  <td><strong>{{ branch.name }}</strong></td>
+                  <td>{{ branch.activeTerminalCount }}</td>
+                  <td><span class="status" [class.status-active]="branch.isActive">{{ branch.isActive ? 'Activa' : 'Inactiva' }}</span></td>
+                  <td class="row-actions">
+                    <button type="button" class="secondary-button terminals-button" (click)="showTerminals(branch)">Cajas</button>
+                    <button type="button" class="secondary-button" (click)="startEditBranch(branch)">Editar</button>
+                    <button type="button" class="secondary-button toggle-button" [disabled]="branchActionId() !== null || (branch.isActive && session()?.context?.companyId === company.id && session()?.context?.branchId === branch.id)" (click)="toggleBranch(branch)">
+                      {{ branchActionId() === branch.id ? 'Guardando…' : branch.isActive ? 'Inactivar' : 'Activar' }}
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table></div>
+        }
+      </section>
+    }
+
+    @if (selectedTerminalBranch(); as terminalBranch) {
+      <section class="category-panel terminals-panel" aria-labelledby="terminals-title" [attr.aria-busy]="terminalsLoading()">
+        <header class="panel-heading">
+          <div>
+            <p class="panel-eyebrow">{{ selectedCompany()?.name }} · {{ terminalBranch.name }}</p>
+            <h2 id="terminals-title">Cajas / terminales</h2>
+            <p>La credencial sólo se muestra al crear o rotar. Guardala para aprovisionar Electron.</p>
+          </div>
+          <div class="header-actions">
+            <button type="button" class="create-terminal-button" [disabled]="!terminalBranch.isActive || !selectedCompany()?.isActive" (click)="startCreateTerminal()">Nueva caja</button>
+            <button type="button" class="secondary-button" (click)="closeTerminals()">Cerrar</button>
+          </div>
+        </header>
+
+        @if (shownCredential(); as credential) {
+          <div class="credential-notice" role="status">
+            <strong>Credencial nueva: guardala ahora. No se volverá a mostrar.</strong>
+            <code>{{ credential }}</code>
+            <button type="button" (click)="clearCredential()">Ya la guardé</button>
+          </div>
+        }
+
+        @if (terminalEditorOpen()) {
+          <form class="editor-form terminal-form" [formGroup]="terminalForm" (ngSubmit)="saveTerminal()">
+            <h3>{{ editingTerminal() ? 'Editar caja' : 'Nueva caja' }}</h3>
+            <label for="terminal-name">Nombre</label>
+            <input id="terminal-name" formControlName="name" maxlength="120" required />
+            @if (terminalForm.controls.name.touched && terminalForm.controls.name.invalid) {
+              <p class="field-error" role="alert">Ingresá un nombre de hasta 120 caracteres.</p>
+            }
+            <div class="editor-actions">
+              <button type="submit" [disabled]="terminalSaving()">{{ terminalSaving() ? 'Guardando…' : 'Guardar' }}</button>
+              <button type="button" class="secondary-button" [disabled]="terminalSaving()" (click)="cancelTerminal()">Cancelar</button>
+            </div>
+          </form>
+        }
+
+        @if (terminalsError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+        @if (terminalsLoading()) {
+          <p class="state-message" role="status">Cargando cajas…</p>
+        } @else if (terminals().length === 0) {
+          <p class="state-message">Esta sucursal todavía no tiene cajas.</p>
+        } @else {
+          <div class="table-wrap"><table>
+            <thead><tr><th scope="col">Caja</th><th scope="col">Credencial</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr></thead>
+            <tbody>
+              @for (terminal of terminals(); track terminal.id) {
+                <tr class="terminal-row">
+                  <td><strong>{{ terminal.name }}</strong></td>
+                  <td>{{ terminal.hasCredential ? 'Aprovisionada' : 'Sin credencial' }}</td>
+                  <td><span class="status" [class.status-active]="terminal.isActive">{{ terminal.isHistorical ? 'Histórica' : terminal.isActive ? 'Activa' : 'Inactiva' }}</span></td>
+                  <td class="row-actions">
+                    <button type="button" class="secondary-button" [disabled]="terminal.isHistorical" (click)="startEditTerminal(terminal)">Editar</button>
+                    <button type="button" class="secondary-button" [disabled]="terminalActionId() !== null || !terminal.isActive" (click)="rotateTerminal(terminal)">Rotar credencial</button>
+                    <button type="button" class="secondary-button" [disabled]="terminalActionId() !== null || terminal.isHistorical || (!terminal.isActive && (!terminalBranch.isActive || !selectedCompany()?.isActive))" (click)="toggleTerminal(terminal)">{{ terminal.isActive ? 'Inactivar' : 'Reactivar' }}</button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table></div>
+        }
+      </section>
+    }
+  </div>
+</main>

@@ -100,6 +100,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.ToTable("companies");
             entity.HasKey(company => company.Id);
             entity.Property(company => company.Name).HasMaxLength(200).IsRequired();
+            entity.HasIndex(company => company.Name).IsUnique();
         });
 
         modelBuilder.Entity<Branch>(entity =>
@@ -108,6 +109,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasKey(branch => branch.Id);
             entity.Property(branch => branch.Name).HasMaxLength(200).IsRequired();
             entity.HasAlternateKey(branch => new { branch.CompanyId, branch.Id });
+            entity.HasIndex(branch => new { branch.CompanyId, branch.Name }).IsUnique();
             entity.HasOne<Company>().WithMany().HasForeignKey(branch => branch.CompanyId).OnDelete(DeleteBehavior.Restrict);
         });
 

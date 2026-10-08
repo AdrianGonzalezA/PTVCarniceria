@@ -2,7 +2,7 @@
 
 ## Estado
 
-**Aprobada para comenzar el desarrollo el 8 de octubre de 2026.** Corresponde al módulo `inventory-traceability` de `CAPABILITY-MAP-pos-peripherals.md`. Los ejemplos reales de ciclo 2 y la regla de relectura manual siguen pendientes.
+**Aprobada para comenzar el desarrollo el 8 de octubre de 2026.** Corresponde al módulo `inventory-traceability` de `CAPABILITY-MAP-pos-peripherals.md`. Ya se recibió un ejemplo de registros del ERP cárnico; siguen pendientes la estructura final de la etiqueta y la regla de relectura manual.
 
 ## Objetivo
 
@@ -10,10 +10,20 @@ Conservar cada pieza recibida del frigorífico/abastecedor como una unidad ident
 
 ## Reglas confirmadas
 
-- El código de ciclo 2 aporta el identificador de producto y los kilos. Su estructura debe configurarse por implementación; no se fijan posiciones ni prefijos antes de ver etiquetas reales.
+- En el ejemplo de ciclo 2, el código aporta `PRO_IDENTIF` (identificador externo único de pieza en el ERP emisor) y los kilos. Su estructura debe configurarse por implementación; no se fijan posiciones ni prefijos definitivos antes de ver etiquetas reales. La correspondencia con el producto de catálogo se resolverá con los datos del ERP.
 - Un perfil de lectura se expresará como una secuencia ordenada de campos con longitud fija, por ejemplo `pro_numero(5) pro_item(3) peso(4)`. El perfil define por separado cuántos decimales tiene `peso`: cuatro caracteres no significan por sí solos una cantidad de kilos. Los nombres y longitudes describen la etiqueta; el vínculo de esos campos con artículo, pieza y origen se configura según el sistema de origen. No se instalará el ejemplo como formato real predeterminado.
-- **Ejemplo provisional aportado por el usuario (8 de octubre de 2026):** `25066151600` puede interpretarse con `pro_identif(6) peso(5)` y 3 decimales para el peso: `PRO_IDENTIF = 250661` y `51600` equivale a **51,600 kg** (51 kg y 600 g). Es un caso de prueba, no un perfil definitivo ni activado. Falta confirmar el formato completo, otros campos posibles y si el identificador corresponde a un artículo de catálogo en cada implementación.
-- Ese código de ejemplo contiene producto y peso, pero no prueba identidad única de bulto ni procedencia. Dos piezas podrían tener el mismo producto y el mismo peso, e incluso la misma cadena de barras. La política de una segunda lectura manual de la misma cadena queda expresamente **sin definir**; no usar la cadena, el producto ni el peso como clave para descartar una pieza hasta acordar esa regla y los datos de origen.
+- **Ejemplo provisional de etiqueta (8 de octubre de 2026):** `25066151600` puede interpretarse con `pro_identif(6) peso(5)` y 3 decimales para el peso: `PRO_IDENTIF = 250661` y `51600` equivale a **51,600 kg** (51 kg y 600 g). Coincide con la primera fila del ERP que sigue. Es un caso de prueba, no un perfil definitivo ni activado.
+- El usuario confirmó que `PRO_IDENTIF` es único en su ERP de frigorífico/abastecedor. En estos registros distingue cada pieza: no es una clave de catálogo compartida por todas las piezas del mismo producto. Conservarlo como identificador externo de pieza junto con la identidad del sistema emisor; la clave interna del POS sigue siendo independiente. No se ha confirmado que la unicidad abarque otros sistemas emisores.
+
+  | PRO_NUMERO | PRO_ITEM | PRO_IDENTIF | PRO_KILOS |
+  | ---: | ---: | ---: | ---: |
+  | 7791407 | 0 | 250661 | 51,600 |
+  | 7791406 | 0 | 250656 | 50,400 |
+  | 7791405 | 0 | 250655 | 50,600 |
+  | 7791404 | 0 | 250654 | 49,000 |
+  | 7791403 | 0 | 250630 | 48,400 |
+
+- El ejemplo de código leído sólo evidencia `PRO_IDENTIF` y kilos. Falta confirmar si `PRO_NUMERO` y `PRO_ITEM` vienen también en alguna etiqueta o únicamente en el registro/importación del ERP, y qué representan para la vinculación al catálogo. La política operativa de una segunda lectura manual del mismo `PRO_IDENTIF` sigue **sin definir**: la unicidad permite reconocer la misma pieza del ERP, pero aún hay que decidir la respuesta del sistema y las excepciones ante relectura.
 - La fórmula debe poder validarse y probarse con un código escrito manualmente antes de activarse. Una lectura con longitud o contenido incompatible se rechaza sin modificar stock ni ticket. Las versiones anteriores de perfiles deben poder explicar lecturas históricas cuando cambie un formato.
 - Dos piezas del mismo artículo pueden pesar exactamente lo mismo. Producto y peso **nunca** son una clave de unicidad ni motivo para omitir una entrada.
 - El origen puede venir de los datos de importación/remito o del código, si los ejemplos confirman que está codificado. No se presume que el código incluya frigorífico o abastecedor.
@@ -69,5 +79,5 @@ if (weightKg <= 0 || decimal.Round(weightKg, 3) != weightKg)
 ## Límites y decisiones pendientes
 
 - **Siempre:** transacción para pieza, movimiento y saldo; auditoría de fuente, actor y operación; conservar datos anteriores; distinguir entrada de stock de lectura para venta.
-- **Confirmar antes de resolver:** estructura de etiquetas reales; existencia o no de correlativo único en ellas; comportamiento ante segunda lectura manual del mismo código; cómo vincular el identificador externo con remito y origen.
+- **Confirmar antes de resolver:** estructura completa de etiquetas reales; alcance de unicidad entre distintos emisores; si `PRO_NUMERO` y `PRO_ITEM` viajan en el código o sólo en la importación; comportamiento ante segunda lectura manual del mismo `PRO_IDENTIF`; cómo vincular los campos externos con catálogo, remito y origen.
 - **Nunca:** deduplicar por producto + kilos; asumir que el código contiene el proveedor; abrir un endpoint externo sin autenticación específica; emitir como fiscal un ticket de prueba; crear una segunda base de Carnicerías.

@@ -52,17 +52,16 @@ async function main() {
     await waitFor("!!document.querySelector('.price-list-lock')?.innerText.includes('Borrador guardado') && document.querySelectorAll('.line-table tbody tr').length === 1");
   };
 
-  if (process.argv.includes('--reload')) {
-    await send('Page.reload', { ignoreCache: true });
-    await waitFor("document.querySelectorAll('.ticket-tab').length === 4 && !!document.querySelector('.price-list-lock')?.innerText.includes('Borrador guardado') && !!document.querySelector('.ticket-tab[aria-current=page]')?.innerText.includes('Guardado')");
-  }
   if (process.argv.includes('--dismiss-receipt')) {
     await evaluate("document.querySelector('.sale-receipt .finish-button')?.click()");
     await waitFor("!document.querySelector('.sale-receipt')");
   }
   const switchOption = process.argv.find((argument) => /^--switch=[ABCD]$/.test(argument));
   if (switchOption) await switchTo(switchOption.at(-1));
-
+  if (process.argv.includes('--reload')) {
+    await send('Page.reload', { ignoreCache: true });
+    await waitFor("document.querySelectorAll('.ticket-tab').length === 4 && !!document.querySelector('.price-list-lock')?.innerText.includes('Borrador guardado') && !!document.querySelector('.ticket-tab[aria-current=page]')?.innerText.includes('Guardado')");
+  }
   const addOption = process.argv.find((argument) => argument.startsWith('--add-current='));
   if (addOption) {
     const productName = addOption.slice('--add-current='.length);
@@ -85,6 +84,25 @@ async function main() {
     await waitFor("!!document.querySelector('.sale-receipt')");
     await waitFor("!document.querySelector('.ticket-tab[aria-current=page]')?.innerText.includes('Guardado')");
     console.log(`${await activeSlot()} confirmado en Electron; la marca de borrador desapareció.`);
+  }
+
+  const cancelOption = process.argv.find((argument) => argument.startsWith('--cancel-current='));
+  if (cancelOption) {
+    const productName = cancelOption.slice('--cancel-current='.length);
+    if (!productName || await lineCount() !== 1 ||
+        !await evaluate(`document.querySelector('.line-table')?.innerText.includes(${JSON.stringify(productName)})`))
+      throw new Error('El ticket no contiene solo el producto esperado; se omite la cancelación.');
+    await evaluate(`(() => {
+      const originalConfirm = window.confirm;
+      try {
+        window.confirm = () => true;
+        document.querySelector('.cancel-sale-button')?.click();
+      } finally {
+        window.confirm = originalConfirm;
+      }
+    })()`);
+    await waitFor("document.querySelectorAll('.line-table tbody tr').length === 0 && !document.querySelector('.ticket-tab[aria-current=page]')?.innerText.includes('Guardado')");
+    console.log(`${await activeSlot()} cancelado en Electron; la marca de borrador desapareció.`);
   }
 
   if (process.argv.includes('--prepare')) {

@@ -47,6 +47,11 @@ public sealed class BarcodeLayout
             fields.Add((match.Groups[1].Value.ToLowerInvariant(), width));
         }
 
+        var ean13Control = fields.FindIndex(field => field.Name == "control_ean13");
+        if (ean13Control >= 0 && (length != 13 || ean13Control != fields.Count - 1 ||
+            fields[ean13Control].Width != 1))
+            throw new ArgumentException("An EAN-13 control field must be the thirteenth digit.", nameof(formula));
+
         return new BarcodeLayout(fields, length);
     }
 
@@ -54,6 +59,17 @@ public sealed class BarcodeLayout
     {
         if (code is null || code.Length != Length)
             throw new FormatException($"The barcode must have exactly {Length} characters.");
+
+        if (fields[^1].Name == "control_ean13")
+        {
+            if (code.Any(character => character is < '0' or > '9'))
+                throw new FormatException("An EAN-13 barcode must contain only digits.");
+            var sum = 0;
+            for (var index = 0; index < 12; index++)
+                sum += (code[index] - '0') * (index % 2 == 0 ? 1 : 3);
+            if ((10 - sum % 10) % 10 != code[12] - '0')
+                throw new FormatException("The EAN-13 check digit is invalid.");
+        }
 
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var offset = 0;

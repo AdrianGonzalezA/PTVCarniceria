@@ -5,6 +5,14 @@ import { Router, RouterLink } from '@angular/router';
 import { BarcodeLayoutClient, BarcodePreviewResponse, BarcodeProfile } from '../../core/inventory/barcode-layout-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 
+const EAN13_EXAMPLE = {
+  name: 'Ciclo 2 - EAN-13 de prueba',
+  formula: 'prefijo(1) pro_identif(6) peso(5) control_ean13(1)',
+  code: '2250661516008',
+  weightField: 'peso',
+  weightDecimals: 3,
+};
+
 @Component({
   selector: 'app-barcode-layout-page',
   imports: [RouterLink, ReactiveFormsModule],
@@ -28,11 +36,11 @@ export class BarcodeLayoutPage implements OnInit {
   protected readonly fields = computed(() => Object.entries(this.result()?.fields ?? {})
     .map(([name, value]) => ({ name, value })));
   protected readonly form = this.formBuilder.nonNullable.group({
-    name: ['', [Validators.maxLength(120)]],
-    formula: ['', [Validators.required, Validators.maxLength(512)]],
-    code: ['', [Validators.required, Validators.maxLength(80)]],
-    weightField: ['peso', [Validators.required, Validators.maxLength(80)]],
-    weightDecimals: [2, [Validators.required, Validators.min(0), Validators.max(6)]],
+    name: [EAN13_EXAMPLE.name, [Validators.maxLength(120)]],
+    formula: [EAN13_EXAMPLE.formula, [Validators.required, Validators.maxLength(512)]],
+    code: [EAN13_EXAMPLE.code, [Validators.required, Validators.maxLength(80)]],
+    weightField: [EAN13_EXAMPLE.weightField, [Validators.required, Validators.maxLength(80)]],
+    weightDecimals: [EAN13_EXAMPLE.weightDecimals, [Validators.required, Validators.min(0), Validators.max(6)]],
   });
 
   ngOnInit(): void {
@@ -56,9 +64,16 @@ export class BarcodeLayoutPage implements OnInit {
     });
   }
 
+  protected useEan13Example(): void {
+    this.form.patchValue(EAN13_EXAMPLE);
+    this.result.set(null);
+    this.error.set(null);
+    this.saveNotice.set(null);
+  }
+
   protected useProfile(profile: BarcodeProfile): void {
     this.form.patchValue({ name: profile.name, formula: profile.formula,
-      weightField: profile.weightField, weightDecimals: profile.weightDecimals });
+      code: '', weightField: profile.weightField, weightDecimals: profile.weightDecimals });
     this.result.set(null);
     this.error.set(null);
     this.saveNotice.set(null);

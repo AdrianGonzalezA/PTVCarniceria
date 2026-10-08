@@ -73,6 +73,7 @@ describe('BarcodeLayoutPage', () => {
     for (const [selector, value] of [
       ['#barcode-name', 'Ciclo 2'],
       ['#barcode-formula', 'pro_numero(5) pro_item(3) peso(4)'],
+      ['#barcode-decimals', '2'],
     ]) {
       const input = page.querySelector<HTMLInputElement>(selector)!;
       input.value = value;
@@ -96,5 +97,62 @@ describe('BarcodeLayoutPage', () => {
     expect(page.textContent).toContain('Perfil Ciclo 2, revisión 1, guardado.');
     expect(page.querySelector('.saved-profile')?.textContent).toContain('rev. 1');
     expect(http.match('/api/inventory/adjustments')).toHaveLength(0);
+  });
+
+  it('loads an editable EAN-13 trial profile and previews its piece weight', () => {
+    const fixture = TestBed.createComponent(BarcodeLayoutPage);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/sessions/current').flush({
+      userId: 'admin-id', username: 'visual-admin', expiresAtUtc: '2026-10-08T00:00:00Z',
+      context: { userId: 'admin-id', companyId: 'company-id', companyName: 'Empresa Visual',
+        branchId: 'branch-id', branchName: 'Sucursal Visual',
+        permissions: ['inventory.stock.manage'], sessionId: 'session-id' },
+    });
+    http.expectOne('/api/admin/barcode-layouts').flush([]);
+    fixture.detectChanges();
+
+    const page = fixture.nativeElement as HTMLElement;
+    page.querySelector<HTMLButtonElement>('.ean13-example-button')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector<HTMLInputElement>('#barcode-formula')!.value)
+      .toBe('prefijo(1) pro_identif(6) peso(5) control_ean13(1)');
+    expect(page.querySelector<HTMLInputElement>('#barcode-code')!.value).toBe('2250661516008');
+    expect(page.querySelector<HTMLInputElement>('#barcode-decimals')!.value).toBe('3');
+    page.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit'));
+
+    const preview = http.expectOne('/api/admin/barcode-layouts/preview');
+    expect(preview.request.body).toEqual({
+      formula: 'prefijo(1) pro_identif(6) peso(5) control_ean13(1)',
+      code: '2250661516008', weightField: 'peso', weightDecimals: 3,
+    });
+    preview.flush({ length: 13,
+      fields: { prefijo: '2', pro_identif: '250661', peso: '51600', control_ean13: '8' },
+      weightKg: 51.6 });
+    fixture.detectChanges();
+    expect(page.textContent).toContain('51,60 kg');
+  });
+
+  it('clears the trial code when loading a saved profile with a different layout', () => {
+    const fixture = TestBed.createComponent(BarcodeLayoutPage);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/sessions/current').flush({
+      userId: 'admin-id', username: 'visual-admin', expiresAtUtc: '2026-10-08T00:00:00Z',
+      context: { userId: 'admin-id', companyId: 'company-id', companyName: 'Empresa Visual',
+        branchId: 'branch-id', branchName: 'Sucursal Visual',
+        permissions: ['inventory.stock.manage'], sessionId: 'session-id' },
+    });
+    http.expectOne('/api/admin/barcode-layouts').flush([{ id: 'profile-id', name: 'Otro formato',
+      revision: 1, formula: 'pro_identif(6) peso(5)', weightField: 'peso', weightDecimals: 3,
+      createdAtUtc: '2026-10-08T13:00:00Z' }]);
+    fixture.detectChanges();
+
+    const page = fixture.nativeElement as HTMLElement;
+    page.querySelector<HTMLButtonElement>('.saved-profile')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector<HTMLInputElement>('#barcode-formula')!.value)
+      .toBe('pro_identif(6) peso(5)');
+    expect(page.querySelector<HTMLInputElement>('#barcode-code')!.value).toBe('');
   });
 });

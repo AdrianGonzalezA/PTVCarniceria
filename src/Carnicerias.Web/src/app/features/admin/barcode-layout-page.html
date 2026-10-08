@@ -24,15 +24,17 @@
       <header class="panel-heading">
         <div>
           <h2 id="layout-title">Formato de la etiqueta</h2>
-          <p>Ejemplo ilustrativo: <code>pro_numero(5) pro_item(3) peso(4)</code>. Cada número indica la cantidad de caracteres, no los decimales.</p>
+          <p>Cada número indica la cantidad de caracteres, no los decimales. El ejemplo EAN-13 es provisional y editable: no define el formato final del frigorífico.</p>
         </div>
       </header>
+
+      <button class="ean13-example-button" type="button" (click)="useEan13Example()">Cargar ejemplo EAN-13</button>
 
       <form class="editor-form barcode-form" [formGroup]="form" (ngSubmit)="preview()">
         <label for="barcode-name">Nombre del perfil</label>
         <input id="barcode-name" formControlName="name" placeholder="Frigorífico ciclo 2" maxlength="120" autocomplete="off" />
         <label for="barcode-formula">Fórmula</label>
-        <input id="barcode-formula" formControlName="formula" placeholder="pro_numero(5) pro_item(3) peso(4)" maxlength="512" autocomplete="off" required />
+        <input id="barcode-formula" formControlName="formula" placeholder="prefijo(1) pro_identif(6) peso(5) control_ean13(1)" maxlength="512" autocomplete="off" required />
         <label for="barcode-code">Código leído o escrito</label>
         <input id="barcode-code" formControlName="code" placeholder="Escribí el código completo" maxlength="80" autocomplete="off" required />
         <div class="barcode-options">
@@ -45,7 +47,7 @@
             <input id="barcode-decimals" type="number" formControlName="weightDecimals" min="0" max="6" step="1" required />
           </div>
         </div>
-        <p class="field-hint">Si <code>peso(4)</code> lee <code>0245</code>, con 2 decimales representa 2,45 kg; con 3, representa 0,245 kg.</p>
+        <p class="field-hint">En el ejemplo, <code>250661</code> identifica la pieza y <code>51600</code> representa 51,600 kg. <code>control_ean13(1)</code> exige 13 dígitos y valida el dígito final. El artículo se vinculará durante la recepción.</p>
         <div class="editor-actions">
           <button type="submit" [disabled]="busy()">{{ busy() ? 'Interpretando…' : 'Probar lectura' }}</button>
           <button class="profile-save-button" type="button" [disabled]="saving()" (click)="saveProfile()">{{ saving() ? 'Guardando…' : 'Guardar nueva revisión' }}</button>
@@ -64,7 +66,7 @@
               <div><dt>{{ field.name }}</dt><dd>{{ field.value }}</dd></div>
             }
           </dl>
-          <p class="field-hint">Todavía no se consultó el artículo ni se modificó el stock. La asociación con la pieza llegará con el origen y los ejemplos reales.</p>
+          <p class="field-hint">Esta prueba no modifica stock ni tickets. El vínculo con el artículo se establecerá al recibir la pieza.</p>
         </div>
       }
     </section>

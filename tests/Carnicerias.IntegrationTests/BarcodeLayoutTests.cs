@@ -50,6 +50,39 @@ public sealed class BarcodeLayoutTests
         Assert.Equal(51.600m, read.ScaledDecimal("peso", 3));
     }
 
+    [Fact]
+    public void Ean13ExampleValidatesCheckDigitAndPreservesPieceWeight()
+    {
+        var layout = BarcodeLayout.Parse("prefijo(1) pro_identif(6) peso(5) control_ean13(1)");
+
+        var read = layout.Decode("2250661516008");
+
+        Assert.Equal(13, layout.Length);
+        Assert.Equal("2", read.Field("prefijo"));
+        Assert.Equal("250661", read.Field("pro_identif"));
+        Assert.Equal(51.600m, read.ScaledDecimal("peso", 3));
+        Assert.Equal("8", read.Field("control_ean13"));
+    }
+
+    [Theory]
+    [InlineData("2250661516007")]
+    [InlineData("225066151600A")]
+    public void Ean13ExampleRejectsInvalidCheckDigitOrNonnumericCode(string code)
+    {
+        var layout = BarcodeLayout.Parse("prefijo(1) pro_identif(6) peso(5) control_ean13(1)");
+
+        Assert.Throws<FormatException>(() => layout.Decode(code));
+    }
+
+    [Theory]
+    [InlineData("control_ean13(1) pro_identif(6) peso(6)")]
+    [InlineData("prefijo(1) pro_identif(6) peso(4) control_ean13(2)")]
+    [InlineData("pro_identif(6) peso(5) control_ean13(1)")]
+    public void Ean13ControlFieldRequiresFinalDigitAndThirteenDigits(string formula)
+    {
+        Assert.Throws<ArgumentException>(() => BarcodeLayout.Parse(formula));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("pro_numero(0) peso(4)")]

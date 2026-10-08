@@ -24,6 +24,30 @@ describe('PosPage', () => {
     ] });
   });
 
+  it.each([
+    [401, 'credencial vigente'],
+    [503, 'conexión con el servidor'],
+  ])('explains terminal verification failures with HTTP %i', async (status, message) => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: PosTerminalClient, useValue: { current: () => throwError(() => new HttpErrorResponse({ status })) } },
+    ] });
+
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain(message);
+    expect(fixture.nativeElement.querySelector('#product-search')).toBeNull();
+  });
+
   it('blocks the catalogue and ticket until this cashier opens a shift', async () => {
     const session: CurrentSession = {
       userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',

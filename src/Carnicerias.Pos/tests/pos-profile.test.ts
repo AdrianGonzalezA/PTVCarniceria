@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { resolvePosProfile } from '../src/pos-profile';
 
@@ -31,5 +32,14 @@ describe('POS profile selection', () => {
     expect(() => resolvePosProfile([
       '--pos-profile=caja-1', '--pos-profile=caja-2',
     ], originalUserData)).toThrow('Invalid POS profile');
+  });
+
+  it('opens the provisioned first register by default in local development', () => {
+    const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+
+    expect(packageJson.scripts['electron:start']).toContain('electron . --pos-profile=caja-1');
+    expect(packageJson.scripts['electron:start:caja2']).toContain('electron . --pos-profile=caja-2');
   });
 });

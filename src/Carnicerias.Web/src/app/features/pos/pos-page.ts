@@ -289,7 +289,9 @@ export class PosPage implements OnInit {
             this.terminal.set(terminal);
             this.loadCashierShift();
           },
-          error: () => this.terminalError.set('Esta instalación no tiene una caja habilitada. Configurá la terminal antes de vender.'),
+          error: (error: HttpErrorResponse) => this.terminalError.set(error.status === 401
+            ? 'Este Electron no tiene una credencial vigente para la caja. Abrí el perfil de la caja o renová su credencial desde administración.'
+            : 'No se pudo verificar la caja. Revisá la conexión con el servidor.'),
         });
       },
       error: () => void this.router.navigateByUrl('/'),

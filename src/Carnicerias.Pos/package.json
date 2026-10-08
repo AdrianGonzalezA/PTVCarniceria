@@ -8,7 +8,9 @@
     "build:electron": "tsc --project tsconfig.build.json",
     "stage:web": "node scripts/stage-web.mjs",
     "electron:build": "npm run build:web && npm run build:electron && npm run stage:web && electron-forge package",
-    "electron:start": "npm run build:web && npm run build:electron && npm run stage:web && electron .",
+    "electron:start": "npm run build:web && npm run build:electron && npm run stage:web && electron . --pos-profile=caja-1",
+    "electron:start:caja2": "npm run build:web && npm run build:electron && npm run stage:web && electron . --pos-profile=caja-2",
+    "electron:start:admin": "npm run build:web && npm run build:electron && npm run stage:web && electron .",
     "electron:test": "vitest run"
   },
   "packageManager": "npm@11.19.0",

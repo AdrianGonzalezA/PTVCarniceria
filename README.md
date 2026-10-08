@@ -10,7 +10,7 @@ El estado detallado y los pendientes están en `tasks/pos-todo.md`. El contrato 
 
 ## Administración
 
-`visual-admin` ingresa con la sesión existente y elige empresa/sucursal antes de abrir `/admin`. Allí puede mantener categorías, artículos y códigos alternativos, listas/precios, empresas, sucursales, cajas, existencias y cajeros. Por ahora no se crean otros administradores ni roles desde la interfaz. El historial de ventas, pagos, turnos y movimientos es de solo lectura y permite filtros por sucursal, caja (cuando corresponde) y fecha. El cajero no tiene acceso a estas API. Contrato y pendientes: `SPEC-admin.md` y `tasks/admin-plan.md`.
+`visual-admin` ingresa y elige empresa/sucursal antes de abrir `/admin`. Allí puede mantener categorías, artículos y códigos alternativos, listas/precios, empresas, sucursales, cajas, existencias y cajeros. Puede restablecer la contraseña de cualquier usuario de la empresa, incluida la propia cuenta; al hacerlo se revocan todas las sesiones de esa persona. Por ahora no se crean otros administradores ni roles desde la interfaz. El historial de ventas, pagos, turnos y movimientos es de solo lectura y permite filtros por sucursal, caja (cuando corresponde) y fecha. El cajero no tiene acceso a estas API. Contrato y pendientes: `SPEC-admin.md` y `tasks/admin-plan.md`.
 
 ## Desarrollo local
 
@@ -19,6 +19,8 @@ Requisitos: SDK .NET 10, PostgreSQL, Node.js compatible con `src/Carnicerias.Web
 Durante el desarrollo se usa **una única base de la aplicación**, `carnicerias_test_visual`, en el PostgreSQL de Docker expuesto en `127.0.0.1:55433`. No crear otra base (tampoco una de pruebas) sin autorización explícita. Para volver a empezar se limpian los datos en esta misma base y se reaplican los scripts del repositorio. La base de sistema `postgres` del servidor no es una base del POS. Esta instalación es ficticia y no productiva; el despliegue final será en un servidor PostgreSQL cuando el producto esté terminado.
 
 El set inicial contiene `Empresa Visual`, `Sucursal Visual`, los usuarios `visual-admin` y `visual-cashier`, dos terminales (`Caja 1` y `Caja 2`), nueve productos con existencias y una lista de precios. Durante el desarrollo se agregaron datos ficticios adicionales; no se vuelve a ejecutar el seed sobre una base con usuarios. Las contraseñas y credenciales de terminal se entregan fuera de Git. `tools/SeedPosVisualData.sql` conserva el catálogo y stock ficticio; `seed-pos-visual` del proyecto `tools/Carnicerias.Bootstrap` inicializa identidades y terminales solo cuando la base está vacía.
+
+Para unificar temporalmente las contraseñas de todos los usuarios existentes en esa base local, ejecutar `dotnet run --project tools/Carnicerias.Bootstrap -- reset-visual-passwords` con `CARNICERIAS_CONNECTION_STRING` apuntando a `127.0.0.1:55433/carnicerias_test_visual` y `CARNICERIAS_VISUAL_PASSWORD` configurada solo en el entorno de esa consola. El comando usa Argon2id, revoca las sesiones activas y no modifica ventas ni stock. No registrar la clave en Git. Solo para esa conexión local, el alta y restablecimiento de contraseñas desde la administración admiten un mínimo de 6 caracteres; en cualquier otra conexión el mínimo sigue siendo 12. La interfaz consulta ese mínimo al API.
 
 ```powershell
 dotnet run --project src/Carnicerias.Api/Carnicerias.Api.csproj --configuration Release -- --urls http://localhost:5197
@@ -30,7 +32,7 @@ En otra consola, con dependencias instaladas mediante `npm ci` en `src/Carniceri
 npm run electron:start --prefix src/Carnicerias.Pos
 ```
 
-Ese comando compila Angular, prepara los archivos del POS y abre Electron. Para pruebas automatizadas:
+Ese comando compila Angular, prepara los archivos del POS y abre Electron con el perfil local ya provisionado de `Caja 1`. Para abrir otra terminal, usar `npm run electron:start:caja2 --prefix src/Carnicerias.Pos`; para revisar únicamente la administración sin credencial de caja, `npm run electron:start:admin --prefix src/Carnicerias.Pos`. La activación de la caja en administración y la credencial guardada en el perfil de Electron son requisitos distintos: un perfil sin credencial vigente no puede operar el POS aunque la caja esté activa. Para pruebas automatizadas:
 
 ```powershell
 dotnet test tests/Carnicerias.ArchitectureTests/Carnicerias.ArchitectureTests.csproj --configuration Debug --no-restore

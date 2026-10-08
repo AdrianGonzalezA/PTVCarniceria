@@ -7,5 +7,5 @@
     "sourceMap": true,
     "types": ["node"]
   },
-  "exclude": ["tests/**/*.ts"]
+  "exclude": ["tests/**/*.ts", "src/emulator-ui.ts"]
 }

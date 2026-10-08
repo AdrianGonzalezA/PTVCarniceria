@@ -286,7 +286,7 @@
             <p class="scale-status" role="status">Pieza {{ identifier }} · {{ quantityDraft() }} kg leídos de la etiqueta · peso fijo</p>
             <p class="scale-status">La pieza se guarda por separado en el ticket; el saldo de stock se calcula por artículo.</p>
           } @else {
-            <p class="scale-status">Balanza no conectada · Ingreso manual de peso</p>
+            <p class="scale-status">Peso manual o balanza virtual externa</p>
           }
         }
         <label class="quantity-field" for="product-quantity">
@@ -301,6 +301,13 @@
             (input)="updateQuantity($event)"
           />
         </label>
+        @if (product.mode === 'weight' && !scannedPieceIdentifier()) {
+          <button class="receipt-pdf-button scale-read-button" type="button" [disabled]="scaleBusy()" (click)="readVirtualScale()">
+            {{ scaleBusy() ? 'Leyendo balanza…' : 'Leer balanza virtual' }}
+          </button>
+          @if (scaleNotice(); as notice) { <p class="scale-status" role="status">{{ notice }}</p> }
+          @if (scaleError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
+        }
         @if (quantityProblem(); as problem) { <p class="pos-error" role="alert">{{ problem }}</p> }
         @else if (errorMessage(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
         <div class="dialog-actions">
@@ -363,11 +370,20 @@
         @if (receiptPdfError(); as error) {
           <p class="pos-error" role="alert">{{ error }}</p>
         }
+        @if (virtualPrintPath(); as path) {
+          <p class="receipt-file" role="status">Impresora virtual: ticket no fiscal guardado en {{ path }}</p>
+        }
+        @if (virtualPrintError(); as error) {
+          <p class="pos-error" role="alert">{{ error }}</p>
+        }
         <div class="dialog-actions">
-          <button class="receipt-pdf-button" type="button" [disabled]="receiptPdfBusy()" (click)="saveReceiptPdf(sale)">
+          <button class="receipt-pdf-button virtual-print-button" type="button" [disabled]="virtualPrintBusy()" (click)="printVirtualReceipt(sale)">
+            {{ virtualPrintBusy() ? 'Enviando ticket…' : 'Imprimir en emulador' }}
+          </button>
+          <button class="receipt-pdf-button save-pdf-button" type="button" [disabled]="receiptPdfBusy()" (click)="saveReceiptPdf(sale)">
             {{ receiptPdfBusy() ? 'Generando PDF…' : 'Guardar ticket PDF' }}
           </button>
-          <button class="finish-button" type="button" (click)="confirmedSale.set(null)">Nueva venta</button>
+          <button class="finish-button" type="button" [disabled]="receiptPdfBusy() || virtualPrintBusy()" (click)="confirmedSale.set(null)">Nueva venta</button>
         </div>
       </section>
     </div>

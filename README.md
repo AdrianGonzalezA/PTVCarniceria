@@ -4,7 +4,7 @@ Sistema de punto de venta para carnicerías: API .NET 10 y PostgreSQL, interfaz 
 
 ## Estado del POS
 
-La lista real permite guardar un ticket, reservar stock, abrir un turno por cajero, registrar una venta con pagos y convertir la reserva en egreso físico dentro de una transacción. El cierre del turno conserva el saldo contable. Los datos actuales del catálogo son ficticios y la base visual es no productiva; no hay comprobante fiscal ni arqueo físico. Tras confirmar una venta, Electron puede generar un PDF de prueba no fiscal en la carpeta `tickets` de su perfil de usuario; la generación del archivo no vuelve a cobrar ni modifica stock. La ruta concreta aparece en el diálogo al guardarlo. `npm run electron:test:pdf --prefix src/Carnicerias.Pos` prueba el motor PDF nativo sin registrar una venta ni crear un archivo.
+La lista real permite guardar un ticket, reservar stock, abrir un turno por cajero, registrar una venta con pagos y convertir la reserva en egreso físico dentro de una transacción. El cierre del turno conserva el saldo contable. Los datos actuales del catálogo son ficticios y la base visual es no productiva; no hay comprobante fiscal ni arqueo físico. Tras confirmar una venta, Electron puede generar un PDF de prueba no fiscal en la carpeta `tickets` de su perfil de usuario o enviar el mismo ticket a una impresora virtual externa. Ninguna de las dos salidas vuelve a cobrar ni modifica stock. La ruta concreta aparece en el diálogo. `npm run electron:test:pdf --prefix src/Carnicerias.Pos` prueba el motor PDF nativo sin registrar una venta ni crear un archivo.
 
 El estado detallado y los pendientes están en `tasks/pos-todo.md`. El contrato de cobro está en `SPEC-pos-checkout.md`; la evidencia de prueba en Electron y sus límites están en `tasks/pos-checkout-plan.md`.
 
@@ -35,6 +35,8 @@ npm run electron:start --prefix src/Carnicerias.Pos
 ```
 
 Ese comando compila Angular, prepara los archivos del POS y abre Electron con el perfil local ya provisionado de `Caja 1`. Para abrir otra terminal, usar `npm run electron:start:caja2 --prefix src/Carnicerias.Pos`; para revisar únicamente la administración sin credencial de caja, `npm run electron:start:admin --prefix src/Carnicerias.Pos`. La activación de la caja en administración y la credencial guardada en el perfil de Electron son requisitos distintos: un perfil sin credencial vigente no puede operar el POS aunque la caja esté activa. Para pruebas automatizadas:
+
+Para simular dispositivos externos durante el desarrollo, abrir además `npm run devices:start --prefix src/Carnicerias.Pos` en otra consola. La ventana separada permite inyectar un peso en kg y muestra tickets recibidos. En el diálogo de un producto vendido por peso, **Leer balanza virtual** copia una lectura estable al campo de kilos; en una pieza trazable el peso de la etiqueta permanece fijo. Tras cobrar, **Imprimir en emulador** envía una copia no fiscal a la ventana externa y la guarda como HTML en los datos locales del emulador. **Guardar ticket PDF** sigue siendo una opción independiente. Si el emulador no está abierto, se puede ingresar el peso manualmente y reintentar la impresión sin repetir el cobro. La interfaz y los tickets de esta función se revisan en Electron; el contrato está en `SPEC-device-emulation.md`.
 
 ```powershell
 dotnet test tests/Carnicerias.ArchitectureTests/Carnicerias.ArchitectureTests.csproj --configuration Debug --no-restore

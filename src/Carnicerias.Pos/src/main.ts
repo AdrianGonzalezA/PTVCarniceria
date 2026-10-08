@@ -15,9 +15,10 @@ import {
 } from 'electron';
 import { resolveAppAsset, toBackendRequest, toBackendUrl } from './app-protocol';
 import { createDiagnostic } from './diagnostic';
-import { diagnosticChannel, saveReceiptPdfChannel } from './native-api';
+import { NativeChannel } from './native-api';
 import { resolvePosProfile } from './pos-profile';
 import { createReceiptHtml, validateReceiptRequest } from './receipt-pdf';
+import { requestVirtualDevice, virtualDevicePipe } from './virtual-device-protocol';
 import { createSecureWebPreferences, isAllowedNavigation } from './security-policy';
 import { loadTerminalCredential } from './terminal-credential';
 
@@ -59,11 +60,11 @@ function validateIpcSender(event: IpcMainInvokeEvent): void {
 }
 
 function registerNativeApi(): void {
-  ipcMain.handle(diagnosticChannel, (event) => {
+  ipcMain.handle(NativeChannel.Diagnostic, (event) => {
     validateIpcSender(event);
     return createDiagnostic(process.platform, process.versions.electron);
   });
-  ipcMain.handle(saveReceiptPdfChannel, async (event, payload: unknown) => {
+  ipcMain.handle(NativeChannel.SaveReceiptPdf, async (event, payload: unknown) => {
     validateIpcSender(event);
     const receipt = validateReceiptRequest(payload);
     const receiptWindow = new BrowserWindow({
@@ -91,6 +92,24 @@ function registerNativeApi(): void {
     } finally {
       receiptWindow.destroy();
     }
+  });
+  ipcMain.handle(NativeChannel.ReadVirtualScale, async (event) => {
+    validateIpcSender(event);
+    const response = await requestVirtualDevice(virtualDevicePipe, { action: 'read-scale' });
+    if (!response.ok || !('reading' in response)) throw new Error('VIRTUAL_SCALE_UNAVAILABLE');
+    const { weightKg, stable, observedAtUtc } = response.reading;
+    if (typeof weightKg !== 'number' || !Number.isFinite(weightKg) ||
+        typeof stable !== 'boolean' || typeof observedAtUtc !== 'string' ||
+        Number.isNaN(Date.parse(observedAtUtc))) throw new Error('VIRTUAL_SCALE_INVALID_READING');
+    return response.reading;
+  });
+  ipcMain.handle(NativeChannel.PrintVirtualReceipt, async (event, payload: unknown) => {
+    validateIpcSender(event);
+    const receipt = validateReceiptRequest(payload);
+    const response = await requestVirtualDevice(virtualDevicePipe, { action: 'print-receipt', receipt });
+    if (!response.ok || !('path' in response) || typeof response.path !== 'string' ||
+        response.path.length > 4096) throw new Error('VIRTUAL_PRINTER_UNAVAILABLE');
+    return { path: response.path };
   });
 }
 

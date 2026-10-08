@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "moduleDetection": "legacy",
+    "noEmit": false,
+    "outDir": "dist/ui",
+    "rootDir": "src",
+    "types": []
+  },
+  "include": ["src/emulator-ui.ts"],
+  "exclude": []
+}

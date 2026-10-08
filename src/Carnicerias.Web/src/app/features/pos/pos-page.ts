@@ -8,6 +8,7 @@ import { CatalogCategory, CatalogClient, PriceListOption } from '../../core/cata
 import { InventoryClient, InventoryStockItem } from '../../core/inventory/inventory-client';
 import { InventoryPieceClient, PosPieceLookup } from '../../core/inventory/inventory-piece-client';
 import { PosTerminal, PosTerminalClient } from '../../core/pos/pos-terminal-client';
+import { PosDeviceClient } from '../../core/pos/pos-device-client';
 import { ConfirmedSale, SaleDraft, SaleDraftClient, SaleDraftLine, SalePaymentMethod } from '../../core/sales/sale-draft-client';
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { CashierShift, CashierShiftClient } from '../../core/sales/cashier-shift-client';
@@ -80,6 +81,7 @@ export class PosPage implements OnInit {
   private readonly catalogClient = inject(CatalogClient);
   private readonly saleDraftClient = inject(SaleDraftClient);
   private readonly receiptPdfClient = inject(ReceiptPdfClient);
+  private readonly posDeviceClient = inject(PosDeviceClient);
   private readonly cashierShiftClient = inject(CashierShiftClient);
   private readonly inventoryClient = inject(InventoryClient);
   private readonly pieceClient = inject(InventoryPieceClient);
@@ -92,6 +94,7 @@ export class PosPage implements OnInit {
   }>();
   private draftRevision = 0;
   private stockRequestRevision = 0;
+  private scaleRequestRevision = 0;
   private scannedCode = '';
   private lastScanKeyAt = 0;
 
@@ -138,6 +141,9 @@ export class PosPage implements OnInit {
   protected readonly scannedPieceIdentifier = signal<string | null>(null);
   private readonly scannedPieceId = signal<string | null>(null);
   protected readonly quantityDraft = signal('1');
+  protected readonly scaleBusy = signal(false);
+  protected readonly scaleNotice = signal<string | null>(null);
+  protected readonly scaleError = signal<string | null>(null);
   protected readonly quantityProblem = computed(() => {
     const product = this.selectedProduct();
     if (!product) return null;
@@ -168,6 +174,9 @@ export class PosPage implements OnInit {
   protected readonly receiptPdfBusy = signal(false);
   protected readonly receiptPdfPath = signal<string | null>(null);
   protected readonly receiptPdfError = signal<string | null>(null);
+  protected readonly virtualPrintBusy = signal(false);
+  protected readonly virtualPrintPath = signal<string | null>(null);
+  protected readonly virtualPrintError = signal<string | null>(null);
   protected readonly selectedPayments = signal<readonly { method: SalePaymentMethod; amount: number }[]>([]);
   protected readonly paymentMethods: readonly { readonly id: SalePaymentMethod; readonly label: string }[] = [
     { id: 'cash', label: 'Efectivo' }, { id: 'debit', label: 'Débito' },
@@ -569,9 +578,12 @@ export class PosPage implements OnInit {
       return;
     }
     this.selectedProduct.set(product);
+    this.scaleRequestRevision++;
     this.scannedPieceIdentifier.set(pieceIdentifier);
     this.scannedPieceId.set(pieceId);
     this.quantityDraft.set(String(quantity));
+    this.scaleNotice.set(null);
+    this.scaleError.set(null);
   }
 
   protected updateQuantity(event: Event): void {
@@ -580,6 +592,24 @@ export class PosPage implements OnInit {
       return;
     }
     this.quantityDraft.set((event.target as HTMLInputElement).value.replace(',', '.'));
+    this.scaleNotice.set(null);
+  }
+
+  protected readVirtualScale(): void {
+    if (this.scaleBusy() || this.selectedProduct()?.mode !== 'weight' || this.scannedPieceIdentifier()) return;
+    const productId = this.selectedProduct()?.id;
+    const revision = ++this.scaleRequestRevision;
+    this.scaleBusy.set(true);
+    this.scaleError.set(null);
+    this.scaleNotice.set(null);
+    void this.posDeviceClient.readScale().then((weightKg) => {
+      if (this.selectedProduct()?.id !== productId || this.scaleRequestRevision !== revision) return;
+      this.quantityDraft.set(String(weightKg));
+      this.scaleNotice.set(`Balanza virtual: ${weightKg.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`);
+    }).catch(() => {
+      if (this.selectedProduct()?.id === productId && this.scaleRequestRevision === revision)
+        this.scaleError.set('No hay una lectura estable de la balanza virtual. Ingresá el peso manualmente o reintentá.');
+    }).finally(() => this.scaleBusy.set(false));
   }
 
   protected addSelectedProduct(): void {
@@ -731,6 +761,7 @@ export class PosPage implements OnInit {
   }
 
   protected closeProductDialog(): void {
+    this.scaleRequestRevision++;
     this.selectedProduct.set(null);
     this.scannedPieceIdentifier.set(null);
     this.scannedPieceId.set(null);
@@ -919,6 +950,8 @@ export class PosPage implements OnInit {
     this.confirmedSale.set(sale);
     this.receiptPdfPath.set(null);
     this.receiptPdfError.set(null);
+    this.virtualPrintPath.set(null);
+    this.virtualPrintError.set(null);
     this.lines.set([]);
     this.persistedLines.set([]);
     this.draftId.set('');
@@ -941,6 +974,20 @@ export class PosPage implements OnInit {
     ).then((path) => this.receiptPdfPath.set(path)).catch(() => {
       this.receiptPdfError.set('No se pudo generar el PDF. La venta sigue confirmada; podés reintentar.');
     }).finally(() => this.receiptPdfBusy.set(false));
+  }
+
+  protected printVirtualReceipt(sale: ConfirmedSale): void {
+    if (this.virtualPrintBusy()) return;
+    this.virtualPrintBusy.set(true);
+    this.virtualPrintError.set(null);
+    void this.posDeviceClient.print(
+      sale,
+      this.session()?.context?.branchName ?? 'Sucursal',
+      this.terminal()?.name ?? 'Caja',
+      this.session()?.username ?? 'Cajero',
+    ).then((path) => this.virtualPrintPath.set(path)).catch(() => {
+      this.virtualPrintError.set('No se pudo enviar el ticket al emulador. La venta sigue confirmada; abrí el emulador y reintentá.');
+    }).finally(() => this.virtualPrintBusy.set(false));
   }
 
   protected paymentMethodName(method: SalePaymentMethod): string {

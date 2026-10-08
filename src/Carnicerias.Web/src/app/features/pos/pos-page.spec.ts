@@ -6,6 +6,7 @@ import { of, Subject, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { CatalogClient } from '../../core/catalog/catalog-client';
 import { PosTerminalClient } from '../../core/pos/pos-terminal-client';
+import { PosDeviceClient } from '../../core/pos/pos-device-client';
 import { InventoryClient } from '../../core/inventory/inventory-client';
 import { InventoryPieceClient } from '../../core/inventory/inventory-piece-client';
 import { CashierShiftClient } from '../../core/sales/cashier-shift-client';
@@ -114,10 +115,12 @@ describe('PosPage', () => {
     let saveAttempts = 0;
     let confirmationAttempts = 0;
     const receiptPdf = vi.fn().mockResolvedValue('C:\\tickets\\ticket-test.pdf');
+    const virtualPrint = vi.fn().mockResolvedValue('C:\\tickets\\external.html');
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
         { provide: ReceiptPdfClient, useValue: { save: receiptPdf } },
+        { provide: PosDeviceClient, useValue: { print: virtualPrint } },
         { provide: SessionClient, useValue: { current: () => of(session) } },
         { provide: CatalogClient, useValue: {
           priceLists: () => of([{ id: 'list-id', name: 'Mostrador (datos ficticios)' }]),
@@ -205,7 +208,12 @@ describe('PosPage', () => {
     expect(receipt.textContent).toContain('sale-id');
     expect(receipt.textContent).toContain('2.400,00');
     expect(receipt.textContent).toContain('Efectivo');
-    (receipt.querySelector('.receipt-pdf-button') as HTMLButtonElement).click();
+    (receipt.querySelector('.virtual-print-button') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(virtualPrint).toHaveBeenCalledWith(expect.objectContaining({ id: 'sale-id' }), 'Sucursal', 'Caja 1', 'cajero');
+    expect(receipt.textContent).toContain('external.html');
+    (receipt.querySelector('.save-pdf-button') as HTMLButtonElement).click();
     await fixture.whenStable();
     fixture.detectChanges();
     expect(receiptPdf).toHaveBeenCalledWith(expect.objectContaining({ id: 'sale-id' }), 'Sucursal', 'Caja 1', 'cajero');
@@ -224,6 +232,42 @@ describe('PosPage', () => {
     (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#checkout-title').textContent).toContain('Cobrar venta');
+  });
+
+  it('fills a weighed product from the virtual scale without changing a sale or a unit item', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const readScale = vi.fn().mockResolvedValue(0.75);
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: PosDeviceClient, useValue: { readScale } },
+      { provide: CatalogClient, useValue: {
+        priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
+        categories: () => of([{ id: 'res', name: 'Carne de res', productCount: 1 }]),
+        products: () => of({ items: [{ id: 'asado', code: '1002', name: 'Asado',
+          categoryId: 'res', saleMode: 'weight' as const, price: 4900, availableStock: 10 }],
+          page: 1, pageSize: 50, totalItems: 1 }),
+      } },
+      { provide: SaleDraftClient, useValue: { current: () => of(null) } },
+      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.product-card') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.scale-read-button') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(readScale).toHaveBeenCalledOnce();
+    expect((fixture.nativeElement.querySelector('#product-quantity') as HTMLInputElement).value).toBe('0.75');
+    expect(fixture.nativeElement.querySelector('.scale-status[role="status"]').textContent).toContain('0,750 kg');
+    expect(fixture.nativeElement.querySelector('.sale-receipt')).toBeNull();
   });
 
   it('offers lists from the active branch without displaying demo prices as real prices', () => {

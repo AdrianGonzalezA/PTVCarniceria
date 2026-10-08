@@ -187,10 +187,12 @@
 .checkout-total { display: flex; justify-content: space-between; margin-top: 1rem; padding: 0.8rem; background: #e7e7e4; border-radius: 0.3rem; }
 .checkout-total strong { font-size: 1.1rem; }
 .sale-receipt { max-height: min(90dvh, 48rem); overflow: auto; }
+.sale-receipt .dialog-actions { flex-wrap: wrap; }
 .receipt-reference { overflow-wrap: anywhere; color: var(--pos-muted); font-size: 0.8rem; }
 .receipt-file { overflow-wrap: anywhere; font-size: 0.85rem; color: var(--pos-muted); }
 .receipt-pdf-button { border: 1px solid currentColor; background: transparent; border-radius: 0.5rem; padding: 0.65rem 1rem; cursor: pointer; }
 .receipt-pdf-button:disabled { opacity: 0.6; cursor: wait; }
+.scale-read-button { margin: 0.65rem 0 0; }
 .receipt-payments { margin: 0.75rem 0; padding: 0; list-style: none; }
 .receipt-payments li { display: flex; justify-content: space-between; gap: 1rem; padding: 0.45rem 0; border-bottom: 1px solid var(--pos-border); font-size: 0.85rem; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }

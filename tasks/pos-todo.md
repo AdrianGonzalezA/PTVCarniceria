@@ -31,7 +31,7 @@
 - El borrador congela descripción, código, unidad, modalidad y precio. Reserva stock agregado al guardar y lo libera al quitar/cancelar; el stock físico no baja hasta confirmar. Los productos de demostración continúan sin persistencia.
 - Stock agregado por sucursal: consulta desde el catálogo y panel del administrador para ingresos/ajustes con motivo; movimientos idempotentes y protegidos por permiso. El saldo no puede quedar debajo de lo ya reservado por tickets.
 - El botón de finalización ya conecta con el cobro real; no se emiten comprobantes fiscales.
-- La balanza figura como no conectada; el peso se ingresa manualmente.
+- El peso se puede ingresar manualmente o leer de un emulador externo de balanza; los controladores USB/serial reales siguen pendientes.
 - Una confirmación protege contra salir de la pantalla con productos en la venta de demostración.
 
 ## Pendientes del POS
@@ -41,6 +41,8 @@
 Ejemplo provisional para validar: `25066151600` = `PRO_IDENTIF 250661` + `peso 51600` con 3 decimales = `51,600 kg`. Configuración de prueba: `pro_identif(6) peso(5)`. El usuario confirmó que `PRO_IDENTIF` identifica de forma única la pieza en su ERP; cinco piezas distintas del artículo `2546` (`CORTITO C/FALDA EXP`) suman `250,000 kg` en `SPEC-inventory-traceability.md`. **No** activar aún el formato como definitivo. Definir el alcance entre emisores y la respuesta a una segunda lectura manual; confirmar si el artículo, `PRO_NUMERO` y `PRO_ITEM` viajan en la etiqueta o llegan por importación. El valor `250.63` se conserva sin normalizar hasta confirmar su formato original.
 
 **Ticket virtual (8 de octubre de 2026):** desde una venta confirmada se puede guardar un PDF de prueba dentro de `userData/tickets` del perfil Electron. El archivo lleva la leyenda **NO FISCAL**; no invoca una impresora física ni ARCA. La ruta no es elegida por el renderer y un error de archivo no revierte la venta. Pendiente: verificar visualmente un PDF generado con una venta real y definir formato físico de impresora para despliegue.
+
+**Emulación de dispositivos (8 de octubre de 2026):** un segundo proceso Electron escucha en un *named pipe* local. El POS lee un peso estable y reciente para artículos por kg sin sobrescribir piezas trazables; tras confirmar una venta puede enviar su ticket validado a una impresora virtual que lo muestra y guarda como HTML **NO FISCAL**. El PDF se corrigió para que su puente funcione dentro del preload sandboxed. Pruebas de IPC reales pasaron para peso, impresión y PDF; queda recorrer visualmente el flujo completo con una venta real. `SPEC-device-emulation.md` documenta contrato y límites.
 
 1. Resolver si el MVP admite cuatro tickets simultáneos por terminal. La maqueta muestra Ticket A–D, pero el relevamiento considera esta decisión pendiente; por ahora solo Ticket A está habilitado.
 2. Continuar `catalog-pricing`: ya existen listas por sucursal, categorías, productos, códigos alternativos, historial de precios, `GET /api/catalog/price-lists`, `GET /api/catalog/categories` y `GET /api/catalog/products` conectados al POS. Falta la gestión para cargar y mantener esos datos. Contrato en `SPEC-catalog-pricing.md`.
@@ -55,7 +57,7 @@ Ejemplo provisional para validar: `25066151600` = `PRO_IDENTIF 250661` + `peso 5
 - Las ventas confirmadas con una lista real se persisten. Los datos iniciales del catálogo son ficticios y deben reemplazarse antes de operar comercialmente.
 - El catálogo de prueba permanece solo en memoria y se pierde al recargar Electron. Los borradores de ventas con lista real ya se guardan y recuperan.
 - El cambio de sucursal queda bloqueado mientras haya un borrador o turno abierto.
-- Clientes registrados, descuentos, impuestos, correlativos trazables, balanza, lector y ARCA aún no están integrados.
+- Clientes registrados, descuentos, impuestos, correlativos trazables, controladores reales de balanza/impresora, lector y ARCA aún no están integrados.
 - La administración de usuarios permanece disponible como módulo previo, pero su desarrollo queda pausado por prioridad del POS.
 
 ## Cierre de venta y caja por cajero/turno

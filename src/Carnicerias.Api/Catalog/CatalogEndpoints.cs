@@ -84,6 +84,8 @@ public static class CatalogEndpoints
         var now = timeProvider.GetUtcNow();
         var products = db.CatalogProducts.AsNoTracking()
             .Where(product => product.CompanyId == context.CompanyId && product.IsActive &&
+                db.ProductCategories.Any(category => category.CompanyId == context.CompanyId &&
+                    category.Id == product.CategoryId && category.IsActive) &&
                 (!categoryId.HasValue || product.CategoryId == categoryId.Value) &&
                 db.ProductPrices.Any(price => price.CompanyId == context.CompanyId &&
                     price.PriceListId == priceListId && price.ProductId == product.Id &&

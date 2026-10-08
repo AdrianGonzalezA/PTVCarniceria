@@ -34,6 +34,12 @@
           <p>Elegí qué datos querés consultar o mantener.</p>
         </header>
         <div class="module-list">
+          @if (context.permissions.includes('catalog.manage')) {
+            <a class="module-link" routerLink="/admin/categories">
+              <span><strong>Categorías</strong><small>Organizar familias de productos para la venta.</small></span>
+              <span aria-hidden="true">→</span>
+            </a>
+          }
           <a class="module-link" routerLink="/users">
             <span><strong>Usuarios</strong><small>Consultar cuentas, modificar datos y controlar el acceso.</small></span>
             <span aria-hidden="true">→</span>

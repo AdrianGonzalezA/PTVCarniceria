@@ -13,15 +13,15 @@ La prioridad pasa al sitio administrativo sin modificar la base única `carnicer
 
 ### A1. Acceso y estructura administrativa
 
-- [ ] Ruta `/admin`, guard y navegación para `visual-admin`, sin acceso para cajeros.
-- [ ] Pantalla base alineada con la maqueta, secciones distinguibles y enlaces al POS/contexto.
+- [x] Ruta `/admin`, guard y navegación para `visual-admin`, sin acceso para cajeros.
+- [x] Pantalla base alineada con la maqueta, secciones distinguibles y enlaces al POS/contexto.
 - [ ] Verificar rutas y estados de permiso con Angular; compilar y recorrer en Electron.
 
 ### A2. Categorías completas
 
-- [ ] Permiso `catalog.manage` persistido y otorgado al administrador existente sin otra base.
-- [ ] API de listado, alta y edición/estado con aislamiento por empresa, validación, duplicados y protección de origen.
-- [ ] Listado y formulario Angular con carga, vacío, error, confirmación de inactivación y prueba de regresión.
+- [x] Permiso `catalog.manage` persistido y otorgado al administrador existente sin otra base.
+- [x] API de listado, alta y edición/estado con aislamiento por empresa, validación, duplicados y protección de origen.
+- [x] Listado y formulario Angular con carga, vacío, error, confirmación de inactivación y prueba de regresión.
 - [ ] Verificar por API y Electron con datos ficticios de la base existente; no tocar ventas.
 
 ### A3. Productos y códigos

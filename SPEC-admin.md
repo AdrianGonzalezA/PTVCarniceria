@@ -18,11 +18,11 @@ El mapa aprobado en `CAPABILITY_MAP.md` sigue siendo el índice modular. La admi
 
 El primer incremento publicable comprende navegación administrativa y ABM de categorías de la empresa activa:
 
-- `GET /api/admin/categories` lista categorías activas e inactivas con conteo de productos, ordenadas por nombre.
+- `GET /api/admin/categories?page=1&pageSize=20&search=` lista categorías activas e inactivas con conteo de productos, ordenadas por nombre y paginadas (máximo 100 por página).
 - `POST /api/admin/categories` crea una categoría activa. El nombre se recorta, debe medir 1–120 caracteres y ser único por empresa.
 - `PATCH /api/admin/categories/{id}` cambia nombre y/o estado. Un ID de otra empresa responde 404. Inactivar una categoría no borra productos ni ventas; sus productos dejan de aparecer en el POS por el filtro de categoría activa.
 - Todos los endpoints exigen sesión, contexto operativo y permiso `catalog.manage`; las mutaciones validan origen. Errores usan el sobre `ErrorResponse` actual, con 400 por datos inválidos, 401/403 por acceso, 404 por recurso fuera de alcance y 409 por duplicado.
-- La UI ofrece listado, búsqueda local, alta, edición e inactivación/reactivación, con estados de carga, vacío, error y éxito. No usa datos simulados.
+- La UI ofrece listado, búsqueda, alta, edición e inactivación/reactivación, con estados de carga, vacío, error y éxito. No usa datos simulados.
 
 ## Tecnología y comandos
 

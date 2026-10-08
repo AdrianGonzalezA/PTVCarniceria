@@ -18,6 +18,8 @@ describe('app protocol boundary', () => {
     expect(resolveAppAsset(root, 'app://bundle/pos')).toBe(path.join(root, 'index.html'));
     expect(resolveAppAsset(root, 'app://bundle/users')).toBe(path.join(root, 'index.html'));
     expect(resolveAppAsset(root, 'app://bundle/pos?ticket=A')).toBe(path.join(root, 'index.html'));
+    expect(resolveAppAsset(root, 'app://bundle/admin')).toBe(path.join(root, 'index.html'));
+    expect(resolveAppAsset(root, 'app://bundle/admin/categories')).toBe(path.join(root, 'index.html'));
   });
 
   it('maps only app API requests to the fixed local backend', () => {

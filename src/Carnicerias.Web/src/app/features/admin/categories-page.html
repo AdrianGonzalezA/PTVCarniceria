@@ -1,0 +1,98 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" routerLink="/admin" aria-label="Volver a administración">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Administración</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+
+  <div class="workspace">
+    <a class="back-link" routerLink="/admin">← Volver a administración</a>
+    <p class="eyebrow">Catálogo</p>
+    <h1>Categorías</h1>
+    <p class="intro">Organizá los productos que verá el cajero en la sucursal.</p>
+
+    @if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Contexto de trabajo">
+        <div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Sucursal</span><strong>{{ context.branchName }}</strong></div>
+      </section>
+    }
+
+    <section class="category-panel" aria-labelledby="category-list-title" [attr.aria-busy]="isLoading()">
+      <header class="panel-heading">
+        <div>
+          <h2 id="category-list-title">Categorías de la empresa</h2>
+          <p>Las categorías inactivas conservan sus productos e historial.</p>
+        </div>
+        <button type="button" class="create-button" [disabled]="isSaving()" (click)="startCreate()">Nueva categoría</button>
+      </header>
+
+      @if (actionMessage(); as message) { <p class="success-message" role="status">{{ message }}</p> }
+      @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+
+      @if (editorOpen()) {
+        <form class="editor-form" [formGroup]="editorForm" (ngSubmit)="save()">
+          <h3>{{ editingId() ? 'Editar categoría' : 'Nueva categoría' }}</h3>
+          <label for="category-name">Nombre</label>
+          <input id="category-name" formControlName="name" maxlength="120" autocomplete="off" required />
+          @if (editorForm.controls.name.touched && editorForm.controls.name.invalid) {
+            <p class="field-error" role="alert">Ingresá un nombre de hasta 120 caracteres.</p>
+          }
+          <div class="editor-actions">
+            <button type="submit" [disabled]="isSaving()">{{ isSaving() ? 'Guardando…' : 'Guardar' }}</button>
+            <button type="button" class="secondary-button" [disabled]="isSaving()" (click)="cancelEdit()">Cancelar</button>
+          </div>
+        </form>
+      }
+
+      <form class="search-form" (submit)="$event.preventDefault(); search()">
+        <label for="category-search">Buscar categoría</label>
+        <div>
+          <input id="category-search" type="search" maxlength="100" [value]="searchDraft()" (input)="updateSearch($event)" placeholder="Nombre de categoría" />
+          <button type="submit" [disabled]="isLoading()">Buscar</button>
+        </div>
+      </form>
+
+      @if (isLoading()) {
+        <p class="state-message" role="status">Cargando categorías…</p>
+      } @else if (loadError(); as error) {
+        <p class="error-message" role="alert">{{ error }} <button type="button" (click)="load(1)">Reintentar</button></p>
+      } @else if (pageData(); as page) {
+        @if (page.items.length === 0) {
+          <p class="state-message" role="status">{{ appliedSearch() ? 'No se encontraron categorías.' : 'Todavía no hay categorías.' }}</p>
+        } @else {
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th scope="col">Nombre</th><th scope="col">Productos</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr></thead>
+              <tbody>
+                @for (category of page.items; track category.id) {
+                  <tr>
+                    <td><strong>{{ category.name }}</strong></td>
+                    <td>{{ category.productCount }} {{ category.productCount === 1 ? 'producto' : 'productos' }}</td>
+                    <td><span class="status" [class.status-active]="category.isActive">{{ category.isActive ? 'Activa' : 'Inactiva' }}</span></td>
+                    <td class="row-actions">
+                      <button type="button" class="secondary-button" [disabled]="isSaving() || actionId() !== null" (click)="startEdit(category)">Editar</button>
+                      <button type="button" class="secondary-button toggle-button" [disabled]="isSaving() || actionId() !== null" (click)="toggleActive(category)">
+                        {{ actionId() === category.id ? 'Guardando…' : category.isActive ? 'Inactivar' : 'Activar' }}
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <footer class="list-footer">
+            <p>Mostrando {{ firstItem() }}–{{ lastItem() }} de {{ page.totalItems }} categorías</p>
+            <nav aria-label="Paginación de categorías">
+              <button type="button" [disabled]="page.page <= 1 || isLoading()" (click)="goToPage(page.page - 1)">Anterior</button>
+              <span>Página {{ page.page }} de {{ page.totalPages }}</span>
+              <button type="button" [disabled]="page.page >= page.totalPages || isLoading()" (click)="goToPage(page.page + 1)">Siguiente</button>
+            </nav>
+          </footer>
+        }
+      }
+    </section>
+  </div>
+</main>

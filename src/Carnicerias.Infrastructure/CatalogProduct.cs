@@ -13,9 +13,7 @@ public sealed class ProductCategory
     public ProductCategory(Guid companyId, string name)
     {
         if (companyId == Guid.Empty) throw new ArgumentException("Company id is required.", nameof(companyId));
-        Name = string.IsNullOrWhiteSpace(name)
-            ? throw new ArgumentException("Category name is required.", nameof(name))
-            : name.Trim();
+        Name = NormalizeName(name);
         Id = Guid.NewGuid();
         CompanyId = companyId;
         IsActive = true;
@@ -25,6 +23,20 @@ public sealed class ProductCategory
     public Guid CompanyId { get; private set; }
     public string Name { get; private set; }
     public bool IsActive { get; private set; }
+
+    public void Rename(string name) => Name = NormalizeName(name);
+
+    public void Activate() => IsActive = true;
+
+    public void Deactivate() => IsActive = false;
+
+    private static string NormalizeName(string name)
+    {
+        var normalized = name?.Trim();
+        if (string.IsNullOrWhiteSpace(normalized) || normalized.Length > 120)
+            throw new ArgumentException("Category name must be between 1 and 120 characters.", nameof(name));
+        return normalized;
+    }
 }
 
 public sealed class CatalogProduct

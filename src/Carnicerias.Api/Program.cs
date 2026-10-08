@@ -31,6 +31,7 @@ app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
 app.MapSessionEndpoints();
 app.MapUserEndpoints();
 app.MapCatalogEndpoints();
+app.MapAdminCategoryEndpoints();
 app.MapSaleDraftEndpoints();
 app.MapSaleConfirmationEndpoints();
 app.MapInventoryEndpoints();

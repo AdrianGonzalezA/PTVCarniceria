@@ -131,12 +131,20 @@ async function main() {
     console.log('Tickets A y B restaurados con sus respectivos productos tras reiniciar Electron.');
   }
 
-  if (process.argv.includes('--preview-account')) {
+  if (process.argv.includes('--preview-account') || process.argv.includes('--preview-balance')) {
     if (await lineCount() < 1 || !await evaluate("!!document.querySelector('.price-list-lock')?.innerText.includes('Borrador guardado')"))
       throw new Error('No hay un borrador guardado para revisar el cobro sin modificarlo.');
     await evaluate("document.querySelector('.sale-footer .finish-button').click()");
     await waitFor("!!document.querySelector('.checkout-dialog') && !!document.querySelector('#account-charge')");
     await waitFor("document.querySelectorAll('#credit-customer option').length > 1");
+    if (process.argv.includes('--preview-balance')) {
+      await evaluate(`(() => {
+        const select = document.querySelector('#credit-customer');
+        select.value = select.options[1].value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      await waitFor("!!document.querySelector('.credit-account-summary') || !!document.querySelector('.credit-payment .pos-error')");
+    }
     const preview = await evaluate(`({
       text: document.querySelector('.checkout-dialog').innerText,
       customers: [...document.querySelectorAll('#credit-customer option')].map(option => option.innerText)

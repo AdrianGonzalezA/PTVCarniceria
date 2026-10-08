@@ -361,6 +361,13 @@
                 <option [value]="customer.id">{{ customer.code }} · {{ customer.name }}</option>
               }
             </select>
+            @if (creditCustomerAccount(); as account) {
+              <p class="credit-account-summary" role="status">Deuda registrada: <strong>{{ formatMoney(account.totalDebt) }}</strong> · Ventas a cuenta: {{ account.saleCount }}</p>
+            } @else if (creditCustomerAccountStatus() === 'loading') {
+              <p role="status">Consultando saldo del cliente…</p>
+            } @else if (creditCustomerAccountStatus() === 'error') {
+              <p class="pos-error" role="alert">No se pudo consultar el saldo del cliente.</p>
+            }
             @if (creditCustomerLoading()) { <p role="status">Buscando clientes…</p> }
             @else if (creditCustomerOptions().length === 0 && !creditCustomerLoadError()) {
               <p role="status">No hay clientes habilitados en esta búsqueda.</p>

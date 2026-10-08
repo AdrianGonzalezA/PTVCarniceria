@@ -35,6 +35,7 @@ El POS y la caja ya guardan ventas, pagos, stock y turnos. Se agregará primero 
 
 ### 3. Cobranzas e imputación
 
+- [x] Primera consulta paginada por cliente y venta a cuenta, con deuda visible en el POS. Por ahora el importe pendiente coincide con el cargo original porque aún no existen cobranzas.
 - [ ] Consulta de deuda por cliente/venta y propuesta de las más antiguas, con selección y parcialidad editables.
 - [ ] Recibo interno idempotente, imputaciones auditables y entrada en caja/turno para cobros reales.
 - **Verificación:** pruebas de distribución, concurrencia y aislamiento; flujo manual en Electron.

@@ -13,7 +13,7 @@ import { ConfirmedSale, SaleDraft, SaleDraftClient, SaleDraftLine, SalePaymentMe
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { CashierShift, CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
-import { CreditCustomerClient, CreditCustomerOption } from '../../core/customers/credit-customer-client';
+import { CreditCustomerAccount, CreditCustomerClient, CreditCustomerOption } from '../../core/customers/credit-customer-client';
 
 type SaleMode = 'weight' | 'unit';
 
@@ -190,6 +190,8 @@ export class PosPage implements OnInit {
   protected readonly creditCustomerOptions = signal<readonly CreditCustomerOption[]>([]);
   protected readonly creditCustomerSearch = signal('');
   protected readonly creditCustomerId = signal('');
+  protected readonly creditCustomerAccount = signal<CreditCustomerAccount | null>(null);
+  protected readonly creditCustomerAccountStatus = signal<'idle' | 'loading' | 'error'>('idle');
   protected readonly creditCustomerLoading = signal(false);
   protected readonly creditCustomerLoadError = signal<string | null>(null);
   protected readonly accountChargeDraft = signal('0');
@@ -909,6 +911,8 @@ export class PosPage implements OnInit {
     this.selectedPayments.set([{ method: 'cash', amount: this.subtotal() }]);
     this.accountChargeDraft.set('0');
     this.creditCustomerId.set('');
+    this.creditCustomerAccount.set(null);
+    this.creditCustomerAccountStatus.set('idle');
     this.creditCustomerSearch.set('');
     this.creditCustomerOptions.set([]);
     this.creditCustomerLoadError.set(null);
@@ -1037,7 +1041,11 @@ export class PosPage implements OnInit {
     this.creditCustomerClient.search(this.creditCustomerSearch().trim()).subscribe({
       next: (options) => {
         this.creditCustomerOptions.set(options);
-        if (!options.some((option) => option.id === this.creditCustomerId())) this.creditCustomerId.set('');
+        if (!options.some((option) => option.id === this.creditCustomerId())) {
+          this.creditCustomerId.set('');
+          this.creditCustomerAccount.set(null);
+          this.creditCustomerAccountStatus.set('idle');
+        }
         this.creditCustomerLoading.set(false);
       },
       error: () => {
@@ -1048,7 +1056,21 @@ export class PosPage implements OnInit {
   }
 
   protected selectCreditCustomer(event: Event): void {
-    this.creditCustomerId.set((event.target as HTMLSelectElement).value);
+    const customerId = (event.target as HTMLSelectElement).value;
+    this.creditCustomerId.set(customerId);
+    this.creditCustomerAccount.set(null);
+    this.creditCustomerAccountStatus.set(customerId ? 'loading' : 'idle');
+    if (customerId) this.creditCustomerClient.account(customerId).subscribe({
+      next: (account) => {
+        if (this.creditCustomerId() !== customerId) return;
+        this.creditCustomerAccount.set(account);
+        this.creditCustomerAccountStatus.set('idle');
+      },
+      error: () => {
+        if (this.creditCustomerId() !== customerId) return;
+        this.creditCustomerAccountStatus.set('error');
+      },
+    });
     this.checkoutError.set(null);
   }
 
@@ -1113,6 +1135,8 @@ export class PosPage implements OnInit {
     this.selectedPayments.set([]);
     this.accountChargeDraft.set('0');
     this.creditCustomerId.set('');
+    this.creditCustomerAccount.set(null);
+    this.creditCustomerAccountStatus.set('idle');
     this.errorMessage.set(null);
     this.loadCashierShift();
     this.loadPriceLists();

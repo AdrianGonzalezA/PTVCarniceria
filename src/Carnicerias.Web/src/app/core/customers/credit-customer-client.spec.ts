@@ -18,4 +18,13 @@ describe('CreditCustomerClient', () => {
     expect(request.request.withCredentials).toBe(true);
     request.flush([{ id: 'customer-id', code: 'CLI-CC', name: 'Cliente' }]);
   });
+
+  it('reads the selected customer account without sending a company id', () => {
+    TestBed.inject(CreditCustomerClient).account('customer-id').subscribe();
+    const request = TestBed.inject(HttpTestingController).expectOne((item) =>
+      item.url === '/api/customers/customer-id/account' && item.params.get('page') === '1');
+    expect(request.request.method).toBe('GET');
+    expect(request.request.withCredentials).toBe(true);
+    request.flush({ customerId: 'customer-id', totalDebt: 0, creditAvailable: 0, sales: [] });
+  });
 });

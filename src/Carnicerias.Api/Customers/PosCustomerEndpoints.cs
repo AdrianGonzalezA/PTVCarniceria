@@ -13,7 +13,36 @@ public static class PosCustomerEndpoints
     {
         endpoints.MapGet("/api/customers/credit-options", OptionsAsync)
             .RequireOperationalPermission(PlatformPermissionCatalog.PosAccountCharge);
+        endpoints.MapGet("/api/customers/{customerId:guid}/account", AccountAsync)
+            .RequireOperationalPermission(PlatformPermissionCatalog.PosAccountCharge);
         return endpoints;
+    }
+
+    private static async Task<IResult> AccountAsync(
+        Guid customerId, PlatformAccessDbContext db, OperationalContextAccessor accessor,
+        CancellationToken cancellationToken, int page = 1)
+    {
+        if (customerId == Guid.Empty || page is < 1 or > 10_000)
+            return Results.Json(new ErrorResponse(new ApiError("VALIDATION_ERROR",
+                "No se pudo completar la solicitud", [])), statusCode: StatusCodes.Status400BadRequest);
+
+        var companyId = accessor.Context.CompanyId;
+        var customer = await db.CustomerAccounts.AsNoTracking().Where(item =>
+            item.CompanyId == companyId && item.Id == customerId)
+            .Select(item => new { item.Id, item.Code, item.Name, item.IsActive, item.CreditEnabled })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (customer is null) return Results.NotFound();
+
+        var charges = db.CustomerSaleCharges.AsNoTracking().Where(charge =>
+            charge.CompanyId == companyId && charge.CustomerId == customerId);
+        var totalDebt = await charges.SumAsync(charge => (decimal?)charge.Amount, cancellationToken) ?? 0;
+        var count = await charges.CountAsync(cancellationToken);
+        var sales = await charges.OrderBy(charge => charge.CreatedAtUtc).ThenBy(charge => charge.Id)
+            .Skip((page - 1) * 50).Take(50)
+            .Select(charge => new AccountSale(charge.SaleId, charge.CreatedAtUtc, charge.Amount,
+                charge.Amount)).ToArrayAsync(cancellationToken);
+        return Results.Ok(new CustomerAccountResponse(customer.Id, customer.Code, customer.Name,
+            customer.IsActive, customer.CreditEnabled, totalDebt, 0, count, page, sales));
     }
 
     private static async Task<IResult> OptionsAsync(
@@ -45,4 +74,9 @@ public static class PosCustomerEndpoints
             .Replace("_", "\\_", StringComparison.Ordinal);
 
     private sealed record CustomerOption(Guid Id, string Code, string Name);
+    private sealed record AccountSale(Guid SaleId, DateTimeOffset ChargedAtUtc,
+        decimal OriginalAmount, decimal OutstandingAmount);
+    private sealed record CustomerAccountResponse(Guid CustomerId, string CustomerCode, string CustomerName,
+        bool IsActive, bool CreditEnabled, decimal TotalDebt, decimal CreditAvailable,
+        int SaleCount, int Page, IReadOnlyList<AccountSale> Sales);
 }

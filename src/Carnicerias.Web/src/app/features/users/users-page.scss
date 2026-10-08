@@ -94,21 +94,14 @@ h1 {
 .user-editor {
   display: grid;
   gap: 0.7rem;
-  max-width: 42rem;
   margin: 1.25rem;
   padding: 1.25rem;
   background: #fff;
   border: 1px solid var(--color-border);
-  border-radius: 0.3rem;
 }
 
-.user-editor h3,
-.user-editor p { margin: 0; }
-.user-editor .form-help { color: var(--color-muted); font-size: 0.9rem; }
-.user-editor fieldset { display: grid; gap: 0.5rem; padding: 0.75rem; border: 1px solid var(--color-border); }
 .user-editor .branch-choice { display: flex; align-items: center; gap: 0.6rem; }
 .user-editor .branch-choice input { width: auto; min-height: auto; }
-.user-editor .editor-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 
 .panel-heading {
   display: flex;
@@ -272,16 +265,6 @@ tbody tr:last-child td {
   font-size: 0.85rem;
 }
 
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  clip-path: inset(50%);
-}
-
 .list-footer {
   display: flex;
   align-items: center;
@@ -308,13 +291,6 @@ tbody tr:last-child td {
   color: var(--color-text);
   background: #fff;
   border-color: var(--color-border);
-}
-
-input:focus-visible,
-button:focus-visible,
-a:focus-visible {
-  outline: 3px solid #71b8da;
-  outline-offset: 2px;
 }
 
 @media (max-width: 40rem) {

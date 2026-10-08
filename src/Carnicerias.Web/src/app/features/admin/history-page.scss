@@ -1,0 +1,10 @@
+.history-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 1rem; border-bottom: 1px solid #ccc; }
+.history-tabs button { color: #003b3b; background: #fff; border: 1px solid #008b8b; }
+.history-tabs button[aria-current='page'] { color: #fff; background: #008b8b; }
+.history-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 0.5rem; padding: 1rem; }
+.history-filters label { font-weight: 650; }
+.history-filters select, .history-filters input { min-height: 2.5rem; padding: 0.4rem; }
+.ticket-detail { margin: 1rem; padding: 1rem; background: #fff; border: 1px solid #b2b2b2; }
+.ticket-detail header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.ticket-detail h3 { overflow-wrap: anywhere; }
+.ticket-detail ul { line-height: 1.6; }

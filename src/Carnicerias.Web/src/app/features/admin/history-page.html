@@ -1,0 +1,156 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" routerLink="/admin" aria-label="Volver a administración">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Administración</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+
+  <div class="workspace">
+    <a class="back-link" routerLink="/admin">← Volver a administración</a>
+    <p class="eyebrow">Consultas</p>
+    <h1>Historial</h1>
+    <p class="intro">Revisá ventas, turnos y movimientos. Los registros confirmados son de solo lectura.</p>
+
+    @if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Contexto de consulta">
+        <div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Sucursal actual</span><strong>{{ context.branchName }}</strong></div>
+      </section>
+    }
+
+    <section class="category-panel history-panel" aria-labelledby="history-title" [attr.aria-busy]="loading()">
+      <header class="panel-heading"><div>
+        <h2 id="history-title">Operaciones de la empresa</h2>
+        <p>Filtrá por sucursal, caja y fecha. El inventario no está asociado a una caja.</p>
+      </div></header>
+
+      <nav class="history-tabs" aria-label="Tipo de historial">
+        <button type="button" [attr.aria-current]="tab() === 'sales' ? 'page' : null" (click)="selectTab('sales')">Ventas</button>
+        <button type="button" [attr.aria-current]="tab() === 'shifts' ? 'page' : null" (click)="selectTab('shifts')">Turnos</button>
+        <button type="button" [attr.aria-current]="tab() === 'cash' ? 'page' : null" (click)="selectTab('cash')">Caja y pagos</button>
+        <button type="button" [attr.aria-current]="tab() === 'stock' ? 'page' : null" (click)="selectTab('stock')">Movimientos de stock</button>
+      </nav>
+
+      <div class="history-filters">
+        <label for="history-branch">Sucursal</label>
+        <select id="history-branch" [value]="branchId()" (change)="selectBranch($event)">
+          <option value="">Todas</option>
+          @for (branch of branches(); track branch.id) {
+            <option [value]="branch.id">{{ branch.name }}{{ branch.isActive ? '' : ' (inactiva)' }}</option>
+          }
+        </select>
+        @if (tab() !== 'stock') {
+          <label for="history-terminal">Caja</label>
+          <select id="history-terminal" [value]="terminalId()" [disabled]="!branchId()" (change)="selectTerminal($event)">
+            <option value="">Todas</option>
+            @for (terminal of terminals(); track terminal.id) {
+              <option [value]="terminal.id">{{ terminal.name }}{{ terminal.isActive ? '' : ' (inactiva)' }}</option>
+            }
+          </select>
+        }
+        <label for="history-from">Desde</label>
+        <input id="history-from" type="date" [value]="fromDate()" (change)="updateDate('from', $event)" />
+        <label for="history-to">Hasta</label>
+        <input id="history-to" type="date" [value]="toDate()" (change)="updateDate('to', $event)" />
+        <button type="button" (click)="applyDates()">Aplicar fechas</button>
+        <button type="button" class="secondary-button" [disabled]="loading()" (click)="load()">Actualizar</button>
+      </div>
+
+      @if (loading()) {
+        <p class="state-message" role="status">Cargando historial…</p>
+      } @else if (loadError(); as error) {
+        <p class="error-message" role="alert">{{ error }}</p>
+      } @else if (totalItems() === 0) {
+        <p class="state-message" role="status">No hay registros para estos filtros.</p>
+      } @else {
+        <div class="table-wrap">
+          @switch (tab()) {
+            @case ('sales') {
+              <table>
+                <thead><tr><th scope="col">Fecha</th><th scope="col">Sucursal / caja</th><th scope="col">Cajero</th><th scope="col">Total</th><th scope="col">Ticket</th></tr></thead>
+                <tbody>
+                  @for (sale of sales()?.items ?? []; track sale.id) {
+                    <tr><td>{{ sale.confirmedAtUtc | date:'dd/MM/yyyy HH:mm' }}</td>
+                      <td>{{ sale.branchName }} · {{ sale.terminalName ?? 'Caja histórica' }}</td>
+                      <td>{{ sale.cashierName }}</td><td>$ {{ sale.total | number:'1.2-2' }}</td>
+                      <td><button type="button" class="secondary-button" (click)="viewSale(sale.id)">Ver detalle</button></td></tr>
+                  }
+                </tbody>
+              </table>
+            }
+            @case ('shifts') {
+              <table>
+                <thead><tr><th scope="col">Apertura</th><th scope="col">Cierre</th><th scope="col">Sucursal / caja</th><th scope="col">Cajero</th><th scope="col">Inicial</th><th scope="col">Estado</th></tr></thead>
+                <tbody>
+                  @for (shift of shifts()?.items ?? []; track shift.id) {
+                    <tr><td>{{ shift.openedAtUtc | date:'dd/MM/yyyy HH:mm' }}</td>
+                      <td>{{ shift.closedAtUtc ? (shift.closedAtUtc | date:'dd/MM/yyyy HH:mm') : '—' }}</td>
+                      <td>{{ shift.branchName }} · {{ shift.terminalName ?? 'Caja histórica' }}</td>
+                      <td>{{ shift.cashierName }}</td><td>$ {{ shift.openingCash | number:'1.2-2' }}</td>
+                      <td>{{ shift.status === 'open' ? 'Abierto' : 'Cerrado' }}</td></tr>
+                  }
+                </tbody>
+              </table>
+            }
+            @case ('cash') {
+              <table>
+                <thead><tr><th scope="col">Fecha</th><th scope="col">Sucursal / caja</th><th scope="col">Cajero</th><th scope="col">Concepto</th><th scope="col">Medio</th><th scope="col">Importe</th><th scope="col">Ticket</th></tr></thead>
+                <tbody>
+                  @for (movement of cash()?.items ?? []; track movement.id) {
+                    <tr><td>{{ movement.createdAtUtc | date:'dd/MM/yyyy HH:mm' }}</td>
+                      <td>{{ movement.branchName }} · {{ movement.terminalName ?? 'Caja histórica' }}</td>
+                      <td>{{ movement.cashierName }}</td><td>{{ cashKindLabel(movement.kind) }}</td>
+                      <td>{{ paymentLabel(movement.method) }}</td><td>$ {{ movement.amountDelta | number:'1.2-2' }}</td>
+                      <td>@if (movement.saleId) { <button type="button" class="secondary-button" (click)="viewSale(movement.saleId)">Ver ticket</button> } @else { — }</td></tr>
+                  }
+                </tbody>
+              </table>
+            }
+            @case ('stock') {
+              <table>
+                <thead><tr><th scope="col">Fecha</th><th scope="col">Sucursal</th><th scope="col">Artículo</th><th scope="col">Usuario</th><th scope="col">Tipo</th><th scope="col">Variación</th><th scope="col">Motivo</th></tr></thead>
+                <tbody>
+                  @for (movement of stock()?.items ?? []; track movement.id) {
+                    <tr><td>{{ movement.createdAtUtc | date:'dd/MM/yyyy HH:mm' }}</td>
+                      <td>{{ movement.branchName }}</td><td>{{ movement.productName }}</td>
+                      <td>{{ movement.username }}</td><td>{{ stockKindLabel(movement.kind) }}</td>
+                      <td>{{ movement.quantityDelta | number:'1.0-3' }}</td><td>{{ movement.reason }}</td></tr>
+                  }
+                </tbody>
+              </table>
+            }
+          }
+        </div>
+        <footer class="list-footer">
+          <p>Mostrando {{ firstItem() }}–{{ lastItem() }} de {{ totalItems() }} registros</p>
+          <nav aria-label="Paginación del historial">
+            <button type="button" [disabled]="page() <= 1 || loading()" (click)="changePage(-1)">Anterior</button>
+            <span>Página {{ page() }}</span>
+            <button type="button" [disabled]="lastItem() >= totalItems() || loading()" (click)="changePage(1)">Siguiente</button>
+          </nav>
+        </footer>
+      }
+
+      @if (detailLoading()) { <p class="state-message" role="status">Cargando ticket…</p> }
+      @if (detailError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+      @if (detail(); as ticket) {
+        <section class="ticket-detail" aria-labelledby="ticket-title">
+          <header><h3 id="ticket-title">Ticket {{ ticket.id }}</h3><button type="button" class="secondary-button" (click)="closeDetail()">Cerrar detalle</button></header>
+          <p>{{ ticket.confirmedAtUtc | date:'dd/MM/yyyy HH:mm' }} · Total $ {{ ticket.total | number:'1.2-2' }}</p>
+          <h4>Artículos</h4>
+          <ul>@for (line of ticket.lines; track line.code) {
+            <li>{{ line.name }} · {{ line.quantity }} {{ line.unit }} × $ {{ line.unitPrice | number:'1.2-2' }} = $ {{ line.lineTotal | number:'1.2-2' }}</li>
+          }</ul>
+          <h4>Pagos</h4>
+          <ul>@for (payment of ticket.payments; track payment.method) {
+            <li>{{ paymentLabel(payment.method) }}: $ {{ payment.appliedAmount | number:'1.2-2' }} aplicado
+              @if (payment.tenderedAmount !== payment.appliedAmount) { (entregado $ {{ payment.tenderedAmount | number:'1.2-2' }}) }
+            </li>
+          }</ul>
+        </section>
+      }
+    </section>
+  </div>
+</main>

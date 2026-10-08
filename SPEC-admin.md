@@ -54,6 +54,12 @@ El primer incremento publicable comprende navegación administrativa y ABM de ca
 - El listado, la edición de datos y las asignaciones sólo muestran usuarios vinculados a la empresa del contexto. Las asignaciones del administrador no se pueden reemplazar desde el sitio. Al cambiar las sucursales del cajero, se cierran sus sesiones anteriores; no se puede quitar una sucursal donde tenga turno o ticket abierto ni dejarlo sin sucursales.
 - La inactivación de una cuenta se rechaza si el usuario mantiene turnos o tickets abiertos, incluso en otra empresa. Restablecer la contraseña de un cajero revoca sus sesiones y nunca devuelve el hash ni la contraseña anterior. El administrador no puede restablecer su propia contraseña por este flujo de terceros.
 
+## Consulta histórica
+
+- `/api/admin/history/sales`, `/shifts`, `/cash-movements` y `/stock-movements` son listados paginados (máximo 100 por página) de solo lectura de la empresa del contexto actual. Permiten filtrar sucursal y fechas; ventas, turnos y caja también permiten caja/terminal. La fecha se envía en UTC y el límite superior es exclusivo, de modo que el formulario incluye el día final completo en hora local.
+- `/api/admin/history/sales/{id}` muestra renglones y pagos del ticket confirmado, sin exponer el hash de solicitud ni permitir modificaciones. Los importes y nombres de artículos provienen del snapshot confirmado; los nombres de sucursal, caja y cajero se muestran con su valor actual.
+- La consulta exige permiso `organization.manage` en servidor; el cajero no puede acceder aunque conozca la ruta. Los índices de empresa, sucursal/caja y fecha facilitan el recorrido cuando crezca el volumen de tickets. No se crean bases nuevas ni se alteran ventas previas.
+
 ## Tecnología y comandos
 
 - Angular 22, formularios reactivos, rutas protegidas y `HttpClient` en `src/Carnicerias.Web`.

@@ -2,7 +2,7 @@ import path from 'node:path';
 
 const applicationOrigin = 'app://bundle';
 const backendOrigin = 'http://localhost:5197';
-const angularRoutes = new Set(['', '/', '/pos', '/users', '/admin', '/admin/categories', '/admin/products', '/admin/price-lists', '/admin/organization', '/admin/stock']);
+const angularRoutes = new Set(['', '/', '/pos', '/users', '/admin', '/admin/categories', '/admin/products', '/admin/price-lists', '/admin/organization', '/admin/stock', '/admin/history']);
 
 export function resolveAppAsset(webRoot: string, candidate: string): string {
   const url = new URL(candidate);

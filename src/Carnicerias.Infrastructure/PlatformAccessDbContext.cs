@@ -366,6 +366,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .HasPrincipalKey(draft => new { draft.CompanyId, draft.Id })
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(sale => new { sale.CompanyId, sale.SourceDraftId }).IsUnique();
+            entity.HasIndex(sale => new { sale.CompanyId, sale.ConfirmedAtUtc });
+            entity.HasIndex(sale => new { sale.CompanyId, sale.BranchId, sale.PosTerminalId, sale.ConfirmedAtUtc });
             entity.HasMany(sale => sale.Lines).WithOne().HasForeignKey(line => line.SaleId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasMany(sale => sale.Payments).WithOne().HasForeignKey(payment => payment.SaleId)
@@ -437,6 +439,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(movement => new { movement.CompanyId, movement.BranchId, movement.OperationId }).IsUnique();
             entity.HasIndex(movement => new { movement.CashierShiftId, movement.Method, movement.CreatedAtUtc });
+            entity.HasIndex(movement => new { movement.CompanyId, movement.CreatedAtUtc });
+            entity.HasIndex(movement => new { movement.CompanyId, movement.BranchId, movement.PosTerminalId, movement.CreatedAtUtc });
         });
 
         modelBuilder.Entity<BranchInventoryBalance>(entity =>
@@ -481,6 +485,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(movement => new { movement.CompanyId, movement.BranchId, movement.OperationId }).IsUnique();
             entity.HasIndex(movement => new { movement.CompanyId, movement.BranchId, movement.ProductId, movement.CreatedAtUtc });
+            entity.HasIndex(movement => new { movement.CompanyId, movement.CreatedAtUtc });
+            entity.HasIndex(movement => new { movement.CompanyId, movement.BranchId, movement.CreatedAtUtc });
         });
 
         modelBuilder.Entity<CashierShift>(entity =>
@@ -508,6 +514,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .IsUnique().HasFilter("\"Status\" = 0");
             entity.HasIndex(shift => new { shift.CompanyId, shift.BranchId, shift.PosTerminalId })
                 .IsUnique().HasFilter("\"Status\" = 0 AND \"PosTerminalId\" IS NOT NULL");
+            entity.HasIndex(shift => new { shift.CompanyId, shift.OpenedAtUtc });
+            entity.HasIndex(shift => new { shift.CompanyId, shift.BranchId, shift.PosTerminalId, shift.OpenedAtUtc });
         });
     }
 }

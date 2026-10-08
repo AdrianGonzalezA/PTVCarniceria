@@ -53,6 +53,10 @@
               <span><strong>Organización</strong><small>Empresas, sucursales y su estado operativo.</small></span>
               <span aria-hidden="true">→</span>
             </a>
+            <a class="module-link" routerLink="/admin/history">
+              <span><strong>Historial</strong><small>Consultar tickets, pagos, turnos y movimientos por sucursal y caja.</small></span>
+              <span aria-hidden="true">→</span>
+            </a>
           }
           @if (context.permissions.includes('inventory.stock.manage')) {
             <a class="module-link" routerLink="/admin/stock">

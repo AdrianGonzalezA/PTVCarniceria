@@ -6,6 +6,7 @@ using Carnicerias.Api.Contracts;
 using Carnicerias.Api.Security;
 using Carnicerias.Domain.Sales;
 using Carnicerias.Infrastructure;
+using Carnicerias.PlatformAccess;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -28,8 +29,10 @@ public static class SaleConfirmationEndpoints
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
-        if (draftId == Guid.Empty || request?.Payments is null || request.Payments.Count is < 1 or > 6 ||
-            request.Payments.Any(payment => payment is null))
+        if (draftId == Guid.Empty || request?.Payments is null || request.Payments.Count > 6 ||
+            request.Payments.Any(payment => payment is null) || request.CustomerId == Guid.Empty ||
+            (request.CustomerId is not null && request.AccountChargeAmount <= 0) ||
+            (request.CustomerId is null && request.AccountChargeAmount != 0))
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var tenders = new List<PaymentTender>(request.Payments.Count);
@@ -40,7 +43,7 @@ public static class SaleConfirmationEndpoints
             tenders.Add(new PaymentTender(method, payment.Amount));
         }
 
-        var requestHash = HashPaymentRequest(tenders);
+        var requestHash = HashPaymentRequest(tenders, request.CustomerId, request.AccountChargeAmount);
         var context = accessor.Context;
         try
         {
@@ -71,10 +74,25 @@ public static class SaleConfirmationEndpoints
 
             var total = draft.Lines.Sum(line => decimal.Round(
                 line.Quantity * line.UnitPrice, 2, MidpointRounding.AwayFromZero));
+            CustomerAccount? creditCustomer = null;
+            if (request.AccountChargeAmount > 0)
+            {
+                if (!context.Permissions.Contains(PlatformPermissionCatalog.PosAccountCharge))
+                    return Error(StatusCodes.Status403Forbidden, "ACCOUNT_CHARGE_FORBIDDEN");
+                if (!request.AccountChargeConfirmed)
+                    return Error(StatusCodes.Status400BadRequest, "ACCOUNT_CHARGE_CONFIRMATION_REQUIRED");
+                creditCustomer = await db.CustomerAccounts.SingleOrDefaultAsync(customer =>
+                    customer.CompanyId == context.CompanyId && customer.Id == request.CustomerId,
+                    cancellationToken);
+                if (creditCustomer?.CanChargeToAccount != true)
+                    return Error(StatusCodes.Status409Conflict, "CUSTOMER_CREDIT_UNAVAILABLE");
+            }
             PaymentSettlementResult settlement;
             try
             {
-                settlement = PaymentSettlement.Calculate(total, tenders);
+                settlement = request.AccountChargeAmount > 0
+                    ? PaymentSettlement.CalculateWithAccountCharge(total, tenders, request.AccountChargeAmount)
+                    : PaymentSettlement.Calculate(total, tenders);
             }
             catch (PaymentSettlementException exception)
             {
@@ -87,13 +105,17 @@ public static class SaleConfirmationEndpoints
                 if (await db.ConfirmedSaleLines.AnyAsync(line => line.InventoryPieceId == pieceId, cancellationToken))
                     return Error(StatusCodes.Status409Conflict, "PIECE_ALREADY_USED");
             var sale = new ConfirmedSale(context.CompanyId, context.BranchId, context.UserId,
-                shift.Id, draft.Id, draft.PriceListId, total, requestHash, now, accessor.TerminalId);
+                shift.Id, draft.Id, draft.PriceListId, total, requestHash, now, accessor.TerminalId,
+                request.CustomerId, request.AccountChargeAmount, creditCustomer?.Code, creditCustomer?.Name);
             sale.Lines.AddRange(draft.Lines.Select(line => new ConfirmedSaleLine(
                 context.CompanyId, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
                 line.SaleMode, line.Quantity, line.UnitPrice, line.InventoryPieceId, line.PieceIdentifier)));
             sale.Payments.AddRange(settlement.AppliedPayments.Select(payment => new SalePayment(
                 payment.Method, payment.TenderedAmount, payment.AppliedAmount)));
             db.ConfirmedSales.Add(sale);
+            if (request.CustomerId is Guid customerId)
+                db.CustomerSaleCharges.Add(new CustomerSaleCharge(context.CompanyId, context.BranchId,
+                    customerId, sale.Id, context.UserId, shift.Id, request.AccountChargeAmount, now));
 
             foreach (var group in draft.Lines.GroupBy(line => line.ProductId))
             {
@@ -162,10 +184,12 @@ public static class SaleConfirmationEndpoints
                 .Sum(payment => payment.TenderedAmount - payment.AppliedAmount)))
             : Error(StatusCodes.Status409Conflict, "IDEMPOTENCY_CONFLICT");
 
-    private static string HashPaymentRequest(IEnumerable<PaymentTender> tenders)
+    private static string HashPaymentRequest(IEnumerable<PaymentTender> tenders, Guid? customerId, decimal accountCharge)
     {
         var canonical = string.Join('|', tenders.OrderBy(tender => tender.Method)
             .Select(tender => $"{(int)tender.Method}:{tender.TenderedAmount.ToString("0.00", CultureInfo.InvariantCulture)}"));
+        if (customerId is not null)
+            canonical += $"|account:{customerId.Value:N}:{accountCharge.ToString("0.00", CultureInfo.InvariantCulture)}";
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
 
@@ -193,7 +217,8 @@ public static class SaleConfirmationEndpoints
     }
 
     private static SaleConfirmationResponse ToResponse(ConfirmedSale sale, decimal change) => new(
-        sale.Id, sale.Total, change, sale.ConfirmedAtUtc,
+        sale.Id, sale.Total, change, sale.ConfirmedAtUtc, sale.CustomerId, sale.AccountChargeAmount,
+        sale.CustomerCode, sale.CustomerName,
         sale.Lines.OrderBy(line => line.ProductName).ThenBy(line => line.PieceIdentifier)
             .Select(line => new SaleConfirmationLineResponse(
                 line.ProductCode, line.ProductName, line.Unit, line.Quantity, line.UnitPrice,
@@ -223,10 +248,13 @@ public static class SaleConfirmationEndpoints
     private static IResult Error(int statusCode, string code) => Results.Json(
         new ErrorResponse(new ApiError(code, "No se pudo completar la solicitud", [])), statusCode: statusCode);
 
-    private sealed record ConfirmSaleRequest(IReadOnlyList<PaymentRequest>? Payments);
+    private sealed record ConfirmSaleRequest(IReadOnlyList<PaymentRequest>? Payments, Guid? CustomerId = null,
+        decimal AccountChargeAmount = 0, bool AccountChargeConfirmed = false);
     private sealed record PaymentRequest(string? Method, decimal Amount);
     private sealed record SaleConfirmationResponse(Guid Id, decimal Total, decimal ChangeAmount,
-        DateTimeOffset ConfirmedAtUtc, IReadOnlyList<SaleConfirmationLineResponse> Lines,
+        DateTimeOffset ConfirmedAtUtc, Guid? CustomerId, decimal AccountChargeAmount,
+        string? CustomerCode, string? CustomerName,
+        IReadOnlyList<SaleConfirmationLineResponse> Lines,
         IReadOnlyList<SaleConfirmationPaymentResponse> Payments);
     private sealed record SaleConfirmationLineResponse(string Code, string Name, string Unit,
         decimal Quantity, decimal UnitPrice, decimal LineTotal, string? PieceIdentifier);

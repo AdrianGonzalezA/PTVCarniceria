@@ -32,6 +32,8 @@ export function formatSerialReceipt(receipt: ReceiptRequest): string {
     '----------------------------------------',
     'PRODUCTOS',
   ];
+  if (receipt.customerName && receipt.customerCode)
+    lines.splice(8, 0, `Cliente ${printable(receipt.customerName)} (${printable(receipt.customerCode)})`);
   for (const line of receipt.lines) {
     const quantity = line.quantity.toLocaleString('es-AR', {
       minimumFractionDigits: line.unit === 'kg' ? 3 : 0, maximumFractionDigits: 3,
@@ -44,6 +46,8 @@ export function formatSerialReceipt(receipt: ReceiptRequest): string {
   lines.push('----------------------------------------', 'PAGOS');
   for (const payment of receipt.payments)
     lines.push(`${paymentNames[payment.method] ?? printable(payment.method)} $ ${money(payment.appliedAmount)}`);
+  if (receipt.accountChargeAmount > 0)
+    lines.push(`Cuenta corriente $ ${money(receipt.accountChargeAmount)}`);
   lines.push('----------------------------------------', `TOTAL $ ${money(receipt.total)}`);
   if (receipt.changeAmount > 0) lines.push(`Vuelto $ ${money(receipt.changeAmount)}`);
   lines.push('NO ES FACTURA NI COMPROBANTE FISCAL', '');

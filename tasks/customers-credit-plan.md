@@ -20,15 +20,18 @@ El POS y la caja ya guardan ventas, pagos, stock y turnos. Se agregará primero 
 
 ### 2. Cliente y autorización de crédito en venta
 
-- [ ] Selección de cliente en POS; ninguna venta a cuenta para eventual, cliente inactivo o no habilitado.
-- [ ] Permiso específico en rol, confirmación adicional, actor e importe auditados.
-- [ ] Venta mixta idempotente: pago inmediato + crédito aplicado + deuda nueva = total; stock y caja atómicos.
+- [x] Selección de cliente en POS; ninguna venta a cuenta para eventual, cliente inactivo o no habilitado.
+- [x] Permiso específico en rol, confirmación adicional, actor e importe auditados en la venta/cargo. La UI de administración de la concesión del permiso sigue pendiente.
+- [x] Venta mixta idempotente: pago inmediato + deuda nueva = total; stock y caja atómicos. La aplicación de crédito previo corresponde a la tarea 4.
 - **Verificación:** tests de importes, permiso, reintentos/rollback y manual en Electron; no ejecutar integración que cree otra base.
 - **Depende de:** tarea 1.
 
 ### Checkpoint de ventas
 
-- [ ] Confirmar una venta con pago parcial y deuda, reabrir Electron y ver persistencia; impedir la misma operación con cajero/cliente no habilitado.
+- [x] Confirmar una venta con pago parcial y deuda, reabrir Electron y ver persistencia.
+- [ ] Verificar rechazo con cajero sin permiso/cliente no habilitado por integración no destructiva en la base única o por tests de API sin provisionar otra base.
+
+**Verificación del segundo corte (8/10/2026):** migraciones `AddCustomerSaleCharges` y `AddSaleCustomerSnapshot` aplicadas únicamente en `carnicerias_test_visual` (55433). La segunda migración completó el snapshot de la venta a cuenta ya existente antes de exigirlo. Venta manual en Electron: $2.500 total, $1.500 efectivo, $1.000 cuenta; caja registra solo $1.500, deuda $1.000 y stock desciende una unidad. El ticket D guardado no se perdió. Pruebas unitarias, frontend y Electron ejecutadas; las pruebas de integración que crean o reinician otra base siguen omitidas por regla del proyecto.
 
 ### 3. Cobranzas e imputación
 

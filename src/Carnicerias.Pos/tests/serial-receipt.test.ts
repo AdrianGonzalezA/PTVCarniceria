@@ -5,6 +5,8 @@ import { formatSerialReceipt } from '../src/serial-receipt';
 const receipt: ReceiptRequest = {
   saleId: 'VENTA-123', branch: 'Sucursal Visual', terminal: 'Caja 1', cashier: 'cajero1',
   confirmedAtUtc: '2026-10-08T15:00:00Z', total: 10200, changeAmount: 150,
+  accountChargeAmount: 0,
+  customerCode: null, customerName: null,
   lines: [
     { code: '2546', name: 'Cortito c/falda', unit: 'kg', quantity: 0.5,
       unitPrice: 10000, lineTotal: 5000, pieceIdentifier: '250661' },
@@ -34,5 +36,16 @@ describe('serial receipt', () => {
     expect(text).not.toContain('\x1b');
     expect(text).toContain('Asado TOTAL FALSO');
     expect(text.match(/TOTAL \$/g)).toHaveLength(1);
+  });
+
+  it('prints the account charge separately from money received', () => {
+    const text = formatSerialReceipt({ ...receipt, accountChargeAmount: 5200,
+      customerCode: 'CLI-001', customerName: 'Cliente prueba',
+      payments: [{ method: 'cash', tenderedAmount: 5000, appliedAmount: 5000 }], changeAmount: 0 });
+
+    expect(text).toContain('Efectivo $ 5.000,00');
+    expect(text).toContain('Cuenta corriente $ 5.200,00');
+    expect(text).toContain('Cliente Cliente prueba (CLI-001)');
+    expect(text).toContain('TOTAL $ 10.200,00');
   });
 });

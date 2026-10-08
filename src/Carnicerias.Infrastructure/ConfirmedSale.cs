@@ -8,10 +8,19 @@ public sealed class ConfirmedSale
 
     public ConfirmedSale(Guid companyId, Guid branchId, Guid cashierId, Guid cashierShiftId,
         Guid sourceDraftId, Guid priceListId, decimal total, string paymentRequestHash,
-        DateTimeOffset confirmedAtUtc, Guid? posTerminalId = null)
+        DateTimeOffset confirmedAtUtc, Guid? posTerminalId = null,
+        Guid? customerId = null, decimal accountChargeAmount = 0,
+        string? customerCode = null, string? customerName = null)
     {
         if (posTerminalId == Guid.Empty)
             throw new ArgumentException("Terminal id cannot be empty.", nameof(posTerminalId));
+        if (customerId == Guid.Empty || accountChargeAmount < 0 || accountChargeAmount > total ||
+            decimal.Round(accountChargeAmount, 2) != accountChargeAmount ||
+            (accountChargeAmount > 0 && customerId is null))
+            throw new ArgumentException("Account charge requires a valid customer and amount.");
+        if (accountChargeAmount > 0 && (string.IsNullOrWhiteSpace(customerCode) ||
+            string.IsNullOrWhiteSpace(customerName) || customerCode.Length > 80 || customerName.Length > 200))
+            throw new ArgumentException("Account charge requires a customer identity snapshot.");
         Id = Guid.NewGuid();
         CompanyId = companyId;
         BranchId = branchId;
@@ -23,6 +32,10 @@ public sealed class ConfirmedSale
         Total = total;
         PaymentRequestHash = paymentRequestHash;
         ConfirmedAtUtc = confirmedAtUtc.ToUniversalTime();
+        CustomerId = customerId;
+        AccountChargeAmount = accountChargeAmount;
+        CustomerCode = customerCode;
+        CustomerName = customerName;
     }
 
     public Guid Id { get; private set; }
@@ -36,6 +49,10 @@ public sealed class ConfirmedSale
     public decimal Total { get; private set; }
     public string PaymentRequestHash { get; private set; }
     public DateTimeOffset ConfirmedAtUtc { get; private set; }
+    public Guid? CustomerId { get; private set; }
+    public decimal AccountChargeAmount { get; private set; }
+    public string? CustomerCode { get; private set; }
+    public string? CustomerName { get; private set; }
     public List<ConfirmedSaleLine> Lines { get; private set; } = [];
     public List<SalePayment> Payments { get; private set; } = [];
 }

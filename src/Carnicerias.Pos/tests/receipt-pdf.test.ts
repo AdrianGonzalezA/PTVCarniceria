@@ -18,6 +18,27 @@ describe('virtual receipt PDF content', () => {
     expect(html).toContain('2.400,00');
   });
 
+  it('renders a full account charge without inventing a cash payment', () => {
+    const html = createReceiptHtml(validateReceiptRequest({
+      ...validRequest, payments: [], accountChargeAmount: 2400,
+      customerCode: 'CLI-001', customerName: 'Cliente cuenta',
+    }));
+
+    expect(html).toContain('Cuenta corriente');
+    expect(html).toContain('2.400,00');
+    expect(html).not.toContain('<td>Efectivo</td>');
+    expect(html).toContain('Cliente cuenta');
+    expect(html).toContain('CLI-001');
+  });
+
+  it('requires a customer snapshot for account charges and escapes its name', () => {
+    expect(() => validateReceiptRequest({ ...validRequest, payments: [], accountChargeAmount: 2400 })).toThrow();
+    const html = createReceiptHtml(validateReceiptRequest({ ...validRequest, payments: [],
+      accountChargeAmount: 2400, customerCode: 'CLI-001', customerName: '<script>alert(1)</script>' }));
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(html).not.toContain('<script>');
+  });
+
   it('prints each traceable piece with its own weight and identifier', () => {
     const html = createReceiptHtml(validateReceiptRequest({ ...validRequest,
       lines: [

@@ -31,6 +31,10 @@ export interface ConfirmedSale {
   readonly total: number;
   readonly changeAmount: number;
   readonly confirmedAtUtc: string;
+  readonly customerId: string | null;
+  readonly customerCode: string | null;
+  readonly customerName: string | null;
+  readonly accountChargeAmount: number;
   readonly lines: readonly { readonly code: string; readonly name: string; readonly unit: string; readonly quantity: number; readonly unitPrice: number; readonly lineTotal: number; readonly pieceIdentifier?: string | null }[];
   readonly payments: readonly { readonly method: SalePaymentMethod; readonly tenderedAmount: number; readonly appliedAmount: number }[];
 }
@@ -56,8 +60,13 @@ export class SaleDraftClient {
     return this.http.delete<void>(this.draftUrl(slot), { withCredentials: true });
   }
 
-  confirm(draftId: string, payments: readonly { readonly method: SalePaymentMethod; readonly amount: number }[]) {
-    return this.http.post<ConfirmedSale>(`/api/sales/drafts/${draftId}/confirmation`, { payments }, { withCredentials: true });
+  confirm(draftId: string, payments: readonly { readonly method: SalePaymentMethod; readonly amount: number }[],
+    account?: { readonly customerId: string; readonly amount: number }) {
+    return this.http.post<ConfirmedSale>(`/api/sales/drafts/${draftId}/confirmation`, {
+      payments,
+      ...(account ? { customerId: account.customerId, accountChargeAmount: account.amount,
+        accountChargeConfirmed: true } : {}),
+    }, { withCredentials: true });
   }
 
   private draftUrl(slot: SaleTicketSlot): string {

@@ -3,6 +3,7 @@ using System;
 using Carnicerias.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Carnicerias.Infrastructure.Migrations
 {
     [DbContext(typeof(PlatformAccessDbContext))]
-    partial class PlatformAccessDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261008203310_AddCustomerSaleCharges")]
+    partial class AddCustomerSaleCharges
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -325,16 +328,8 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("ConfirmedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("CustomerCode")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
                     b.Property<Guid?>("CustomerId")
                         .HasColumnType("uuid");
-
-                    b.Property<string>("CustomerName")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("PaymentRequestHash")
                         .IsRequired()
@@ -373,7 +368,7 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.ToTable("confirmed_sales", "pos_sales", t =>
                         {
-                            t.HasCheckConstraint("CK_confirmed_sales_account_charge", "\"AccountChargeAmount\" >= 0 AND \"AccountChargeAmount\" <= \"Total\" AND (\"AccountChargeAmount\" = 0 OR (\"CustomerId\" IS NOT NULL AND \"CustomerCode\" IS NOT NULL AND \"CustomerName\" IS NOT NULL))");
+                            t.HasCheckConstraint("CK_confirmed_sales_account_charge", "\"AccountChargeAmount\" >= 0 AND \"AccountChargeAmount\" <= \"Total\" AND (\"AccountChargeAmount\" = 0 OR \"CustomerId\" IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_confirmed_sales_total_positive", "\"Total\" > 0");
                         });

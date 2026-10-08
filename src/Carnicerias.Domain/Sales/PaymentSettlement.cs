@@ -39,6 +39,23 @@ public static class PaymentSettlement
     private const decimal MaximumAmount = 9_999_999_999.99m;
     private const int MaximumMethods = 6;
 
+    public static PaymentSettlementResult CalculateWithAccountCharge(
+        decimal saleTotal, IReadOnlyList<PaymentTender> tenders, decimal accountCharge)
+    {
+        ArgumentNullException.ThrowIfNull(tenders);
+        ValidateAmount(saleTotal);
+        ValidateAmount(accountCharge);
+        if (saleTotal == 0 || accountCharge > saleTotal)
+            throw new PaymentSettlementException(PaymentSettlementError.InvalidAmount);
+
+        var immediateTotal = saleTotal - accountCharge;
+        if (immediateTotal == 0 && tenders.Count == 0)
+            return new PaymentSettlementResult(saleTotal, [], 0);
+
+        var immediate = Calculate(immediateTotal, tenders);
+        return new PaymentSettlementResult(saleTotal, immediate.AppliedPayments, immediate.ChangeAmount);
+    }
+
     public static PaymentSettlementResult Calculate(
         decimal saleTotal,
         IReadOnlyList<PaymentTender> tenders)

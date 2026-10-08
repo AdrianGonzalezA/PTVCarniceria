@@ -11,7 +11,8 @@ public sealed class PlatformPermissionCatalogTests
 
         Assert.Equal(
             ["catalog.manage", "inventory.stock.manage", "organization.manage",
-                "platform.assignments.manage", "platform.roles.manage", "platform.users.manage"],
+                "platform.assignments.manage", "platform.roles.manage", "platform.users.manage",
+                "pos.account.charge"],
             permissions.Select(permission => permission.Code).Order(StringComparer.Ordinal));
     }
 }

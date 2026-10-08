@@ -6,6 +6,7 @@ export interface CashierShift {
   readonly openingCash: number;
   readonly cashSales: number;
   readonly nonCashSales: number;
+  readonly accountSales: number;
   readonly salesTotal: number;
   readonly cashBalance: number;
   readonly openedAtUtc: string;

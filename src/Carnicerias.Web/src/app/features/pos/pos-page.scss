@@ -169,13 +169,23 @@
 .dialog-actions { justify-content: flex-end; gap: 0.65rem; margin-top: 1.2rem; }
 .dialog-cancel { min-height: 2.5rem; padding: 0.5rem 0.9rem; background: #fff; border: 1px solid var(--pos-border); border-radius: 0.35rem; font: inherit; cursor: pointer; }
 .checkout-dialog > p:not(.eyebrow) { line-height: 1.5; }
-.checkout-dialog { max-height: min(90dvh, 48rem); overflow: auto; }
+.checkout-dialog { width: min(100%, 44rem); max-height: min(90dvh, 48rem); overflow: auto; }
+.checkout-dialog .payment-methods { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .checkout-context { margin: 0 0 0.8rem; color: #4d5049; font-size: 0.85rem; }
 .payment-methods { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem; }
 .payment-option { display: grid; min-height: 2.7rem; grid-template-columns: 1fr minmax(5rem, 8rem); align-items: center; gap: 0.4rem; padding: 0.4rem 0.5rem; background: #e7e7e4; border-radius: 0.3rem; font-size: 0.78rem; }
 .payment-option > span { display: flex; align-items: center; gap: 0.35rem; }
 .payment-option input[type="checkbox"] { width: 1rem; height: 1rem; accent-color: var(--pos-teal); }
 .payment-amount { box-sizing: border-box; width: 100%; min-width: 0; min-height: 2rem; padding: 0.3rem; border: 1px solid var(--pos-border); border-radius: 0.25rem; font: inherit; text-align: right; }
+.credit-payment { display: grid; gap: 0.3rem; margin-top: 0.65rem; padding: 0.65rem; border: 1px solid var(--pos-border); border-radius: 0.3rem; }
+.credit-payment h3 { margin: 0; color: var(--pos-teal); font-size: 0.95rem; }
+.credit-payment p { margin: 0 0 0.25rem; font-size: 0.78rem; }
+.credit-payment label { font-size: 0.78rem; font-weight: 700; }
+.credit-payment select,.credit-payment input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 2.3rem; padding: 0.4rem; border: 1px solid var(--pos-border); border-radius: 0.25rem; font: inherit; }
+.credit-customer-search { display: grid; gap: 0.4rem; }
+.credit-customer-search > div { display: flex; gap: 0.4rem; }
+.credit-customer-search button { min-height: 2.3rem; padding: 0.4rem 0.75rem; border: 0; border-radius: 0.25rem; background: var(--pos-lime); font: inherit; cursor: pointer; }
+@media (max-width: 42rem) { .checkout-dialog .payment-methods { grid-template-columns: 1fr; } }
 .change-preview { margin: 0.5rem 0; padding: 0.6rem; color: #215a33; background: #dceedd; border-radius: 0.3rem; font-size: 0.82rem; }
 .payment-balance,.payment-guidance { margin: 0.45rem 0; font-size: 0.82rem; }
 .payment-balance { display: flex; justify-content: space-between; color: #68440b; }

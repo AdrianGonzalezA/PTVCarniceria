@@ -17,7 +17,7 @@ Permitir que el cajero abra su turno, registre pagos combinados y confirme un bo
 - El backend recalcula el total con los renglones y precios del borrador. No acepta total, precio ni vuelto calculado por el cliente.
 - Se admiten pagos combinados. Débito, crédito, transferencia, Mercado Pago y cheque son registros manuales, sin integración con adquirentes.
 - Solo efectivo puede exceder el saldo pendiente. El vuelto se calcula en servidor y se registra como egreso de efectivo; otros medios no pueden exceder el total.
-- Cuenta corriente sigue excluida del **flujo implementado** de cierre de venta. Las reglas provisionales de cliente, autorización, pagos parciales y saldo se registran en `SPEC-customers-credit.md`; se incorporarán por cortes verificables.
+- La venta puede dejar todo o parte del total a cuenta corriente de un cliente expresamente habilitado, con permiso `pos.account.charge` y confirmación adicional. La cobranza posterior, la aplicación de anticipos y las correcciones siguen pendientes. Las reglas provisionales, preguntas y respuestas están en `SPEC-customers-credit.md`.
 - La venta real no emite comprobante fiscal en este corte. Impuestos, descuentos, correlativos de piezas, devolución/anulación y facturación ARCA quedan fuera.
 - La venta de demostración nunca se confirma como operación comercial.
 
@@ -27,8 +27,8 @@ Permitir que el cajero abra su turno, registre pagos combinados y confirme un bo
 - `GET /api/cashier-shifts/last-closed`: último turno cerrado del mismo cajero y sucursal, o `204`; permite recuperar el resumen después de reiniciar Electron.
 - `POST /api/cashier-shifts`: abre turno con fondo inicial no negativo; rechaza segundo turno abierto para ese cajero/sucursal.
 - `POST /api/cashier-shifts/current/close`: cierra el turno propio solo si no hay una confirmación en curso; arqueo físico no requerido en este corte.
-- Las respuestas de turno incluyen `openingCash`, `cashSales`, `nonCashSales`, `salesTotal` y `cashBalance`. Se calculan desde el libro de movimientos: el efectivo recibido menos el vuelto integra `cashSales`; `cashBalance` agrega el fondo inicial. No equivalen a un arqueo físico.
-- `POST /api/sales/drafts/{draftId}/confirmation`: requiere turno abierto y pagos. El borrador solo pasa a confirmado si se registran juntos venta/detalle, pagos, caja y egreso de stock.
+- Las respuestas de turno incluyen `openingCash`, `cashSales`, `nonCashSales`, `accountSales`, `salesTotal` y `cashBalance`. `salesTotal` suma las ventas confirmadas; `accountSales` identifica lo vendido a cuenta sin sumar efectivo ficticio. El efectivo recibido menos el vuelto integra `cashSales`; `cashBalance` agrega el fondo inicial. No equivalen a un arqueo físico.
+- `POST /api/sales/drafts/{draftId}/confirmation`: requiere turno abierto y pagos o un importe total a cuenta. El borrador solo pasa a confirmado si se registran juntos venta/detalle, pagos inmediatos, deuda, caja y egreso de stock. Para deuda requiere `customerId`, `accountChargeAmount` y `accountChargeConfirmed`.
 - La confirmación usa `draftId` como intención idempotente: una repetición devuelve la venta resultante; un payload de pagos distinto para esa venta confirmada devuelve conflicto.
 - Los métodos iniciales son efectivo, débito, crédito, transferencia, Mercado Pago y cheque. Solo se exponen los que estén activos; su administración configurable puede incorporarse sin romper el contrato.
 - Rutas autenticadas y ligadas al contexto operativo; los recursos siempre se filtran por empresa/sucursal y las operaciones de caja por cajero/turno propio. El reintento de confirmación de un borrador ya cobrado solo devuelve la venta a su cajero; otro cajero recibe conflicto.
@@ -66,7 +66,7 @@ Permitir que el cajero abra su turno, registre pagos combinados y confirme un bo
 ## Límites
 
 - Siempre: validar importes y formas en API, resolver identidad desde sesión, controlar autorización/propiedad, usar transacción y restricciones únicas, conservar auditoría y snapshot.
-- Requiere nueva definición antes de incluir: arqueo obligatorio, diferencias de caja, cuenta corriente, descuentos/impuestos, anulaciones/devoluciones, numeración fiscal o integración con adquirentes.
+- Requiere nueva definición antes de incluir: arqueo obligatorio, diferencias de caja, cobranza/imputación/anulación de cuenta corriente, descuentos/impuestos, anulaciones/devoluciones, numeración fiscal o integración con adquirentes.
 - Nunca: confiar en total/vuelto del cliente, aceptar pago en tarjeta/transferencia por encima del saldo, descontar stock antes de confirmar el resto, persistir una venta del catálogo de demostración o guardar datos completos de tarjetas. Las ventas de ensayo con la lista real sí se persisten en la base no productiva.
 
 ## Pregunta abierta

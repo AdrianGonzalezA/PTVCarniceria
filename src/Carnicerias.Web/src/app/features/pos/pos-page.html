@@ -342,14 +342,44 @@
             </label>
           }
         </div>
+        @if (canChargeToAccount()) {
+          <section class="credit-payment" aria-labelledby="credit-payment-title">
+            <h3 id="credit-payment-title">Cuenta corriente</h3>
+            <p>Podés cargar a cuenta solo el saldo que el cliente no paga ahora. No ingresa dinero a caja por ese importe.</p>
+            <form class="credit-customer-search" (submit)="$event.preventDefault(); searchCreditCustomers()">
+              <label for="credit-customer-search">Buscar cliente habilitado</label>
+              <div>
+                <input id="credit-customer-search" type="search" maxlength="100" [value]="creditCustomerSearch()" (input)="updateCreditSearch($event)" placeholder="Código o nombre" />
+                <button type="submit" [disabled]="creditCustomerLoading() || checkoutBusy()">Buscar</button>
+              </div>
+            </form>
+            @if (creditCustomerLoadError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
+            <label for="credit-customer">Cliente</label>
+            <select id="credit-customer" [value]="creditCustomerId()" [disabled]="checkoutBusy()" (change)="selectCreditCustomer($event)">
+              <option value="">Seleccioná un cliente</option>
+              @for (customer of creditCustomerOptions(); track customer.id) {
+                <option [value]="customer.id">{{ customer.code }} · {{ customer.name }}</option>
+              }
+            </select>
+            @if (creditCustomerLoading()) { <p role="status">Buscando clientes…</p> }
+            @else if (creditCustomerOptions().length === 0 && !creditCustomerLoadError()) {
+              <p role="status">No hay clientes habilitados en esta búsqueda.</p>
+            }
+            <label for="account-charge">Importe a cuenta corriente</label>
+            <input id="account-charge" type="number" min="0" step="0.01" [max]="subtotal()" [value]="accountChargeDraft()" [disabled]="checkoutBusy()" (input)="updateAccountCharge($event)" />
+          </section>
+        }
         <div class="checkout-total"><span>Total del ticket</span><strong>{{ formatMoney(subtotal()) }}</strong></div>
+        @if (accountChargeAmount() > 0) {
+          <p class="payment-balance"><span>A cuenta corriente</span><strong>{{ formatMoney(accountChargeAmount()) }}</strong></p>
+        }
         @if (paymentBalance() > 0) { <p class="payment-balance" role="status">Falta cubrir: <strong>{{ formatMoney(paymentBalance()) }}</strong></p> }
         @if (paymentProblem(); as problem) { <p class="payment-guidance" role="status">{{ problem }}</p> }
         @if (changePreview() > 0) { <p class="change-preview">Vuelto estimado en efectivo: <strong>{{ formatMoney(changePreview()) }}</strong></p> }
         @if (checkoutError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
         <div class="dialog-actions">
           <button class="dialog-cancel" type="button" [disabled]="checkoutBusy()" (click)="closeCheckout()">Volver</button>
-          <button class="finish-button" type="button" [disabled]="checkoutBusy() || selectedPayments().length === 0" (click)="confirmSale()">{{ checkoutBusy() ? 'Confirmando…' : 'Confirmar venta' }}</button>
+          <button class="finish-button" type="button" [disabled]="checkoutBusy() || !!paymentProblem()" (click)="confirmSale()">{{ checkoutBusy() ? 'Confirmando…' : 'Confirmar venta' }}</button>
         </div>
       </section>
     </div>
@@ -361,16 +391,20 @@
         <p class="eyebrow">Venta registrada · {{ session()?.context?.branchName }}</p>
         <h2 id="receipt-title">Venta confirmada</h2>
         <p class="receipt-reference">Operación {{ sale.id }}</p>
-        <div class="checkout-total"><span>Total cobrado</span><strong>{{ formatMoney(sale.total) }}</strong></div>
+        <div class="checkout-total"><span>Total de la venta</span><strong>{{ formatMoney(sale.total) }}</strong></div>
         <ul class="receipt-payments" aria-label="Pagos registrados">
           @for (payment of sale.payments; track payment.method) {
             <li><span>{{ paymentMethodName(payment.method) }}</span><strong>{{ formatMoney(payment.appliedAmount) }}</strong></li>
           }
         </ul>
+        @if (sale.accountChargeAmount > 0) {
+          <p class="checkout-context">Cliente: {{ sale.customerName }} ({{ sale.customerCode }})</p>
+          <p class="payment-balance"><span>A cuenta corriente</span><strong>{{ formatMoney(sale.accountChargeAmount) }}</strong></p>
+        }
         @if (sale.changeAmount > 0) {
           <p class="change-preview">Vuelto en efectivo: <strong>{{ formatMoney(sale.changeAmount) }}</strong></p>
         }
-        <p class="checkout-context">El stock y los pagos quedaron registrados. No se emitió comprobante fiscal.</p>
+        <p class="checkout-context">El stock, los pagos y el saldo a cuenta quedaron registrados. No se emitió comprobante fiscal.</p>
         @if (receiptPdfPath(); as path) {
           <p class="receipt-file" role="status">Ticket de prueba guardado en: {{ path }}</p>
         }
@@ -410,6 +444,7 @@
             <span>Ventas del turno</span><strong>{{ formatMoney(shift.salesTotal) }}</strong>
             <span>De esas ventas, en efectivo</span><strong>{{ formatMoney(shift.cashSales) }}</strong>
             <span>Otros medios</span><strong>{{ formatMoney(shift.nonCashSales) }}</strong>
+            <span>A cuenta corriente (sin ingreso de caja)</span><strong>{{ formatMoney(shift.accountSales) }}</strong>
             <span>Efectivo registrado en caja</span><strong>{{ formatMoney(shift.cashBalance) }}</strong>
             <small>Turno {{ shift.id.slice(0, 8) }} · El saldo no es un arqueo físico.</small>
           </div>
@@ -427,6 +462,7 @@
               <span>Ventas registradas</span><strong>{{ formatMoney(closed.salesTotal) }}</strong>
               <span>De esas ventas, en efectivo</span><strong>{{ formatMoney(closed.cashSales) }}</strong>
               <span>Otros medios</span><strong>{{ formatMoney(closed.nonCashSales) }}</strong>
+              <span>A cuenta corriente (sin ingreso de caja)</span><strong>{{ formatMoney(closed.accountSales) }}</strong>
               <span>Efectivo registrado al cierre</span><strong>{{ formatMoney(closed.cashBalance) }}</strong>
               <small>Saldo calculado desde movimientos; no representa un arqueo físico.</small>
             </div>

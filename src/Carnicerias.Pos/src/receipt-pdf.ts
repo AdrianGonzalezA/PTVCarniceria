@@ -6,6 +6,9 @@ export interface ReceiptRequest {
   readonly confirmedAtUtc: string;
   readonly total: number;
   readonly changeAmount: number;
+  readonly accountChargeAmount: number;
+  readonly customerCode: string | null;
+  readonly customerName: string | null;
   readonly lines: readonly {
     readonly code: string; readonly name: string; readonly unit: string;
     readonly quantity: number; readonly unitPrice: number; readonly lineTotal: number;
@@ -44,9 +47,15 @@ export function validateReceiptRequest(value: unknown): ReceiptRequest {
   const lines = data['lines'];
   const payments = data['payments'];
   if (!Array.isArray(lines) || lines.length < 1 || lines.length > 100 ||
-      !Array.isArray(payments) || payments.length < 1 || payments.length > 6) {
+      !Array.isArray(payments) || payments.length > 6) {
     throw new Error('Invalid receipt detail');
   }
+  const total = amount(data['total'], true);
+  const accountChargeAmount = amount(data['accountChargeAmount'] ?? 0);
+  if (accountChargeAmount > total || (payments.length === 0 && accountChargeAmount !== total))
+    throw new Error('Invalid receipt settlement');
+  const customerCode = accountChargeAmount > 0 ? label(data['customerCode'], 80) : null;
+  const customerName = accountChargeAmount > 0 ? label(data['customerName']) : null;
   const confirmedAtUtc = label(data['confirmedAtUtc'], 40);
   if (Number.isNaN(Date.parse(confirmedAtUtc))) throw new Error('Invalid receipt date');
   const result: ReceiptRequest = {
@@ -55,8 +64,11 @@ export function validateReceiptRequest(value: unknown): ReceiptRequest {
     terminal: label(data['terminal']),
     cashier: label(data['cashier']),
     confirmedAtUtc,
-    total: amount(data['total']),
+    total,
     changeAmount: amount(data['changeAmount']),
+    accountChargeAmount,
+    customerCode,
+    customerName,
     lines: lines.map((input: unknown) => {
       const line = object(input);
       const quantity = amount(line['quantity'], true);
@@ -77,6 +89,8 @@ export function validateReceiptRequest(value: unknown): ReceiptRequest {
       };
     }),
   };
+  const settled = result.payments.reduce((sum, payment) => sum + payment.appliedAmount, 0) + accountChargeAmount;
+  if (Math.abs(settled - total) > 0.001) throw new Error('Invalid receipt settlement');
   return result;
 }
 
@@ -93,6 +107,10 @@ const money = (value: number): string => value.toLocaleString('es-AR', {
 export function createReceiptHtml(receipt: ReceiptRequest): string {
   const rows = receipt.lines.map((line) => `<tr><td>${escapeHtml(line.name)}<small>${escapeHtml(line.code)}${line.pieceIdentifier ? ` · Pieza ${escapeHtml(line.pieceIdentifier)}` : ''} · ${line.quantity.toLocaleString('es-AR', { minimumFractionDigits: line.unit === 'kg' ? 3 : 0, maximumFractionDigits: 3 })} ${escapeHtml(line.unit)} × $ ${money(line.unitPrice)}</small></td><td>$ ${money(line.lineTotal)}</td></tr>`).join('');
   const payments = receipt.payments.map((payment) => `<tr><td>${methods[payment.method]}</td><td>$ ${money(payment.appliedAmount)}</td></tr>`).join('');
+  const accountCharge = receipt.accountChargeAmount > 0
+    ? `<tr><td>Cuenta corriente</td><td>$ ${money(receipt.accountChargeAmount)}</td></tr>` : '';
+  const customer = receipt.customerName && receipt.customerCode
+    ? `<p class="meta">Cliente: ${escapeHtml(receipt.customerName)} (${escapeHtml(receipt.customerCode)})</p>` : '';
   const date = new Date(receipt.confirmedAtUtc).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>Ticket de prueba</title><style>
     @page { margin: 3mm; } body { font: 10pt Arial, sans-serif; color: #171717; margin: 0; overflow-wrap: anywhere; }
@@ -103,8 +121,8 @@ export function createReceiptHtml(receipt: ReceiptRequest): string {
     .total { font-size: 13pt; font-weight: bold; } .footer { border-top: 1px solid #555; margin-top: 5mm; padding-top: 3mm; font-size: 9pt; }
   </style></head><body><div class="warning">DOCUMENTO DE PRUEBA<br>NO FISCAL</div>
     <h1>${escapeHtml(receipt.branch)}</h1><p class="meta">${escapeHtml(receipt.terminal)} · ${escapeHtml(receipt.cashier)}</p>
-    <p class="meta">Venta ${escapeHtml(receipt.saleId)}</p><p class="meta">${escapeHtml(date)}</p>
-    <h2>Productos</h2><table>${rows}</table><h2>Pagos</h2><table>${payments}
+    <p class="meta">Venta ${escapeHtml(receipt.saleId)}</p><p class="meta">${escapeHtml(date)}</p>${customer}
+    <h2>Productos</h2><table>${rows}</table><h2>Pagos y saldo a cuenta</h2><table>${payments}${accountCharge}
     <tr class="total"><td>Total</td><td>$ ${money(receipt.total)}</td></tr>
     ${receipt.changeAmount > 0 ? `<tr><td>Vuelto</td><td>$ ${money(receipt.changeAmount)}</td></tr>` : ''}</table>
     <p class="footer">Simulación de impresión. No es factura ni comprobante fiscal válido.</p></body></html>`;

@@ -36,7 +36,7 @@ Las preguntas están redactadas para conservar el sentido de la conversación; l
 ## Contratos previstos (a confirmar por incremento)
 
 - Administración: alta/listado/edición de clientes de la empresa, incluida la habilitación de cuenta corriente. Un cliente inactivo o sin habilitación no admite deuda nueva; el historial previo se conserva.
-- El primer corte de administración reutiliza `organization.manage` para el ABM de clientes; **no** concede por ello permiso para cargar una venta a cuenta. Ese permiso operativo específico se implementará en el corte de ventas.
+- El ABM de clientes reutiliza `organization.manage`; **no** concede por ello permiso para cargar una venta a cuenta. La venta a cuenta exige `pos.account.charge`. En este entorno de desarrollo, la migración lo concede inicialmente a los roles globales `cashier` y `administrator`; queda pendiente administrar esa concesión por rol desde la interfaz.
 - POS: búsqueda/selección de cliente para la venta; visualización de deuda y saldo a favor; elección explícita del importe a cuenta o del crédito a aplicar; autorización por permiso del rol.
 - Cobranzas: consulta paginada de deuda por cliente y venta, propuesta de imputación por antigüedad, confirmación con clave de idempotencia, recibo interno y movimientos de caja/cuenta en una transacción.
 - Correcciones: anulación enlazada e idempotente, sin eliminar recibos ni ventas, con motivo y actor obligatorios. La reversión de caja depende de la realidad del dinero, no solo de la imputación contable.
@@ -62,3 +62,9 @@ Las preguntas están redactadas para conservar el sentido de la conversación; l
 ## Estrategia de desarrollo y verificación
 
 Implementar en cortes pequeños según `tasks/customers-credit-plan.md`. Cada corte incluye pruebas unitarias de invariantes y autorización cuando sea posible, compilación backend/frontend afectado, revisión del diff y estado de migración. La integración que cree o reinicie otra base queda expresamente pendiente; las migraciones se aplicarán únicamente a la base actual, después de verificar nombre y puerto. No publicar como terminado el flujo de cuenta hasta probar confirmación, cobranza, anticipo y corrección de punta a punta.
+
+## Estado de implementación al 8/10/2026
+
+- Implementado: alta/edición/habilitación de clientes; selección de cliente habilitado en el POS; venta total o parcialmente a cuenta con confirmación adicional, permiso del rol, validación del servidor, asiento de deuda separado de pagos, stock y caja. El código y nombre del cliente se copian a la venta confirmada para conservar la identidad en el ticket aun si cambia el catálogo.
+- Comprobado manualmente en Electron y la única base: venta de $2.500 con $1.500 en efectivo y $1.000 a cuenta. Se registraron $1.500 en caja, $1.000 como deuda, una unidad descontada de stock y la venta íntegra de $2.500; otro borrador de ticket permaneció intacto. El ticket es **no fiscal**.
+- Pendiente: consulta del saldo y ventas abiertas, cobros parciales/totales e imputaciones, anticipos y su aplicación, anulación/corrección de recibos, administración de permisos por rol y revisión fiscal. La habilitación del cliente no implica que el flujo completo de cuenta corriente ya esté terminado.

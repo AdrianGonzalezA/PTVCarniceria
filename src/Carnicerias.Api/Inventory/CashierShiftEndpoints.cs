@@ -160,14 +160,22 @@ public static class CashierShiftEndpoints
                     .Sum(movement => movement.AmountDelta),
                 CashSales = group.Where(movement => movement.Method == PaymentMethod.Cash &&
                     movement.Kind != CashLedgerMovementKind.Opening).Sum(movement => movement.AmountDelta),
-                SalesTotal = group.Where(movement => movement.Kind != CashLedgerMovementKind.Opening)
+                CollectedSales = group.Where(movement => movement.Kind != CashLedgerMovementKind.Opening)
                     .Sum(movement => movement.AmountDelta)
             })
             .SingleOrDefaultAsync(cancellationToken);
         var cashSales = totals?.CashSales ?? 0;
-        var salesTotal = totals?.SalesTotal ?? 0;
+        var collectedSales = totals?.CollectedSales ?? 0;
+        var salesTotal = await db.ConfirmedSales.AsNoTracking()
+            .Where(sale => sale.CompanyId == shift.CompanyId && sale.BranchId == shift.BranchId &&
+                sale.CashierId == shift.CashierId && sale.CashierShiftId == shift.Id)
+            .SumAsync(sale => (decimal?)sale.Total, cancellationToken) ?? 0;
+        var accountSales = await db.CustomerSaleCharges.AsNoTracking()
+            .Where(charge => charge.CompanyId == shift.CompanyId && charge.BranchId == shift.BranchId &&
+                charge.CashierShiftId == shift.Id)
+            .SumAsync(charge => (decimal?)charge.Amount, cancellationToken) ?? 0;
         return new ShiftResponse(shift.Id, shift.OpeningCash, shift.OpenedAtUtc, shift.ClosedAtUtc,
-            cashSales, salesTotal - cashSales, salesTotal, totals?.CashBalance ?? 0);
+            cashSales, collectedSales - cashSales, accountSales, salesTotal, totals?.CashBalance ?? 0);
     }
 
     private static IResult Error(int statusCode, string code) => Results.Json(
@@ -177,5 +185,5 @@ public static class CashierShiftEndpoints
     private sealed record OpenShiftRequest(decimal OpeningCash);
     private sealed record ShiftResponse(
         Guid Id, decimal OpeningCash, DateTimeOffset OpenedAtUtc, DateTimeOffset? ClosedAtUtc,
-        decimal CashSales, decimal NonCashSales, decimal SalesTotal, decimal CashBalance);
+        decimal CashSales, decimal NonCashSales, decimal AccountSales, decimal SalesTotal, decimal CashBalance);
 }

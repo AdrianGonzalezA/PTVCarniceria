@@ -33,7 +33,7 @@ async function main() {
   };
   const pause = (ms) => new Promise((done) => setTimeout(done, ms));
   const waitFor = async (expression) => {
-    for (let attempt = 0; attempt < 50; attempt++) {
+    for (let attempt = 0; attempt < 150; attempt++) {
       if (await evaluate(expression)) return;
       await pause(100);
     }
@@ -129,6 +129,35 @@ async function main() {
       throw new Error('El Ticket A no se conservó independientemente.');
     await switchTo('B');
     console.log('Tickets A y B restaurados con sus respectivos productos tras reiniciar Electron.');
+  }
+
+  if (process.argv.includes('--preview-account')) {
+    if (await lineCount() < 1 || !await evaluate("!!document.querySelector('.price-list-lock')?.innerText.includes('Borrador guardado')"))
+      throw new Error('No hay un borrador guardado para revisar el cobro sin modificarlo.');
+    await evaluate("document.querySelector('.sale-footer .finish-button').click()");
+    await waitFor("!!document.querySelector('.checkout-dialog') && !!document.querySelector('#account-charge')");
+    await waitFor("document.querySelectorAll('#credit-customer option').length > 1");
+    const preview = await evaluate(`({
+      text: document.querySelector('.checkout-dialog').innerText,
+      customers: [...document.querySelectorAll('#credit-customer option')].map(option => option.innerText)
+    })`);
+    const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    const screenshotPath = resolve(tmpdir(), 'electron-account-checkout.png');
+    writeFileSync(screenshotPath, Buffer.from(screenshot.data, 'base64'));
+    await evaluate("document.querySelector('.checkout-dialog .dialog-cancel').click()");
+    socket.close();
+    console.log(JSON.stringify({ ...preview, screenshotPath }, null, 2));
+    return;
+  }
+
+  if (process.argv.includes('--shift-preview')) {
+    await evaluate("document.querySelector('.shift-status').click()");
+    await waitFor("!!document.querySelector('.shift-summary')");
+    const summary = await evaluate("document.querySelector('.shift-summary')?.innerText");
+    await evaluate("document.querySelector('.shift-dialog .dialog-cancel').click()");
+    socket.close();
+    console.log(summary);
+    return;
   }
 
   const state = await send('Runtime.evaluate', { expression: `({

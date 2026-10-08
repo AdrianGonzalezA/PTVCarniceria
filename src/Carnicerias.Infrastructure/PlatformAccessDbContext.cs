@@ -28,6 +28,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<CustomerAccount> CustomerAccounts => Set<CustomerAccount>();
 
+    public DbSet<CustomerSaleCharge> CustomerSaleCharges => Set<CustomerSaleCharge>();
+
     public DbSet<BranchPriceList> BranchPriceLists => Set<BranchPriceList>();
 
     public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
@@ -201,6 +203,34 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(customer => new { customer.CompanyId, customer.NormalizedCode }).IsUnique();
             entity.HasIndex(customer => new { customer.CompanyId, customer.Name });
+        });
+
+        modelBuilder.Entity<CustomerSaleCharge>(entity =>
+        {
+            entity.ToTable("sale_charges", "customers_credit", table =>
+                table.HasCheckConstraint("CK_sale_charges_amount_positive", "\"Amount\" > 0"));
+            entity.HasKey(charge => charge.Id);
+            entity.Property(charge => charge.Amount).HasPrecision(12, 2);
+            entity.HasOne<CustomerAccount>().WithMany()
+                .HasForeignKey(charge => new { charge.CompanyId, charge.CustomerId })
+                .HasPrincipalKey(customer => new { customer.CompanyId, customer.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ConfirmedSale>().WithMany()
+                .HasForeignKey(charge => new { charge.CompanyId, charge.SaleId })
+                .HasPrincipalKey(sale => new { sale.CompanyId, sale.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Branch>().WithMany()
+                .HasForeignKey(charge => new { charge.CompanyId, charge.BranchId })
+                .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CashierShift>().WithMany()
+                .HasForeignKey(charge => new { charge.CompanyId, charge.CashierShiftId })
+                .HasPrincipalKey(shift => new { shift.CompanyId, shift.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany().HasForeignKey(charge => charge.CashierId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(charge => charge.SaleId).IsUnique();
+            entity.HasIndex(charge => new { charge.CompanyId, charge.CustomerId, charge.CreatedAtUtc });
         });
 
         modelBuilder.Entity<BranchPriceList>(entity =>
@@ -418,11 +448,22 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
         modelBuilder.Entity<ConfirmedSale>(entity =>
         {
             entity.ToTable("confirmed_sales", "pos_sales", table =>
-                table.HasCheckConstraint("CK_confirmed_sales_total_positive", "\"Total\" > 0"));
+            {
+                table.HasCheckConstraint("CK_confirmed_sales_total_positive", "\"Total\" > 0");
+                table.HasCheckConstraint("CK_confirmed_sales_account_charge",
+                    "\"AccountChargeAmount\" >= 0 AND \"AccountChargeAmount\" <= \"Total\" AND (\"AccountChargeAmount\" = 0 OR (\"CustomerId\" IS NOT NULL AND \"CustomerCode\" IS NOT NULL AND \"CustomerName\" IS NOT NULL))");
+            });
             entity.HasKey(sale => sale.Id);
             entity.HasAlternateKey(sale => new { sale.CompanyId, sale.Id });
             entity.Property(sale => sale.Total).HasPrecision(12, 2);
+            entity.Property(sale => sale.AccountChargeAmount).HasPrecision(12, 2);
+            entity.Property(sale => sale.CustomerCode).HasMaxLength(80);
+            entity.Property(sale => sale.CustomerName).HasMaxLength(200);
             entity.Property(sale => sale.PaymentRequestHash).HasMaxLength(64).IsRequired();
+            entity.HasOne<CustomerAccount>().WithMany()
+                .HasForeignKey(sale => new { sale.CompanyId, sale.CustomerId })
+                .HasPrincipalKey(customer => new { customer.CompanyId, customer.Id })
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<Branch>().WithMany()
                 .HasForeignKey(sale => new { sale.CompanyId, sale.BranchId })
                 .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })

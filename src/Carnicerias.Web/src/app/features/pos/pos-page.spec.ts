@@ -917,7 +917,7 @@ describe('PosPage', () => {
         branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
     };
     const openShift = { id: 'shift-id', openingCash: 100, cashSales: 1000,
-      nonCashSales: 500, salesTotal: 1500, cashBalance: 1100,
+      nonCashSales: 500, accountSales: 0, salesTotal: 1500, cashBalance: 1100,
       openedAtUtc: '2026-10-06T15:00:00Z', closedAtUtc: null };
     const closedShift = { ...openShift, closedAtUtc: '2026-10-06T17:00:00Z' };
     let isOpen = true;

@@ -29,6 +29,66 @@ describe('PosPage', () => {
     ] });
   });
 
+  it('requires fiscal recipient details before confirming an electronic invoice and keeps it pending', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const confirm = vi.fn().mockReturnValue(of({
+      id: 'sale-id', total: 2500, changeAmount: 0, confirmedAtUtc: '2026-10-09T16:00:00Z',
+      documentType: 'electronicInvoice', recipientTaxStatus: 'registered', recipientName: 'Cliente',
+      accountChargeAmount: 0, creditAppliedAmount: 0, customerId: null, customerCode: null,
+      customerName: null, lines: [], payments: [{ method: 'cash', tenderedAmount: 2500, appliedAmount: 2500 }],
+    }));
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: { priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
+        categories: () => of([]) } },
+      { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of({
+        id: 'draft-id', ticketSlot: 'A', priceListId: 'list-id', updatedAtUtc: '2026-10-09T15:00:00Z',
+        lines: [{ id: 'line-id', productId: 'product-id', productCode: '1001', productName: 'Asado',
+          unit: 'kg', saleMode: 'weight', quantity: 1, unitPrice: 2500 }],
+      }), confirm } },
+      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    const select = (id: string, value: string) => {
+      const element = fixture.nativeElement.querySelector(`#${id}`) as HTMLSelectElement;
+      element.value = value;
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+      fixture.detectChanges();
+    };
+    const input = (id: string, value: string) => {
+      const element = fixture.nativeElement.querySelector(`#${id}`) as HTMLInputElement;
+      element.value = value;
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges();
+    };
+    select('sale-document-type', 'electronicInvoice');
+    select('sale-recipient-tax-status', 'registered');
+    expect((fixture.nativeElement.querySelector('.checkout-dialog .finish-button') as HTMLButtonElement).disabled).toBe(true);
+    expect(confirm).not.toHaveBeenCalled();
+    input('sale-recipient-name', 'Cliente');
+    input('sale-recipient-document-number', '20000000001');
+    input('sale-recipient-address', 'Calle 123');
+    expect((fixture.nativeElement.querySelector('.checkout-dialog .finish-button') as HTMLButtonElement).disabled).toBe(false);
+    (fixture.nativeElement.querySelector('.checkout-dialog .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(confirm).toHaveBeenCalledWith('draft-id', [{ method: 'cash', amount: 2500 }], undefined,
+      { documentType: 'electronicInvoice', recipientTaxStatus: 'registered', recipientName: 'Cliente',
+        recipientDocumentNumber: '20000000001', recipientAddress: 'Calle 123' });
+    expect(fixture.nativeElement.querySelector('.sale-receipt').textContent).toContain('pendiente de emisión');
+    expect(fixture.nativeElement.querySelector('.serial-print-button')).toBeNull();
+  });
+
   it('switches independent saved tickets and restores the active ticket after remount', async () => {
     const session: CurrentSession = {
       userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',

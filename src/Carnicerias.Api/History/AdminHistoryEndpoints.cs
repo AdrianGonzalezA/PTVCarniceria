@@ -155,6 +155,20 @@ public static class AdminHistoryEndpoints
             sale.Total,
             sale.DiscountAmount,
             sale.DiscountReason,
+            sale.DocumentType switch
+            {
+                SaleDocumentType.FiscalTicket => "fiscalTicket",
+                SaleDocumentType.ElectronicInvoice => "electronicInvoice",
+                _ => "nonFiscalTicket"
+            },
+            sale.RecipientTaxStatus switch
+            {
+                SaleRecipientTaxStatus.Registered => "registered",
+                SaleRecipientTaxStatus.SmallTaxpayer => "smallTaxpayer",
+                SaleRecipientTaxStatus.Exempt => "exempt",
+                _ => "finalConsumer"
+            },
+            sale.RecipientName, sale.RecipientDocumentNumber, sale.RecipientAddress,
             sale.Lines.Any(line => line.NetAfterDiscount is null) ? "legacy" :
                 sale.Lines.Any(line => line.TaxRuleId is null) ? "unconfigured" : "complete",
             sale.Lines.All(line => line.TaxRuleId is not null)
@@ -333,6 +347,8 @@ public static class AdminHistoryEndpoints
         Guid CashierId, string CashierName, Guid ShiftId);
     private sealed record SaleDetail(Guid Id, DateTimeOffset ConfirmedAtUtc, decimal Total,
         decimal DiscountAmount, string? DiscountReason,
+        string DocumentType, string RecipientTaxStatus, string? RecipientName,
+        string? RecipientDocumentNumber, string? RecipientAddress,
         string TaxSnapshotStatus, decimal? TaxableBase, decimal? TaxAmount,
         decimal? ExemptAmount, decimal? NotTaxedAmount,
         SaleLineItem[] Lines, SalePaymentItem[] Payments);

@@ -622,6 +622,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 table.HasCheckConstraint("CK_confirmed_sales_discount", "\"DiscountAmount\" >= 0 AND (\"DiscountAmount\" = 0 OR \"DiscountReason\" IS NOT NULL)");
                 table.HasCheckConstraint("CK_confirmed_sales_account_charge",
                     "\"AccountChargeAmount\" >= 0 AND \"CreditAppliedAmount\" >= 0 AND \"AccountChargeAmount\" + \"CreditAppliedAmount\" <= \"Total\" AND (\"AccountChargeAmount\" + \"CreditAppliedAmount\" = 0 OR (\"CustomerId\" IS NOT NULL AND \"CustomerCode\" IS NOT NULL AND \"CustomerName\" IS NOT NULL))");
+                table.HasCheckConstraint("CK_confirmed_sales_document_type", "\"DocumentType\" IN (0, 1, 2) AND \"RecipientTaxStatus\" IN (0, 1, 2, 3)");
             });
             entity.HasKey(sale => sale.Id);
             entity.HasAlternateKey(sale => new { sale.CompanyId, sale.Id });
@@ -632,6 +633,9 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(sale => sale.DiscountReason).HasMaxLength(200);
             entity.Property(sale => sale.CustomerCode).HasMaxLength(80);
             entity.Property(sale => sale.CustomerName).HasMaxLength(200);
+            entity.Property(sale => sale.RecipientName).HasMaxLength(200);
+            entity.Property(sale => sale.RecipientDocumentNumber).HasMaxLength(11);
+            entity.Property(sale => sale.RecipientAddress).HasMaxLength(200);
             entity.Property(sale => sale.PaymentRequestHash).HasMaxLength(64).IsRequired();
             entity.HasOne<CustomerAccount>().WithMany()
                 .HasForeignKey(sale => new { sale.CompanyId, sale.CustomerId })

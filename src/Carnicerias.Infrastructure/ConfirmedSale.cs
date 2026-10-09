@@ -12,7 +12,7 @@ public sealed class ConfirmedSale
         Guid? customerId = null, decimal accountChargeAmount = 0,
         string? customerCode = null, string? customerName = null,
         decimal creditAppliedAmount = 0, decimal discountAmount = 0,
-        string? discountReason = null)
+        string? discountReason = null, SaleDocumentChoice? documentChoice = null)
     {
         if (posTerminalId == Guid.Empty)
             throw new ArgumentException("Terminal id cannot be empty.", nameof(posTerminalId));
@@ -47,6 +47,11 @@ public sealed class ConfirmedSale
         CustomerName = customerName;
         DiscountAmount = discountAmount;
         DiscountReason = discountAmount > 0 ? discountReason?.Trim() : null;
+        DocumentType = documentChoice?.Type ?? SaleDocumentType.NonFiscalTicket;
+        RecipientTaxStatus = documentChoice?.RecipientTaxStatus ?? SaleRecipientTaxStatus.FinalConsumer;
+        RecipientName = documentChoice?.RecipientName;
+        RecipientDocumentNumber = documentChoice?.RecipientDocumentNumber;
+        RecipientAddress = documentChoice?.RecipientAddress;
     }
 
     public Guid Id { get; private set; }
@@ -67,6 +72,11 @@ public sealed class ConfirmedSale
     public string? CustomerName { get; private set; }
     public decimal DiscountAmount { get; private set; }
     public string? DiscountReason { get; private set; }
+    public SaleDocumentType DocumentType { get; private set; }
+    public SaleRecipientTaxStatus RecipientTaxStatus { get; private set; }
+    public string? RecipientName { get; private set; }
+    public string? RecipientDocumentNumber { get; private set; }
+    public string? RecipientAddress { get; private set; }
     public List<ConfirmedSaleLine> Lines { get; private set; } = [];
     public List<SalePayment> Payments { get; private set; } = [];
 }

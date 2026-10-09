@@ -57,6 +57,11 @@ export interface SaleDetail {
   readonly total: number;
   readonly discountAmount: number;
   readonly discountReason: string | null;
+  readonly documentType: 'nonFiscalTicket' | 'fiscalTicket' | 'electronicInvoice';
+  readonly recipientTaxStatus: 'finalConsumer' | 'registered' | 'smallTaxpayer' | 'exempt';
+  readonly recipientName: string | null;
+  readonly recipientDocumentNumber: string | null;
+  readonly recipientAddress: string | null;
   readonly taxSnapshotStatus: 'legacy' | 'unconfigured' | 'complete';
   readonly taxableBase: number | null;
   readonly taxAmount: number | null;

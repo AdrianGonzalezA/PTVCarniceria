@@ -170,8 +170,15 @@
 .dialog-cancel { min-height: 2.5rem; padding: 0.5rem 0.9rem; background: #fff; border: 1px solid var(--pos-border); border-radius: 0.35rem; font: inherit; cursor: pointer; }
 .checkout-dialog > p:not(.eyebrow) { line-height: 1.5; }
 .checkout-dialog { width: min(100%, 44rem); max-height: min(90dvh, 48rem); overflow: auto; }
+.checkout-dialog .dialog-actions { position: sticky; bottom: -1.5rem; z-index: 1; padding: 0.65rem 0 1.5rem; background: #f4f4f2; box-shadow: 0 -0.35rem 0.5rem #f4f4f2; }
 .checkout-dialog .payment-methods { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .checkout-context { margin: 0 0 0.8rem; color: #4d5049; font-size: 0.85rem; }
+.sale-document { display: grid; gap: 0.45rem; margin-bottom: 0.85rem; padding: 0.7rem; border: 1px solid var(--pos-border); border-radius: 0.3rem; }
+.sale-document h3 { margin: 0; color: var(--pos-teal); font-size: 0.95rem; }
+.sale-document-fields { display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(12rem, 2fr); align-items: center; gap: 0.45rem; }
+.sale-document-fields label { font-size: 0.78rem; font-weight: 700; }
+.sale-document-fields select,.sale-document-fields input { box-sizing: border-box; width: 100%; min-height: 2.3rem; padding: 0.4rem; border: 1px solid var(--pos-border); border-radius: 0.25rem; font: inherit; }
+.sale-document .payment-guidance,.sale-document .pos-error { margin: 0; font-size: 0.78rem; }
 .payment-methods { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem; }
 .payment-option { display: grid; min-height: 2.7rem; grid-template-columns: 1fr minmax(5rem, 8rem); align-items: center; gap: 0.4rem; padding: 0.4rem 0.5rem; background: #e7e7e4; border-radius: 0.3rem; font-size: 0.78rem; }
 .payment-option > span { display: flex; align-items: center; gap: 0.35rem; }
@@ -186,6 +193,7 @@
 .credit-customer-search > div { display: flex; gap: 0.4rem; }
 .credit-customer-search button { min-height: 2.3rem; padding: 0.4rem 0.75rem; border: 0; border-radius: 0.25rem; background: var(--pos-lime); font: inherit; cursor: pointer; }
 @media (max-width: 42rem) { .checkout-dialog .payment-methods { grid-template-columns: 1fr; } }
+@media (max-width: 42rem) { .sale-document-fields { grid-template-columns: 1fr; } }
 .change-preview { margin: 0.5rem 0; padding: 0.6rem; color: #215a33; background: #dceedd; border-radius: 0.3rem; font-size: 0.82rem; }
 .payment-balance,.payment-guidance { margin: 0.45rem 0; font-size: 0.82rem; }
 .payment-balance { display: flex; justify-content: space-between; color: #68440b; }

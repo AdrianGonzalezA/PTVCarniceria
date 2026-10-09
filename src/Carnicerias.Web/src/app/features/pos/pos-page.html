@@ -188,11 +188,11 @@
         }
         <label>
           <span>Comprobante</span>
-          <input value="Sin emisión fiscal" readonly aria-label="Comprobante" />
+          <input value="Se elige al cobrar" readonly aria-label="Comprobante" />
         </label>
         <label>
           <span>Cliente</span>
-          <input value="Consumidor final" readonly aria-label="Cliente" />
+          <input value="Se define al cobrar" readonly aria-label="Cliente" />
         </label>
       </div>
 
@@ -355,6 +355,36 @@
         <p class="eyebrow">Cobro · {{ session()?.username }} · turno abierto</p>
         <h2 id="checkout-title">Cobrar venta</h2>
         <p class="checkout-context">El cobro se registra en la sucursal y el turno del cajero actual. El stock se descuenta al confirmar.</p>
+        <section class="sale-document" aria-labelledby="sale-document-title">
+          <h3 id="sale-document-title">Comprobante solicitado</h3>
+          <div class="sale-document-fields">
+            <label for="sale-document-type">Tipo de comprobante</label>
+            <select id="sale-document-type" [value]="documentType()" [disabled]="checkoutBusy()" (change)="selectDocumentType($event)">
+              <option value="nonFiscalTicket">Ticket no fiscal</option>
+              <option value="fiscalTicket">Ticket fiscal</option>
+              <option value="electronicInvoice">Factura electrónica</option>
+            </select>
+            <label for="sale-recipient-tax-status">Tipo de cliente</label>
+            <select id="sale-recipient-tax-status" [value]="recipientTaxStatus()" [disabled]="checkoutBusy()" (change)="selectRecipientTaxStatus($event)">
+              <option value="finalConsumer">Consumidor final</option>
+              <option value="registered">Responsable inscripto</option>
+              <option value="smallTaxpayer">Monotributista</option>
+              <option value="exempt">Exento</option>
+            </select>
+          </div>
+          @if (documentType() !== 'nonFiscalTicket') {
+            <p class="payment-guidance">La venta se guarda con esta solicitud, pero el comprobante fiscal quedará pendiente hasta contar con emisión autorizada. COM1 y el PDF actual son solo no fiscales.</p>
+            <div class="sale-document-fields">
+              <label for="sale-recipient-name">Nombre o razón social @if (recipientTaxStatus() !== 'finalConsumer') { (obligatorio) }</label>
+              <input id="sale-recipient-name" maxlength="200" autocomplete="off" [value]="recipientName()" [disabled]="checkoutBusy()" (input)="updateRecipientName($event)" />
+              <label for="sale-recipient-document-number">{{ recipientTaxStatus() === 'finalConsumer' ? 'DNI o CUIT' : 'CUIT (obligatorio)' }}</label>
+              <input id="sale-recipient-document-number" inputmode="numeric" maxlength="20" autocomplete="off" [value]="recipientDocumentNumber()" [disabled]="checkoutBusy()" (input)="updateRecipientDocumentNumber($event)" />
+              <label for="sale-recipient-address">Domicilio @if (recipientTaxStatus() !== 'finalConsumer') { (obligatorio) }</label>
+              <input id="sale-recipient-address" maxlength="200" autocomplete="off" [value]="recipientAddress()" [disabled]="checkoutBusy()" (input)="updateRecipientAddress($event)" />
+            </div>
+            @if (documentProblem(); as problem) { <p class="pos-error" role="alert">{{ problem }}</p> }
+          }
+        </section>
         <div class="payment-methods" aria-label="Medios de pago">
           @for (method of paymentMethods; track method.id) {
             <label class="payment-option">
@@ -420,7 +450,7 @@
         @if (checkoutError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
         <div class="dialog-actions">
           <button class="dialog-cancel" type="button" [disabled]="checkoutBusy()" (click)="closeCheckout()">Volver</button>
-          <button class="finish-button" type="button" [disabled]="checkoutBusy() || !!paymentProblem()" (click)="confirmSale()">{{ checkoutBusy() ? 'Confirmando…' : 'Confirmar venta' }}</button>
+          <button class="finish-button" type="button" [disabled]="checkoutBusy() || !!paymentProblem() || !!documentProblem()" (click)="confirmSale()">{{ checkoutBusy() ? 'Confirmando…' : 'Confirmar venta' }}</button>
         </div>
       </section>
     </div>
@@ -452,7 +482,11 @@
         @if (sale.changeAmount > 0) {
           <p class="change-preview">Vuelto en efectivo: <strong>{{ formatMoney(sale.changeAmount) }}</strong></p>
         }
-        <p class="checkout-context">El stock, los pagos y el saldo a cuenta quedaron registrados. No se emitió comprobante fiscal.</p>
+        @if (sale.documentType === 'fiscalTicket' || sale.documentType === 'electronicInvoice') {
+          <p class="checkout-context" role="status">{{ sale.documentType === 'fiscalTicket' ? 'Ticket fiscal' : 'Factura electrónica' }} pendiente de emisión. La venta y el cobro están registrados; todavía no hay comprobante fiscal autorizado.</p>
+        } @else {
+          <p class="checkout-context">El stock, los pagos y el saldo a cuenta quedaron registrados. Ticket interno no fiscal.</p>
+        }
         @if (receiptPdfPath(); as path) {
           <p class="receipt-file" role="status">Ticket de prueba guardado en: {{ path }}</p>
         }
@@ -468,12 +502,14 @@
           <p class="pos-error" role="alert">{{ error }}</p>
         }
         <div class="dialog-actions">
-          <button class="receipt-pdf-button serial-print-button" type="button" [disabled]="serialPrintBusy()" (click)="printSerialReceipt(sale)">
-            {{ serialPrintBusy() ? 'Enviando a COM1…' : 'Imprimir en COM1' }}
-          </button>
-          <button class="receipt-pdf-button save-pdf-button" type="button" [disabled]="receiptPdfBusy()" (click)="saveReceiptPdf(sale)">
-            {{ receiptPdfBusy() ? 'Generando PDF…' : 'Guardar ticket PDF' }}
-          </button>
+          @if (sale.documentType !== 'fiscalTicket' && sale.documentType !== 'electronicInvoice') {
+            <button class="receipt-pdf-button serial-print-button" type="button" [disabled]="serialPrintBusy()" (click)="printSerialReceipt(sale)">
+              {{ serialPrintBusy() ? 'Enviando a COM1…' : 'Imprimir en COM1' }}
+            </button>
+            <button class="receipt-pdf-button save-pdf-button" type="button" [disabled]="receiptPdfBusy()" (click)="saveReceiptPdf(sale)">
+              {{ receiptPdfBusy() ? 'Generando PDF…' : 'Guardar ticket PDF' }}
+            </button>
+          }
           <button class="finish-button" type="button" [disabled]="receiptPdfBusy() || serialPrintBusy()" (click)="confirmedSale.set(null)">Nueva venta</button>
         </div>
       </section>

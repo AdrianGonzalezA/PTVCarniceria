@@ -27,6 +27,16 @@ export interface SaleDraft {
 export type SaleTicketSlot = 'A' | 'B' | 'C' | 'D';
 
 export type SalePaymentMethod = 'cash' | 'debit' | 'credit' | 'transfer' | 'mercadoPago' | 'cheque';
+export type SaleDocumentType = 'nonFiscalTicket' | 'fiscalTicket' | 'electronicInvoice';
+export type SaleRecipientTaxStatus = 'finalConsumer' | 'registered' | 'smallTaxpayer' | 'exempt';
+
+export interface SaleDocumentRequest {
+  readonly documentType: SaleDocumentType;
+  readonly recipientTaxStatus: SaleRecipientTaxStatus;
+  readonly recipientName?: string;
+  readonly recipientDocumentNumber?: string;
+  readonly recipientAddress?: string;
+}
 
 export interface ConfirmedSale {
   readonly id: string;
@@ -40,6 +50,9 @@ export interface ConfirmedSale {
   readonly creditAppliedAmount: number;
   readonly discountAmount?: number;
   readonly discountReason?: string | null;
+  readonly documentType?: SaleDocumentType;
+  readonly recipientTaxStatus?: SaleRecipientTaxStatus;
+  readonly recipientName?: string | null;
   readonly lines: readonly { readonly code: string; readonly name: string; readonly unit: string; readonly quantity: number; readonly unitPrice: number; readonly lineTotal: number; readonly pieceIdentifier?: string | null }[];
   readonly payments: readonly { readonly method: SalePaymentMethod; readonly tenderedAmount: number; readonly appliedAmount: number }[];
 }
@@ -67,11 +80,13 @@ export class SaleDraftClient {
   }
 
   confirm(draftId: string, payments: readonly { readonly method: SalePaymentMethod; readonly amount: number }[],
-    account?: { readonly customerId: string; readonly amount: number; readonly creditAppliedAmount: number }) {
+    account?: { readonly customerId: string; readonly amount: number; readonly creditAppliedAmount: number },
+    document?: SaleDocumentRequest) {
     return this.http.post<ConfirmedSale>(`/api/sales/drafts/${draftId}/confirmation`, {
       payments,
       ...(account ? { customerId: account.customerId, accountChargeAmount: account.amount,
         creditAppliedAmount: account.creditAppliedAmount, accountChargeConfirmed: account.amount > 0 } : {}),
+      ...(document ?? {}),
     }, { withCredentials: true });
   }
 

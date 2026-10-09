@@ -33,7 +33,11 @@ public static class SaleConfirmationEndpoints
             request.Payments.Any(payment => payment is null) || request.CustomerId == Guid.Empty ||
             (request.CustomerId is not null && request.AccountChargeAmount <= 0 && request.CreditAppliedAmount <= 0) ||
             (request.CustomerId is null && (request.AccountChargeAmount != 0 || request.CreditAppliedAmount != 0)) ||
-            request.AccountChargeAmount < 0 || request.CreditAppliedAmount < 0)
+            request.AccountChargeAmount < 0 || request.CreditAppliedAmount < 0 ||
+            request.DocumentType is null or { Length: > 32 } ||
+            request.RecipientTaxStatus is null or { Length: > 32 } ||
+            request.RecipientName?.Length > 200 || request.RecipientDocumentNumber?.Length > 20 ||
+            request.RecipientAddress?.Length > 200)
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var tenders = new List<PaymentTender>(request.Payments.Count);
@@ -45,7 +49,7 @@ public static class SaleConfirmationEndpoints
         }
 
         var requestHash = HashPaymentRequest(tenders, request.CustomerId, request.AccountChargeAmount,
-            request.CreditAppliedAmount);
+            request.CreditAppliedAmount, request);
         var context = accessor.Context;
         try
         {
@@ -79,6 +83,16 @@ public static class SaleConfirmationEndpoints
                 return Error(StatusCodes.Status403Forbidden, "DISCOUNT_FORBIDDEN");
             var total = draft.TotalAfterDiscount;
             if (total <= 0) return Error(StatusCodes.Status409Conflict, "SALE_NOT_CONFIRMABLE");
+            SaleDocumentChoice documentChoice;
+            try
+            {
+                documentChoice = SaleDocumentChoice.Create(request.DocumentType, request.RecipientTaxStatus,
+                    request.RecipientName, request.RecipientDocumentNumber, request.RecipientAddress, total);
+            }
+            catch (ArgumentException)
+            {
+                return Error(StatusCodes.Status400BadRequest, "DOCUMENT_DETAILS_INVALID");
+            }
             CustomerAccount? creditCustomer = null;
             if (request.AccountChargeAmount > 0 || request.CreditAppliedAmount > 0)
             {
@@ -125,7 +139,7 @@ public static class SaleConfirmationEndpoints
             var sale = new ConfirmedSale(context.CompanyId, context.BranchId, context.UserId,
                 shift.Id, draft.Id, draft.PriceListId, total, requestHash, now, accessor.TerminalId,
                 request.CustomerId, request.AccountChargeAmount, creditCustomer?.Code, creditCustomer?.Name,
-                request.CreditAppliedAmount, draft.DiscountAmount, draft.DiscountReason);
+                request.CreditAppliedAmount, draft.DiscountAmount, draft.DiscountReason, documentChoice);
             sale.Lines.AddRange(draft.Lines.Select(line => new ConfirmedSaleLine(
                 context.CompanyId, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
                 line.SaleMode, line.Quantity, line.UnitPrice, line.InventoryPieceId, line.PieceIdentifier)));
@@ -227,7 +241,7 @@ public static class SaleConfirmationEndpoints
             : Error(StatusCodes.Status409Conflict, "IDEMPOTENCY_CONFLICT");
 
     private static string HashPaymentRequest(IEnumerable<PaymentTender> tenders, Guid? customerId,
-        decimal accountCharge, decimal creditApplied)
+        decimal accountCharge, decimal creditApplied, ConfirmSaleRequest request)
     {
         var canonical = string.Join('|', tenders.OrderBy(tender => tender.Method)
             .Select(tender => $"{(int)tender.Method}:{tender.TenderedAmount.ToString("0.00", CultureInfo.InvariantCulture)}"));
@@ -236,6 +250,14 @@ public static class SaleConfirmationEndpoints
             canonical += $"|account:{customerId.Value:N}:{accountCharge.ToString("0.00", CultureInfo.InvariantCulture)}";
             if (creditApplied > 0)
                 canonical += $":{creditApplied.ToString("0.00", CultureInfo.InvariantCulture)}";
+        }
+        if (request.DocumentType != "nonFiscalTicket" || request.RecipientTaxStatus != "finalConsumer")
+        {
+            // Length-independent field encoding prevents delimiter collisions in the idempotency fingerprint.
+            static string Encode(string? value) => Convert.ToBase64String(Encoding.UTF8.GetBytes(value ?? ""));
+            canonical += $"|document:{Encode(request.DocumentType)}:{Encode(request.RecipientTaxStatus)}";
+            if (request.DocumentType != "nonFiscalTicket")
+                canonical += $":{Encode(request.RecipientName)}:{Encode(request.RecipientDocumentNumber)}:{Encode(request.RecipientAddress)}";
         }
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
@@ -267,6 +289,8 @@ public static class SaleConfirmationEndpoints
         sale.Id, sale.Total, change, sale.ConfirmedAtUtc, sale.CustomerId, sale.AccountChargeAmount,
         sale.CreditAppliedAmount, sale.DiscountAmount, sale.DiscountReason,
         sale.CustomerCode, sale.CustomerName,
+        DocumentTypeName(sale.DocumentType), RecipientTaxStatusName(sale.RecipientTaxStatus),
+        sale.RecipientName,
         sale.Lines.OrderBy(line => line.ProductName).ThenBy(line => line.PieceIdentifier)
             .Select(line => new SaleConfirmationLineResponse(
                 line.ProductCode, line.ProductName, line.Unit, line.Quantity, line.UnitPrice,
@@ -285,6 +309,23 @@ public static class SaleConfirmationEndpoints
         _ => throw new ArgumentOutOfRangeException(nameof(method))
     };
 
+    private static string DocumentTypeName(SaleDocumentType type) => type switch
+    {
+        SaleDocumentType.NonFiscalTicket => "nonFiscalTicket",
+        SaleDocumentType.FiscalTicket => "fiscalTicket",
+        SaleDocumentType.ElectronicInvoice => "electronicInvoice",
+        _ => throw new ArgumentOutOfRangeException(nameof(type))
+    };
+
+    private static string RecipientTaxStatusName(SaleRecipientTaxStatus status) => status switch
+    {
+        SaleRecipientTaxStatus.FinalConsumer => "finalConsumer",
+        SaleRecipientTaxStatus.Registered => "registered",
+        SaleRecipientTaxStatus.SmallTaxpayer => "smallTaxpayer",
+        SaleRecipientTaxStatus.Exempt => "exempt",
+        _ => throw new ArgumentOutOfRangeException(nameof(status))
+    };
+
     private static IResult PaymentError(PaymentSettlementError error) => error switch
     {
         PaymentSettlementError.AmountPending => Error(StatusCodes.Status400BadRequest, "PAYMENT_TOTAL_MISMATCH"),
@@ -298,12 +339,15 @@ public static class SaleConfirmationEndpoints
 
     private sealed record ConfirmSaleRequest(IReadOnlyList<PaymentRequest>? Payments, Guid? CustomerId = null,
         decimal AccountChargeAmount = 0, bool AccountChargeConfirmed = false,
-        decimal CreditAppliedAmount = 0);
+        decimal CreditAppliedAmount = 0, string DocumentType = "nonFiscalTicket",
+        string RecipientTaxStatus = "finalConsumer", string? RecipientName = null,
+        string? RecipientDocumentNumber = null, string? RecipientAddress = null);
     private sealed record PaymentRequest(string? Method, decimal Amount);
     private sealed record SaleConfirmationResponse(Guid Id, decimal Total, decimal ChangeAmount,
         DateTimeOffset ConfirmedAtUtc, Guid? CustomerId, decimal AccountChargeAmount,
         decimal CreditAppliedAmount, decimal DiscountAmount, string? DiscountReason,
         string? CustomerCode, string? CustomerName,
+        string DocumentType, string RecipientTaxStatus, string? RecipientName,
         IReadOnlyList<SaleConfirmationLineResponse> Lines,
         IReadOnlyList<SaleConfirmationPaymentResponse> Payments);
     private sealed record SaleConfirmationLineResponse(string Code, string Name, string Unit,

@@ -9,7 +9,7 @@ import { InventoryClient, InventoryStockItem } from '../../core/inventory/invent
 import { InventoryPieceClient, PosPieceLookup } from '../../core/inventory/inventory-piece-client';
 import { PosTerminal, PosTerminalClient } from '../../core/pos/pos-terminal-client';
 import { PosDeviceClient, SerialPrintResult } from '../../core/pos/pos-device-client';
-import { ConfirmedSale, SaleDraft, SaleDraftClient, SaleDraftLine, SalePaymentMethod, SaleTicketSlot } from '../../core/sales/sale-draft-client';
+import { ConfirmedSale, SaleDocumentType, SaleDraft, SaleDraftClient, SaleDraftLine, SalePaymentMethod, SaleRecipientTaxStatus, SaleTicketSlot } from '../../core/sales/sale-draft-client';
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { CashierShift, CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
@@ -181,6 +181,28 @@ export class PosPage implements OnInit {
   protected readonly ticketSlotsLoadState = signal<'idle' | 'loading' | 'ready' | 'error'>('idle');
   protected readonly checkoutBusy = signal(false);
   protected readonly checkoutError = signal<string | null>(null);
+  protected readonly documentType = signal<SaleDocumentType>('nonFiscalTicket');
+  protected readonly recipientTaxStatus = signal<SaleRecipientTaxStatus>('finalConsumer');
+  protected readonly recipientName = signal('');
+  protected readonly recipientDocumentNumber = signal('');
+  protected readonly recipientAddress = signal('');
+  protected readonly documentProblem = computed(() => {
+    if (this.documentType() === 'nonFiscalTicket') return null;
+    const name = this.recipientName().trim();
+    const address = this.recipientAddress().trim();
+    const document = this.recipientDocumentNumber().replace(/[- ]/g, '');
+    if (this.recipientTaxStatus() !== 'finalConsumer') {
+      if (!name || !address || !document)
+        return 'Para este cliente necesitás nombre o razón social, CUIT y domicilio.';
+      if (!this.validCuit(document)) return 'Ingresá un CUIT válido para el comprobante fiscal.';
+    } else if (this.subtotal() >= 10_000_000 && !document) {
+      return 'Por el importe de esta venta necesitás identificar al consumidor final con DNI o CUIT.';
+    } else if (document && !(/^\d{7,8}$/.test(document) || this.validCuit(document))) {
+      return 'Ingresá un DNI o CUIT válido para el consumidor final.';
+    }
+    if (name.length > 200 || address.length > 200) return 'Los datos del cliente son demasiado extensos.';
+    return null;
+  });
   protected readonly confirmedSale = signal<ConfirmedSale | null>(null);
   protected readonly receiptPdfBusy = signal(false);
   protected readonly receiptPdfPath = signal<string | null>(null);
@@ -983,6 +1005,11 @@ export class PosPage implements OnInit {
     this.creditCustomerSearch.set('');
     this.creditCustomerOptions.set([]);
     this.creditCustomerLoadError.set(null);
+    this.documentType.set('nonFiscalTicket');
+    this.recipientTaxStatus.set('finalConsumer');
+    this.recipientName.set('');
+    this.recipientDocumentNumber.set('');
+    this.recipientAddress.set('');
     if (this.canChargeToAccount()) this.searchCreditCustomers();
     this.checkoutError.set(null);
     this.checkoutNotice.set(true);
@@ -1098,6 +1125,36 @@ export class PosPage implements OnInit {
     return this.selectedPayments().some((payment) => payment.method === method);
   }
 
+  protected selectDocumentType(event: Event): void {
+    this.documentType.set((event.target as HTMLSelectElement).value as SaleDocumentType);
+    this.checkoutError.set(null);
+  }
+
+  protected selectRecipientTaxStatus(event: Event): void {
+    this.recipientTaxStatus.set((event.target as HTMLSelectElement).value as SaleRecipientTaxStatus);
+    this.checkoutError.set(null);
+  }
+
+  protected updateRecipientName(event: Event): void {
+    this.recipientName.set((event.target as HTMLInputElement).value.slice(0, 201));
+  }
+
+  protected updateRecipientDocumentNumber(event: Event): void {
+    this.recipientDocumentNumber.set((event.target as HTMLInputElement).value.slice(0, 20));
+  }
+
+  protected updateRecipientAddress(event: Event): void {
+    this.recipientAddress.set((event.target as HTMLInputElement).value.slice(0, 201));
+  }
+
+  private validCuit(value: string): boolean {
+    if (!/^\d{11}$/.test(value)) return false;
+    const weights = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
+    const sum = weights.reduce((total, weight, index) => total + Number(value[index]) * weight, 0);
+    const check = 11 - sum % 11;
+    return (check === 11 ? 0 : check === 10 ? 9 : check) === Number(value[10]);
+  }
+
   protected updateCreditSearch(event: Event): void {
     this.creditCustomerSearch.set((event.target as HTMLInputElement).value.slice(0, 100));
   }
@@ -1166,7 +1223,7 @@ export class PosPage implements OnInit {
 
   protected confirmSale(): void {
     if (!this.draftId() || !this.canOperate() || this.checkoutBusy()) return;
-    const problem = this.paymentProblem();
+    const problem = this.documentProblem() ?? this.paymentProblem();
     if (problem) {
       this.checkoutError.set(problem);
       return;
@@ -1183,7 +1240,11 @@ export class PosPage implements OnInit {
     this.saleDraftClient.confirm(this.draftId(), payments,
       accountCharge > 0 || creditApplied > 0
         ? { customerId: this.creditCustomerId(), amount: accountCharge, creditAppliedAmount: creditApplied }
-        : undefined).subscribe({
+        : undefined,
+      { documentType: this.documentType(), recipientTaxStatus: this.recipientTaxStatus(),
+        recipientName: this.recipientName().trim() || undefined,
+        recipientDocumentNumber: this.recipientDocumentNumber().trim() || undefined,
+        recipientAddress: this.recipientAddress().trim() || undefined }).subscribe({
       next: (sale) => this.finishConfirmedSale(sale),
       error: (error: HttpErrorResponse) => {
         this.checkoutBusy.set(false);
@@ -1223,13 +1284,18 @@ export class PosPage implements OnInit {
     this.creditCustomerId.set('');
     this.creditCustomerAccount.set(null);
     this.creditCustomerAccountStatus.set('idle');
+    this.documentType.set('nonFiscalTicket');
+    this.recipientTaxStatus.set('finalConsumer');
+    this.recipientName.set('');
+    this.recipientDocumentNumber.set('');
+    this.recipientAddress.set('');
     this.errorMessage.set(null);
     this.loadCashierShift();
     this.loadPriceLists();
   }
 
   protected saveReceiptPdf(sale: ConfirmedSale): void {
-    if (this.receiptPdfBusy()) return;
+    if (this.receiptPdfBusy() || sale.documentType === 'fiscalTicket' || sale.documentType === 'electronicInvoice') return;
     this.receiptPdfBusy.set(true);
     this.receiptPdfError.set(null);
     void this.receiptPdfClient.save(
@@ -1243,7 +1309,7 @@ export class PosPage implements OnInit {
   }
 
   protected printSerialReceipt(sale: ConfirmedSale): void {
-    if (this.serialPrintBusy()) return;
+    if (this.serialPrintBusy() || sale.documentType === 'fiscalTicket' || sale.documentType === 'electronicInvoice') return;
     this.serialPrintBusy.set(true);
     this.serialPrintError.set(null);
     void this.posDeviceClient.print(
@@ -1268,6 +1334,7 @@ export class PosPage implements OnInit {
     if (code === 'INVALID_CHANGE') return 'El vuelto solo puede entregarse cuando se paga en efectivo.';
     if (code === 'CUSTOMER_CREDIT_UNAVAILABLE') return 'La cuenta corriente del cliente ya no está habilitada. Elegí otro medio de pago.';
     if (code === 'CUSTOMER_CREDIT_INSUFFICIENT') return 'El saldo a favor del cliente cambió. Consultá la cuenta y ajustá el importe aplicado.';
+    if (code === 'DOCUMENT_DETAILS_INVALID') return 'Revisá el tipo de comprobante y los datos fiscales del cliente.';
     if (code === 'ACCOUNT_CHARGE_FORBIDDEN') return 'Tu rol no tiene permiso para cargar ventas a cuenta corriente.';
     if (code === 'IDEMPOTENCY_CONFLICT') return 'La venta ya fue confirmada con otro pago. Actualizá el estado antes de continuar.';
     return 'El ticket cambió o ya se procesó. Revisá el estado de la venta e intentá de nuevo.';

@@ -7,6 +7,8 @@
 **Fecha de aprobación:** 29 de septiembre de 2026  
 **Lista ejecutable:** `tasks/todo.md`
 
+**Conciliación pendiente (9/10/2026):** este plan de *platform access* se conserva como histórico. El desarrollo aprobado del catálogo de impuestos se sigue en `tasks/tax-catalog-plan.md` y `tasks/tax-catalog-todo.md`. Antes de consolidar planes, contrastar cada criterio abierto de este archivo y `tasks/todo.md` con el producto actual; no asumir que una casilla antigua representa el estado presente.
+
 ## Objetivo
 
 Construir el primer módulo vertical del sistema: autenticación local, sesión segura, selección explícita de empresa y sucursal, administración web de usuarios y roles, recuperación por correo y políticas parametrizables. La instalación será independiente por cliente, admitirá múltiples empresas y sucursales y evitará dependencias que impidan una migración posterior a cloud.

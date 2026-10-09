@@ -5,15 +5,19 @@ import { AdminProductTaxClient, ProductTaxRule, TaxProductPage, TaxProductRow,
   TaxTreatment } from '../../core/admin/admin-product-tax-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { AdminAreaTabs } from './admin-area-tabs';
+import { AdminTaxCatalogClient, VatTaxOption } from '../../core/admin/admin-tax-catalog-client';
+import { TaxCatalogPanel } from './tax-catalog-panel';
+import { TaxAssignmentPanel } from './tax-assignment-panel';
 
 @Component({
   selector: 'app-product-tax-page',
-  imports: [RouterLink, AdminAreaTabs, DatePipe],
+  imports: [RouterLink, AdminAreaTabs, DatePipe, TaxCatalogPanel, TaxAssignmentPanel],
   templateUrl: './product-tax-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './accounts-page.scss', './product-tax-page.scss'],
 })
 export class ProductTaxPage implements OnInit {
   private readonly client = inject(AdminProductTaxClient);
+  private readonly taxCatalog = inject(AdminTaxCatalogClient);
   private readonly sessions = inject(SessionClient);
   private readonly router = inject(Router);
   private listRevision = 0;
@@ -28,6 +32,9 @@ export class ProductTaxPage implements OnInit {
   protected readonly historyError = signal<string | null>(null);
   protected readonly treatment = signal<TaxTreatment>('taxed');
   protected readonly rate = signal('');
+  protected readonly selectedTaxId = signal('');
+  protected readonly vatOptions = signal<readonly VatTaxOption[]>([]);
+  protected readonly vatOptionsError = signal<string | null>(null);
   protected readonly saving = signal(false);
   protected readonly saveError = signal<string | null>(null);
   protected readonly saveSuccess = signal(false);
@@ -77,6 +84,12 @@ export class ProductTaxPage implements OnInit {
     this.selected.set(product);
     this.treatment.set(product.currentRule?.treatment ?? 'taxed');
     this.rate.set(product.currentRule?.ratePercent.toString() ?? '');
+    this.selectedTaxId.set(product.currentRule?.taxCatalogEntryId ?? '');
+    this.vatOptionsError.set(null);
+    this.taxCatalog.vatOptions().subscribe({
+      next: (options) => this.vatOptions.set(options),
+      error: () => this.vatOptionsError.set('No se pudieron consultar las alícuotas de IVA.'),
+    });
     this.history.set([]);
     this.historyError.set(null);
     this.saveError.set(null);
@@ -88,13 +101,21 @@ export class ProductTaxPage implements OnInit {
   protected treatmentChanged(event: Event): void {
     const value = (event.target as HTMLSelectElement).value as TaxTreatment;
     this.treatment.set(value);
-    if (value !== 'taxed') this.rate.set('0');
+    if (value !== 'taxed') { this.rate.set('0'); this.selectedTaxId.set(''); }
   }
-  protected rateChanged(event: Event): void { this.rate.set((event.target as HTMLInputElement).value); }
+  protected taxChanged(event: Event): void {
+    const taxId = (event.target as HTMLSelectElement).value;
+    this.selectedTaxId.set(taxId);
+    this.rate.set(this.vatOptions().find((option) => option.id === taxId)?.ratePercent.toString() ?? '');
+  }
 
   protected save(): void {
     const product = this.selected();
     if (!product || this.saving()) return;
+    if (this.treatment() === 'taxed' && !this.selectedTaxId()) {
+      this.saveError.set('Elegí una alícuota de IVA del catálogo antes de guardar.');
+      return;
+    }
     const rate = Number(this.rate().replace(',', '.'));
     if (!this.rate().trim() || !Number.isFinite(rate) || rate < 0 || rate > 100 ||
       Math.abs(Math.round(rate * 100) - rate * 100) > 0.000001 ||
@@ -106,7 +127,8 @@ export class ProductTaxPage implements OnInit {
     this.saving.set(true);
     this.saveError.set(null);
     this.saveSuccess.set(false);
-    this.client.set(product.id, this.treatment(), rate).subscribe({
+    this.client.set(product.id, this.treatment(), rate,
+      this.treatment() === 'taxed' ? this.selectedTaxId() : undefined).subscribe({
       next: (rule) => {
         this.saving.set(false);
         this.saveSuccess.set(true);

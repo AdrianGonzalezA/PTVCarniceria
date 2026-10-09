@@ -7,7 +7,8 @@ public sealed class ProductTaxRule
     private ProductTaxRule() { }
 
     public ProductTaxRule(Guid companyId, Guid productId, SaleTaxTreatment treatment,
-        decimal ratePercent, Guid changedByUserId, DateTimeOffset effectiveFromUtc)
+        decimal ratePercent, Guid changedByUserId, DateTimeOffset effectiveFromUtc,
+        Guid? taxCatalogEntryId = null)
     {
         if (companyId == Guid.Empty || productId == Guid.Empty || changedByUserId == Guid.Empty)
             throw new ArgumentException("Company, product and actor are required.");
@@ -15,11 +16,16 @@ public sealed class ProductTaxRule
             decimal.Round(ratePercent, 2) != ratePercent ||
             (treatment != SaleTaxTreatment.Taxed && ratePercent != 0))
             throw new ArgumentOutOfRangeException(nameof(ratePercent));
+        if (taxCatalogEntryId == Guid.Empty ||
+            (treatment != SaleTaxTreatment.Taxed && taxCatalogEntryId is not null))
+            throw new ArgumentException("A catalog entry may only be linked to a taxed rule.",
+                nameof(taxCatalogEntryId));
         Id = Guid.NewGuid();
         CompanyId = companyId;
         ProductId = productId;
         Treatment = treatment;
         RatePercent = ratePercent;
+        TaxCatalogEntryId = taxCatalogEntryId;
         ChangedByUserId = changedByUserId;
         EffectiveFromUtc = effectiveFromUtc.ToUniversalTime();
     }
@@ -29,6 +35,7 @@ public sealed class ProductTaxRule
     public Guid ProductId { get; private set; }
     public SaleTaxTreatment Treatment { get; private set; }
     public decimal RatePercent { get; private set; }
+    public Guid? TaxCatalogEntryId { get; private set; }
     public Guid ChangedByUserId { get; private set; }
     public DateTimeOffset EffectiveFromUtc { get; private set; }
     public DateTimeOffset? EffectiveToUtc { get; private set; }

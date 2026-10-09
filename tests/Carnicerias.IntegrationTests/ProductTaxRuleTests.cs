@@ -36,4 +36,21 @@ public sealed class ProductTaxRuleTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new ProductTaxRule(
             Guid.NewGuid(), Guid.NewGuid(), treatment, rate, Guid.NewGuid(), DateTimeOffset.UtcNow));
     }
+
+    [Fact]
+    public void KeepsCatalogEntryReferenceOnTaxedRule()
+    {
+        var taxId = Guid.NewGuid();
+        var rule = new ProductTaxRule(Guid.NewGuid(), Guid.NewGuid(), SaleTaxTreatment.Taxed,
+            21m, Guid.NewGuid(), DateTimeOffset.UtcNow, taxId);
+
+        Assert.Equal(taxId, rule.TaxCatalogEntryId);
+    }
+
+    [Fact]
+    public void RejectsCatalogEntryOnExemptRule()
+    {
+        Assert.Throws<ArgumentException>(() => new ProductTaxRule(Guid.NewGuid(), Guid.NewGuid(),
+            SaleTaxTreatment.Exempt, 0m, Guid.NewGuid(), DateTimeOffset.UtcNow, Guid.NewGuid()));
+    }
 }

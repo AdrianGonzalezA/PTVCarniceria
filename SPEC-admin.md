@@ -42,6 +42,12 @@ El primer incremento publicable comprende navegación administrativa y ABM de ca
 - El precio de un artículo se define por lista, debe ser positivo y no inferior al costo vigente. Un cambio cierra el precio anterior y abre otro con fecha y usuario responsables en una transacción. Los tickets ya guardados mantienen sus importes snapshot.
 - Si el costo de un artículo sube por encima de alguno de sus precios vigentes, la edición se rechaza hasta ajustar primero esos precios.
 
+## Impuestos por artículo
+
+- Configuración → Impuestos por artículo mantiene un catálogo por empresa de entradas `iva` u `otro`, con código/tasa inmutables e inactivación lógica. Sólo un administrador con `catalog.manage` puede crearlas o asignarlas; la API valida sesión, empresa y origen.
+- El IVA de un artículo se elige entre entradas activas y conserva versiones de su regla gravada, exenta o no alcanzada. Los otros gravámenes pueden asignarse a uno, varios o todos los artículos existentes, activos e inactivos, con historial y conteo de cambios. Repetir el estado deseado no duplica versiones.
+- Los gravámenes `otro` se muestran como «no calculados» y no afectan ventas ni ARCA. El 21 % de Empresa Visual es ficticio de homologación, no configuración fiscal general. Contrato, evidencia y pendientes: `SPEC-tax-catalog.md`.
+
 ## Organización y existencias
 
 - Una empresa nueva nace con su primera sucursal, indicada en el formulario, y el administrador que la crea recibe allí la asignación de su rol existente. No se crea otro usuario ni otro rol.

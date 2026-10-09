@@ -45,6 +45,8 @@ app.MapCatalogEndpoints();
 app.MapAdminCategoryEndpoints();
 app.MapAdminProductEndpoints();
 app.MapAdminProductTaxEndpoints();
+app.MapAdminTaxCatalogEndpoints();
+app.MapAdminTaxAssignmentEndpoints();
 app.MapAdminProductCodeEndpoints();
 app.MapAdminPriceListEndpoints();
 app.MapAdminProductPriceEndpoints();

@@ -6,6 +6,7 @@ using Carnicerias.Domain.Sales;
 using Carnicerias.Infrastructure;
 using Carnicerias.PlatformAccess;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Carnicerias.Api.Catalog;
 
@@ -77,40 +78,71 @@ public static class AdminProductTaxEndpoints
             !TryTreatment(request.Treatment, out var treatment) ||
             request.RatePercent is < 0 or > 100 ||
             decimal.Round(request.RatePercent, 2) != request.RatePercent ||
-            (treatment != SaleTaxTreatment.Taxed && request.RatePercent != 0))
+            (treatment != SaleTaxTreatment.Taxed &&
+                (request.RatePercent != 0 || request.TaxCatalogEntryId is not null)) ||
+            request.TaxCatalogEntryId == Guid.Empty)
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
         var context = accessor.Context;
-        await using var transaction = await db.Database.BeginTransactionAsync(
-            IsolationLevel.Serializable, cancellationToken);
-        await ProductPriceConsistencyLock.AcquireAsync(db, context.CompanyId, productId, cancellationToken);
-        if (!await db.CatalogProducts.AsNoTracking().AnyAsync(item =>
-                item.CompanyId == context.CompanyId && item.Id == productId, cancellationToken))
-            return Results.NotFound();
-        var current = await db.ProductTaxRules.SingleOrDefaultAsync(item =>
-            item.CompanyId == context.CompanyId && item.ProductId == productId &&
-            item.EffectiveToUtc == null, cancellationToken);
-        if (current is not null && current.Treatment == treatment &&
-            current.RatePercent == request.RatePercent)
-            return Results.Ok(ToRule(current));
-        var now = timeProvider.GetUtcNow();
-        if (current is not null)
+        try
         {
-            if (now <= current.EffectiveFromUtc)
-                now = current.EffectiveFromUtc.AddTicks(1);
-            current.Close(now);
+            await using var transaction = await db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable, cancellationToken);
+            if (request.TaxCatalogEntryId is Guid requestedTaxId)
+                await TaxCatalogConsistencyLock.AcquireAsync(db, requestedTaxId, cancellationToken);
+            await ProductPriceConsistencyLock.AcquireAsync(db, context.CompanyId, productId, cancellationToken);
+            if (!await db.CatalogProducts.AsNoTracking().AnyAsync(item =>
+                    item.CompanyId == context.CompanyId && item.Id == productId, cancellationToken))
+                return Results.NotFound();
+            if (request.TaxCatalogEntryId is Guid taxId &&
+                !await db.TaxCatalogEntries.AsNoTracking().AnyAsync(item =>
+                    item.CompanyId == context.CompanyId && item.Id == taxId && item.IsActive &&
+                    item.Kind == TaxKind.Vat && item.RatePercent == request.RatePercent,
+                    cancellationToken))
+                return Error(StatusCodes.Status400BadRequest, "INVALID_TAX_ENTRY");
+            var current = await db.ProductTaxRules.SingleOrDefaultAsync(item =>
+                item.CompanyId == context.CompanyId && item.ProductId == productId &&
+                item.EffectiveToUtc == null, cancellationToken);
+            var effectiveTaxId = request.TaxCatalogEntryId ??
+                (treatment == SaleTaxTreatment.Taxed && current?.Treatment == treatment &&
+                    current.RatePercent == request.RatePercent ? current.TaxCatalogEntryId : null);
+            if (current is not null && current.Treatment == treatment &&
+                current.RatePercent == request.RatePercent &&
+                current.TaxCatalogEntryId == effectiveTaxId)
+                return Results.Ok(ToRule(current));
+            var now = timeProvider.GetUtcNow();
+            if (current is not null)
+            {
+                if (now <= current.EffectiveFromUtc)
+                    now = current.EffectiveFromUtc.AddTicks(1);
+                current.Close(now);
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            var rule = new ProductTaxRule(context.CompanyId, productId, treatment,
+                request.RatePercent, context.UserId, now, effectiveTaxId);
+            db.ProductTaxRules.Add(rule);
             await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return Results.Ok(ToRule(rule));
         }
-        var rule = new ProductTaxRule(context.CompanyId, productId, treatment,
-            request.RatePercent, context.UserId, now);
-        db.ProductTaxRules.Add(rule);
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return Results.Ok(ToRule(rule));
+        catch (PostgresException exception) when (exception.SqlState is
+            PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected)
+        {
+            return Error(StatusCodes.Status409Conflict, "TAX_ASSIGNMENT_CONFLICT");
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation or
+                PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected
+        })
+        {
+            return Error(StatusCodes.Status409Conflict, "TAX_ASSIGNMENT_CONFLICT");
+        }
     }
 
     private static TaxRuleResponse ToRule(ProductTaxRule rule) => new(rule.Id,
         rule.ProductId, TreatmentName(rule.Treatment), rule.RatePercent,
-        rule.EffectiveFromUtc, rule.EffectiveToUtc, rule.ChangedByUserId);
+        rule.EffectiveFromUtc, rule.EffectiveToUtc, rule.ChangedByUserId,
+        rule.TaxCatalogEntryId);
 
     private static string TreatmentName(SaleTaxTreatment treatment) => treatment switch
     {
@@ -146,10 +178,11 @@ public static class AdminProductTaxEndpoints
     private static IResult Error(int statusCode, string code) => Results.Json(
         new ErrorResponse(new ApiError(code, "No se pudo completar la solicitud", [])), statusCode: statusCode);
 
-    private sealed record SetTaxRuleRequest(string? Treatment, decimal RatePercent);
+    private sealed record SetTaxRuleRequest(string? Treatment, decimal RatePercent,
+        Guid? TaxCatalogEntryId = null);
     private sealed record TaxRuleResponse(Guid Id, Guid ProductId, string Treatment,
         decimal RatePercent, DateTimeOffset EffectiveFromUtc, DateTimeOffset? EffectiveToUtc,
-        Guid ChangedByUserId);
+        Guid ChangedByUserId, Guid? TaxCatalogEntryId);
     private sealed record TaxProductRow(Guid Id, string Code, string Name, bool IsActive,
         TaxRuleResponse? CurrentRule);
     private sealed record TaxRulePage(int Page, int PageSize, int Total,

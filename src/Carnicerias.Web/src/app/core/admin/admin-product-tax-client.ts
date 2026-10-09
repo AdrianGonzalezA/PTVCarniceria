@@ -11,6 +11,7 @@ export interface ProductTaxRule {
   readonly effectiveFromUtc: string;
   readonly effectiveToUtc: string | null;
   readonly changedByUserId: string;
+  readonly taxCatalogEntryId?: string | null;
 }
 
 export interface TaxProductRow {
@@ -45,9 +46,11 @@ export class AdminProductTaxClient {
       { withCredentials: true });
   }
 
-  set(productId: string, treatment: TaxTreatment, ratePercent: number) {
+  set(productId: string, treatment: TaxTreatment, ratePercent: number,
+    taxCatalogEntryId?: string) {
     return this.http.put<ProductTaxRule>(
       `/api/admin/product-tax-rules/${encodeURIComponent(productId)}`,
-      { treatment, ratePercent }, { withCredentials: true });
+      { treatment, ratePercent, ...(taxCatalogEntryId ? { taxCatalogEntryId } : {}) },
+      { withCredentials: true });
   }
 }

@@ -1,0 +1,94 @@
+<section class="category-panel" aria-labelledby="assignments-title">
+  <header class="panel-heading"><div>
+    <h2 id="assignments-title">Asignaciones por artículo</h2>
+    <p>Aplicá una entrada a artículos seleccionados o a todos los existentes, incluso inactivos.</p>
+  </div></header>
+  <div class="assignment-controls">
+    <div><label for="assignment-tax">Impuesto o gravamen</label>
+      <select id="assignment-tax" [value]="selectedTaxId()" (change)="taxChanged($event)">
+        <option value="">Elegí una entrada activa</option>
+        @for (tax of taxes(); track tax.id) {
+          <option [value]="tax.id">{{ tax.name }} · {{ tax.ratePercent }} %</option>
+        }
+      </select>
+      <button type="button" class="secondary-button refresh-taxes" (click)="loadTaxes()">Actualizar catálogo</button>
+      @if (taxesError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
+    </div>
+    <div><label for="assignment-action">Acción</label>
+      <select id="assignment-action" [value]="isAssigned() ? 'assign' : 'remove'"
+        [disabled]="selectedTax()?.kind === 'iva'" (change)="actionChanged($event)">
+        <option value="assign">Asignar</option>
+        @if (selectedTax()?.kind !== 'iva') { <option value="remove">Quitar</option> }
+      </select>
+    </div>
+    <fieldset><legend>Artículos alcanzados</legend>
+      <label><input id="assignment-selected" type="radio" name="assignment-scope"
+        [checked]="scope() === 'selected'" (change)="scopeChanged('selected')" />
+        Seleccionados ({{ selectedIds().length }})</label>
+      <label><input id="assignment-all" type="radio" name="assignment-scope"
+        [checked]="scope() === 'all'" (change)="scopeChanged('all')" />
+        Todos los existentes ({{ allCount() ?? '…' }})</label>
+    </fieldset>
+    <div class="assignment-submit">
+      <button id="assignment-apply" type="button" [disabled]="saving()" (click)="apply()">
+        {{ saving() ? 'Guardando…' : 'Aplicar asignación' }}
+      </button>
+    </div>
+  </div>
+  @if (selectedTax()?.kind === 'otro') {
+    <p class="assignment-note">No calculado: este gravamen queda configurado, pero no altera el precio, el cobro ni ARCA.</p>
+  } @else {
+    <p class="assignment-note">El IVA seleccionado se aplicará sólo a ventas nuevas. Los datos actuales de prueba deben validarse antes de producción.</p>
+  }
+  @if (countError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+  @if (saveError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+  @if (saveSuccess(); as success) { <p class="success-message" role="status">{{ success }}</p> }
+
+  <form class="account-search" (submit)="$event.preventDefault(); runSearch()">
+    <label for="assignment-search">Buscar artículos para seleccionar</label>
+    <input id="assignment-search" type="search" maxlength="100" [value]="productSearch()"
+      (input)="searchChanged($event)" placeholder="Código o artículo" />
+    <button type="submit" [disabled]="productsLoading()">Buscar</button>
+  </form>
+  @if (productsLoading()) { <p class="state-message" role="status">Consultando artículos…</p> }
+  @else if (productsError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+  @else if (products(); as result) {
+    @if (result.total === 0) { <p class="state-message">No hay artículos para esta búsqueda.</p> }
+    @else {
+      <div class="table-wrap"><table>
+        <thead><tr><th scope="col">Elegir</th><th scope="col">Artículo</th>
+          <th scope="col">Estado</th><th scope="col">IVA actual</th><th scope="col">Otros gravámenes</th></tr></thead>
+        <tbody>@for (product of result.items; track product.id) {
+          <tr><td><input type="checkbox" [attr.aria-label]="'Seleccionar ' + product.name"
+                [checked]="isSelected(product.id)" (change)="toggleProduct(product.id, $event)" /></td>
+            <td><strong>{{ product.name }}</strong><small>{{ product.code }}</small></td>
+            <td>{{ product.isActive ? 'Activo' : 'Inactivo' }}</td>
+            <td>{{ product.currentRule ? product.currentRule.ratePercent + ' %' : 'Sin configurar' }}</td>
+            <td><button type="button" class="secondary-button" (click)="viewHistory(product)">Ver historial</button></td></tr>
+        }</tbody>
+      </table></div>
+      <div class="account-pages">
+        <button type="button" class="secondary-button" [disabled]="productPage() <= 1"
+          (click)="changePage(-1)">Anterior</button>
+        <span>Página {{ productPage() }} de {{ pageCount(result.total) }} · {{ result.total }} artículos</span>
+        <button type="button" class="secondary-button" [disabled]="productPage() >= pageCount(result.total)"
+          (click)="changePage(1)">Siguiente</button>
+      </div>
+    }
+  }
+  @if (historyProduct(); as product) {
+    <div class="assignment-history"><h3>Gravámenes de {{ product.name }}</h3>
+      @if (historyError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+      @else if (history().length === 0) { <p>Sin gravámenes adicionales asignados.</p> }
+      @else { <div class="table-wrap"><table>
+        <thead><tr><th scope="col">Gravamen</th><th scope="col">Porcentaje</th>
+          <th scope="col">Desde</th><th scope="col">Hasta</th></tr></thead>
+        <tbody>@for (entry of history(); track entry.id) {
+          <tr><td>{{ entry.taxName }} · No calculado</td><td>{{ entry.ratePercent }} %</td>
+            <td>{{ entry.effectiveFromUtc | date:'dd/MM/yyyy HH:mm' }}</td>
+            <td>{{ entry.effectiveToUtc ? (entry.effectiveToUtc | date:'dd/MM/yyyy HH:mm') : 'Vigente' }}</td></tr>
+        }</tbody>
+      </table></div> }
+    </div>
+  }
+</section>

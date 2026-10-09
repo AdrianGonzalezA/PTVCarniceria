@@ -50,6 +50,10 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<ProductTaxRule> ProductTaxRules => Set<ProductTaxRule>();
 
+    public DbSet<TaxCatalogEntry> TaxCatalogEntries => Set<TaxCatalogEntry>();
+
+    public DbSet<OtherTaxAssignment> OtherTaxAssignments => Set<OtherTaxAssignment>();
+
     public DbSet<SaleDraft> SaleDrafts => Set<SaleDraft>();
 
     public DbSet<BranchInventoryBalance> BranchInventoryBalances => Set<BranchInventoryBalance>();
@@ -481,12 +485,37 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasIndex(product => new { product.CompanyId, product.CategoryId, product.IsActive });
         });
 
+        modelBuilder.Entity<TaxCatalogEntry>(entity =>
+        {
+            entity.ToTable("tax_catalog_entries", "catalog_pricing", table =>
+            {
+                table.HasCheckConstraint("CK_tax_catalog_entries_kind", "\"Kind\" IN (0, 1)");
+                table.HasCheckConstraint("CK_tax_catalog_entries_rate",
+                    "\"RatePercent\" >= 0 AND \"RatePercent\" <= 100");
+            });
+            entity.HasKey(tax => tax.Id);
+            entity.HasAlternateKey(tax => new { tax.CompanyId, tax.Id });
+            entity.Property(tax => tax.Code).HasMaxLength(40).IsRequired();
+            entity.Property(tax => tax.Name).HasMaxLength(120).IsRequired();
+            entity.Property(tax => tax.Kind).HasConversion<int>();
+            entity.Property(tax => tax.RatePercent).HasPrecision(5, 2);
+            entity.HasOne<Company>().WithMany().HasForeignKey(tax => tax.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany().HasForeignKey(tax => tax.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany().HasForeignKey(tax => tax.DeactivatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(tax => new { tax.CompanyId, tax.Code }).IsUnique();
+        });
+
         modelBuilder.Entity<ProductTaxRule>(entity =>
         {
             entity.ToTable("product_tax_rules", "catalog_pricing", table =>
             {
                 table.HasCheckConstraint("CK_product_tax_rules_treatment",
                     "\"Treatment\" IN (0, 1, 2) AND (\"Treatment\" = 0 OR \"RatePercent\" = 0)");
+                table.HasCheckConstraint("CK_product_tax_rules_catalog_treatment",
+                    "\"TaxCatalogEntryId\" IS NULL OR \"Treatment\" = 0");
                 table.HasCheckConstraint("CK_product_tax_rules_rate",
                     "\"RatePercent\" >= 0 AND \"RatePercent\" <= 100");
                 table.HasCheckConstraint("CK_product_tax_rules_dates",
@@ -498,12 +527,44 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .HasForeignKey(rule => new { rule.CompanyId, rule.ProductId })
                 .HasPrincipalKey(product => new { product.CompanyId, product.Id })
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<TaxCatalogEntry>().WithMany()
+                .HasForeignKey(rule => new { rule.CompanyId, rule.TaxCatalogEntryId })
+                .HasPrincipalKey(tax => new { tax.CompanyId, tax.Id })
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<UserIdentity>().WithMany().HasForeignKey(rule => rule.ChangedByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(rule => new { rule.CompanyId, rule.ProductId, rule.EffectiveToUtc })
                 .HasFilter("\"EffectiveToUtc\" IS NULL").IsUnique();
             entity.HasIndex(rule => new { rule.CompanyId, rule.ProductId, rule.EffectiveFromUtc })
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<OtherTaxAssignment>(entity =>
+        {
+            entity.ToTable("other_tax_assignments", "catalog_pricing", table =>
+                table.HasCheckConstraint("CK_other_tax_assignments_dates",
+                    "\"EffectiveToUtc\" IS NULL OR \"EffectiveToUtc\" > \"EffectiveFromUtc\""));
+            entity.HasKey(assignment => assignment.Id);
+            entity.HasOne<CatalogProduct>().WithMany()
+                .HasForeignKey(assignment => new { assignment.CompanyId, assignment.ProductId })
+                .HasPrincipalKey(product => new { product.CompanyId, product.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<TaxCatalogEntry>().WithMany()
+                .HasForeignKey(assignment => new { assignment.CompanyId, assignment.TaxCatalogEntryId })
+                .HasPrincipalKey(tax => new { tax.CompanyId, tax.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(assignment => assignment.AssignedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(assignment => assignment.RemovedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(assignment => new
+                { assignment.CompanyId, assignment.ProductId, assignment.TaxCatalogEntryId,
+                    assignment.EffectiveToUtc })
+                .HasFilter("\"EffectiveToUtc\" IS NULL").IsUnique();
+            entity.HasIndex(assignment => new
+                { assignment.CompanyId, assignment.TaxCatalogEntryId, assignment.EffectiveToUtc });
         });
 
         modelBuilder.Entity<ProductCode>(entity =>

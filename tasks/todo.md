@@ -1,6 +1,7 @@
 # Tareas de platform access
 
 **Estado:** aprobadas para implementación  
+**Conciliación pendiente (9/10/2026):** revisar esta lista histórica criterio por criterio contra `tasks/tax-catalog-todo.md` y el producto actual antes de fusionar o cerrar tareas. El avance tributario no cambia automáticamente estas casillas.
 **Fecha de aprobación:** 29 de septiembre de 2026  
 **Ejecución:** tareas 1 a 4 completadas; tarea 5 tiene login/logout API, persistencia y formulario Angular implementados con pruebas automatizadas; quedan pendientes E2E visual en navegador/Electron por falta de superficies UI en esta sesión
 

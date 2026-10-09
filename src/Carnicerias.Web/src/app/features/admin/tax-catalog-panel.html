@@ -1,0 +1,56 @@
+<section class="category-panel" aria-labelledby="tax-catalog-title" [attr.aria-busy]="loading()">
+  <header class="panel-heading"><div>
+    <h2 id="tax-catalog-title">Catálogo de impuestos y gravámenes</h2>
+    <p>Elegí una entrada para asignarla a artículos. El IVA se usa en ventas; los demás figuran como No calculado.</p>
+  </div></header>
+
+  <form class="tax-catalog-form" (submit)="$event.preventDefault(); create()">
+    <div><label for="new-tax-code">Código</label>
+      <input id="new-tax-code" maxlength="40" [value]="code()" (input)="codeChanged($event)" placeholder="IVA_21_00" /></div>
+    <div><label for="new-tax-name">Nombre</label>
+      <input id="new-tax-name" maxlength="120" [value]="name()" (input)="nameChanged($event)" placeholder="IVA 21 %" /></div>
+    <div><label for="new-tax-kind">Tipo</label>
+      <select id="new-tax-kind" [value]="kind()" (change)="kindChanged($event)">
+        <option value="iva">IVA</option><option value="otro">Otro gravamen</option>
+      </select></div>
+    <div><label for="new-tax-rate">Porcentaje</label>
+      <input id="new-tax-rate" type="number" min="0" max="100" step="0.01"
+        [value]="rate()" (input)="rateChanged($event)" /></div>
+    <button id="tax-create" type="submit" [disabled]="saving()">{{ saving() ? 'Guardando…' : 'Agregar al catálogo' }}</button>
+  </form>
+  @if (saveError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+  @if (saveSuccess(); as success) { <p class="success-message" role="status">{{ success }}</p> }
+
+  <form class="account-search" (submit)="$event.preventDefault(); runSearch()">
+    <label for="tax-catalog-search">Buscar código o nombre</label>
+    <input id="tax-catalog-search" type="search" maxlength="100" [value]="search()"
+      (input)="searchChanged($event)" placeholder="Buscar impuesto" />
+    <button type="submit" [disabled]="loading()">Buscar</button>
+    <button type="button" class="secondary-button" [disabled]="loading()" (click)="load()">Actualizar</button>
+  </form>
+  @if (loading()) { <p class="state-message" role="status">Consultando catálogo…</p> }
+  @else if (listError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+  @else if (list(); as result) {
+    @if (result.total === 0) { <p class="state-message">No hay entradas para esta búsqueda.</p> }
+    @else {
+      <div class="table-wrap"><table>
+        <thead><tr><th scope="col">Código</th><th scope="col">Impuesto / gravamen</th>
+          <th scope="col">Tipo</th><th scope="col">Porcentaje</th><th scope="col">Estado</th><th scope="col">Acción</th></tr></thead>
+        <tbody>@for (entry of result.items; track entry.id) {
+          <tr><td>{{ entry.code }}</td><td><strong>{{ entry.name }}</strong></td>
+            <td>{{ entry.kind === 'iva' ? 'IVA' : 'Otro · No calculado' }}</td>
+            <td>{{ entry.ratePercent }} %</td><td>{{ entry.isActive ? 'Activo' : 'Inactivo' }}</td>
+            <td>@if (entry.isActive) {
+              <button type="button" class="secondary-button" [disabled]="saving()"
+                (click)="deactivate(entry)">Inactivar</button>
+            } @else { — }</td></tr>
+        }</tbody>
+      </table></div>
+      <div class="account-pages">
+        <button type="button" class="secondary-button" [disabled]="page() <= 1" (click)="changePage(-1)">Anterior</button>
+        <span>Página {{ page() }} de {{ pageCount(result.total) }} · {{ result.total }} entradas</span>
+        <button type="button" class="secondary-button" [disabled]="page() >= pageCount(result.total)" (click)="changePage(1)">Siguiente</button>
+      </div>
+    }
+  }
+</section>

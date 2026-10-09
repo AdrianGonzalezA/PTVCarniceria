@@ -3,6 +3,7 @@ using System;
 using Carnicerias.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Carnicerias.Infrastructure.Migrations
 {
     [DbContext(typeof(PlatformAccessDbContext))]
-    partial class PlatformAccessDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261009155918_AddTaxCatalog")]
+    partial class AddTaxCatalog
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1083,51 +1086,6 @@ namespace Carnicerias.Infrastructure.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Carnicerias.Infrastructure.OtherTaxAssignment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AssignedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("EffectiveFromUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset?>("EffectiveToUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("ProductId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("RemovedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TaxCatalogEntryId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AssignedByUserId");
-
-                    b.HasIndex("RemovedByUserId");
-
-                    b.HasIndex("CompanyId", "TaxCatalogEntryId", "EffectiveToUtc");
-
-                    b.HasIndex("CompanyId", "ProductId", "TaxCatalogEntryId", "EffectiveToUtc")
-                        .IsUnique()
-                        .HasFilter("\"EffectiveToUtc\" IS NULL");
-
-                    b.ToTable("other_tax_assignments", "catalog_pricing", t =>
-                        {
-                            t.HasCheckConstraint("CK_other_tax_assignments_dates", "\"EffectiveToUtc\" IS NULL OR \"EffectiveToUtc\" > \"EffectiveFromUtc\"");
-                        });
-                });
-
             modelBuilder.Entity("Carnicerias.Infrastructure.PointPaymentIntent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1411,17 +1369,12 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)");
 
-                    b.Property<Guid?>("TaxCatalogEntryId")
-                        .HasColumnType("uuid");
-
                     b.Property<int>("Treatment")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
                     b.HasIndex("ChangedByUserId");
-
-                    b.HasIndex("CompanyId", "TaxCatalogEntryId");
 
                     b.HasIndex("CompanyId", "ProductId", "EffectiveFromUtc")
                         .IsUnique();
@@ -1432,8 +1385,6 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.ToTable("product_tax_rules", "catalog_pricing", t =>
                         {
-                            t.HasCheckConstraint("CK_product_tax_rules_catalog_treatment", "\"TaxCatalogEntryId\" IS NULL OR \"Treatment\" = 0");
-
                             t.HasCheckConstraint("CK_product_tax_rules_dates", "\"EffectiveToUtc\" IS NULL OR \"EffectiveToUtc\" > \"EffectiveFromUtc\"");
 
                             t.HasCheckConstraint("CK_product_tax_rules_rate", "\"RatePercent\" >= 0 AND \"RatePercent\" <= 100");
@@ -1659,6 +1610,8 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasColumnType("numeric(5,2)");
 
                     b.HasKey("Id");
+
+                    b.HasAlternateKey("CompanyId", "Id");
 
                     b.HasIndex("CreatedByUserId");
 
@@ -2346,34 +2299,6 @@ namespace Carnicerias.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Carnicerias.Infrastructure.OtherTaxAssignment", b =>
-                {
-                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
-                        .WithMany()
-                        .HasForeignKey("AssignedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
-                        .WithMany()
-                        .HasForeignKey("RemovedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Carnicerias.Infrastructure.CatalogProduct", null)
-                        .WithMany()
-                        .HasForeignKey("CompanyId", "ProductId")
-                        .HasPrincipalKey("CompanyId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Carnicerias.Infrastructure.TaxCatalogEntry", null)
-                        .WithMany()
-                        .HasForeignKey("CompanyId", "TaxCatalogEntryId")
-                        .HasPrincipalKey("CompanyId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Carnicerias.Infrastructure.PointPaymentIntent", b =>
                 {
                     b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
@@ -2479,12 +2404,6 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasPrincipalKey("CompanyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.HasOne("Carnicerias.Infrastructure.TaxCatalogEntry", null)
-                        .WithMany()
-                        .HasForeignKey("CompanyId", "TaxCatalogEntryId")
-                        .HasPrincipalKey("CompanyId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Carnicerias.Infrastructure.SaleDraft", b =>

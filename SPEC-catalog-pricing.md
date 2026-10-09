@@ -65,6 +65,10 @@ Reemplazar el catálogo de demostración del punto de venta por productos activo
 - Revisión en escritorio: `npm run electron:start --prefix src/Carnicerias.Pos`.
 - Seguir los contratos C#/TypeScript existentes, validar en el borde HTTP y mantener migraciones explícitas. No introducir precios ni catálogos comerciales de ejemplo en producción.
 
+## Relación con impuestos (9/10/2026)
+
+El precio vigente de la lista sigue siendo el precio final usado por el POS. La clasificación IVA se configura y versiona aparte en `SPEC-tax-catalog.md`; el cálculo y snapshot de ventas se describen en `SPEC-fiscal-payments.md`. Las entradas de otros gravámenes hoy son asignaciones administrativas «no calculadas»: no cambian el precio de la lista ni el total. Este corte del catálogo de impuestos no altera el contrato de lectura de productos/precios de esta especificación.
+
 ## Decisión ratificada
 
 El 6 de octubre de 2026 el usuario confirmó que la sucursal puede tener listas de precios y que el cajero elige la correspondiente. Esta especificación modela varias listas habilitadas por sucursal y selección explícita para cada venta.

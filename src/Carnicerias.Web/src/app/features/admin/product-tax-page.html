@@ -11,10 +11,13 @@
     <a class="back-link" routerLink="/admin/configuracion">← Volver a Configuración</a>
     <p class="eyebrow">Configuración · Catálogo</p>
     <h1>Impuestos por artículo</h1>
-    <p class="intro">Asigná la clasificación y alícuota de cada artículo. No hay valores fiscales precargados ni se modifican ventas pasadas. Esta configuración todavía no emite facturas.</p>
+    <p class="intro">Configurá el IVA por artículo desde el catálogo y prepará otros gravámenes sin cobrarlos todavía. La alícuota de prueba no reemplaza la validación contable; las ventas anteriores no cambian.</p>
     @if (session()?.context; as context) {
       <section class="context-bar"><div><span>Empresa</span><strong>{{ context.companyName }}</strong></div></section>
     }
+
+    <app-tax-catalog-panel />
+    <app-tax-assignment-panel />
 
     <section class="category-panel history-panel" aria-labelledby="tax-list-title" [attr.aria-busy]="loading()">
       <header class="panel-heading"><div>
@@ -59,15 +62,21 @@
           <h2 id="tax-editor-title">{{ product.name }}</h2></div>
           <button class="secondary-button" type="button" (click)="close()">Cerrar</button></header>
         <div class="tax-editor-body">
-          <p class="account-note">Los precios del POS son finales. La base gravada y el impuesto se extraerán del precio final cuando se conecte esta regla al flujo de venta. No se asume una alícuota por familia de productos.</p>
+          <p class="account-note">Los precios del POS son finales. El IVA vigente se extrae del precio final al confirmar una venta nueva. No se asume una alícuota por familia de productos.</p>
           <div class="tax-editor-fields">
             <div><label for="tax-treatment">Tratamiento</label>
               <select id="tax-treatment" [value]="treatment()" [disabled]="saving()" (change)="treatmentChanged($event)">
                 <option value="taxed">Gravado</option><option value="exempt">Exento</option><option value="notTaxed">No alcanzado</option>
               </select></div>
-            <div><label for="tax-rate">Alícuota (%)</label>
-              <input id="tax-rate" type="number" min="0" max="100" step="0.01" [value]="rate()"
-                [disabled]="saving() || treatment() !== 'taxed'" (input)="rateChanged($event)" />
+            <div><label for="tax-catalog-entry">Alícuota del catálogo</label>
+              <select id="tax-catalog-entry" [value]="selectedTaxId()"
+                [disabled]="saving() || treatment() !== 'taxed'" (change)="taxChanged($event)">
+                <option value="">Elegí IVA</option>
+                @for (option of vatOptions(); track option.id) {
+                  <option [value]="option.id">{{ option.name }} · {{ option.ratePercent }} %</option>
+                }
+              </select>
+              @if (vatOptionsError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
             </div>
           </div>
           @if (saveError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }

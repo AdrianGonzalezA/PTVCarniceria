@@ -3,6 +3,7 @@ using System;
 using Carnicerias.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Carnicerias.Infrastructure.Migrations
 {
     [DbContext(typeof(PlatformAccessDbContext))]
-    partial class PlatformAccessDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261009160033_LinkExistingVatRulesToTaxCatalog")]
+    partial class LinkExistingVatRulesToTaxCatalog
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1080,51 +1083,6 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.ToTable("pieces", "inventory", t =>
                         {
                             t.HasCheckConstraint("CK_pieces_received_weight_positive", "\"ReceivedWeightKg\" > 0");
-                        });
-                });
-
-            modelBuilder.Entity("Carnicerias.Infrastructure.OtherTaxAssignment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AssignedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("EffectiveFromUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset?>("EffectiveToUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("ProductId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("RemovedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TaxCatalogEntryId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AssignedByUserId");
-
-                    b.HasIndex("RemovedByUserId");
-
-                    b.HasIndex("CompanyId", "TaxCatalogEntryId", "EffectiveToUtc");
-
-                    b.HasIndex("CompanyId", "ProductId", "TaxCatalogEntryId", "EffectiveToUtc")
-                        .IsUnique()
-                        .HasFilter("\"EffectiveToUtc\" IS NULL");
-
-                    b.ToTable("other_tax_assignments", "catalog_pricing", t =>
-                        {
-                            t.HasCheckConstraint("CK_other_tax_assignments_dates", "\"EffectiveToUtc\" IS NULL OR \"EffectiveToUtc\" > \"EffectiveFromUtc\"");
                         });
                 });
 
@@ -2341,34 +2299,6 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.HasOne("Carnicerias.Infrastructure.CatalogProduct", null)
                         .WithMany()
                         .HasForeignKey("CompanyId", "ProductId")
-                        .HasPrincipalKey("CompanyId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Carnicerias.Infrastructure.OtherTaxAssignment", b =>
-                {
-                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
-                        .WithMany()
-                        .HasForeignKey("AssignedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
-                        .WithMany()
-                        .HasForeignKey("RemovedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Carnicerias.Infrastructure.CatalogProduct", null)
-                        .WithMany()
-                        .HasForeignKey("CompanyId", "ProductId")
-                        .HasPrincipalKey("CompanyId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Carnicerias.Infrastructure.TaxCatalogEntry", null)
-                        .WithMany()
-                        .HasForeignKey("CompanyId", "TaxCatalogEntryId")
                         .HasPrincipalKey("CompanyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();

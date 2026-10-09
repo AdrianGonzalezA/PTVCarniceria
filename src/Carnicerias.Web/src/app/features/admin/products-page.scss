@@ -28,3 +28,5 @@ select:focus-visible { outline: 3px solid #71b8da; outline-offset: 2px; }
   .field-grid, .product-filters { grid-template-columns: 1fr; }
   .panel-heading { align-items: stretch; flex-direction: column; }
 }
+.cost-history-dialog { padding: 1.5rem; width: min(620px, calc(100vw - 3rem)); max-height: 75vh; overflow: auto; }
+.cost-history-dialog ul { line-height: 1.6; }

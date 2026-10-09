@@ -1,0 +1,24 @@
+.import-actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; justify-content: flex-end; }
+.import-template { color: #254b46; font-weight: 700; text-decoration: underline; text-underline-offset: .2em; }
+.import-template-disabled { pointer-events: none; opacity: .45; }
+.import-open, .import-footer button { min-height: 2.7rem; border-radius: .25rem; padding: .55rem .9rem; font: inherit; font-weight: 700; cursor: pointer; }
+.import-open, .import-footer .secondary-button { color: #005e60; background: #fff; border: 1px solid #7d9992; }
+.import-footer button:not(.secondary-button) { color: #172622; background: #dcf600; border: 1px solid #c1da00; }
+.import-open:hover, .import-footer .secondary-button:hover { background: #e3f1eb; }
+.import-open:focus-visible, .import-footer button:focus-visible, .import-template:focus-visible { outline: 3px solid #007f86; outline-offset: 2px; }
+.import-open:disabled, .import-footer button:disabled { opacity: .45; cursor: not-allowed; }
+.import-dialog { box-sizing: border-box; width: 100%; max-height: min(82vh, 780px); overflow: auto; padding: 1.5rem; color: #27383d; }
+.import-dialog h2 { margin: 0 0 .5rem; }
+.import-dialog h3 { font-size: 1rem; margin: 1.2rem 0 .4rem; }
+.import-dialog p { line-height: 1.45; }
+.import-file { display: grid; gap: .4rem; font-weight: 700; margin-top: 1rem; }
+.import-file input { max-width: 100%; font-weight: 400; }
+.import-error { color: #9a3025; font-weight: 700; }
+.import-success { color: #17634c; font-weight: 700; }
+.import-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5rem; margin-top: 1rem; }
+.import-summary span { border: 1px solid #d5dfdc; border-radius: .55rem; padding: .65rem; background: #f4f7f5; }
+.import-summary strong { display: block; font-size: 1.3rem; }
+.import-details { max-height: 190px; overflow: auto; padding-left: 1.4rem; margin: .4rem 0; line-height: 1.5; }
+.import-issues { color: #8c3027; }
+.import-footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .5rem; margin-top: 1.3rem; }
+@media (max-width: 600px) { .import-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

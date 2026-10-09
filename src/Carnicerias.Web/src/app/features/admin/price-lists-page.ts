@@ -10,10 +10,11 @@ import {
 } from '../../core/admin/admin-price-list-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { AdminDetailDialog } from './admin-detail-dialog';
+import { AdminExcelImportActions } from './admin-excel-import-actions';
 
 @Component({
   selector: 'app-price-lists-page',
-  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, ReactiveFormsModule, DatePipe],
+  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, AdminExcelImportActions, ReactiveFormsModule, DatePipe],
   templateUrl: './price-lists-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './price-lists-page.scss'],
 })
@@ -248,10 +249,6 @@ export class PriceListsPage implements OnInit {
       if (amount <= 0) this.priceError.set('Ingresá un precio mayor que cero.');
       return;
     }
-    if (amount < product.cost) {
-      this.priceError.set('El precio no puede ser menor que el costo.');
-      return;
-    }
     this.priceSaving.set(true);
     this.priceError.set(null);
     this.client.setPrice(list.id, product.productId, amount).subscribe({
@@ -267,11 +264,9 @@ export class PriceListsPage implements OnInit {
         this.priceSaving.set(false);
         this.actionMessage.set('Precio guardado con historial de vigencia.');
       },
-      error: (error: HttpErrorResponse) => {
+      error: () => {
         this.priceSaving.set(false);
-        this.priceError.set(error.error?.error?.code === 'PRICE_BELOW_COST'
-          ? 'El precio no puede ser menor que el costo vigente.'
-          : 'No se pudo guardar el precio. Intentá de nuevo.');
+        this.priceError.set('No se pudo guardar el precio. Intentá de nuevo.');
       },
     });
   }

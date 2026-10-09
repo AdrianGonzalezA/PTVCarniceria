@@ -27,7 +27,11 @@
           <h2 id="price-lists-title">Listas de la empresa</h2>
           <p>Una lista puede estar disponible en varias sucursales. El cajero elige entre las habilitadas.</p>
         </div>
-        <button type="button" class="create-button" [disabled]="isSaving()" (click)="startCreate()">Nueva lista</button>
+        <div class="admin-import-heading-actions">
+          <app-admin-excel-import-actions kind="price-lists" [disabled]="isSaving()"
+            (completed)="load(pageData()?.page ?? 1)" />
+          <button type="button" class="create-button" [disabled]="isSaving()" (click)="startCreate()">Nueva lista</button>
+        </div>
       </header>
 
       @if (actionMessage(); as message) { <p class="success-message" role="status">{{ message }}</p> }

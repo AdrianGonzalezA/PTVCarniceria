@@ -1,0 +1,56 @@
+<div class="import-actions">
+  <a class="import-template" [href]="templateUrl()" [attr.aria-disabled]="disabled() ? 'true' : null"
+    [attr.tabindex]="disabled() ? -1 : null" [class.import-template-disabled]="disabled()"
+    download>Descargar plantilla</a>
+  <button type="button" class="import-open" [disabled]="disabled()" (click)="start()">Importar Excel</button>
+</div>
+
+@if (open()) {
+  <app-admin-detail-dialog labelledBy="excel-import-title" [compact]="true" [canClose]="busy() === null" (closed)="close()">
+    <section class="import-dialog" aria-labelledby="excel-import-title" [attr.aria-busy]="busy() !== null">
+      <h2 id="excel-import-title">Importar desde Excel</h2>
+      <p>Descargá la plantilla, completá sólo las hojas de carga y revisá el resultado antes de confirmar.
+        La hoja <strong>Ejemplos</strong> no se importa.</p>
+      <label class="import-file">Archivo .xlsx
+        <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          [disabled]="busy() !== null" (change)="chooseFile($event)" />
+      </label>
+      @if (errorMessage(); as error) { <p class="import-error" role="alert">{{ error }}</p> }
+      @if (busy() === 'preview') { <p role="status">Analizando archivo…</p> }
+      @if (previewResult(); as result) {
+        <div class="import-summary" aria-label="Resumen de importación">
+          <span><strong>{{ result.createCount }}</strong> altas</span>
+          <span><strong>{{ result.updateCount }}</strong> cambios</span>
+          <span><strong>{{ result.skippedCount }}</strong> no importados</span>
+          <span><strong>{{ result.unchangedCount }}</strong> sin cambios</span>
+        </div>
+        @if (result.issues.length > 0) {
+          <h3>Errores que impiden aplicar</h3>
+          <ul class="import-details import-issues">
+            @for (issue of result.issues; track $index) {
+              <li><strong>{{ issue.sheet || 'Archivo' }}@if (issue.row) { · fila {{ issue.row }}}@if (issue.column) { · {{ issue.column }}}</strong>: {{ issue.message }}</li>
+            }
+          </ul>
+        }
+        @if (result.rows.length > 0) {
+          <h3>Detalle por fila</h3>
+          <ul class="import-details">
+            @for (row of result.rows; track $index) {
+              <li><strong>{{ row.sheet }} · fila {{ row.row }}</strong>: {{ row.message }}</li>
+            }
+          </ul>
+        }
+        @if (applied()) { <p class="import-success" role="status">La importación quedó guardada.</p> }
+      }
+      <div class="import-footer">
+        <button type="button" class="secondary-button" [disabled]="busy() !== null" (click)="close()">Cerrar</button>
+        @if (!applied()) {
+          <button type="button" class="secondary-button" [disabled]="!file() || busy() !== null || !!errorMessage()"
+            (click)="preview()">Previsualizar</button>
+          <button type="button" [disabled]="!previewResult()?.canApply || busy() !== null || !!errorMessage()"
+            (click)="apply()">{{ busy() === 'apply' ? 'Aplicando…' : 'Confirmar importación' }}</button>
+        }
+      </div>
+    </section>
+  </app-admin-detail-dialog>
+}

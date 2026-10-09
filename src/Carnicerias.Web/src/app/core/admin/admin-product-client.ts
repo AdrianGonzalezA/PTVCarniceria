@@ -24,6 +24,14 @@ export interface AdminProductPage {
   readonly totalPages: number;
 }
 
+export interface AdminCostHistory {
+  readonly id: string;
+  readonly amount: number;
+  readonly effectiveFromUtc: string;
+  readonly effectiveToUtc: string | null;
+  readonly changedByUsername: string | null;
+}
+
 export interface AdminProductCreate {
   readonly categoryId: string;
   readonly code: string;
@@ -61,5 +69,10 @@ export class AdminProductClient {
 
   update(id: string, changes: AdminProductUpdate) {
     return this.http.patch<AdminProduct>(`${this.endpoint}/${id}`, changes, { withCredentials: true });
+  }
+
+  costHistory(id: string) {
+    return this.http.get<readonly AdminCostHistory[]>(`${this.endpoint}/${id}/cost-history`,
+      { withCredentials: true });
   }
 }

@@ -27,7 +27,11 @@
           <h2 id="product-list-title">Artículos de la empresa</h2>
           <p>El código principal no se cambia. Inactivar conserva tickets y movimientos.</p>
         </div>
-        <button type="button" class="create-button" [disabled]="isSaving() || categoriesLoading()" (click)="startCreate()">Nuevo artículo</button>
+        <div class="admin-import-heading-actions">
+          <app-admin-excel-import-actions kind="products" [disabled]="isSaving()"
+            (completed)="load(pageData()?.page ?? 1)" />
+          <button type="button" class="create-button" [disabled]="isSaving() || categoriesLoading()" (click)="startCreate()">Nuevo artículo</button>
+        </div>
       </header>
 
       @if (categoriesError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
@@ -71,6 +75,24 @@
           @if (actionError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
           <p class="editor-note">Los precios de venta se asignan por lista. Un artículo nuevo no se muestra en caja hasta tener precio y stock.</p>
           @if (editingProduct(); as editing) {
+            <button type="button" class="secondary-button" (click)="showCostHistory()">Ver historial de costos</button>
+            @if (costHistoryOpen()) {
+              <app-admin-detail-dialog labelledBy="cost-history-title" (closed)="closeCostHistory()">
+                <section class="cost-history-dialog">
+                  <h3 id="cost-history-title">Historial de costos · {{ editing.name }}</h3>
+                  @if (costHistoryLoading()) { <p role="status">Cargando vigencias…</p> }
+                  @if (costHistoryError(); as error) { <p role="alert">{{ error }}</p> }
+                  <ul>
+                    @for (version of costHistoryRows(); track version.id) {
+                      <li>ARS {{ version.amount.toFixed(2) }} · desde {{ version.effectiveFromUtc | date:'short' }}
+                        @if (version.effectiveToUtc) { hasta {{ version.effectiveToUtc | date:'short' }} }
+                        · {{ version.changedByUsername ?? 'Costo inicial anterior al historial' }}</li>
+                    }
+                  </ul>
+                  <button type="button" class="secondary-button" (click)="closeCostHistory()">Cerrar</button>
+                </section>
+              </app-admin-detail-dialog>
+            }
             <section class="alternate-codes" aria-labelledby="alternate-codes-title">
               <h4 id="alternate-codes-title">Códigos alternativos</h4>
               <p>Otros códigos para encontrar {{ editing.name }} en caja. Inactivar conserva el registro.</p>

@@ -1,17 +1,19 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { DatePipe } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AdminAreaTabs } from './admin-area-tabs';
 import { AdminDetailDialog } from './admin-detail-dialog';
+import { AdminExcelImportActions } from './admin-excel-import-actions';
 import { AdminCategoryClient, AdminCategoryOption } from '../../core/admin/admin-category-client';
 import { AdminProductCode, AdminProductCodeClient } from '../../core/admin/admin-product-code-client';
-import { AdminProduct, AdminProductClient, AdminProductPage, SaleMode } from '../../core/admin/admin-product-client';
+import { AdminCostHistory, AdminProduct, AdminProductClient, AdminProductPage, SaleMode } from '../../core/admin/admin-product-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 
 @Component({
   selector: 'app-products-page',
-  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, ReactiveFormsModule],
+  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, AdminExcelImportActions, ReactiveFormsModule, DatePipe],
   templateUrl: './products-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './products-page.scss'],
 })
@@ -55,6 +57,10 @@ export class ProductsPage implements OnInit {
   protected readonly codeSaving = signal(false);
   protected readonly codeAction = signal<string | null>(null);
   protected readonly codesError = signal<string | null>(null);
+  protected readonly costHistoryOpen = signal(false);
+  protected readonly costHistoryRows = signal<readonly AdminCostHistory[]>([]);
+  protected readonly costHistoryLoading = signal(false);
+  protected readonly costHistoryError = signal<string | null>(null);
   protected readonly editorCategories = computed(() => {
     const options = this.categories();
     const editing = this.editingProduct();
@@ -137,9 +143,32 @@ export class ProductsPage implements OnInit {
 
   protected cancelEdit(): void {
     if (this.isSaving() || this.codeSaving()) return;
+    this.costHistoryOpen.set(false);
     this.editorOpen.set(false);
     this.editingProduct.set(null);
   }
+
+  protected showCostHistory(): void {
+    const product = this.editingProduct();
+    if (!product) return;
+    this.costHistoryRows.set([]);
+    this.costHistoryError.set(null);
+    this.costHistoryLoading.set(true);
+    this.costHistoryOpen.set(true);
+    this.productsClient.costHistory(product.id).subscribe({
+      next: (rows) => {
+        if (this.editingProduct()?.id !== product.id || !this.costHistoryOpen()) return;
+        this.costHistoryRows.set(rows);
+        this.costHistoryLoading.set(false);
+      },
+      error: () => {
+        this.costHistoryLoading.set(false);
+        this.costHistoryError.set('No se pudo cargar el historial de costos.');
+      },
+    });
+  }
+
+  protected closeCostHistory(): void { this.costHistoryOpen.set(false); }
 
   protected save(): void {
     const values = this.editorForm.getRawValue();
@@ -326,8 +355,8 @@ export class ProductsPage implements OnInit {
     if (code === 'PRODUCT_QUANTITY_HISTORY_EXISTS')
       return 'No se puede cambiar la unidad o modalidad: el artículo ya tiene stock o tickets.';
     if (code === 'CATEGORY_NOT_ACTIVE') return 'Elegí una categoría activa.';
-    if (code === 'COST_ABOVE_CURRENT_PRICE')
-      return 'El costo supera un precio vigente. Actualizá primero las listas de precios.';
+    if (code === 'COST_NOT_YET_EFFECTIVE' || code === 'COST_HISTORY_MISSING')
+      return 'No se pudo abrir una nueva vigencia de costo. Actualizá la pantalla y reintentá.';
     if (error.status === 409) return 'El código ya existe o el cambio entra en conflicto con el catálogo.';
     if (error.status === 400) return 'Revisá los datos del artículo.';
     if (error.status === 401 || error.status === 403) return 'La sesión no tiene permiso para editar artículos.';

@@ -22,10 +22,10 @@ Reemplazar el catálogo de demostración del punto de venta por productos activo
 ## Alcance de la primera entrega
 
 1. Categorías y productos pertenecen a una empresa. El código principal de producto es único dentro de esa empresa y permanece inmutable después del alta.
-2. Cada producto tiene denominación, categoría, unidad, modalidad de venta (`weight` o `unit`), costo positivo, estado activo y códigos alternativos cuando correspondan.
+2. Cada producto tiene denominación, categoría, unidad, modalidad de venta (`weight` o `unit`), costo estadístico positivo, estado activo y códigos alternativos cuando correspondan. Los cambios de costo conservan vigencias; el costo no determina ni limita el precio de venta.
    La unidad de venta se define en el catálogo, no en la caja: un producto `weight` se cobra y controla por kg (hasta tres decimales); uno `unit` se cobra y controla en cantidades enteras de la unidad configurada (por ejemplo, unidad o paquete). Un paquete de cuatro se registra como un paquete, no como cuatro unidades sueltas.
 3. Una sucursal puede tener varias listas de precios habilitadas. El cajero elige explícitamente la lista correspondiente antes de agregar productos; la elección pertenece a la venta en curso y no se deduce solo de la sucursal.
-4. Cada cambio de precio conserva valor anterior, nuevo, vigencia, fecha de cambio y usuario. El POS recibe solo productos activos con precio vigente en la lista elegida para su contexto. Los importes se expresan en ARS con dos decimales. Los productos por peso muestran precio por kilogramo.
+4. Cada cambio de precio reemplaza el valor vigente de la lista y conserva valor anterior, nuevo, vigencia, fecha de cambio y usuario. El POS recibe solo productos activos con precio vigente en la lista elegida para su contexto. Los importes se expresan en ARS con dos decimales. Los productos por peso muestran precio por kilogramo. El precio puede ser inferior al costo estadístico.
 5. La búsqueda por texto se inicia con tres caracteres y examina nombre y código. La búsqueda exacta por código puede ejecutarse con menos caracteres y devuelve un producto inequívoco o «Producto no encontrado».
 6. Las consultas del POS usan el contexto de empresa y sucursal resuelto desde la sesión del servidor. No aceptan esos IDs como parámetros del cliente.
 7. La lista elegida se valida de nuevo en el servidor contra la sucursal de la sesión. Si deja de estar habilitada, el cajero debe elegir otra antes de continuar; no se aplican precios de otra lista por omisión.
@@ -72,6 +72,8 @@ El precio vigente de la lista sigue siendo el precio final usado por el POS. La 
 ## Decisión ratificada
 
 El 6 de octubre de 2026 el usuario confirmó que la sucursal puede tener listas de precios y que el cajero elige la correspondiente. Esta especificación modela varias listas habilitadas por sucursal y selección explícita para cada venta.
+
+El 9 de octubre de 2026 el usuario precisó que el costo del artículo es estadístico y cada cambio de costo abre una nueva vigencia. El precio de venta lo determina la lista. Sobrescribir su valor vigente no borra el historial: se cierra la vigencia anterior y se abre la nueva.
 
 ## Corte implementado
 

@@ -33,7 +33,7 @@ El primer incremento publicable comprende navegación administrativa y ABM de ca
 - `GET /api/admin/products` lista artículos activos e inactivos de la empresa, con búsqueda, categoría y paginación. No depende de que exista precio vigente.
 - `POST /api/admin/products` crea un artículo activo con código principal único, categoría activa, nombre, unidad de venta, modalidad (`weight` o `unit`) y costo positivo. Nace sin precio ni stock: no aparece en el POS hasta completar esos datos.
 - `PATCH /api/admin/products/{id}` permite cambiar categoría, nombre, unidad, modalidad, costo y estado, pero nunca el código principal. Una baja es inactivación lógica.
-- La unidad o modalidad no se modifica si el artículo ya tiene movimientos/existencias o renglones de ticket, para no reinterpretar cantidades históricas. La edición de nombre, categoría, costo y estado conserva los snapshots de tickets existentes.
+- La unidad o modalidad no se modifica si el artículo ya tiene movimientos/existencias o renglones de ticket, para no reinterpretar cantidades históricas. El costo es estadístico: cada cambio abre una nueva vigencia de costo sin modificar las anteriores ni los snapshots de tickets.
 - Los códigos alternativos se gestionan aparte y no pueden coincidir con códigos principales ni con otros alternativos de la empresa.
 - Los códigos alternativos tienen estado activo/inactivo; inactivarlos no borra la fila ni libera el código para otro artículo. El POS ignora los inactivos al buscar. Las altas de artículos y códigos alternativos serializan la reserva por empresa para impedir colisiones entre ambas tablas.
 
@@ -41,8 +41,8 @@ El primer incremento publicable comprende navegación administrativa y ABM de ca
 
 - Cada lista pertenece a una empresa y puede habilitarse en varias sucursales; una sucursal puede ofrecer varias listas. El cajero elige entre las listas activas asignadas a su sucursal.
 - La baja de lista o asignación es lógica. Se rechaza mientras existan borradores de venta abiertos que dependan de ella, para no interrumpir una caja en uso.
-- El precio de un artículo se define por lista, debe ser positivo y no inferior al costo vigente. Un cambio cierra el precio anterior y abre otro con fecha y usuario responsables en una transacción. Los tickets ya guardados mantienen sus importes snapshot.
-- Si el costo de un artículo sube por encima de alguno de sus precios vigentes, la edición se rechaza hasta ajustar primero esos precios.
+- El precio de venta de un artículo se define exclusivamente por lista y debe ser positivo; el costo estadístico no fija un mínimo de venta ni bloquea cambios de precio. Un cambio de precio reemplaza el valor vigente cerrando su vigencia y abriendo otra con fecha y usuario responsables en una transacción. El historial no se elimina y los tickets ya guardados mantienen sus importes snapshot.
+- Cambiar el costo estadístico no altera las listas de precios: cierra la vigencia de costo anterior y abre una nueva, aunque el nuevo costo supere algún precio de venta vigente.
 
 ## Impuestos por artículo
 

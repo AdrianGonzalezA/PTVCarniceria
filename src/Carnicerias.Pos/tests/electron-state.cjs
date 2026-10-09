@@ -33,6 +33,8 @@ async function main() {
     await send('Page.reload', { ignoreCache: true });
     await new Promise((done) => setTimeout(done, 1200));
   }
+  const downloadPath = process.argv.find((item) => item.startsWith('--download-path='))?.slice(16);
+  if (downloadPath) await send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath });
   const clickSelector = process.argv.find((item) => item.startsWith('--click-selector='))?.slice(17);
   if (clickSelector) {
     const clicked = await send('Runtime.evaluate', {
@@ -42,6 +44,26 @@ async function main() {
     });
     if (!clicked.result.value) throw new Error(`No se pudo abrir la acción: ${clickSelector}`);
     await new Promise((done) => setTimeout(done, 400));
+  }
+  const selectedFile = process.argv.find((item) => item.startsWith('--select-file='))?.slice(14);
+  if (selectedFile) {
+    const document = await send('DOM.getDocument', { depth: 1 });
+    const input = await send('DOM.querySelector', {
+      nodeId: document.root.nodeId, selector: 'dialog input[type="file"]',
+    });
+    if (!input.nodeId) throw new Error('No se encontró el selector de archivo del modal.');
+    await send('DOM.setFileInputFiles', { files: [selectedFile], nodeId: input.nodeId });
+    await new Promise((done) => setTimeout(done, 250));
+  }
+  const afterSelect = process.argv.find((item) => item.startsWith('--click-after-select='))?.slice(21);
+  if (afterSelect) {
+    const clicked = await send('Runtime.evaluate', {
+      expression: `(() => { const button = document.querySelector(${JSON.stringify(afterSelect)});
+        if (!button || button.disabled) return false; button.click(); return true; })()`,
+      returnByValue: true,
+    });
+    if (!clicked.result.value) throw new Error(`No se pudo abrir la acción: ${afterSelect}`);
+    await new Promise((done) => setTimeout(done, 1000));
   }
   if (process.argv.includes('--click-first-detail')) {
     await send('Runtime.evaluate', { expression: "document.querySelector('table tbody button')?.click()" });

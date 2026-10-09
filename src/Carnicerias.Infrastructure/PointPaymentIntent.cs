@@ -12,6 +12,12 @@ public enum PointPaymentStatus
     Refunded
 }
 
+public enum MercadoPagoOrderMode
+{
+    Point,
+    DynamicQr
+}
+
 /// <summary>A durable, non-cardholder record created before sending a Point order.</summary>
 public sealed class PointPaymentIntent
 {
@@ -22,13 +28,14 @@ public sealed class PointPaymentIntent
 
     public PointPaymentIntent(Guid companyId, Guid branchId, Guid saleDraftId,
         Guid cashierShiftId, Guid cashierId, Guid posTerminalId, string terminalId,
-        decimal amount, DateTimeOffset now)
+        decimal amount, DateTimeOffset now, MercadoPagoOrderMode mode = MercadoPagoOrderMode.Point)
     {
         if (companyId == Guid.Empty || branchId == Guid.Empty || saleDraftId == Guid.Empty ||
             cashierShiftId == Guid.Empty || cashierId == Guid.Empty || posTerminalId == Guid.Empty ||
             string.IsNullOrWhiteSpace(terminalId) || terminalId.Length > 100 ||
             !terminalId.All(character => char.IsAsciiLetterOrDigit(character) || character is '_' or '-') ||
-            amount <= 0 || amount > 999_999_999.99m || decimal.Round(amount, 2) != amount)
+            amount <= 0 || amount > 999_999_999.99m || decimal.Round(amount, 2) != amount ||
+            !Enum.IsDefined(mode))
             throw new ArgumentException("A Point intent needs an exact sale, register, terminal and amount.");
         Id = Guid.NewGuid();
         CompanyId = companyId;
@@ -38,6 +45,7 @@ public sealed class PointPaymentIntent
         CashierId = cashierId;
         PosTerminalId = posTerminalId;
         TerminalId = terminalId;
+        Mode = mode;
         Amount = amount;
         IdempotencyKey = Guid.NewGuid();
         Status = PointPaymentStatus.Prepared;
@@ -53,6 +61,9 @@ public sealed class PointPaymentIntent
     public Guid CashierId { get; private set; }
     public Guid PosTerminalId { get; private set; }
     public string TerminalId { get; private set; }
+    public MercadoPagoOrderMode Mode { get; private set; }
+    public string? QrData { get; private set; }
+    public Guid? ConfirmedSaleId { get; private set; }
     public decimal Amount { get; private set; }
     public Guid IdempotencyKey { get; private set; }
     public PointPaymentStatus Status { get; private set; }
@@ -64,6 +75,22 @@ public sealed class PointPaymentIntent
     public DateTimeOffset CreatedAtUtc { get; private set; }
     public DateTimeOffset UpdatedAtUtc { get; private set; }
     public string ExternalReference => Id.ToString("N");
+
+    public void SetQrData(string qrData)
+    {
+        if (Mode != MercadoPagoOrderMode.DynamicQr || string.IsNullOrWhiteSpace(qrData) ||
+            qrData.Length > 4096 || QrData is not null && QrData != qrData)
+            throw new InvalidOperationException("Invalid or changed dynamic QR data.");
+        QrData = qrData;
+    }
+
+    public void ApplyToSale(Guid saleId)
+    {
+        if (Status != PointPaymentStatus.Approved || saleId == Guid.Empty ||
+            ConfirmedSaleId is not null && ConfirmedSaleId != saleId)
+            throw new InvalidOperationException("Only one sale can use an accredited order.");
+        ConfirmedSaleId = saleId;
+    }
 
     public void MarkUncertain(DateTimeOffset now)
     {

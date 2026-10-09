@@ -131,6 +131,34 @@ public static class SaleConfirmationEndpoints
                 return PaymentError(exception.Error);
             }
 
+            var mercadoPagoAmount = settlement.AppliedPayments
+                .Where(payment => payment.Method == PaymentMethod.MercadoPago)
+                .Sum(payment => payment.AppliedAmount);
+            PointPaymentIntent? mercadoPagoIntent = null;
+            if (mercadoPagoAmount > 0)
+            {
+                if (request.MercadoPagoIntentId is not Guid intentId || intentId == Guid.Empty)
+                    return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_APPROVAL_REQUIRED");
+                mercadoPagoIntent = await db.PointPaymentIntents.SingleOrDefaultAsync(item =>
+                    item.Id == intentId && item.CompanyId == context.CompanyId &&
+                    item.BranchId == context.BranchId && item.SaleDraftId == draftId &&
+                    item.CashierShiftId == shift.Id && item.CashierId == context.UserId &&
+                    item.PosTerminalId == accessor.TerminalId && item.Amount == mercadoPagoAmount &&
+                    item.Status == PointPaymentStatus.Approved && item.ConfirmedSaleId == null &&
+                    item.ProviderOrderId != null && item.ProviderPaymentId != null,
+                    cancellationToken);
+                if (mercadoPagoIntent is null)
+                    return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_APPROVAL_REQUIRED");
+            }
+            else if (request.MercadoPagoIntentId is not null)
+                return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+            if (mercadoPagoAmount == 0 && await db.PointPaymentIntents.AnyAsync(item =>
+                    item.CompanyId == context.CompanyId && item.SaleDraftId == draftId &&
+                    (item.Status == PointPaymentStatus.Prepared || item.Status == PointPaymentStatus.Pending ||
+                     item.Status == PointPaymentStatus.Approved ||
+                     item.Status == PointPaymentStatus.NeedsReconciliation), cancellationToken))
+                return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_ORDER_ACTIVE");
+
             var now = timeProvider.GetUtcNow();
             foreach (var pieceId in draft.Lines.Where(line => line.InventoryPieceId is not null)
                          .Select(line => line.InventoryPieceId!.Value))
@@ -140,6 +168,7 @@ public static class SaleConfirmationEndpoints
                 shift.Id, draft.Id, draft.PriceListId, total, requestHash, now, accessor.TerminalId,
                 request.CustomerId, request.AccountChargeAmount, creditCustomer?.Code, creditCustomer?.Name,
                 request.CreditAppliedAmount, draft.DiscountAmount, draft.DiscountReason, documentChoice);
+            mercadoPagoIntent?.ApplyToSale(sale.Id);
             sale.Lines.AddRange(draft.Lines.Select(line => new ConfirmedSaleLine(
                 context.CompanyId, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
                 line.SaleMode, line.Quantity, line.UnitPrice, line.InventoryPieceId, line.PieceIdentifier)));
@@ -259,6 +288,8 @@ public static class SaleConfirmationEndpoints
             if (request.DocumentType != "nonFiscalTicket")
                 canonical += $":{Encode(request.RecipientName)}:{Encode(request.RecipientDocumentNumber)}:{Encode(request.RecipientAddress)}";
         }
+        if (request.MercadoPagoIntentId is Guid mercadoPagoIntentId)
+            canonical += $"|mercadoPago:{mercadoPagoIntentId:N}";
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
 
@@ -342,7 +373,8 @@ public static class SaleConfirmationEndpoints
         decimal AccountChargeAmount = 0, bool AccountChargeConfirmed = false,
         decimal CreditAppliedAmount = 0, string DocumentType = "nonFiscalTicket",
         string RecipientTaxStatus = "finalConsumer", string? RecipientName = null,
-        string? RecipientDocumentNumber = null, string? RecipientAddress = null);
+        string? RecipientDocumentNumber = null, string? RecipientAddress = null,
+        Guid? MercadoPagoIntentId = null);
     private sealed record PaymentRequest(string? Method, decimal Amount);
     private sealed record SaleConfirmationResponse(Guid Id, decimal Total, decimal ChangeAmount,
         DateTimeOffset ConfirmedAtUtc, Guid? CustomerId, decimal AccountChargeAmount,

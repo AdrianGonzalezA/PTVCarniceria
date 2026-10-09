@@ -23,6 +23,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
     public DbSet<PosTerminal> PosTerminals => Set<PosTerminal>();
 
     public DbSet<ArcaCompanySettings> ArcaCompanySettings => Set<ArcaCompanySettings>();
+    public DbSet<MercadoPagoGatewaySettings> MercadoPagoGatewaySettings => Set<MercadoPagoGatewaySettings>();
+    public DbSet<MercadoPagoRegisterSettings> MercadoPagoRegisterSettings => Set<MercadoPagoRegisterSettings>();
 
     public DbSet<UserSession> Sessions => Set<UserSession>();
 
@@ -182,6 +184,42 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<UserIdentity>().WithMany().HasForeignKey(settings => settings.UpdatedByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MercadoPagoGatewaySettings>(entity =>
+        {
+            entity.ToTable("mercado_pago_gateway_settings", "payments_cash");
+            entity.HasKey(settings => settings.CompanyId);
+            entity.Property(settings => settings.SellerUserId).HasMaxLength(30).IsRequired();
+            entity.Ignore(settings => settings.HasAccessToken);
+            entity.Ignore(settings => settings.HasWebhookSecret);
+            entity.HasOne<Company>().WithOne()
+                .HasForeignKey<MercadoPagoGatewaySettings>(settings => settings.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(settings => settings.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MercadoPagoRegisterSettings>(entity =>
+        {
+            entity.ToTable("mercado_pago_register_settings", "payments_cash");
+            entity.HasKey(settings => new { settings.CompanyId, settings.PosTerminalId });
+            entity.Property(settings => settings.QrExternalPosId).HasMaxLength(40);
+            entity.Property(settings => settings.PointTerminalId).HasMaxLength(100);
+            entity.HasOne<PosTerminal>().WithOne()
+                .HasForeignKey<MercadoPagoRegisterSettings>(settings =>
+                    new { settings.CompanyId, settings.BranchId, settings.PosTerminalId })
+                .HasPrincipalKey<PosTerminal>(terminal =>
+                    new { terminal.CompanyId, terminal.BranchId, terminal.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(settings => settings.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(settings => new { settings.CompanyId, settings.QrExternalPosId })
+                .IsUnique().HasFilter("\"QrExternalPosId\" IS NOT NULL");
+            entity.HasIndex(settings => new { settings.CompanyId, settings.PointTerminalId })
+                .IsUnique().HasFilter("\"PointTerminalId\" IS NOT NULL");
         });
 
         modelBuilder.Entity<UserAssignment>(entity =>
@@ -881,11 +919,14 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             {
                 table.HasCheckConstraint("CK_point_payment_intents_amount_positive", "\"Amount\" > 0");
                 table.HasCheckConstraint("CK_point_payment_intents_status", "\"Status\" BETWEEN 0 AND 7");
+                table.HasCheckConstraint("CK_point_payment_intents_mode", "\"Mode\" BETWEEN 0 AND 1");
             });
             entity.HasKey(intent => intent.Id);
             entity.Property(intent => intent.Amount).HasPrecision(12, 2);
             entity.Property(intent => intent.Status).HasConversion<int>().IsRequired();
+            entity.Property(intent => intent.Mode).HasConversion<int>().IsRequired();
             entity.Property(intent => intent.TerminalId).HasMaxLength(100).IsRequired();
+            entity.Property(intent => intent.QrData).HasMaxLength(4096);
             entity.Property(intent => intent.ProviderOrderId).HasMaxLength(100);
             entity.Property(intent => intent.ProviderPaymentId).HasMaxLength(100);
             entity.Property(intent => intent.ProviderOrderStatus).HasMaxLength(40);
@@ -907,10 +948,17 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasOne<UserIdentity>().WithMany()
                 .HasForeignKey(intent => intent.CashierId)
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ConfirmedSale>().WithMany()
+                .HasForeignKey(intent => intent.ConfirmedSaleId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(intent => intent.ConfirmedSaleId).IsUnique()
+                .HasFilter("\"ConfirmedSaleId\" IS NOT NULL");
             entity.HasIndex(intent => intent.IdempotencyKey).IsUnique();
             entity.HasIndex(intent => intent.ProviderOrderId).IsUnique()
                 .HasFilter("\"ProviderOrderId\" IS NOT NULL");
             entity.HasIndex(intent => new { intent.CompanyId, intent.SaleDraftId, intent.CreatedAtUtc });
+            entity.HasIndex(intent => new { intent.CompanyId, intent.SaleDraftId })
+                .IsUnique().HasFilter("\"Status\" IN (0, 1, 2, 6)");
         });
 
         modelBuilder.Entity<CashLedgerMovement>(entity =>

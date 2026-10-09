@@ -118,6 +118,8 @@ public static class SaleDraftEndpoints
             return Error(StatusCodes.Status409Conflict, "DRAFT_BELONGS_TO_OTHER_SHIFT");
         if (draft is not null && draft.PriceListId != request.PriceListId)
             return Error(StatusCodes.Status409Conflict, "DRAFT_PRICE_LIST_LOCKED");
+        if (draft is not null && await HasActiveMercadoPagoOrderAsync(db, draft.Id, cancellationToken))
+            return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_ORDER_ACTIVE");
 
         var currentDraftId = draft?.Id ?? Guid.Empty;
         var lines = new List<SaleDraftLine>(request.Lines.Count);
@@ -227,6 +229,8 @@ public static class SaleDraftEndpoints
             item.TicketSlot == ticketSlot &&
             item.Status == SaleDraftStatus.Draft, cancellationToken);
         if (draft is null) return Results.NoContent();
+        if (await HasActiveMercadoPagoOrderAsync(db, draft.Id, cancellationToken))
+            return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_ORDER_ACTIVE");
         foreach (var group in draft.Lines.GroupBy(line => line.ProductId))
         {
             var quantity = group.Sum(line => line.Quantity);
@@ -243,6 +247,13 @@ public static class SaleDraftEndpoints
         await transaction.CommitAsync(cancellationToken);
         return Results.NoContent();
     }
+
+    private static Task<bool> HasActiveMercadoPagoOrderAsync(PlatformAccessDbContext db,
+        Guid draftId, CancellationToken cancellationToken) =>
+        db.PointPaymentIntents.AnyAsync(item => item.SaleDraftId == draftId &&
+            (item.Status == PointPaymentStatus.Prepared || item.Status == PointPaymentStatus.Pending ||
+             item.Status == PointPaymentStatus.Approved ||
+             item.Status == PointPaymentStatus.NeedsReconciliation), cancellationToken);
 
     private static Task<CashierShift?> FindOpenShiftAsync(
         PlatformAccessDbContext db, OperationalContextAccessor accessor, CancellationToken cancellationToken)

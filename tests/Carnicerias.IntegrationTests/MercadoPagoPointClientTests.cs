@@ -7,6 +7,13 @@ namespace Carnicerias.IntegrationTests;
 public sealed class MercadoPagoPointClientTests
 {
     [Fact]
+    public void RejectsAmountBelowObservedPointMinimum()
+    {
+        Assert.Throws<ArgumentException>(() => new PointOrderRequest("TERMINAL_1", 14.99m,
+            "0123456789abcdef0123456789abcdef", Guid.NewGuid()));
+    }
+
+    [Fact]
     public async Task CreatesAnIdempotentOrderWithoutTreatingCreatedAsPaid()
     {
         var handler = new FakeHandler("""

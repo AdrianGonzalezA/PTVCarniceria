@@ -3,6 +3,7 @@ using System;
 using Carnicerias.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Carnicerias.Infrastructure.Migrations
 {
     [DbContext(typeof(PlatformAccessDbContext))]
-    partial class PlatformAccessDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261009211639_AddMercadoPagoGatewaySettings")]
+    partial class AddMercadoPagoGatewaySettings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1340,17 +1343,11 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<Guid>("CompanyId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("ConfirmedSaleId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("IdempotencyKey")
                         .HasColumnType("uuid");
-
-                    b.Property<int>("Mode")
-                        .HasColumnType("integer");
 
                     b.Property<Guid>("PosTerminalId")
                         .HasColumnType("uuid");
@@ -1375,10 +1372,6 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
 
-                    b.Property<string>("QrData")
-                        .HasMaxLength(4096)
-                        .HasColumnType("character varying(4096)");
-
                     b.Property<Guid>("SaleDraftId")
                         .HasColumnType("uuid");
 
@@ -1397,10 +1390,6 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.HasIndex("CashierId");
 
-                    b.HasIndex("ConfirmedSaleId")
-                        .IsUnique()
-                        .HasFilter("\"ConfirmedSaleId\" IS NOT NULL");
-
                     b.HasIndex("IdempotencyKey")
                         .IsUnique();
 
@@ -1410,10 +1399,6 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.HasIndex("CompanyId", "CashierShiftId");
 
-                    b.HasIndex("CompanyId", "SaleDraftId")
-                        .IsUnique()
-                        .HasFilter("\"Status\" IN (0, 1, 2, 6)");
-
                     b.HasIndex("CompanyId", "BranchId", "PosTerminalId");
 
                     b.HasIndex("CompanyId", "SaleDraftId", "CreatedAtUtc");
@@ -1421,8 +1406,6 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.ToTable("point_payment_intents", "payments_cash", t =>
                         {
                             t.HasCheckConstraint("CK_point_payment_intents_amount_positive", "\"Amount\" > 0");
-
-                            t.HasCheckConstraint("CK_point_payment_intents_mode", "\"Mode\" BETWEEN 0 AND 1");
 
                             t.HasCheckConstraint("CK_point_payment_intents_status", "\"Status\" BETWEEN 0 AND 7");
                         });
@@ -2696,11 +2679,6 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasForeignKey("CashierId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.HasOne("Carnicerias.Infrastructure.ConfirmedSale", null)
-                        .WithMany()
-                        .HasForeignKey("ConfirmedSaleId")
-                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Carnicerias.Infrastructure.CashierShift", null)
                         .WithMany()

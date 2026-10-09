@@ -13,7 +13,7 @@ public sealed class PointOrderRequest
         if (string.IsNullOrWhiteSpace(terminalId) || terminalId.Length > 100 ||
             !terminalId.All(character => char.IsAsciiLetterOrDigit(character) || character is '_' or '-') ||
             !Guid.TryParseExact(externalReference, "N", out _) ||
-            amount <= 0 || amount > 999_999_999.99m || decimal.Round(amount, 2) != amount ||
+            amount < 15m || amount > 999_999_999.99m || decimal.Round(amount, 2) != amount ||
             idempotencyKey == Guid.Empty)
             throw new ArgumentException("An explicit terminal, sale reference, amount and idempotency key are required.");
         TerminalId = terminalId;
@@ -76,6 +76,20 @@ public sealed class MercadoPagoPointClient(HttpClient httpClient)
         using var request = NewRequest(HttpMethod.Get, $"/v1/orders/{orderId}", accessToken);
         return await SendAsync(request, orderId, expectedExternalReference,
             expectedAmount, cancellationToken);
+    }
+
+    public async Task<PointOrderState> CancelAsync(string accessToken, string orderId,
+        string expectedExternalReference, decimal expectedAmount, Guid idempotencyKey,
+        CancellationToken cancellationToken = default)
+    {
+        if (idempotencyKey == Guid.Empty || string.IsNullOrWhiteSpace(orderId) || orderId.Length > 100 ||
+            !orderId.All(character => char.IsAsciiLetterOrDigit(character) || character is '_' or '-'))
+            throw new ArgumentException("A Point order and cancellation idempotency key are required.");
+        using var request = NewRequest(HttpMethod.Post, $"/v1/orders/{orderId}/cancel", accessToken);
+        request.Headers.TryAddWithoutValidation("X-Idempotency-Key", idempotencyKey.ToString("D"));
+        request.Headers.TryAddWithoutValidation("x-allow-cancelable-status", "at_terminal");
+        return await SendAsync(request, orderId, expectedExternalReference, expectedAmount,
+            cancellationToken);
     }
 
     private static HttpRequestMessage NewRequest(HttpMethod method, string path, string accessToken)

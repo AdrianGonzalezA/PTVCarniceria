@@ -373,7 +373,7 @@
             </select>
           </div>
           @if (documentType() !== 'nonFiscalTicket') {
-            <p class="payment-guidance">La venta se guarda con esta solicitud, pero el comprobante fiscal quedará pendiente hasta contar con emisión autorizada. COM1 y el PDF actual son solo no fiscales.</p>
+            <p class="payment-guidance">La venta y el cobro se guardan primero. Luego se consulta ARCA homologación: solo si llega el CAE se habilitan COM1 y el PDF fiscal de prueba.</p>
             <div class="sale-document-fields">
               <label for="sale-recipient-name">Nombre o razón social @if (recipientTaxStatus() !== 'finalConsumer') { (obligatorio) }</label>
               <input id="sale-recipient-name" maxlength="200" autocomplete="off" [value]="recipientName()" [disabled]="checkoutBusy()" (input)="updateRecipientName($event)" />
@@ -483,7 +483,15 @@
           <p class="change-preview">Vuelto en efectivo: <strong>{{ formatMoney(sale.changeAmount) }}</strong></p>
         }
         @if (sale.documentType === 'fiscalTicket' || sale.documentType === 'electronicInvoice') {
-          <p class="checkout-context" role="status">{{ sale.documentType === 'fiscalTicket' ? 'Ticket fiscal' : 'Factura electrónica' }} pendiente de emisión. La venta y el cobro están registrados; todavía no hay comprobante fiscal autorizado.</p>
+          @if (fiscalDocument()?.status === 'Authorized') {
+            <p class="checkout-context" role="status">ARCA homologación autorizó el comprobante {{ fiscalDocument()?.voucherType === 1 ? 'A' : 'B' }}
+              {{ fiscalDocument()?.pointOfSale }}-{{ fiscalDocument()?.number }} · CAE {{ fiscalDocument()?.cae }}.
+              Prueba sin validez fiscal.</p>
+          } @else {
+            <p class="checkout-context" role="status">Comprobante pendiente de emisión. {{ fiscalBusy() ? 'Consultando ARCA…' : '' }}
+              La venta y el cobro están registrados; todavía no hay CAE confirmado.</p>
+          }
+          @if (fiscalError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
         } @else {
           <p class="checkout-context">El stock, los pagos y el saldo a cuenta quedaron registrados. Ticket interno no fiscal.</p>
         }
@@ -502,15 +510,22 @@
           <p class="pos-error" role="alert">{{ error }}</p>
         }
         <div class="dialog-actions">
-          @if (sale.documentType !== 'fiscalTicket' && sale.documentType !== 'electronicInvoice') {
+          @if (sale.documentType === 'fiscalTicket' || sale.documentType === 'electronicInvoice') {
+            @if (fiscalDocument()?.status !== 'Authorized') {
+              <button class="receipt-pdf-button" type="button" [disabled]="fiscalBusy()" (click)="issueFiscalDocument(sale)">
+                {{ fiscalBusy() ? 'Consultando ARCA…' : 'Consultar ARCA / reintentar' }}
+              </button>
+            }
+          }
+          @if (sale.documentType !== 'fiscalTicket' && sale.documentType !== 'electronicInvoice' || fiscalDocument()?.status === 'Authorized') {
             <button class="receipt-pdf-button serial-print-button" type="button" [disabled]="serialPrintBusy()" (click)="printSerialReceipt(sale)">
               {{ serialPrintBusy() ? 'Enviando a COM1…' : 'Imprimir en COM1' }}
             </button>
             <button class="receipt-pdf-button save-pdf-button" type="button" [disabled]="receiptPdfBusy()" (click)="saveReceiptPdf(sale)">
-              {{ receiptPdfBusy() ? 'Generando PDF…' : 'Guardar ticket PDF' }}
+              {{ receiptPdfBusy() ? 'Generando PDF…' : sale.documentType === 'electronicInvoice' ? 'Guardar factura PDF' : 'Guardar ticket PDF' }}
             </button>
           }
-          <button class="finish-button" type="button" [disabled]="receiptPdfBusy() || serialPrintBusy()" (click)="confirmedSale.set(null)">Nueva venta</button>
+          <button class="finish-button" type="button" [disabled]="receiptPdfBusy() || serialPrintBusy() || fiscalBusy()" (click)="confirmedSale.set(null)">Nueva venta</button>
         </div>
       </section>
     </div>

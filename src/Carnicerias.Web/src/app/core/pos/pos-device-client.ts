@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { ConfirmedSale } from '../sales/sale-draft-client';
 import { receiptPayload, ReceiptPayload } from '../sales/receipt-pdf-client';
+import { AuthorizedFiscalDocument } from '../sales/fiscal-document-client';
 
 interface DeviceBridge {
   readSerialScale(): Promise<{ readonly weightKg: number; readonly stable: boolean; readonly observedAtUtc: string }>;
@@ -28,9 +29,10 @@ export class PosDeviceClient {
     });
   }
 
-  print(sale: ConfirmedSale, branch: string, terminal: string, cashier: string): Promise<SerialPrintResult> {
+  print(sale: ConfirmedSale, branch: string, terminal: string, cashier: string,
+    fiscal?: AuthorizedFiscalDocument): Promise<SerialPrintResult> {
     const bridge = (window as Window & { carnicerias?: DeviceBridge }).carnicerias;
     if (!bridge) return Promise.reject(new Error('DEVICE_UNAVAILABLE'));
-    return bridge.printSerialReceipt(receiptPayload(sale, branch, terminal, cashier));
+    return bridge.printSerialReceipt(receiptPayload(sale, branch, terminal, cashier, fiscal));
   }
 }

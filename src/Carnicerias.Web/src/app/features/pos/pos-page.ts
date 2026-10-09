@@ -11,6 +11,7 @@ import { PosTerminal, PosTerminalClient } from '../../core/pos/pos-terminal-clie
 import { PosDeviceClient, SerialPrintResult } from '../../core/pos/pos-device-client';
 import { ConfirmedSale, SaleDocumentType, SaleDraft, SaleDraftClient, SaleDraftLine, SalePaymentMethod, SaleRecipientTaxStatus, SaleTicketSlot } from '../../core/sales/sale-draft-client';
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
+import { AuthorizedFiscalDocument, FiscalDocumentClient } from '../../core/sales/fiscal-document-client';
 import { CashierShift, CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { CreditCustomerAccount, CreditCustomerClient, CreditCustomerOption } from '../../core/customers/credit-customer-client';
@@ -83,6 +84,7 @@ export class PosPage implements OnInit {
   private readonly catalogClient = inject(CatalogClient);
   private readonly saleDraftClient = inject(SaleDraftClient);
   private readonly receiptPdfClient = inject(ReceiptPdfClient);
+  private readonly fiscalDocumentClient = inject(FiscalDocumentClient);
   private readonly posDeviceClient = inject(PosDeviceClient);
   private readonly cashierShiftClient = inject(CashierShiftClient);
   private readonly inventoryClient = inject(InventoryClient);
@@ -204,6 +206,9 @@ export class PosPage implements OnInit {
     return null;
   });
   protected readonly confirmedSale = signal<ConfirmedSale | null>(null);
+  protected readonly fiscalDocument = signal<AuthorizedFiscalDocument | null>(null);
+  protected readonly fiscalBusy = signal(false);
+  protected readonly fiscalError = signal<string | null>(null);
   protected readonly receiptPdfBusy = signal(false);
   protected readonly receiptPdfPath = signal<string | null>(null);
   protected readonly receiptPdfError = signal<string | null>(null);
@@ -1266,6 +1271,8 @@ export class PosPage implements OnInit {
     this.checkoutBusy.set(false);
     this.checkoutNotice.set(false);
     this.confirmedSale.set(sale);
+    this.fiscalDocument.set(null);
+    this.fiscalError.set(null);
     this.receiptPdfPath.set(null);
     this.receiptPdfError.set(null);
     this.serialPrintResult.set(null);
@@ -1292,32 +1299,67 @@ export class PosPage implements OnInit {
     this.errorMessage.set(null);
     this.loadCashierShift();
     this.loadPriceLists();
+    if (sale.documentType === 'fiscalTicket' || sale.documentType === 'electronicInvoice')
+      this.issueFiscalDocument(sale);
+  }
+
+  protected issueFiscalDocument(sale: ConfirmedSale): void {
+    if (this.fiscalBusy()) return;
+    this.fiscalBusy.set(true);
+    this.fiscalError.set(null);
+    this.fiscalDocumentClient.issue(sale.id).subscribe({
+      next: (document) => {
+        if (this.confirmedSale()?.id !== sale.id) return;
+        this.fiscalDocument.set(document);
+        this.fiscalBusy.set(false);
+        if (document.status === 'Authorized') {
+          if (sale.documentType === 'fiscalTicket') this.printSerialReceipt(sale);
+          else this.saveReceiptPdf(sale);
+        } else if (document.status === 'Rejected') {
+          this.fiscalError.set(`ARCA rechazó la emisión (código ${document.errorCodes ?? 'sin detalle'}). La venta sigue registrada.`);
+        }
+      },
+      error: (error: HttpErrorResponse) => {
+        if (this.confirmedSale()?.id !== sale.id) return;
+        this.fiscalBusy.set(false);
+        const code = error.error?.error?.code;
+        this.fiscalError.set(code === 'FISCAL_RECONCILIATION_PENDING'
+          ? 'No se pudo confirmar si ARCA autorizó el número. Usá «Consultar ARCA» antes de volver a emitir.'
+          : code === 'INCOMPLETE_TAX_SNAPSHOT'
+            ? 'La venta quedó registrada, pero faltan reglas de IVA en el catálogo; no se solicitó CAE.'
+            : `No se pudo emitir en ARCA (${code ?? 'conexión'}). La venta sigue registrada; podés reintentar.`);
+      },
+    });
   }
 
   protected saveReceiptPdf(sale: ConfirmedSale): void {
-    if (this.receiptPdfBusy() || sale.documentType === 'fiscalTicket' || sale.documentType === 'electronicInvoice') return;
+    const fiscal = this.fiscalDocument();
+    if (this.receiptPdfBusy() || ((sale.documentType === 'fiscalTicket' ||
+      sale.documentType === 'electronicInvoice') && fiscal?.status !== 'Authorized')) return;
     this.receiptPdfBusy.set(true);
     this.receiptPdfError.set(null);
-    void this.receiptPdfClient.save(
-      sale,
-      this.session()?.context?.branchName ?? 'Sucursal',
-      this.terminal()?.name ?? 'Caja',
-      this.session()?.username ?? 'Cajero',
-    ).then((path) => this.receiptPdfPath.set(path)).catch(() => {
+    const branch = this.session()?.context?.branchName ?? 'Sucursal';
+    const terminal = this.terminal()?.name ?? 'Caja';
+    const cashier = this.session()?.username ?? 'Cajero';
+    const save = fiscal ? this.receiptPdfClient.save(sale, branch, terminal, cashier, fiscal)
+      : this.receiptPdfClient.save(sale, branch, terminal, cashier);
+    void save.then((path) => this.receiptPdfPath.set(path)).catch(() => {
       this.receiptPdfError.set('No se pudo generar el PDF. La venta sigue confirmada; podés reintentar.');
     }).finally(() => this.receiptPdfBusy.set(false));
   }
 
   protected printSerialReceipt(sale: ConfirmedSale): void {
-    if (this.serialPrintBusy() || sale.documentType === 'fiscalTicket' || sale.documentType === 'electronicInvoice') return;
+    const fiscal = this.fiscalDocument();
+    if (this.serialPrintBusy() || ((sale.documentType === 'fiscalTicket' ||
+      sale.documentType === 'electronicInvoice') && fiscal?.status !== 'Authorized')) return;
     this.serialPrintBusy.set(true);
     this.serialPrintError.set(null);
-    void this.posDeviceClient.print(
-      sale,
-      this.session()?.context?.branchName ?? 'Sucursal',
-      this.terminal()?.name ?? 'Caja',
-      this.session()?.username ?? 'Cajero',
-    ).then((result) => this.serialPrintResult.set(result)).catch(() => {
+    const branch = this.session()?.context?.branchName ?? 'Sucursal';
+    const terminal = this.terminal()?.name ?? 'Caja';
+    const cashier = this.session()?.username ?? 'Cajero';
+    const print = fiscal ? this.posDeviceClient.print(sale, branch, terminal, cashier, fiscal)
+      : this.posDeviceClient.print(sale, branch, terminal, cashier);
+    void print.then((result) => this.serialPrintResult.set(result)).catch(() => {
       this.serialPrintError.set('No se pudo completar el envío por COM1. La venta sigue confirmada; revisá PuTTY y el puerto antes de reintentar para evitar duplicados.');
     }).finally(() => this.serialPrintBusy.set(false));
   }

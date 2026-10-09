@@ -79,6 +79,30 @@ describe('virtual receipt PDF content', () => {
     expect(html).toContain("default-src 'none'");
   });
 
+  it('renders only an authorized homologation invoice with a bounded CAE', () => {
+    const fiscal = {
+      saleId: 'sale-123', status: 'Authorized', total: 2400,
+      saleDocumentType: 'ElectronicInvoice', issuerCuit: '30710106513',
+      issuerName: 'Empresa de prueba', issuerAddress: 'Domicilio de prueba',
+      pointOfSale: 99, voucherType: 6, number: 3, issueDate: '2026-10-09',
+      receiverName: null, receiverAddress: null,
+      receiverDocumentType: 99, receiverDocumentNumber: 0,
+      vatBreakdown: [{ ratePercent: 21, taxableBase: 1983.47, taxAmount: 416.53 }],
+      exemptAmount: 0, notTaxedAmount: 0,
+      cae: '86410975393203', caeExpiry: '2026-10-19',
+    };
+    const html = createReceiptHtml(validateReceiptRequest({ ...validRequest, fiscal }));
+    expect(html).toContain('FACTURA ELECTRÓNICA DE PRUEBA B');
+    expect(html).toContain('CAE 86410975393203');
+    expect(html).toContain('IVA 21% incluido');
+    expect(html).toContain('SIN VALIDEZ FISCAL');
+    expect(html).not.toContain('DOCUMENTO DE PRUEBA<br>NO FISCAL');
+    expect(() => validateReceiptRequest({ ...validRequest,
+      fiscal: { ...fiscal, status: 'NeedsReconciliation' } })).toThrow();
+    expect(() => validateReceiptRequest({ ...validRequest,
+      fiscal: { ...fiscal, cae: '123' } })).toThrow();
+  });
+
   it.each([
     { total: -1 },
     { total: Number.POSITIVE_INFINITY },

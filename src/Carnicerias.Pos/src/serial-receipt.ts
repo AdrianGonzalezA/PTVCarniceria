@@ -20,11 +20,23 @@ export function formatSerialReceipt(receipt: ReceiptRequest): string {
   const date = new Date(receipt.confirmedAtUtc).toLocaleString('es-AR', {
     timeZone: 'America/Argentina/Buenos_Aires',
   });
+  const fiscal = receipt.fiscal;
   const lines = [
     '========================================',
-    'COMPROBANTE DE PRUEBA',
-    'NO FISCAL',
+    fiscal ? (fiscal.saleDocumentType === 'FiscalTicket'
+      ? 'TICKET FISCAL DE PRUEBA' : 'FACTURA ELECTRONICA DE PRUEBA') : 'COMPROBANTE DE PRUEBA',
+    fiscal ? 'HOMOLOGACION - SIN VALIDEZ FISCAL' : 'NO FISCAL',
     '========================================',
+    ...(fiscal ? [
+      printable(fiscal.issuerName),
+      `CUIT ${fiscal.issuerCuit}`,
+      printable(fiscal.issuerAddress),
+      `FACTURA ${fiscal.voucherType === 1 ? 'A' : 'B'} ${fiscal.pointOfSale.toString().padStart(5, '0')}-${fiscal.number.toString().padStart(8, '0')}`,
+      `Fecha ${fiscal.issueDate}`,
+      `Receptor ${printable(fiscal.receiverName ?? 'Consumidor final')}`,
+      `Documento ${fiscal.receiverDocumentType} ${fiscal.receiverDocumentNumber}`,
+      ...(fiscal.receiverAddress ? [`Domicilio ${printable(fiscal.receiverAddress)}`] : []),
+    ] : []),
     printable(receipt.branch),
     `${printable(receipt.terminal)} - ${printable(receipt.cashier)}`,
     `Venta ${printable(receipt.saleId)}`,
@@ -33,7 +45,7 @@ export function formatSerialReceipt(receipt: ReceiptRequest): string {
     'PRODUCTOS',
   ];
   if (receipt.customerName && receipt.customerCode)
-    lines.splice(8, 0, `Cliente ${printable(receipt.customerName)} (${printable(receipt.customerCode)})`);
+    lines.push(`Cliente ${printable(receipt.customerName)} (${printable(receipt.customerCode)})`);
   for (const line of receipt.lines) {
     const quantity = line.quantity.toLocaleString('es-AR', {
       minimumFractionDigits: line.unit === 'kg' ? 3 : 0, maximumFractionDigits: 3,
@@ -47,6 +59,14 @@ export function formatSerialReceipt(receipt: ReceiptRequest): string {
     lines.push(`Descuento global - $ ${money(receipt.discountAmount ?? 0)}`);
     lines.push(`  ${printable(receipt.discountReason ?? '')}`);
   }
+  if (fiscal) {
+    lines.push('----------------------------------------', 'DESGLOSE IMPOSITIVO DE PRUEBA');
+    for (const item of fiscal.vatBreakdown)
+      lines.push(`Neto ${item.ratePercent}% $ ${money(item.taxableBase)}`,
+        `IVA ${item.ratePercent}% incluido $ ${money(item.taxAmount)}`);
+    if (fiscal.exemptAmount > 0) lines.push(`Exento $ ${money(fiscal.exemptAmount)}`);
+    if (fiscal.notTaxedAmount > 0) lines.push(`No gravado $ ${money(fiscal.notTaxedAmount)}`);
+  }
   lines.push('----------------------------------------', 'PAGOS');
   for (const payment of receipt.payments)
     lines.push(`${paymentNames[payment.method] ?? printable(payment.method)} $ ${money(payment.appliedAmount)}`);
@@ -56,6 +76,9 @@ export function formatSerialReceipt(receipt: ReceiptRequest): string {
     lines.push(`Saldo a favor $ ${money(receipt.creditAppliedAmount)}`);
   lines.push('----------------------------------------', `TOTAL $ ${money(receipt.total)}`);
   if (receipt.changeAmount > 0) lines.push(`Vuelto $ ${money(receipt.changeAmount)}`);
-  lines.push('NO ES FACTURA NI COMPROBANTE FISCAL', '');
+  if (fiscal) {
+    lines.push(`CAE ${fiscal.cae}`, `Vencimiento CAE ${fiscal.caeExpiry}`,
+      'QR PENDIENTE PARA PRODUCCION', 'HOMOLOGACION - SIN VALIDEZ FISCAL', '');
+  } else lines.push('NO ES FACTURA NI COMPROBANTE FISCAL', '');
   return lines.join('\r\n') + '\r\n\r\n';
 }

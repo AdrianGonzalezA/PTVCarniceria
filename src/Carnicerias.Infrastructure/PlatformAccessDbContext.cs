@@ -64,6 +64,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<ConfirmedSale> ConfirmedSales => Set<ConfirmedSale>();
 
+    public DbSet<FiscalDocument> FiscalDocuments => Set<FiscalDocument>();
+
     public DbSet<ConfirmedSaleLine> ConfirmedSaleLines => Set<ConfirmedSaleLine>();
 
     public DbSet<SalePayment> SalePayments => Set<SalePayment>();
@@ -670,6 +672,35 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasMany(sale => sale.Payments).WithOne().HasForeignKey(payment => payment.SaleId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FiscalDocument>(entity =>
+        {
+            entity.ToTable("fiscal_documents", "pos_sales", table =>
+            {
+                table.HasCheckConstraint("CK_fiscal_documents_status", "\"Status\" IN (0, 1, 2, 3)");
+                table.HasCheckConstraint("CK_fiscal_documents_authorization",
+                    "(\"Status\" = 3 AND \"Cae\" IS NOT NULL AND \"CaeExpiry\" IS NOT NULL AND \"AuthorizedAtUtc\" IS NOT NULL) OR (\"Status\" <> 3 AND \"Cae\" IS NULL AND \"CaeExpiry\" IS NULL AND \"AuthorizedAtUtc\" IS NULL)");
+            });
+            entity.HasKey(document => document.Id);
+            entity.Property(document => document.IssuerCuit).HasMaxLength(11).IsRequired();
+            entity.Property(document => document.Total).HasPrecision(12, 2);
+            entity.Property(document => document.Cae).HasMaxLength(14);
+            entity.Property(document => document.ErrorCodes).HasMaxLength(140);
+            entity.Property(document => document.Status).HasConversion<int>();
+            entity.HasOne<ConfirmedSale>().WithMany()
+                .HasForeignKey(document => new { document.CompanyId, document.SaleId })
+                .HasPrincipalKey(sale => new { sale.CompanyId, sale.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(document => new
+            {
+                document.IssuerCuit,
+                document.PointOfSale,
+                document.VoucherType,
+                document.Number
+            }).IsUnique();
+            entity.HasIndex(document => new { document.CompanyId, document.SaleId })
+                .IsUnique().HasFilter("\"Status\" <> 2");
         });
 
         modelBuilder.Entity<ConfirmedSaleLine>(entity =>

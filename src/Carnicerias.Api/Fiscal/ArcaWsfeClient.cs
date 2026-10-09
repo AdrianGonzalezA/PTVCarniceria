@@ -13,13 +13,20 @@ public sealed record ArcaAccessTicket(string Token, string Sign, string Cuit,
 
 public sealed record ArcaInvoiceLookup(int PointOfSale, int VoucherType, long Number,
     decimal Total, string Result, string AuthorizationCode, string AuthorizationKind,
-    DateOnly? AuthorizationExpiry);
+    DateOnly? AuthorizationExpiry, int ReceiverDocumentType, long ReceiverDocumentNumber,
+    DateOnly IssueDate);
 
 public sealed record ArcaPointOfSale(int Number, string IssuanceType, bool IsBlocked,
     DateOnly? DeactivatedOn);
 
 public sealed class ArcaWsfeErrorException(IReadOnlyList<int> codes)
     : Exception($"WSFE error codes: {string.Join(",", codes)}")
+{
+    public IReadOnlyList<int> Codes { get; } = codes.ToArray();
+}
+
+public sealed class ArcaWsfeRejectionException(IReadOnlyList<int> codes)
+    : Exception($"WSFE rejected the invoice with codes: {string.Join(",", codes)}")
 {
     public IReadOnlyList<int> Codes { get; } = codes.ToArray();
 }
@@ -150,12 +157,18 @@ public sealed class ArcaWsfeClient(HttpClient httpClient)
         var resultCode = ReadText(invoice, "Resultado");
         var authorization = ReadText(invoice, "CodAutorizacion");
         var kind = ReadText(invoice, "EmisionTipo");
+        var receiverDocumentType = ReadInt(invoice, "DocTipo");
+        var receiverDocumentNumber = ReadLong(invoice, "DocNro");
+        var issueDateText = ReadText(invoice, "CbteFch");
         if (ReadInt(invoice, "PtoVta") != pointOfSale ||
             ReadInt(invoice, "CbteTipo") != voucherType ||
             ReadLong(invoice, "CbteDesde") != number ||
             ReadLong(invoice, "CbteHasta") != number || total <= 0 ||
             resultCode is not ("A" or "R") ||
-            kind is not ("CAE" or "CAEA") || authorization.Length is < 1 or > 40)
+            kind is not ("CAE" or "CAEA") || authorization.Length is < 1 or > 40 ||
+            receiverDocumentType <= 0 || receiverDocumentNumber < 0 ||
+            !DateOnly.TryParseExact(issueDateText, "yyyyMMdd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var issueDate))
             throw new InvalidDataException("WSFE returned a mismatched invoice response.");
         var expiryText = Child(invoice, "FchVto")?.Value;
         DateOnly? expiry = null;
@@ -167,7 +180,8 @@ public sealed class ArcaWsfeClient(HttpClient httpClient)
             expiry = parsedExpiry;
         }
         return new ArcaInvoiceLookup(pointOfSale, voucherType, number,
-            total, resultCode, authorization, kind, expiry);
+            total, resultCode, authorization, kind, expiry,
+            receiverDocumentType, receiverDocumentNumber, issueDate);
     }
 
     public async Task<ArcaCaeResult> RequestCaeAsync(ArcaAccessTicket ticket,
@@ -209,14 +223,26 @@ public sealed class ArcaWsfeClient(HttpClient httpClient)
         var line = Child(Child(result, "FeDetResp")
             ?? throw new InvalidDataException("WSFE omitted the CAE response detail."), "FECAEDetResponse")
             ?? throw new InvalidDataException("WSFE omitted the CAE response line.");
-        var cae = ReadText(line, "CAE");
-        var expiryText = ReadText(line, "CAEFchVto");
         if (ReadInt(header, "PtoVta") != request.PointOfSale ||
             ReadInt(header, "CbteTipo") != request.VoucherType ||
             ReadInt(header, "CantReg") != 1 ||
             ReadLong(line, "CbteDesde") != request.Number ||
-            ReadLong(line, "CbteHasta") != request.Number ||
-            ReadText(line, "Resultado") != "A" ||
+            ReadLong(line, "CbteHasta") != request.Number)
+            throw new InvalidDataException("WSFE returned a mismatched invoice response.");
+        if (ReadText(line, "Resultado") == "R")
+        {
+            var observations = Child(line, "Observaciones")?.Elements()
+                .Where(element => element.Name.LocalName == "Obs").ToArray() ?? [];
+            if (observations.Length is < 1 or > 100)
+                throw new InvalidDataException("WSFE rejected the invoice without bounded observation codes.");
+            var codes = observations.Select(item => ReadInt(item, "Code")).ToArray();
+            if (codes.Any(code => code is < 1 or > 999999))
+                throw new InvalidDataException("WSFE returned invalid rejection codes.");
+            throw new ArcaWsfeRejectionException(codes);
+        }
+        var cae = ReadText(line, "CAE");
+        var expiryText = ReadText(line, "CAEFchVto");
+        if (ReadText(line, "Resultado") != "A" ||
             cae.Length != 14 || !cae.All(char.IsAsciiDigit) ||
             !DateOnly.TryParseExact(expiryText, "yyyyMMdd", CultureInfo.InvariantCulture,
                 DateTimeStyles.None, out var expiry))

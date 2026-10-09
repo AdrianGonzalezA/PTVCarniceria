@@ -1,3 +1,24 @@
+export interface FiscalReceipt {
+  readonly saleDocumentType: 'FiscalTicket' | 'ElectronicInvoice';
+  readonly issuerCuit: string;
+  readonly issuerName: string;
+  readonly issuerAddress: string;
+  readonly pointOfSale: number;
+  readonly voucherType: 1 | 6;
+  readonly number: number;
+  readonly issueDate: string;
+  readonly receiverName: string | null;
+  readonly receiverAddress: string | null;
+  readonly receiverDocumentType: number;
+  readonly receiverDocumentNumber: number;
+  readonly vatBreakdown: readonly { readonly ratePercent: number;
+    readonly taxableBase: number; readonly taxAmount: number }[];
+  readonly exemptAmount: number;
+  readonly notTaxedAmount: number;
+  readonly cae: string;
+  readonly caeExpiry: string;
+}
+
 export interface ReceiptRequest {
   readonly saleId: string;
   readonly branch: string;
@@ -20,6 +41,7 @@ export interface ReceiptRequest {
   readonly payments: readonly {
     readonly method: string; readonly tenderedAmount: number; readonly appliedAmount: number;
   }[];
+  readonly fiscal?: FiscalReceipt;
 }
 
 const methods: Record<string, string> = {
@@ -98,11 +120,60 @@ export function validateReceiptRequest(value: unknown): ReceiptRequest {
         appliedAmount: amount(payment['appliedAmount'], true),
       };
     }),
+    ...(data['fiscal'] == null ? {} : { fiscal: validateFiscal(data['fiscal'], data['saleId'], total) }),
   };
   const settled = result.payments.reduce((sum, payment) => sum + payment.appliedAmount, 0) +
     accountChargeAmount + creditAppliedAmount;
   if (Math.abs(settled - total) > 0.001) throw new Error('Invalid receipt settlement');
   return result;
+}
+
+function validateFiscal(value: unknown, saleId: unknown, total: number): FiscalReceipt {
+  const fiscal = object(value);
+  const rawVat = fiscal['vatBreakdown'];
+  if (!Array.isArray(rawVat) || rawVat.length > 20) throw new Error('Invalid fiscal taxes');
+  const vatBreakdown = rawVat.map((entry: unknown) => {
+    const row = object(entry);
+    const ratePercent = Number(row['ratePercent']);
+    if (![0, 10.5, 21, 27].includes(ratePercent)) throw new Error('Invalid fiscal tax rate');
+    return { ratePercent, taxableBase: amount(row['taxableBase'], true), taxAmount: amount(row['taxAmount']) };
+  });
+  const exemptAmount = amount(fiscal['exemptAmount']);
+  const notTaxedAmount = amount(fiscal['notTaxedAmount']);
+  const taxTotal = vatBreakdown.reduce((sum, row) => sum + row.taxableBase + row.taxAmount, 0) +
+    exemptAmount + notTaxedAmount;
+  if (fiscal['status'] !== 'Authorized' || fiscal['saleId'] !== saleId || fiscal['total'] !== total ||
+      Math.abs(taxTotal - total) > 0.011 ||
+      !/^\d{11}$/.test(String(fiscal['issuerCuit'])) || !/^\d{14}$/.test(String(fiscal['cae'])) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(String(fiscal['issueDate'])) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(String(fiscal['caeExpiry'])) ||
+      !Number.isSafeInteger(fiscal['pointOfSale']) || Number(fiscal['pointOfSale']) < 1 ||
+      !Number.isSafeInteger(fiscal['number']) || Number(fiscal['number']) < 1 ||
+      ![1, 6].includes(Number(fiscal['voucherType'])) ||
+      ![80, 96, 99].includes(Number(fiscal['receiverDocumentType'])) ||
+      !Number.isSafeInteger(fiscal['receiverDocumentNumber']) ||
+      Number(fiscal['receiverDocumentNumber']) < 0 ||
+      !['FiscalTicket', 'ElectronicInvoice'].includes(String(fiscal['saleDocumentType'])))
+    throw new Error('Invalid fiscal authorization');
+  return {
+    saleDocumentType: fiscal['saleDocumentType'] as FiscalReceipt['saleDocumentType'],
+    issuerCuit: String(fiscal['issuerCuit']),
+    issuerName: label(fiscal['issuerName'], 200),
+    issuerAddress: label(fiscal['issuerAddress'], 200),
+    pointOfSale: Number(fiscal['pointOfSale']),
+    voucherType: Number(fiscal['voucherType']) as 1 | 6,
+    number: Number(fiscal['number']),
+    issueDate: String(fiscal['issueDate']),
+    receiverName: fiscal['receiverName'] == null ? null : label(fiscal['receiverName'], 200),
+    receiverAddress: fiscal['receiverAddress'] == null ? null : label(fiscal['receiverAddress'], 200),
+    receiverDocumentType: Number(fiscal['receiverDocumentType']),
+    receiverDocumentNumber: Number(fiscal['receiverDocumentNumber']),
+    vatBreakdown,
+    exemptAmount,
+    notTaxedAmount,
+    cae: String(fiscal['cae']),
+    caeExpiry: String(fiscal['caeExpiry']),
+  };
 }
 
 function escapeHtml(value: string): string {
@@ -127,6 +198,23 @@ export function createReceiptHtml(receipt: ReceiptRequest): string {
   const customer = receipt.customerName && receipt.customerCode
     ? `<p class="meta">Cliente: ${escapeHtml(receipt.customerName)} (${escapeHtml(receipt.customerCode)})</p>` : '';
   const date = new Date(receipt.confirmedAtUtc).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
+  const fiscal = receipt.fiscal;
+  const fiscalHeader = fiscal ? `<div class="warning">HOMOLOGACIÓN ARCA<br>SIN VALIDEZ FISCAL</div>
+    <h1>${fiscal.saleDocumentType === 'FiscalTicket' ? 'TICKET FISCAL DE PRUEBA' : 'FACTURA ELECTRÓNICA DE PRUEBA'} ${fiscal.voucherType === 1 ? 'A' : 'B'}</h1>
+    <p class="meta">${escapeHtml(fiscal.issuerName)} · CUIT ${escapeHtml(fiscal.issuerCuit)}</p>
+    <p class="meta">${escapeHtml(fiscal.issuerAddress)}</p>
+    <p class="meta">Punto de venta ${fiscal.pointOfSale.toString().padStart(5, '0')} · N.º ${fiscal.number.toString().padStart(8, '0')} · ${escapeHtml(fiscal.issueDate)}</p>
+    <p class="meta">Receptor: ${escapeHtml(fiscal.receiverName ?? 'Consumidor final')} · Documento ${fiscal.receiverDocumentType}: ${fiscal.receiverDocumentNumber}</p>
+    ${fiscal.receiverAddress ? `<p class="meta">Domicilio: ${escapeHtml(fiscal.receiverAddress)}</p>` : ''}` :
+    '<div class="warning">DOCUMENTO DE PRUEBA<br>NO FISCAL</div>';
+  const fiscalFooter = fiscal ? `CAE ${escapeHtml(fiscal.cae)} · Vencimiento ${escapeHtml(fiscal.caeExpiry)}<br>
+    Homologación: no usar como comprobante válido. QR pendiente para producción.` :
+    'Simulación de impresión. No es factura ni comprobante fiscal válido.';
+  const fiscalTaxes = fiscal ? `<h2>Desglose impositivo de prueba</h2><table>
+    ${fiscal.vatBreakdown.map((item) => `<tr><td>Neto gravado ${item.ratePercent}%</td><td>$ ${money(item.taxableBase)}</td></tr>
+      <tr><td>IVA ${item.ratePercent}% incluido</td><td>$ ${money(item.taxAmount)}</td></tr>`).join('')}
+    ${fiscal.exemptAmount > 0 ? `<tr><td>Exento</td><td>$ ${money(fiscal.exemptAmount)}</td></tr>` : ''}
+    ${fiscal.notTaxedAmount > 0 ? `<tr><td>No gravado</td><td>$ ${money(fiscal.notTaxedAmount)}</td></tr>` : ''}</table>` : '';
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>Ticket de prueba</title><style>
     @page { margin: 3mm; } body { font: 10pt Arial, sans-serif; color: #171717; margin: 0; overflow-wrap: anywhere; }
     h1 { font-size: 15pt; margin: 0 0 4mm; } h2 { font-size: 11pt; margin: 5mm 0 2mm; }
@@ -134,11 +222,11 @@ export function createReceiptHtml(receipt: ReceiptRequest): string {
     .meta { margin: 1mm 0; } table { border-collapse: collapse; width: 100%; } td { padding: 2mm 0; border-bottom: 1px dashed #aaa; vertical-align: top; }
     td:last-child { text-align: right; white-space: nowrap; } small { display: block; font-size: 8pt; color: #555; margin-top: 1mm; }
     .total { font-size: 13pt; font-weight: bold; } .footer { border-top: 1px solid #555; margin-top: 5mm; padding-top: 3mm; font-size: 9pt; }
-  </style></head><body><div class="warning">DOCUMENTO DE PRUEBA<br>NO FISCAL</div>
+  </style></head><body>${fiscalHeader}
     <h1>${escapeHtml(receipt.branch)}</h1><p class="meta">${escapeHtml(receipt.terminal)} · ${escapeHtml(receipt.cashier)}</p>
     <p class="meta">Venta ${escapeHtml(receipt.saleId)}</p><p class="meta">${escapeHtml(date)}</p>${customer}
-    <h2>Productos</h2><table>${rows}${discount}</table><h2>Pagos y saldo a cuenta</h2><table>${payments}${accountCharge}${creditApplied}
+    <h2>Productos</h2><table>${rows}${discount}</table>${fiscalTaxes}<h2>Pagos y saldo a cuenta</h2><table>${payments}${accountCharge}${creditApplied}
     <tr class="total"><td>Total</td><td>$ ${money(receipt.total)}</td></tr>
     ${receipt.changeAmount > 0 ? `<tr><td>Vuelto</td><td>$ ${money(receipt.changeAmount)}</td></tr>` : ''}</table>
-    <p class="footer">Simulación de impresión. No es factura ni comprobante fiscal válido.</p></body></html>`;
+    <p class="footer">${fiscalFooter}</p></body></html>`;
 }

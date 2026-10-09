@@ -2,7 +2,7 @@ import '@angular/compiler';
 import { HttpErrorResponse } from '@angular/common/http';
 import { provideRouter, Router } from '@angular/router';
 import { TestBed } from '@angular/core/testing';
-import { of, Subject, throwError } from 'rxjs';
+import { NEVER, of, Subject, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { CatalogClient } from '../../core/catalog/catalog-client';
 import { PosTerminalClient } from '../../core/pos/pos-terminal-client';
@@ -12,6 +12,7 @@ import { InventoryPieceClient } from '../../core/inventory/inventory-piece-clien
 import { CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { SaleDraftClient } from '../../core/sales/sale-draft-client';
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
+import { FiscalDocumentClient } from '../../core/sales/fiscal-document-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { PosPage } from './pos-page';
 
@@ -26,6 +27,7 @@ describe('PosPage', () => {
         id: 'shift-id', openingCash: 0, openedAtUtc: '2026-10-06T15:00:00Z', closedAtUtc: null,
       }) } },
       { provide: InventoryPieceClient, useValue: { lookup: () => throwError(() => new HttpErrorResponse({ status: 404 })) } },
+      { provide: FiscalDocumentClient, useValue: { issue: () => NEVER } },
     ] });
   });
 

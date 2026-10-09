@@ -88,7 +88,10 @@ function registerNativeApi(): void {
       });
       const directory = path.join(app.getPath('userData'), 'tickets');
       await mkdir(directory, { recursive: true });
-      const filePath = path.join(directory, `ticket-${randomUUID()}.pdf`);
+      const fiscalName = receipt.fiscal
+        ? `${receipt.fiscal.saleDocumentType === 'ElectronicInvoice' ? 'factura' : 'ticket-fiscal'}-homo-${receipt.fiscal.voucherType === 1 ? 'a' : 'b'}-${receipt.fiscal.pointOfSale.toString().padStart(5, '0')}-${receipt.fiscal.number.toString().padStart(8, '0')}`
+        : 'ticket-no-fiscal';
+      const filePath = path.join(directory, `${fiscalName}-${randomUUID()}.pdf`);
       await writeFile(filePath, pdf, { flag: 'wx' });
       return { path: filePath };
     } finally {

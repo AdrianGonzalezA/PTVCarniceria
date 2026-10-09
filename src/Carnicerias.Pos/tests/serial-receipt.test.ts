@@ -55,4 +55,24 @@ describe('serial receipt', () => {
     expect(text).toContain('Cliente Cliente prueba (CLI-001)');
     expect(text).toContain('TOTAL $ 10.200,00');
   });
+
+  it('prints an authorized homologation ticket with its CAE on COM1', () => {
+    const text = formatSerialReceipt({ ...receipt, fiscal: {
+      saleDocumentType: 'FiscalTicket', issuerCuit: '30710106513',
+      issuerName: 'Empresa de prueba', issuerAddress: 'Domicilio de prueba',
+      pointOfSale: 99, voucherType: 6, number: 4, issueDate: '2026-10-09',
+      receiverName: null, receiverAddress: null,
+      receiverDocumentType: 99, receiverDocumentNumber: 0,
+      vatBreakdown: [{ ratePercent: 21, taxableBase: 8429.75, taxAmount: 1770.25 }],
+      exemptAmount: 0, notTaxedAmount: 0,
+      cae: '86410975401751', caeExpiry: '2026-10-19',
+    } });
+    expect(text).toContain('TICKET FISCAL DE PRUEBA\r\n');
+    expect(text).toContain('FACTURA B 00099-00000004');
+    expect(text).toContain('CUIT 30710106513');
+    expect(text).toContain('CAE 86410975401751');
+    expect(text).toContain('IVA 21% incluido');
+    expect(text).toContain('HOMOLOGACION - SIN VALIDEZ FISCAL');
+    expect(text).not.toContain('NO ES FACTURA NI COMPROBANTE FISCAL');
+  });
 });

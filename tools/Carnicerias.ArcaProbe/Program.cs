@@ -26,10 +26,23 @@ try
         .RequestTicketAsync(certificate, cuit);
     Console.WriteLine("WSAA homologation: authenticated.");
     stage = "WSFE";
-    var points = await new ArcaWsfeClient(httpClient).GetPointsOfSaleAsync(ticket);
-    Console.WriteLine($"WSFE homologation: {points.Count} fiscal point(s) returned.");
-    foreach (var point in points.Take(20))
-        Console.WriteLine($"Point {point.Number}: {point.IssuanceType}, blocked={point.IsBlocked}, deactivated={point.DeactivatedOn is not null}");
+    var wsfe = new ArcaWsfeClient(httpClient);
+    var pointOfSaleText = Environment.GetEnvironmentVariable("ARCA_HOMO_POINT_OF_SALE");
+    if (int.TryParse(pointOfSaleText, out var pointOfSale) && pointOfSale is > 0 and < 99999)
+    {
+        foreach (var voucherType in new[] { 1, 6 })
+        {
+            var last = await wsfe.GetLastAuthorizedAsync(ticket, pointOfSale, voucherType);
+            Console.WriteLine($"WSFE homologation point {pointOfSale}, type {voucherType}: last authorized {last}.");
+        }
+    }
+    else
+    {
+        var points = await wsfe.GetPointsOfSaleAsync(ticket);
+        Console.WriteLine($"WSFE homologation: {points.Count} fiscal point(s) returned.");
+        foreach (var point in points.Take(20))
+            Console.WriteLine($"Point {point.Number}: {point.IssuanceType}, blocked={point.IsBlocked}, deactivated={point.DeactivatedOn is not null}");
+    }
     return 0;
 }
 catch (Exception exception) when (exception is not OperationCanceledException)

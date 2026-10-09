@@ -96,7 +96,8 @@ public sealed class ArcaWsfeClientTests
               <soap:Body><FECompConsultarResponse xmlns="http://ar.gov.afip.dif.FEV1/">
                 <FECompConsultarResult><ResultGet>
                   <CbteDesde>43</CbteDesde><CbteHasta>43</CbteHasta><PtoVta>12</PtoVta><CbteTipo>6</CbteTipo>
-                  <ImpTotal>2375.00</ImpTotal><Resultado>A</Resultado>
+                  <ImpTotal>2375.00</ImpTotal><DocTipo>80</DocTipo><DocNro>20111111112</DocNro>
+                  <CbteFch>20261009</CbteFch><Resultado>A</Resultado>
                   <CodAutorizacion>12345678901234</CodAutorizacion><EmisionTipo>CAE</EmisionTipo><FchVto>20261019</FchVto>
                 </ResultGet></FECompConsultarResult>
               </FECompConsultarResponse></soap:Body>
@@ -110,6 +111,9 @@ public sealed class ArcaWsfeClientTests
         Assert.Equal(43, result.Number);
         Assert.Equal("12345678901234", result.AuthorizationCode);
         Assert.Equal("CAE", result.AuthorizationKind);
+        Assert.Equal(80, result.ReceiverDocumentType);
+        Assert.Equal(20111111112, result.ReceiverDocumentNumber);
+        Assert.Equal(new DateOnly(2026, 10, 9), result.IssueDate);
         Assert.Contains("<CbteNro>43</CbteNro>", handler.Body);
     }
 
@@ -185,6 +189,7 @@ public sealed class ArcaWsfeClientTests
               <FECAESolicitarResult><FeCabResp><PtoVta>12</PtoVta><CbteTipo>6</CbteTipo><CantReg>1</CantReg></FeCabResp>
                 <FeDetResp><FECAEDetResponse><CbteDesde>43</CbteDesde><CbteHasta>43</CbteHasta>
                   <Resultado>R</Resultado><CAE></CAE><CAEFchVto></CAEFchVto>
+                  <Observaciones><Obs><Code>10016</Code><Msg>other team issued this number</Msg></Obs></Observaciones>
                 </FECAEDetResponse></FeDetResp>
               </FECAESolicitarResult>
             </soap:Body></soap:Envelope>
@@ -194,7 +199,10 @@ public sealed class ArcaWsfeClientTests
             80, 20111111112, 1, 121m, 100m, 0m, 0m,
             [new ArcaVatAmount(5, 100m, 21m)]);
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => client.RequestCaeAsync(Ticket, request));
+        var rejection = await Assert.ThrowsAsync<ArcaWsfeRejectionException>(() =>
+            client.RequestCaeAsync(Ticket, request));
+        Assert.Equal([10016], rejection.Codes);
+        Assert.DoesNotContain("other team", rejection.ToString());
     }
 
     private sealed class FakeHandler(string response) : HttpMessageHandler

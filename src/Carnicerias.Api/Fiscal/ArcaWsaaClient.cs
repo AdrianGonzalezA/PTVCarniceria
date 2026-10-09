@@ -7,6 +7,11 @@ using System.Xml.Linq;
 
 namespace Carnicerias.Api.Fiscal;
 
+public sealed class ArcaWsaaFaultException(string code) : Exception($"WSAA fault: {code}")
+{
+    public string Code { get; } = code;
+}
+
 /// <summary>Requests a WSAA access ticket for wsfe in homologation only.</summary>
 public sealed class ArcaWsaaClient(HttpClient httpClient, TimeProvider timeProvider)
 {
@@ -50,12 +55,21 @@ public sealed class ArcaWsaaClient(HttpClient httpClient, TimeProvider timeProvi
         request.Headers.TryAddWithoutValidation("SOAPAction", "urn:LoginCms");
         using var response = await httpClient.SendAsync(request,
             HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await response.Content.LoadIntoBufferAsync(1_000_000, cancellationToken);
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = XmlReader.Create(stream, SafeXmlSettings());
         var outer = await XDocument.LoadAsync(reader, LoadOptions.None, cancellationToken);
-        if (outer.Descendants().Any(element => element.Name.LocalName == "Fault"))
-            throw new InvalidDataException("WSAA returned a SOAP fault.");
+        var fault = outer.Descendants().SingleOrDefault(element => element.Name.LocalName == "Fault");
+        if (fault is not null)
+        {
+            var suppliedCode = fault.Elements().SingleOrDefault(element =>
+                element.Name.LocalName is "faultcode" or "Code")?.Value.Trim();
+            var safeCode = suppliedCode is { Length: > 0 and <= 80 } &&
+                suppliedCode.All(character => char.IsAsciiLetterOrDigit(character) ||
+                    character is '.' or '_' or '-' or ':') ? suppliedCode : "unclassified";
+            throw new ArcaWsaaFaultException(safeCode);
+        }
+        response.EnsureSuccessStatusCode();
         var ticketXml = outer.Descendants().SingleOrDefault(element =>
             element.Name.LocalName == "loginCmsReturn")?.Value;
         if (string.IsNullOrWhiteSpace(ticketXml) || ticketXml.Length > 1_000_000)

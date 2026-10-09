@@ -51,6 +51,22 @@ public sealed class ArcaWsfeClientTests
     }
 
     [Fact]
+    public async Task ReportsOnlyWsfeErrorCodesWithoutLeakingItsMessage()
+    {
+        var handler = new FakeHandler("""
+            <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>
+              <FEParamGetPtosVentaResult><Errors><Err><Code>602</Code>
+                <Msg>secret-token must not be logged</Msg></Err></Errors></FEParamGetPtosVentaResult>
+            </soap:Body></soap:Envelope>
+            """);
+        var error = await Assert.ThrowsAsync<ArcaWsfeErrorException>(() =>
+            new ArcaWsfeClient(new HttpClient(handler)).GetPointsOfSaleAsync(Ticket));
+
+        Assert.Equal([602], error.Codes);
+        Assert.DoesNotContain("secret-token", error.ToString());
+    }
+
+    [Fact]
     public async Task ReadsLastAuthorizedNumberWithoutLeakingCredentialsIntoTheUrl()
     {
         var handler = new FakeHandler("""

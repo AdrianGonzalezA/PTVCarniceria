@@ -18,6 +18,12 @@ public sealed record ArcaInvoiceLookup(int PointOfSale, int VoucherType, long Nu
 public sealed record ArcaPointOfSale(int Number, string IssuanceType, bool IsBlocked,
     DateOnly? DeactivatedOn);
 
+public sealed class ArcaWsfeErrorException(IReadOnlyList<int> codes)
+    : Exception($"WSFE error codes: {string.Join(",", codes)}")
+{
+    public IReadOnlyList<int> Codes { get; } = codes.ToArray();
+}
+
 public sealed record ArcaVatAmount(int ArcaRateCode, decimal TaxableBase, decimal TaxAmount);
 
 public sealed class ArcaCaeRequest
@@ -73,8 +79,8 @@ public sealed record ArcaCaeResult(int PointOfSale, int VoucherType, long Number
     string Cae, DateOnly Expiry);
 
 /// <summary>
-/// Read-only WSFEv1 homologation adapter. The WSAA ticket must be supplied by a separate
-/// credential provider. It never calls the production endpoint.
+/// WSFEv1 homologation-only adapter. The WSAA ticket must be supplied by a separate
+/// credential provider. Issuance is not exposed to the POS and must not be blindly retried.
 /// </summary>
 public sealed class ArcaWsfeClient(HttpClient httpClient)
 {
@@ -251,8 +257,19 @@ public sealed class ArcaWsfeClient(HttpClient httpClient)
         var result = document.Descendants().SingleOrDefault(element =>
             element.Name.LocalName == $"{operation}Result")
             ?? throw new InvalidDataException("WSFE returned an unexpected SOAP response.");
-        if (Child(result, "Errors") is not null)
-            throw new InvalidDataException("WSFE rejected the consultation; reconcile before retrying.");
+        if (Child(result, "Errors") is { } errors)
+        {
+            var rows = errors.Elements().Where(element => element.Name.LocalName == "Err").ToArray();
+            if (rows.Length > 100)
+                throw new InvalidDataException("WSFE returned too many errors.");
+            if (rows.Length > 0)
+            {
+                var codes = rows.Select(row => ReadInt(row, "Code")).ToArray();
+                if (codes.Any(code => code is < 1 or > 999_999))
+                    throw new InvalidDataException("WSFE returned invalid error codes.");
+                throw new ArcaWsfeErrorException(codes);
+            }
+        }
         return result;
     }
 

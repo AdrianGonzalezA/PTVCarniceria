@@ -11,6 +11,23 @@ namespace Carnicerias.IntegrationTests;
 public sealed class ArcaWsaaClientTests
 {
     [Fact]
+    public async Task ReportsOnlyTheSafeFaultCodeOnHttp500()
+    {
+        using var key = RSA.Create(2048);
+        var request = new CertificateRequest("CN=FiscalTest", key,
+            HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        using var certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1),
+            DateTimeOffset.UtcNow.AddDays(1));
+        var client = new ArcaWsaaClient(new HttpClient(new FaultHandler()), TimeProvider.System);
+
+        var error = await Assert.ThrowsAsync<ArcaWsaaFaultException>(() =>
+            client.RequestTicketAsync(certificate, "20111111112"));
+
+        Assert.Equal("coe.alreadyAuthenticated", error.Code);
+        Assert.DoesNotContain("secret-token", error.ToString());
+    }
+
+    [Fact]
     public async Task SignsAServiceTicketWithTheProvidedCertificateAndReadsTheResponse()
     {
         using var key = RSA.Create(2048);
@@ -58,5 +75,20 @@ public sealed class ArcaWsaaClientTests
                 Content = new StringContent(envelope.ToString(), Encoding.UTF8, "text/xml")
             };
         }
+    }
+
+    private sealed class FaultHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken) => Task.FromResult(new HttpResponseMessage(
+            HttpStatusCode.InternalServerError)
+        {
+            Content = new StringContent("""
+                <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>
+                  <soap:Fault><faultcode>coe.alreadyAuthenticated</faultcode>
+                    <faultstring>secret-token must never be logged</faultstring></soap:Fault>
+                </soap:Body></soap:Envelope>
+                """, Encoding.UTF8, "text/xml")
+        });
     }
 }

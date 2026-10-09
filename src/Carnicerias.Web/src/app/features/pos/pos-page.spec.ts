@@ -11,6 +11,7 @@ import { InventoryClient } from '../../core/inventory/inventory-client';
 import { InventoryPieceClient } from '../../core/inventory/inventory-piece-client';
 import { CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { SaleDraftClient } from '../../core/sales/sale-draft-client';
+import { MercadoPagoClient } from '../../core/sales/mercado-pago-client';
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { FiscalDocumentClient } from '../../core/sales/fiscal-document-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
@@ -28,6 +29,8 @@ describe('PosPage', () => {
       }) } },
       { provide: InventoryPieceClient, useValue: { lookup: () => throwError(() => new HttpErrorResponse({ status: 404 })) } },
       { provide: FiscalDocumentClient, useValue: { issue: () => NEVER } },
+      { provide: MercadoPagoClient, useValue: { get: () => of(null),
+        start: () => NEVER, check: () => NEVER, cancel: () => NEVER } },
     ] });
   });
 
@@ -96,7 +99,7 @@ describe('PosPage', () => {
     fixture.detectChanges();
     expect(confirm).toHaveBeenCalledWith('draft-id', [{ method: 'cash', amount: 2500 }], undefined,
       { documentType: 'electronicInvoice', recipientTaxStatus: 'registered', recipientName: 'Cliente',
-        recipientDocumentNumber: '20000000001', recipientAddress: 'Calle 123' });
+        recipientDocumentNumber: '20000000001', recipientAddress: 'Calle 123' }, undefined);
     expect((fixture.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement).value).toBe('nonFiscalTicket');
     expect((fixture.nativeElement.querySelector('#sale-recipient-tax-status') as HTMLSelectElement).value).toBe('finalConsumer');
     expect(fixture.nativeElement.querySelector('.sale-receipt').textContent).toContain('pendiente de emisión');
@@ -1145,5 +1148,53 @@ describe('PosPage', () => {
     expect(save).toHaveBeenCalledTimes(2);
     expect(fixture.nativeElement.querySelector('.pos-error').textContent)
       .toContain('no corresponde a un artículo ni a una pieza');
+  });
+
+  it('allows another Mercado Pago order after a rejected payment without closing the sale', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-09T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const pending = { id: 'intent-id', mode: 'point', amount: 2500, status: 'Pending',
+      providerOrderId: 'order-id', qrData: null, approved: false, createdAtUtc: '2026-10-09T16:00:00Z' };
+    const start = vi.fn().mockReturnValue(of(pending));
+    const check = vi.fn().mockReturnValue(of({ ...pending, status: 'Rejected' }));
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: { priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
+        categories: () => of([]) } },
+      { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of({
+        id: 'draft-id', ticketSlot: 'A', priceListId: 'list-id', updatedAtUtc: '2026-10-09T15:00:00Z',
+        lines: [{ id: 'line-id', productId: 'product-id', productCode: '1001', productName: 'Asado',
+          unit: 'kg', saleMode: 'weight', quantity: 1, unitPrice: 2500 }],
+      }) } },
+      { provide: MercadoPagoClient, useValue: { get: () => of(null), start, check,
+        cancel: () => NEVER } },
+      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const options = fixture.nativeElement.querySelectorAll('.payment-option input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+    options[0].click();
+    options[4].click();
+    fixture.detectChanges();
+    const mode = fixture.nativeElement.querySelector('#mercado-pago-mode') as HTMLSelectElement;
+    mode.value = 'point';
+    mode.dispatchEvent(new Event('change', { bubbles: true }));
+    const request = fixture.nativeElement.querySelector('.mercado-pago-actions button') as HTMLButtonElement;
+    request.click();
+    fixture.detectChanges();
+    expect(request.disabled).toBe(true);
+    (fixture.nativeElement.querySelectorAll('.mercado-pago-actions button')[1] as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(request.disabled).toBe(false);
+    expect(mode.disabled).toBe(false);
+    expect(start).toHaveBeenCalledWith('draft-id', 'point', 2500);
+    expect(check).toHaveBeenCalledWith('draft-id', 'intent-id');
   });
 });

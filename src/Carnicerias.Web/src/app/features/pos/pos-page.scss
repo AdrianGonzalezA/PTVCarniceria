@@ -251,6 +251,16 @@
 .sale-discount-fields input { width: 100%; min-height: 2.2rem; padding: 0.25rem 0.4rem; border: 1px solid #7f8e8d; background: white; color: #1c2221; }
 .sale-discount-fields p { width: 100%; margin: 0; color: #a63024; font-size: 0.72rem; }
 .total-field small { display: block; font-size: 0.68rem; font-weight: 500; }
+.mercado-pago-panel { margin: .7rem 0; padding: 1rem; border: 1px solid #a4c4ca; border-radius: .4rem; background: #f4fafb; }
+.mercado-pago-panel h3 { margin: 0 0 .4rem; }
+.mercado-pago-panel label { display: block; margin: .7rem 0 .3rem; font-weight: 700; }
+.mercado-pago-panel select { min-height: 2.6rem; width: min(100%, 17rem); padding: .4rem; border: 1px solid var(--pos-border); border-radius: .25rem; background: #fff; font: inherit; }
+.mercado-pago-actions { display: flex; gap: .6rem; flex-wrap: wrap; margin: .8rem 0; }
+.mercado-pago-actions button { min-height: 2.4rem; padding: .45rem .75rem; border: 1px solid var(--pos-border); border-radius: .3rem; background: #fff; font: inherit; cursor: pointer; }
+.mercado-pago-actions button:first-child { border-color: var(--pos-lime); background: var(--pos-lime); font-weight: 700; }
+.mercado-pago-actions button:disabled { opacity: .55; cursor: not-allowed; }
+.mercado-pago-qr { display: block; max-width: 100%; margin: .7rem auto; background: #fff; }
+.mercado-pago-state { overflow-wrap: anywhere; }
 
 @media (max-width: 48rem) {
   .pos-header { padding-inline: 0.7rem; }

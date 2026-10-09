@@ -1,0 +1,15 @@
+.gateway-state { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; align-items: end; }
+.gateway-state strong { color: #205c54; }
+.gateway-hint { padding: 0 1.25rem 1.25rem; margin: 0; }
+.gateway-registers { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 1rem; padding: 1.25rem; }
+.gateway-register { border: 1px solid #b8c6c2; border-radius: .4rem; padding: 1rem; background: #fff; }
+.gateway-register div { display: flex; justify-content: space-between; gap: .5rem; }
+.gateway-register small { color: #52615d; }
+.gateway-register p { margin: .55rem 0; overflow-wrap: anywhere; }
+.gateway-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 1rem; background: #10231fbb; }
+.gateway-dialog { width: min(100%, 35rem); padding: 1.5rem; background: #fff; border-radius: .6rem; box-shadow: 0 1rem 3rem #0005; }
+.gateway-dialog h2 { margin-top: 0; }
+.gateway-dialog form, .gateway-dialog label { display: grid; gap: .6rem; }
+.gateway-dialog form { gap: 1rem; }
+.gateway-dialog input { min-height: 2.75rem; padding: .5rem .7rem; font: inherit; }
+.gateway-actions { display: flex; justify-content: flex-end; gap: .6rem; }

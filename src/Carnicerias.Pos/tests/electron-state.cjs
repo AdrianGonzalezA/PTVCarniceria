@@ -57,6 +57,17 @@ async function main() {
     });
     if (!selected.result.value) throw new Error('No se pudo seleccionar la empresa y sucursal.');
   }
+  const paymentMode = process.argv.find((item) => item.startsWith('--select-payment-mode='))?.slice(22);
+  if (paymentMode) {
+    if (!['point', 'qr'].includes(paymentMode)) throw new Error('Modo de pago inválido.');
+    const selected = await send('Runtime.evaluate', {
+      expression: `(() => { const input = document.getElementById('mercado-pago-mode');
+        if (!input || input.disabled) return false; input.value = ${JSON.stringify(paymentMode)};
+        input.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`,
+      returnByValue: true,
+    });
+    if (!selected.result.value) throw new Error('No se pudo seleccionar el modo de Mercado Pago.');
+  }
   const clickSelector = process.argv.find((item) => item.startsWith('--click-selector='))?.slice(17);
   if (clickSelector) {
     const clicked = await send('Runtime.evaluate', {
@@ -106,7 +117,8 @@ async function main() {
         visible: dialog.getBoundingClientRect().top >= 0 &&
           dialog.getBoundingClientRect().bottom <= innerHeight,
       })),
-      detail: document.querySelector('.ticket-detail')?.innerText ?? null })`, returnByValue: true,
+      detail: document.querySelector('.ticket-detail')?.innerText ?? null,
+      mercadoPago: document.querySelector('.mercado-pago-panel')?.innerText ?? null })`, returnByValue: true,
   });
   console.log(JSON.stringify(state.result.value, null, 2));
   if (process.argv.includes('--screenshot')) {

@@ -82,12 +82,13 @@ export class SaleDraftClient {
 
   confirm(draftId: string, payments: readonly { readonly method: SalePaymentMethod; readonly amount: number }[],
     account?: { readonly customerId: string; readonly amount: number; readonly creditAppliedAmount: number },
-    document?: SaleDocumentRequest) {
+    document?: SaleDocumentRequest, mercadoPagoIntentId?: string) {
     return this.http.post<ConfirmedSale>(`/api/sales/drafts/${draftId}/confirmation`, {
       payments,
       ...(account ? { customerId: account.customerId, accountChargeAmount: account.amount,
         creditAppliedAmount: account.creditAppliedAmount, accountChargeConfirmed: account.amount > 0 } : {}),
       ...(document ?? {}),
+      ...(mercadoPagoIntentId ? { mercadoPagoIntentId } : {}),
     }, { withCredentials: true });
   }
 

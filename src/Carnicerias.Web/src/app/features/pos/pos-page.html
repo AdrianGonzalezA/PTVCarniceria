@@ -390,6 +390,41 @@
             </label>
           }
         </div>
+        @if (hasPayment('mercadoPago')) {
+          <section class="mercado-pago-panel" aria-labelledby="mercado-pago-title">
+            <h3 id="mercado-pago-title">Cobro integrado · Mercado Pago</h3>
+            <p>La venta no se cerrará hasta que Mercado Pago confirme el pago.</p>
+            <label for="mercado-pago-mode">Modo de cobro</label>
+            <select id="mercado-pago-mode" [value]="mercadoPagoMode()"
+              [disabled]="mercadoPagoBusy() || mercadoPagoOrderActive()"
+              (change)="selectMercadoPagoMode($event)">
+              <option value="qr">QR dinámico</option>
+              <option value="point">Terminal Point</option>
+            </select>
+            <div class="mercado-pago-actions">
+              <button type="button" [disabled]="mercadoPagoBusy() || (mercadoPagoOrderActive() && !!mercadoPagoIntent()?.providerOrderId) || paymentAmount('mercadoPago') <= 0"
+                (click)="startMercadoPago()">{{ mercadoPagoBusy() ? 'Consultando…' : 'Solicitar cobro' }}</button>
+              @if (mercadoPagoIntent()) {
+                <button type="button" [disabled]="mercadoPagoBusy()" (click)="checkMercadoPago()">Consultar pago</button>
+                @if (!mercadoPagoIntent()?.approved && mercadoPagoIntent()?.providerOrderId &&
+                  mercadoPagoIntent()?.status !== 'Canceled' && mercadoPagoIntent()?.status !== 'Expired' &&
+                  mercadoPagoIntent()?.status !== 'Rejected') {
+                  <button type="button" [disabled]="mercadoPagoBusy()" (click)="cancelMercadoPago()">Cancelar orden</button>
+                }
+              }
+            </div>
+            @if (mercadoPagoIntent(); as intent) {
+              <p class="mercado-pago-state" role="status">Orden {{ intent.providerOrderId || 'pendiente de respuesta' }} ·
+                {{ intent.approved ? 'Acreditado' : intent.status === 'Expired' ? 'Vencido' : intent.status === 'Rejected' ? 'Rechazado' : 'Pendiente' }}</p>
+              @if (intent.mode === 'qr' && mercadoPagoQrImage(); as image) {
+                <img class="mercado-pago-qr" [src]="image" alt="QR de Mercado Pago para esta venta" width="240" height="240" />
+              } @else if (intent.mode === 'point' && intent.providerOrderId) {
+                <p>La orden se envió a la terminal Point configurada para esta caja.</p>
+              }
+            }
+            @if (mercadoPagoMessage(); as message) { <p class="mercado-pago-state" role="status">{{ message }}</p> }
+          </section>
+        }
         @if (canChargeToAccount()) {
           <section class="credit-payment" aria-labelledby="credit-payment-title">
             <h3 id="credit-payment-title">Cuenta corriente</h3>

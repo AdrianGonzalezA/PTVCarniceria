@@ -16,6 +16,8 @@ import { CashierShift, CashierShiftClient } from '../../core/sales/cashier-shift
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { CreditCustomerAccount, CreditCustomerClient, CreditCustomerOption } from '../../core/customers/credit-customer-client';
 import { AccountCollectionDialog } from './account-collection-dialog';
+import QRCode from 'qrcode';
+import { MercadoPagoClient, MercadoPagoIntent, MercadoPagoMode } from '../../core/sales/mercado-pago-client';
 
 type SaleMode = 'weight' | 'unit';
 
@@ -83,6 +85,7 @@ export class PosPage implements OnInit {
   private readonly sessionClient = inject(SessionClient);
   private readonly catalogClient = inject(CatalogClient);
   private readonly saleDraftClient = inject(SaleDraftClient);
+  private readonly mercadoPagoClient = inject(MercadoPagoClient);
   private readonly receiptPdfClient = inject(ReceiptPdfClient);
   private readonly fiscalDocumentClient = inject(FiscalDocumentClient);
   private readonly posDeviceClient = inject(PosDeviceClient);
@@ -183,6 +186,14 @@ export class PosPage implements OnInit {
   protected readonly ticketSlotsLoadState = signal<'idle' | 'loading' | 'ready' | 'error'>('idle');
   protected readonly checkoutBusy = signal(false);
   protected readonly checkoutError = signal<string | null>(null);
+  protected readonly mercadoPagoIntent = signal<MercadoPagoIntent | null>(null);
+  protected readonly mercadoPagoMode = signal<MercadoPagoMode>('qr');
+  protected readonly mercadoPagoBusy = signal(false);
+  protected readonly mercadoPagoLoadState = signal<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  protected readonly mercadoPagoOrderActive = computed(() => !!this.mercadoPagoIntent() &&
+    !['Rejected', 'Expired', 'Canceled', 'Refunded'].includes(this.mercadoPagoIntent()!.status));
+  protected readonly mercadoPagoQrImage = signal<string | null>(null);
+  protected readonly mercadoPagoMessage = signal<string | null>(null);
   protected readonly documentType = signal<SaleDocumentType>('nonFiscalTicket');
   protected readonly recipientTaxStatus = signal<SaleRecipientTaxStatus>('finalConsumer');
   protected readonly recipientName = signal('');
@@ -255,6 +266,8 @@ export class PosPage implements OnInit {
   protected readonly paymentBalance = computed(() => Math.max(0, Math.round((this.dueNow() -
     this.selectedPayments().reduce((sum, payment) => sum + payment.amount, 0)) * 100) / 100));
   protected readonly paymentProblem = computed(() => {
+    if (this.mercadoPagoLoadState() === 'loading') return 'Consultando si hay un cobro de Mercado Pago previo.';
+    if (this.mercadoPagoLoadState() === 'error') return 'No se pudo verificar el cobro previo. Reabrí la ventana de cobro.';
     const accountCharge = this.accountChargeAmount();
     if (!Number.isFinite(accountCharge) || accountCharge < 0 || accountCharge > this.subtotal() ||
         Math.abs(Math.round(accountCharge * 100) - accountCharge * 100) > 0.000001)
@@ -278,6 +291,12 @@ export class PosPage implements OnInit {
       .reduce((sum, payment) => sum + payment.amount, 0);
     if (nonCash > this.dueNow()) return 'Los medios sin efectivo no pueden superar el importe a cobrar ahora.';
     if (this.paymentBalance() > 0) return 'Los medios de pago todavía no cubren el total.';
+    const mercadoPago = payments.find((payment) => payment.method === 'mercadoPago');
+    if (mercadoPago && (!this.mercadoPagoIntent()?.approved ||
+        this.mercadoPagoIntent()?.amount !== mercadoPago.amount))
+      return 'Confirmá el cobro de Mercado Pago antes de cerrar la venta.';
+    if (!mercadoPago && this.mercadoPagoOrderActive())
+      return 'Hay una orden de Mercado Pago activa. Consultá su estado antes de cambiar el medio.';
     return null;
   });
   protected readonly errorMessage = signal<string | null>(null);
@@ -343,12 +362,15 @@ export class PosPage implements OnInit {
       if (error) {
         if (revision === this.draftRevision) {
           if (operation === 'cancel') this.lines.set(this.persistedLines());
-          if (['INSUFFICIENT_STOCK', 'PIECE_ALREADY_USED', 'PIECE_NOT_AVAILABLE'].includes(error.error?.error?.code)) {
+          if (['INSUFFICIENT_STOCK', 'PIECE_ALREADY_USED', 'PIECE_NOT_AVAILABLE',
+            'MERCADO_PAGO_ORDER_ACTIVE'].includes(error.error?.error?.code)) {
             this.lines.set(this.persistedLines());
             this.discountDraft.set(String(this.persistedDiscountAmount()));
             this.discountReason.set(this.persistedDiscountReason());
             this.draftStatus.set('saved');
-            this.errorMessage.set(error.error?.error?.code === 'INSUFFICIENT_STOCK'
+            this.errorMessage.set(error.error?.error?.code === 'MERCADO_PAGO_ORDER_ACTIVE'
+              ? 'Hay un cobro de Mercado Pago activo. Consultá o cancelá la orden desde el cierre antes de modificar el ticket.'
+              : error.error?.error?.code === 'INSUFFICIENT_STOCK'
               ? 'No hay stock suficiente. El producto o la cantidad rechazada no se agregó al ticket. Revisá las existencias.'
               : 'Esta pieza ya no está disponible. No se agregó al ticket.');
             this.refreshStock();
@@ -833,6 +855,10 @@ export class PosPage implements OnInit {
 
   protected cancelSale(): void {
     if (!this.canOperate()) return;
+    if (this.mercadoPagoOrderActive()) {
+      this.errorMessage.set('Hay un cobro de Mercado Pago activo. Consultá o cancelá la orden antes de cancelar el ticket.');
+      return;
+    }
     if (!window.confirm('¿Querés cancelar la venta y quitar todos sus productos?')) return;
     if (!this.isDemoPriceList() && this.selectedPriceListId()) {
       this.queueDraftOperation('cancel');
@@ -864,6 +890,9 @@ export class PosPage implements OnInit {
     this.persistedDiscountAmount.set(0);
     this.persistedDiscountReason.set('');
     this.draftId.set('');
+    this.mercadoPagoIntent.set(null);
+    this.mercadoPagoQrImage.set(null);
+    this.mercadoPagoLoadState.set('idle');
     this.errorMessage.set(null);
     this.searchText.set('');
     this.realSearchSubmitted.set(false);
@@ -1018,6 +1047,24 @@ export class PosPage implements OnInit {
     if (this.canChargeToAccount()) this.searchCreditCustomers();
     this.checkoutError.set(null);
     this.checkoutNotice.set(true);
+    this.mercadoPagoIntent.set(null);
+    this.mercadoPagoQrImage.set(null);
+    this.mercadoPagoMessage.set(null);
+    this.mercadoPagoLoadState.set('loading');
+    this.mercadoPagoClient.get(this.draftId()).subscribe({
+      next: (intent) => {
+        this.mercadoPagoLoadState.set('ready');
+        if (!intent) return;
+        this.acceptMercadoPagoIntent(intent);
+        const rest = Math.round((this.subtotal() - intent.amount) * 100) / 100;
+        this.selectedPayments.set([{ method: 'mercadoPago', amount: intent.amount },
+          ...(rest > 0 ? [{ method: 'cash' as const, amount: rest }] : [])]);
+      },
+      error: () => {
+        this.mercadoPagoLoadState.set('error');
+        this.mercadoPagoMessage.set('No se pudo recuperar el cobro anterior de Mercado Pago.');
+      },
+    });
   }
 
   protected retryDraftSave(): void {
@@ -1120,6 +1167,89 @@ export class PosPage implements OnInit {
     const amount = Number((event.target as HTMLInputElement).value.replace(',', '.'));
     this.selectedPayments.update((payments) => payments.map((payment) => payment.method === method ? { ...payment, amount } : payment));
     this.checkoutError.set(null);
+  }
+
+  protected selectMercadoPagoMode(event: Event): void {
+    this.mercadoPagoMode.set((event.target as HTMLSelectElement).value as MercadoPagoMode);
+  }
+
+  protected startMercadoPago(): void {
+    const amount = this.paymentAmount('mercadoPago');
+    if (!this.draftId() || !Number.isFinite(amount) || amount <= 0 || this.mercadoPagoBusy()) return;
+    this.mercadoPagoBusy.set(true);
+    this.mercadoPagoMessage.set(null);
+    this.mercadoPagoClient.start(this.draftId(), this.mercadoPagoMode(), amount).subscribe({
+      next: (intent) => {
+        this.mercadoPagoBusy.set(false);
+        this.acceptMercadoPagoIntent(intent);
+      },
+      error: (response: HttpErrorResponse) => {
+        this.mercadoPagoBusy.set(false);
+        const code = response.error?.error?.code;
+        this.mercadoPagoMessage.set(code === 'MERCADO_PAGO_REGISTER_NOT_CONFIGURED'
+          ? 'Esta caja no tiene configurado ese modo de Mercado Pago en Administración.'
+          : code === 'MERCADO_PAGO_AMOUNT_TOO_SMALL'
+            ? 'Point requiere un cobro mínimo de $ 15. Aumentá el importe o elegí otro medio.'
+          : code === 'MERCADO_PAGO_NOT_CONFIGURED' || code === 'MERCADO_PAGO_CREDENTIAL_UNAVAILABLE'
+            ? 'Faltan credenciales de Mercado Pago o no se pueden leer.'
+            : code === 'MERCADO_PAGO_ORDER_ACTIVE'
+              ? 'Ya hay una orden activa con otro importe o modo. Consultá su estado.'
+              : 'No se confirmó la creación de la orden. Reintentá con la misma operación o consultá su estado.');
+        this.mercadoPagoClient.get(this.draftId()).subscribe({
+          next: (intent) => { if (intent) this.acceptMercadoPagoIntent(intent); },
+          error: () => this.mercadoPagoMessage.set(
+            'No se pudo recuperar la orden. Consultá de nuevo antes de cambiar el medio de pago.'),
+        });
+      },
+    });
+  }
+
+  protected checkMercadoPago(): void {
+    const intent = this.mercadoPagoIntent();
+    if (!intent || !this.draftId() || this.mercadoPagoBusy()) return;
+    this.mercadoPagoBusy.set(true);
+    this.mercadoPagoMessage.set(null);
+    this.mercadoPagoClient.check(this.draftId(), intent.id).subscribe({
+      next: (updated) => {
+        this.mercadoPagoBusy.set(false);
+        this.acceptMercadoPagoIntent(updated);
+      },
+      error: () => {
+        this.mercadoPagoBusy.set(false);
+        this.mercadoPagoMessage.set('No se pudo verificar el estado en Mercado Pago. No cierres la venta todavía.');
+      },
+    });
+  }
+
+  protected cancelMercadoPago(): void {
+    const intent = this.mercadoPagoIntent();
+    if (!intent || !this.draftId() || this.mercadoPagoBusy() || intent.approved) return;
+    this.mercadoPagoBusy.set(true);
+    this.mercadoPagoMessage.set(null);
+    this.mercadoPagoClient.cancel(this.draftId(), intent.id).subscribe({
+      next: (updated) => {
+        this.mercadoPagoBusy.set(false);
+        this.acceptMercadoPagoIntent(updated);
+      },
+      error: () => {
+        this.mercadoPagoBusy.set(false);
+        this.mercadoPagoMessage.set('No se pudo confirmar la cancelación. Consultá el pago antes de cambiar de medio.');
+      },
+    });
+  }
+
+  private acceptMercadoPagoIntent(intent: MercadoPagoIntent): void {
+    this.mercadoPagoIntent.set(intent);
+    this.mercadoPagoMode.set(intent.mode);
+    this.mercadoPagoMessage.set(intent.approved ? 'Pago acreditado. Ya podés confirmar la venta.'
+      : intent.status === 'Expired' || intent.status === 'Rejected' || intent.status === 'Canceled'
+        ? 'La orden terminó sin cobro. Podés iniciar otra o elegir otro medio.'
+        : 'Orden pendiente. Consultá el estado después de realizar el pago.');
+    if (intent.qrData) {
+      void QRCode.toDataURL(intent.qrData, { width: 240, margin: 2 }).then((image) => {
+        if (this.mercadoPagoIntent()?.id === intent.id) this.mercadoPagoQrImage.set(image);
+      }).catch(() => this.mercadoPagoMessage.set('No se pudo dibujar el QR. Consultá la orden.'));
+    } else this.mercadoPagoQrImage.set(null);
   }
 
   protected paymentAmount(method: SalePaymentMethod): number {
@@ -1261,7 +1391,8 @@ export class PosPage implements OnInit {
       { documentType: this.documentType(), recipientTaxStatus: this.recipientTaxStatus(),
         recipientName: this.recipientName().trim() || undefined,
         recipientDocumentNumber: this.recipientDocumentNumber().trim() || undefined,
-        recipientAddress: this.recipientAddress().trim() || undefined }).subscribe({
+        recipientAddress: this.recipientAddress().trim() || undefined },
+      this.mercadoPagoIntent()?.approved ? this.mercadoPagoIntent()!.id : undefined).subscribe({
       next: (sale) => this.finishConfirmedSale(sale),
       error: (error: HttpErrorResponse) => {
         this.checkoutBusy.set(false);
@@ -1298,6 +1429,9 @@ export class PosPage implements OnInit {
     this.draftId.set('');
     this.draftStatus.set('saved');
     this.selectedPayments.set([]);
+    this.mercadoPagoIntent.set(null);
+    this.mercadoPagoQrImage.set(null);
+    this.mercadoPagoLoadState.set('idle');
     this.accountChargeDraft.set('0');
     this.creditAppliedDraft.set('0');
     this.creditCustomerId.set('');

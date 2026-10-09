@@ -1,0 +1,97 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" routerLink="/admin/configuracion" aria-label="Volver a configuración">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Administración</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+
+  <div class="workspace">
+    <app-admin-area-tabs area="configuration" />
+    <a class="back-link" routerLink="/admin/configuracion">← Volver a configuración</a>
+    <p class="eyebrow">Configuración de cobro</p>
+    <h1>Pasarelas de cobro</h1>
+    <p class="intro">Mercado Pago es la primera pasarela. QR dinámico y Point se asignan por caja; otras pasarelas podrán incorporarse aquí.</p>
+
+    @if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Empresa configurada">
+        <div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Ambiente</span><strong>Pruebas</strong></div>
+      </section>
+    }
+
+    @if (notice(); as message) { <p class="arca-notice" role="status">{{ message }}</p> }
+    @if (error(); as problem) { <p class="arca-error" role="alert">{{ problem }}</p> }
+    @if (loading()) {
+      <p class="arca-loading" role="status">Cargando pasarelas…</p>
+    } @else {
+      <section class="category-panel" aria-labelledby="mp-title">
+        <header class="panel-heading"><div><h2 id="mp-title">Mercado Pago · Pruebas</h2>
+          <p>Cuenta vendedora de prueba. Los secretos se cifran y nunca se devuelven al navegador.</p></div></header>
+        <form class="arca-form" [formGroup]="form" (ngSubmit)="save()">
+          <label>User ID del vendedor de prueba
+            <input formControlName="sellerUserId" inputmode="numeric" maxlength="30" autocomplete="off" required />
+          </label>
+          <div class="gateway-state" aria-live="polite">
+            <span>Access Token: <strong>{{ settings()?.hasAccessToken ? 'Cargado' : 'Pendiente' }}</strong></span>
+            <span>Clave de webhook: <strong>{{ settings()?.hasWebhookSecret ? 'Cargada' : 'Pendiente' }}</strong></span>
+          </div>
+          <label>Access Token de prueba (dejar vacío para conservar el actual)
+            <input formControlName="accessToken" type="password" autocomplete="new-password" maxlength="4096" />
+          </label>
+          <label>Clave secreta del webhook (dejar vacía para conservarla)
+            <input formControlName="webhookSecret" type="password" autocomplete="new-password" maxlength="4096" />
+          </label>
+          @if (form.touched && form.invalid) {
+            <p class="field-error" role="alert">Ingresá un User ID numérico y revisá los tamaños de las credenciales.</p>
+          }
+          <div class="arca-actions"><button type="submit" [disabled]="saving()">{{ saving() ? 'Guardando…' : 'Guardar credenciales' }}</button></div>
+        </form>
+        <p class="gateway-hint">Se usa el Access Token de la cuenta vendedora de prueba. No cargues credenciales de producción durante el desarrollo.</p>
+      </section>
+
+      <section class="category-panel" aria-labelledby="registers-title">
+        <header class="panel-heading"><div><h2 id="registers-title">Cajas vinculadas</h2>
+          <p>QR usa el <code>external_id</code> de la caja creada en Mercado Pago. Point usa el ID de la terminal asociada a esa caja.</p></div></header>
+        @if (settings()?.registers?.length) {
+          <div class="gateway-registers">
+            @for (register of settings()!.registers; track register.id) {
+              <article class="gateway-register">
+                <div><strong>{{ register.branchName }} · {{ register.name }}</strong><small>{{ register.isActive ? 'Activa' : 'Inactiva' }}</small></div>
+                <p>QR: {{ register.qrExternalPosId || 'Sin configurar' }}</p>
+                <p>Point: {{ register.pointTerminalId || 'Sin configurar' }}</p>
+                <button type="button" (click)="editRegister(register)">Configurar</button>
+              </article>
+            }
+          </div>
+        } @else { <p class="gateway-hint">No hay cajas creadas en esta empresa. Crealas en Organización.</p> }
+      </section>
+    }
+  </div>
+</main>
+
+@if (editing(); as register) {
+  <div class="gateway-backdrop">
+    <section class="gateway-dialog" role="dialog" aria-modal="true" aria-labelledby="gateway-dialog-title">
+      <h2 id="gateway-dialog-title">{{ register.branchName }} · {{ register.name }}</h2>
+      <p>Podés configurar ambos modos o solo uno. Vaciar un campo deshabilita ese modo en esta caja.</p>
+      <form [formGroup]="registerForm" (ngSubmit)="saveRegister()">
+        <label>QR · external_id de la caja en Mercado Pago
+          <input formControlName="qrExternalPosId" maxlength="40" autocomplete="off" />
+        </label>
+        <label>Point · ID de la terminal (por ejemplo, NEWLAND_N950__SBX0000001)
+          <input formControlName="pointTerminalId" maxlength="100" autocomplete="off" />
+        </label>
+        @if (registerForm.touched && registerForm.invalid) {
+          <p class="field-error" role="alert">Usá solo letras, números, guiones y guiones bajos.</p>
+        }
+        @if (registerError(); as problem) { <p class="field-error" role="alert">{{ problem }}</p> }
+        <div class="gateway-actions">
+          <button type="button" (click)="closeRegister()" [disabled]="registerSaving()">Cancelar</button>
+          <button type="submit" [disabled]="registerSaving()">{{ registerSaving() ? 'Guardando…' : 'Guardar caja' }}</button>
+        </div>
+      </form>
+    </section>
+  </div>
+}

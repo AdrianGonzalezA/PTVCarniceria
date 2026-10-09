@@ -17,6 +17,7 @@ export const routes: Routes = [
   { path: 'admin/price-lists', loadComponent: () => import('./features/admin/price-lists-page').then((page) => page.PriceListsPage), canActivate: [catalogAdminGuard] },
   { path: 'admin/organization', loadComponent: () => import('./features/admin/organization-page').then((page) => page.OrganizationPage), canActivate: [organizationAdminGuard] },
   { path: 'admin/arca', loadComponent: () => import('./features/admin/arca-settings-page').then((page) => page.ArcaSettingsPage), canActivate: [organizationAdminGuard] },
+  { path: 'admin/payment-gateways', loadComponent: () => import('./features/admin/payment-gateways-page').then((page) => page.PaymentGatewaysPage), canActivate: [organizationAdminGuard] },
   { path: 'admin/customers', loadComponent: () => import('./features/admin/customers-page').then((page) => page.CustomersPage), canActivate: [organizationAdminGuard] },
   { path: 'admin/stock', loadComponent: () => import('./features/admin/stock-page').then((page) => page.StockPage), canActivate: [inventoryAdminGuard] },
   { path: 'admin/barcode-layouts', loadComponent: () => import('./features/admin/barcode-layout-page').then((page) => page.BarcodeLayoutPage), canActivate: [inventoryAdminGuard] },

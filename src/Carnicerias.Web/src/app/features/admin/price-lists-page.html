@@ -98,6 +98,8 @@
     </section>
 
     @if (selectedList(); as selected) {
+      @if (!historyProduct()) {
+      <app-admin-detail-dialog labelledBy="detail-title" [canClose]="!priceSaving() && !branchActionId()" (closed)="closeDetails()">
       <section class="detail-panel" aria-labelledby="detail-title">
         <header>
           <div>
@@ -182,9 +184,17 @@
             </form>
           }
 
-          @if (historyProduct(); as product) {
+        }
+      </section>
+      </app-admin-detail-dialog>
+      }
+    }
+
+    @if (historyProduct(); as product) {
+            <app-admin-detail-dialog labelledBy="history-title" (closed)="closeHistory()">
             <section class="price-history" aria-labelledby="history-title">
-              <h3 id="history-title">Historial de {{ product.name }}</h3>
+              <header><h3 id="history-title">Historial de {{ product.name }}</h3>
+                <button type="button" class="secondary-button" (click)="closeHistory()">Cerrar historial</button></header>
               @if (historyError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
               @if (historyLoading()) {
                 <p role="status">Cargando historial…</p>
@@ -206,9 +216,7 @@
                 </table></div>
               }
             </section>
-          }
-        }
-      </section>
+            </app-admin-detail-dialog>
     }
   </div>
 </main>

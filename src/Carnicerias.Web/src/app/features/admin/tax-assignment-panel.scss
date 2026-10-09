@@ -14,8 +14,9 @@
 .assignment-controls input[type='radio'] { min-height: auto; flex: none; }
 .assignment-submit button { white-space: nowrap; }
 .assignment-note { margin: 0; padding: 0 1.25rem 1rem; color: #005f60; }
-.assignment-history { padding: 1rem 1.25rem; border-top: 1px solid #c5c5c5; }
-.assignment-history h3 { margin: 0 0 0.75rem; color: #005f60; }
+.assignment-history { padding: 1rem 1.25rem; }
+.assignment-history header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.75rem; }
+.assignment-history h2 { margin: 0; color: #005f60; }
 .account-search { display: flex; align-items: end; gap: 0.5rem; padding: 0 1.25rem 1rem; }
 .account-search label { font-weight: 700; }
 .account-search input { max-width: 18rem; }

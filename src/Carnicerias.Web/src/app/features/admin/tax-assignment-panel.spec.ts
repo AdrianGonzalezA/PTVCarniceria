@@ -87,5 +87,9 @@ describe('TaxAssignmentPanel', () => {
     }]);
     fixture.detectChanges();
     expect(page.textContent).toContain('Percepción IIBB · No calculado');
+    expect(page.querySelector('dialog[open]')?.textContent).toContain('Percepción IIBB');
+    page.querySelector<HTMLButtonElement>('dialog button')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector('dialog')).toBeNull();
   });
 });

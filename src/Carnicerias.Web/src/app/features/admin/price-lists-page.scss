@@ -1,4 +1,4 @@
-.detail-panel { margin-top: 1.5rem; padding: 1.25rem; color: #202322; background: #ededed; border-radius: 0.35rem; }
+.detail-panel { padding: 1.25rem; color: #202322; background: #ededed; border-radius: 0.35rem; }
 .detail-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .detail-panel h2 { margin: 0; color: #005e60; }
 .detail-panel .eyebrow { margin: 0 0 0.25rem; }
@@ -14,6 +14,7 @@
 .price-form, .price-history { margin-top: 1rem; padding: 1rem; background: #dcdcdc; border-radius: 0.25rem; }
 .price-form { display: grid; gap: 0.5rem; max-width: 30rem; }
 .price-form h3, .price-history h3 { margin: 0; color: #005e60; }
+.price-history header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .price-form p { margin: 0.25rem 0; }
 .field-error { margin: 0; color: #a32222; }
 .secondary-button { background: #fff; border-color: #b2b2b2; }

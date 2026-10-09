@@ -6,5 +6,5 @@
 .history-filters select, .history-filters input { min-height: 2.5rem; padding: 0.4rem; }
 .ticket-detail { margin: 1rem; padding: 1rem; background: #fff; border: 1px solid #b2b2b2; }
 .ticket-detail header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.ticket-detail h3 { overflow-wrap: anywhere; }
+.ticket-detail h2 { margin: 0; color: #005e60; overflow-wrap: anywhere; }
 .ticket-detail ul { line-height: 1.6; }

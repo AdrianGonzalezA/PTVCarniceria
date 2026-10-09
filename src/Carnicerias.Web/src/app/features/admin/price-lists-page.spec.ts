@@ -68,6 +68,7 @@ describe('PriceListsPage', () => {
       { branchId: 'branch-1', branchName: 'Centro', branchActive: true, isAssigned: false },
     ]);
     fixture.detectChanges();
+    expect(page.querySelector('dialog[open] .branch-row')).not.toBeNull();
     page.querySelector<HTMLButtonElement>('.branch-row button')!.click();
     const assign = http.expectOne('/api/admin/price-lists/list-1/branches/branch-1');
     expect(assign.request.body).toEqual({ isActive: true });
@@ -104,5 +105,10 @@ describe('PriceListsPage', () => {
     ]);
     fixture.detectChanges();
     expect(page.querySelector('.price-history')?.textContent).toContain('visual-admin');
+    expect(page.querySelectorAll('dialog[open]').length).toBe(1);
+    expect(page.querySelector('.detail-panel')).toBeNull();
+    page.querySelector<HTMLButtonElement>('.price-history button')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector('dialog[open] .detail-panel')).not.toBeNull();
   });
 });

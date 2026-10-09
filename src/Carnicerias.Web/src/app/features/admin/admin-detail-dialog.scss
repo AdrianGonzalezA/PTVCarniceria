@@ -1,0 +1,18 @@
+:host { display: contents; }
+.admin-detail-dialog {
+  box-sizing: border-box;
+  width: min(72rem, calc(100vw - 2rem));
+  max-width: none;
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  padding: 0;
+  border: 1px solid #859b94;
+  border-radius: 0.35rem;
+  background: #ededed;
+  color: #202322;
+  box-shadow: 0 1rem 3rem #0006;
+}
+.admin-detail-dialog::backdrop { background: #0b191bb8; }
+@media (max-width: 40rem) {
+  .admin-detail-dialog { width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); }
+}

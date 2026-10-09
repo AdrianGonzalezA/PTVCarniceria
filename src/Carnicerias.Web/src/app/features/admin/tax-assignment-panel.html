@@ -76,9 +76,14 @@
       </div>
     }
   }
-  @if (historyProduct(); as product) {
-    <div class="assignment-history"><h3>Gravámenes de {{ product.name }}</h3>
-      @if (historyError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+ </section>
+@if (historyProduct(); as product) {
+  <app-admin-detail-dialog labelledBy="assignment-history-title" (closed)="closeHistory()">
+    <div class="assignment-history">
+      <header><h2 id="assignment-history-title">Gravámenes de {{ product.name }}</h2>
+        <button type="button" class="secondary-button" (click)="closeHistory()">Cerrar historial</button></header>
+      @if (historyLoading()) { <p role="status">Cargando historial…</p> }
+      @else if (historyError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
       @else if (history().length === 0) { <p>Sin gravámenes adicionales asignados.</p> }
       @else { <div class="table-wrap"><table>
         <thead><tr><th scope="col">Gravamen</th><th scope="col">Porcentaje</th>
@@ -90,5 +95,5 @@
         }</tbody>
       </table></div> }
     </div>
-  }
-</section>
+  </app-admin-detail-dialog>
+}

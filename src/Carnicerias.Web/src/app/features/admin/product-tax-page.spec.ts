@@ -44,6 +44,7 @@ describe('ProductTaxPage', () => {
     http.expectOne('/api/admin/product-tax-rules/product-id').flush([]);
     http.expectOne('/api/admin/taxes/options').flush([]);
     fixture.detectChanges();
+    expect(page.querySelector('dialog[open] .product-tax-editor')).not.toBeNull();
     (page.querySelector('#tax-treatment') as HTMLSelectElement).value = 'exempt';
     page.querySelector('#tax-treatment')?.dispatchEvent(new Event('change'));
     fixture.detectChanges();

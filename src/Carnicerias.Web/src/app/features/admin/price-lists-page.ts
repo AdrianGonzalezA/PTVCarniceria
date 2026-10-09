@@ -9,10 +9,11 @@ import {
   AdminProductPrice, AdminProductPricePage, BranchPriceListAssignment,
 } from '../../core/admin/admin-price-list-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
+import { AdminDetailDialog } from './admin-detail-dialog';
 
 @Component({
   selector: 'app-price-lists-page',
-  imports: [RouterLink, AdminAreaTabs, ReactiveFormsModule, DatePipe],
+  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, ReactiveFormsModule, DatePipe],
   templateUrl: './price-lists-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './price-lists-page.scss'],
 })
@@ -21,6 +22,7 @@ export class PriceListsPage implements OnInit {
   private readonly sessions = inject(SessionClient);
   private readonly router = inject(Router);
   private readonly formBuilder = inject(FormBuilder);
+  private historyRevision = 0;
 
   protected readonly editorForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(160)]],
@@ -266,23 +268,39 @@ export class PriceListsPage implements OnInit {
   protected showHistory(product: AdminProductPrice): void {
     const list = this.selectedList();
     if (!list) return;
+    const revision = ++this.historyRevision;
     this.historyProduct.set(product);
     this.historyRows.set([]);
     this.historyLoading.set(true);
     this.historyError.set(null);
     this.client.history(list.id, product.productId).subscribe({
       next: (rows) => {
+        if (revision !== this.historyRevision || this.historyProduct()?.productId !== product.productId ||
+            this.selectedList()?.id !== list.id) return;
         this.historyRows.set(rows);
         this.historyLoading.set(false);
       },
       error: () => {
+        if (revision !== this.historyRevision || this.historyProduct()?.productId !== product.productId ||
+            this.selectedList()?.id !== list.id) return;
         this.historyLoading.set(false);
         this.historyError.set('No se pudo cargar el historial de precios.');
       },
     });
   }
 
+  protected closeHistory(): void {
+    this.historyRevision++;
+    this.historyProduct.set(null);
+    this.historyRows.set([]);
+    this.historyLoading.set(false);
+    this.historyError.set(null);
+  }
+
   protected closeDetails(): void {
+    if (this.priceSaving() || this.branchActionId()) return;
+    this.closeHistory();
+    this.priceEditing.set(null);
     this.detailMode.set(null);
     this.selectedList.set(null);
   }

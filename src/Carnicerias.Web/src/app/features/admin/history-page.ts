@@ -7,12 +7,13 @@ import { AdminTerminal, AdminTerminalClient } from '../../core/admin/admin-termi
 import { AdminHistoryClient, CashHistoryItem, HistoryFilters, HistoryPage as HistoryPageData, SaleDetail,
   SaleHistoryItem, ShiftHistoryItem, StockHistoryItem } from '../../core/admin/admin-history-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
+import { AdminDetailDialog } from './admin-detail-dialog';
 
 type HistoryTab = 'sales' | 'shifts' | 'cash' | 'stock';
 
 @Component({
   selector: 'app-history-page',
-  imports: [RouterLink, AdminAreaTabs, DatePipe, DecimalPipe],
+  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, DatePipe, DecimalPipe],
   templateUrl: './history-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './history-page.scss'],
 })
@@ -23,6 +24,7 @@ export class HistoryPage implements OnInit {
   private readonly sessions = inject(SessionClient);
   private readonly router = inject(Router);
   private requestRevision = 0;
+  private detailRevision = 0;
 
   protected readonly session = signal<CurrentSession | null>(null);
   protected readonly branches = signal<readonly AdminBranch[]>([]);
@@ -40,6 +42,7 @@ export class HistoryPage implements OnInit {
   protected readonly cash = signal<HistoryPageData<CashHistoryItem> | null>(null);
   protected readonly stock = signal<HistoryPageData<StockHistoryItem> | null>(null);
   protected readonly detail = signal<SaleDetail | null>(null);
+  protected readonly detailSaleId = signal<string | null>(null);
   protected readonly detailLoading = signal(false);
   protected readonly detailError = signal<string | null>(null);
   protected readonly totalItems = computed(() => {
@@ -75,7 +78,7 @@ export class HistoryPage implements OnInit {
     if (this.tab() === tab) return;
     this.tab.set(tab);
     this.page.set(1);
-    this.detail.set(null);
+    this.closeDetail();
     if (tab === 'stock') this.terminalId.set('');
     this.load();
   }
@@ -126,15 +129,19 @@ export class HistoryPage implements OnInit {
   }
 
   protected viewSale(id: string): void {
+    const revision = ++this.detailRevision;
+    this.detailSaleId.set(id);
     this.detail.set(null);
     this.detailError.set(null);
     this.detailLoading.set(true);
     this.client.saleDetail(id).subscribe({
       next: (detail) => {
+        if (revision !== this.detailRevision) return;
         this.detail.set(detail);
         this.detailLoading.set(false);
       },
       error: () => {
+        if (revision !== this.detailRevision) return;
         this.detailLoading.set(false);
         this.detailError.set('No se pudo cargar el detalle del ticket.');
       },
@@ -142,8 +149,11 @@ export class HistoryPage implements OnInit {
   }
 
   protected closeDetail(): void {
+    this.detailRevision++;
+    this.detailSaleId.set(null);
     this.detail.set(null);
     this.detailError.set(null);
+    this.detailLoading.set(false);
   }
 
   protected paymentLabel(method: string): string {
@@ -179,7 +189,7 @@ export class HistoryPage implements OnInit {
     };
     this.loading.set(true);
     this.loadError.set(null);
-    this.detail.set(null);
+    this.closeDetail();
     const onError = () => {
       if (revision !== this.requestRevision) return;
       this.loading.set(false);

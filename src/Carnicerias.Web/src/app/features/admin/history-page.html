@@ -134,11 +134,14 @@
         </footer>
       }
 
-      @if (detailLoading()) { <p class="state-message" role="status">Cargando ticket…</p> }
-      @if (detailError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
-      @if (detail(); as ticket) {
+    </section>
+    @if (detailSaleId()) {
+      <app-admin-detail-dialog labelledBy="ticket-title" (closed)="closeDetail()">
         <section class="ticket-detail" aria-labelledby="ticket-title">
-          <header><h3 id="ticket-title">Ticket {{ ticket.id }}</h3><button type="button" class="secondary-button" (click)="closeDetail()">Cerrar detalle</button></header>
+          <header><h2 id="ticket-title">Ticket {{ detailSaleId() }}</h2><button type="button" class="secondary-button" (click)="closeDetail()">Cerrar detalle</button></header>
+          @if (detailLoading()) { <p class="state-message" role="status">Cargando ticket…</p> }
+          @if (detailError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+          @if (detail(); as ticket) {
           <p>{{ ticket.confirmedAtUtc | date:'dd/MM/yyyy HH:mm' }} · Total $ {{ ticket.total | number:'1.2-2' }}</p>
           <p>Comprobante solicitado: @switch (ticket.documentType) {
             @case ('fiscalTicket') { ticket fiscal pendiente de emisión }
@@ -174,8 +177,9 @@
               @if (payment.tenderedAmount !== payment.appliedAmount) { (entregado $ {{ payment.tenderedAmount | number:'1.2-2' }}) }
             </li>
           }</ul>
+          }
         </section>
-      }
-    </section>
+      </app-admin-detail-dialog>
+    }
   </div>
 </main>

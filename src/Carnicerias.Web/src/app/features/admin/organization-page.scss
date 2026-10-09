@@ -1,5 +1,4 @@
-.branches-panel { margin-top: 1.5rem; }
-.terminals-panel { margin-top: 1.5rem; }
+.branches-panel,.terminals-panel { margin: 0; }
 .header-actions { display: flex; gap: 0.5rem; }
 .credential-notice { display: grid; gap: 0.5rem; margin: 1rem; padding: 1rem; color: #003b3b; background: #c6e8e3; border: 2px solid #008b8b; }
 .credential-notice code { overflow-wrap: anywhere; font-size: 1.15rem; }

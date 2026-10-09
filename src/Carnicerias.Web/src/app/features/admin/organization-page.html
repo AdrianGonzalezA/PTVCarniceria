@@ -81,13 +81,19 @@
     </section>
 
     @if (selectedCompany(); as company) {
+      @if (!selectedTerminalBranch()) {
+      <app-admin-detail-dialog labelledBy="branches-title"
+        [canClose]="!branchSaving() && !branchActionId() && !selectedTerminalBranch()" (closed)="closeCompany()">
       <section class="category-panel branches-panel" aria-labelledby="branches-title" [attr.aria-busy]="branchesLoading()">
         <header class="panel-heading">
           <div>
             <p class="panel-eyebrow">{{ company.name }}</p>
             <h2 id="branches-title">Sucursales</h2>
           </div>
-          <button type="button" class="create-branch-button" [disabled]="!company.isActive" (click)="startCreateBranch()">Nueva sucursal</button>
+          <div class="header-actions">
+            <button type="button" class="create-branch-button" [disabled]="!company.isActive" (click)="startCreateBranch()">Nueva sucursal</button>
+            <button type="button" class="secondary-button" [disabled]="branchSaving() || !!branchActionId()" (click)="closeCompany()">Cerrar sucursales</button>
+          </div>
         </header>
 
         @if (branchEditorOpen()) {
@@ -132,9 +138,13 @@
           </table></div>
         }
       </section>
+      </app-admin-detail-dialog>
+      }
     }
 
     @if (selectedTerminalBranch(); as terminalBranch) {
+      <app-admin-detail-dialog labelledBy="terminals-title"
+        [canClose]="!terminalSaving() && !terminalActionId() && !shownCredential()" (closed)="closeTerminals()">
       <section class="category-panel terminals-panel" aria-labelledby="terminals-title" [attr.aria-busy]="terminalsLoading()">
         <header class="panel-heading">
           <div>
@@ -144,7 +154,7 @@
           </div>
           <div class="header-actions">
             <button type="button" class="create-terminal-button" [disabled]="!terminalBranch.isActive || !selectedCompany()?.isActive" (click)="startCreateTerminal()">Nueva caja</button>
-            <button type="button" class="secondary-button" (click)="closeTerminals()">Cerrar</button>
+            <button type="button" class="secondary-button" [disabled]="terminalSaving() || !!terminalActionId() || !!shownCredential()" (click)="closeTerminals()">Cerrar</button>
           </div>
         </header>
 
@@ -196,6 +206,7 @@
           </table></div>
         }
       </section>
+      </app-admin-detail-dialog>
     }
   </div>
 </main>

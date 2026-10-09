@@ -8,10 +8,11 @@ import { CurrentSession, SessionClient } from '../../core/session/session-client
 import { PosTerminalClient } from '../../core/pos/pos-terminal-client';
 import { CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { AdminAreaTabs } from './admin-area-tabs';
+import { AdminDetailDialog } from './admin-detail-dialog';
 
 @Component({
   selector: 'app-accounts-page',
-  imports: [RouterLink, AdminAreaTabs, DatePipe],
+  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, DatePipe],
   templateUrl: './accounts-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './history-page.scss', './accounts-page.scss'],
 })
@@ -114,7 +115,12 @@ export class AccountsPage implements OnInit {
     this.loadDetail();
   }
 
-  protected closeDetail(): void { this.selectedCustomerId.set(null); this.detail.set(null); }
+  protected closeDetail(): void {
+    if (this.correctionReceipt()) return;
+    this.detailRevision++;
+    this.selectedCustomerId.set(null);
+    this.detail.set(null);
+  }
 
   protected changeDetailPage(section: 'sales' | 'receipts' | 'creditApplications', delta: number): void {
     switch (section) {

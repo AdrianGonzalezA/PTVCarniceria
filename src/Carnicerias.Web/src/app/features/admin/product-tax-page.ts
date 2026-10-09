@@ -8,10 +8,11 @@ import { AdminAreaTabs } from './admin-area-tabs';
 import { AdminTaxCatalogClient, VatTaxOption } from '../../core/admin/admin-tax-catalog-client';
 import { TaxCatalogPanel } from './tax-catalog-panel';
 import { TaxAssignmentPanel } from './tax-assignment-panel';
+import { AdminDetailDialog } from './admin-detail-dialog';
 
 @Component({
   selector: 'app-product-tax-page',
-  imports: [RouterLink, AdminAreaTabs, DatePipe, TaxCatalogPanel, TaxAssignmentPanel],
+  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, DatePipe, TaxCatalogPanel, TaxAssignmentPanel],
   templateUrl: './product-tax-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './accounts-page.scss', './product-tax-page.scss'],
 })

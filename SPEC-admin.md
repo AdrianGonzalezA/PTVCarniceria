@@ -76,6 +76,13 @@ El primer incremento publicable comprende navegación administrativa y ABM de ca
 - Compilar: `dotnet build Carnicerias.sln --configuration Debug --no-restore`; `npm run build --prefix src/Carnicerias.Web`.
 - Probar sin crear otra base: `dotnet test tests/Carnicerias.ArchitectureTests/Carnicerias.ArchitectureTests.csproj --configuration Debug --no-restore`; `npm test --prefix src/Carnicerias.Web -- --watch=false`; `npm run lint --prefix src/Carnicerias.Web`. Las pruebas de integración PostgreSQL existentes permanecen pendientes bajo la regla de base única.
 
+## Consulta desde grillas
+
+- Las acciones de consulta de una fila (detalle, estado, historial, sucursales, cajas y precios) abren una ventana modal inmediata, con título y cierre por botón o Escape. No agregan resultados al final de la página.
+- La grilla, su búsqueda, paginación y posición permanecen intactas al cerrar la consulta. El modal muestra carga y error en el mismo lugar; su contenido extenso tiene desplazamiento interno.
+- Si una consulta conduce a otra (por ejemplo, lista → historial de un artículo o empresa → cajas), se muestra una sola ventana modal a la vez. Al volver se recupera el nivel anterior, sin cerrar toda la consulta.
+- Una operación de guardado pendiente o una credencial de caja aún visible bloquea el cierre accidental del modal correspondiente.
+
 ## Estructura y estilo
 
 - Endpoints administrativos por módulo en `src/Carnicerias.Api`; entidades y mapeos en `src/Carnicerias.Infrastructure`; contratos Angular y páginas en `src/Carnicerias.Web/src/app`.

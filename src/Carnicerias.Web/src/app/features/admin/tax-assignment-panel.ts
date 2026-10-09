@@ -3,10 +3,11 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { AdminProductTaxClient, TaxProductPage, TaxProductRow } from '../../core/admin/admin-product-tax-client';
 import { AdminTaxAssignmentClient, AssignmentResult, OtherTaxAssignment } from '../../core/admin/admin-tax-assignment-client';
 import { AdminTaxCatalogClient, TaxCatalogEntry } from '../../core/admin/admin-tax-catalog-client';
+import { AdminDetailDialog } from './admin-detail-dialog';
 
 @Component({
   selector: 'app-tax-assignment-panel',
-  imports: [DatePipe],
+  imports: [AdminDetailDialog, DatePipe],
   templateUrl: './tax-assignment-panel.html',
   styleUrls: ['./categories-page.scss', './tax-assignment-panel.scss'],
 })
@@ -15,6 +16,7 @@ export class TaxAssignmentPanel implements OnInit {
   private readonly productsClient = inject(AdminProductTaxClient);
   private readonly assignments = inject(AdminTaxAssignmentClient);
   private productsRevision = 0;
+  private historyRevision = 0;
   protected readonly taxes = signal<readonly TaxCatalogEntry[]>([]);
   protected readonly taxesError = signal<string | null>(null);
   protected readonly selectedTaxId = signal('');
@@ -33,6 +35,7 @@ export class TaxAssignmentPanel implements OnInit {
   protected readonly saveSuccess = signal<string | null>(null);
   protected readonly historyProduct = signal<TaxProductRow | null>(null);
   protected readonly history = signal<readonly OtherTaxAssignment[]>([]);
+  protected readonly historyLoading = signal(false);
   protected readonly historyError = signal<string | null>(null);
 
   ngOnInit(): void {
@@ -95,15 +98,31 @@ export class TaxAssignmentPanel implements OnInit {
   }
 
   protected viewHistory(product: TaxProductRow): void {
+    const revision = ++this.historyRevision;
     this.historyProduct.set(product);
     this.history.set([]);
+    this.historyLoading.set(true);
     this.historyError.set(null);
     this.assignments.history(product.id).subscribe({
       next: (rows) => {
-        if (this.historyProduct()?.id === product.id) this.history.set(rows);
+        if (revision !== this.historyRevision) return;
+        this.history.set(rows);
+        this.historyLoading.set(false);
       },
-      error: () => this.historyError.set('No se pudo consultar el historial de gravámenes.'),
+      error: () => {
+        if (revision !== this.historyRevision) return;
+        this.historyLoading.set(false);
+        this.historyError.set('No se pudo consultar el historial de gravámenes.');
+      },
     });
+  }
+
+  protected closeHistory(): void {
+    this.historyRevision++;
+    this.historyProduct.set(null);
+    this.history.set([]);
+    this.historyLoading.set(false);
+    this.historyError.set(null);
   }
 
   protected apply(): void {

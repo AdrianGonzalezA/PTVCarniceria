@@ -7,10 +7,11 @@ import { Observable } from 'rxjs';
 import { AdminBranch, AdminCompany, AdminCompanyCreated, AdminOrganizationClient } from '../../core/admin/admin-organization-client';
 import { AdminTerminal, AdminTerminalClient, AdminTerminalUpdate, ProvisionedTerminal } from '../../core/admin/admin-terminal-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
+import { AdminDetailDialog } from './admin-detail-dialog';
 
 @Component({
   selector: 'app-organization-page',
-  imports: [RouterLink, AdminAreaTabs, ReactiveFormsModule],
+  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, ReactiveFormsModule],
   templateUrl: './organization-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './organization-page.scss'],
 })
@@ -67,7 +68,7 @@ export class OrganizationPage implements OnInit {
           return;
         }
         this.session.set(session);
-        this.loadCompanies(true);
+        this.loadCompanies();
       },
       error: () => void this.router.navigateByUrl('/'),
     });
@@ -78,6 +79,12 @@ export class OrganizationPage implements OnInit {
     this.branchEditorOpen.set(false);
     this.closeTerminals();
     this.loadBranches(company.id);
+  }
+
+  protected closeCompany(): void {
+    if (this.branchSaving() || this.branchActionId() || this.selectedTerminalBranch()) return;
+    this.selectedCompany.set(null);
+    this.branches.set([]);
   }
 
   protected startCreateCompany(): void {
@@ -119,7 +126,7 @@ export class OrganizationPage implements OnInit {
         this.companySaving.set(false);
         this.companyEditorOpen.set(false);
         if ('activeBranchCount' in result) this.replaceCompany(result);
-        else this.loadCompanies(false);
+        else this.loadCompanies();
         this.actionMessage.set(editing ? 'Empresa actualizada.' :
           'Empresa y sucursal inicial creadas. El administrador ya tiene acceso.');
       },
@@ -236,6 +243,7 @@ export class OrganizationPage implements OnInit {
   }
 
   protected closeTerminals(): void {
+    if (this.terminalSaving() || this.terminalActionId() || this.shownCredential()) return;
     this.selectedTerminalBranch.set(null);
     this.terminals.set([]);
     this.terminalEditorOpen.set(false);
@@ -352,18 +360,13 @@ export class OrganizationPage implements OnInit {
     });
   }
 
-  private loadCompanies(selectCurrent: boolean): void {
+  private loadCompanies(): void {
     this.companiesLoading.set(true);
     this.companiesError.set(null);
     this.client.companies().subscribe({
       next: (companies) => {
         this.companies.set(companies);
         this.companiesLoading.set(false);
-        if (selectCurrent) {
-          const current = companies.find((company) =>
-            company.id === this.session()?.context?.companyId);
-          if (current) this.selectCompany(current);
-        }
       },
       error: () => {
         this.companiesLoading.set(false);

@@ -37,7 +37,11 @@ describe('HistoryPage', () => {
   it('shows persisted sales and loads a read-only ticket with payments', () => {
     const { fixture, http, page } = load();
     expect(page.querySelector('tbody')?.textContent).toContain('Caja 1');
-    page.querySelector<HTMLButtonElement>('tbody button')!.click();
+    const trigger = page.querySelector<HTMLButtonElement>('tbody button')!;
+    trigger.click();
+    fixture.detectChanges();
+    expect(page.querySelector('dialog[open]')).not.toBeNull();
+    expect(page.querySelector('dialog')?.textContent).toContain('Cargando ticket');
     http.expectOne('/api/admin/history/sales/sale-1').flush({ id: 'sale-1',
       confirmedAtUtc: '2026-10-08T10:00:00Z', total: 200,
       lines: [{ code: 'P1', name: 'Asado', unit: 'kg', saleMode: 'weight',
@@ -47,6 +51,10 @@ describe('HistoryPage', () => {
     expect(page.querySelector('.ticket-detail')?.textContent).toContain('Asado');
     expect(page.querySelector('.ticket-detail')?.textContent).toContain('Efectivo');
     expect(page.querySelector('.ticket-detail input')).toBeNull();
+    page.querySelector<HTMLButtonElement>('dialog button')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector('dialog')).toBeNull();
+    expect(page.querySelector('tbody button')).toBe(trigger);
   });
 
   it('filters by branch and changes to stock movements without a terminal filter', () => {

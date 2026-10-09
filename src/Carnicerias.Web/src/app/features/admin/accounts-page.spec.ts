@@ -50,6 +50,7 @@ describe('AccountsPage', () => {
     });
     fixture.detectChanges();
     expect(page.textContent).toContain('Recibos internos · 1');
+    expect(page.querySelector('dialog[open] .account-detail-panel')).not.toBeNull();
     expect(page.textContent).toContain('Anticipos aplicados a ventas · 1');
     expect(page.textContent).toContain('ingresá desde una caja Electron');
     expect(page.querySelector('.account-detail-panel button.secondary-button')?.textContent)

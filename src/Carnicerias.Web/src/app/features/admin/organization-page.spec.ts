@@ -26,15 +26,19 @@ describe('OrganizationPage', () => {
     const http = TestBed.inject(HttpTestingController);
     http.expectOne('/api/sessions/current').flush(session);
     http.expectOne('/api/admin/companies').flush([company]);
-    http.expectOne('/api/admin/companies/company-1/branches').flush([branch]);
     fixture.detectChanges();
     return { fixture, http, page: fixture.nativeElement as HTMLElement };
   }
 
   it('shows the current company and prevents inactivating its active branch', () => {
-    const { page } = load();
+    const { fixture, http, page } = load();
     expect(page.querySelector('h1')?.textContent).toContain('Organización');
     expect(page.querySelector('.company-row')?.textContent).toContain('Empresa Visual');
+    expect(page.querySelector('dialog')).toBeNull();
+    page.querySelector<HTMLButtonElement>('.company-row button')!.click();
+    http.expectOne('/api/admin/companies/company-1/branches').flush([branch]);
+    fixture.detectChanges();
+    expect(page.querySelector('dialog[open] .branch-row')).not.toBeNull();
     expect(page.querySelector('.branch-row')?.textContent).toContain('Centro');
     expect(page.querySelector<HTMLButtonElement>('.branch-row .toggle-button')?.disabled).toBe(true);
   });
@@ -64,6 +68,9 @@ describe('OrganizationPage', () => {
 
   it('adds a branch under the selected company', () => {
     const { fixture, http, page } = load();
+    page.querySelector<HTMLButtonElement>('.company-row button')!.click();
+    http.expectOne('/api/admin/companies/company-1/branches').flush([branch]);
+    fixture.detectChanges();
     page.querySelector<HTMLButtonElement>('.create-branch-button')!.click();
     fixture.detectChanges();
     const name = page.querySelector<HTMLInputElement>('#branch-name')!;
@@ -80,9 +87,14 @@ describe('OrganizationPage', () => {
 
   it('creates a terminal and shows its credential only until dismissed', () => {
     const { fixture, http, page } = load();
+    page.querySelector<HTMLButtonElement>('.company-row button')!.click();
+    http.expectOne('/api/admin/companies/company-1/branches').flush([branch]);
+    fixture.detectChanges();
     page.querySelector<HTMLButtonElement>('.branch-row .terminals-button')!.click();
     http.expectOne('/api/admin/companies/company-1/branches/branch-1/terminals').flush([]);
     fixture.detectChanges();
+    expect(page.querySelectorAll('dialog[open]').length).toBe(1);
+    expect(page.querySelector('.branches-panel')).toBeNull();
     page.querySelector<HTMLButtonElement>('.create-terminal-button')!.click();
     fixture.detectChanges();
     const name = page.querySelector<HTMLInputElement>('#terminal-name')!;
@@ -98,5 +110,8 @@ describe('OrganizationPage', () => {
     page.querySelector<HTMLButtonElement>('.credential-notice button')!.click();
     fixture.detectChanges();
     expect(page.querySelector('.credential-notice')).toBeNull();
+    page.querySelector<HTMLButtonElement>('.terminals-panel .header-actions .secondary-button')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector('dialog[open] .branches-panel')).not.toBeNull();
   });
 });

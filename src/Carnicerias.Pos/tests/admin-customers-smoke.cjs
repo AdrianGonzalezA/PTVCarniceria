@@ -103,7 +103,7 @@ async function main() {
         summaryCheck.branch.status !== 200 || summaryCheck.reversedStatus !== 400 ||
         summaryCheck.invalidStatus !== 400 || summaryCheck.unknownStatus !== 404 ||
         Math.abs(summaryCheck.all.body.salesTotal - summaryCheck.all.body.immediateSalePayments -
-          summaryCheck.all.body.newAccountCharges) > 0.01)
+          summaryCheck.all.body.newAccountCharges - summaryCheck.all.body.creditApplied) > 0.01)
       throw new Error('El resumen o la validación de sucursal no coincide con las operaciones persistidas.');
     const business = await evaluate("({ text: document.body.innerText.slice(0, 2000), links: [...document.querySelectorAll('.module-link')].map(link => link.getAttribute('href')) })");
     const businessImage = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });

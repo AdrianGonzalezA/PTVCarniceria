@@ -58,9 +58,10 @@
               <div class="summary-card"><span>Importe vendido</span><strong>$ {{ formatMoney(result.salesTotal) }}</strong><small>Incluye lo cargado a cuenta</small></div>
               <div class="summary-card"><span>Cobrado en ventas</span><strong>$ {{ formatMoney(result.immediateSalePayments) }}</strong><small>Pagos aplicados, sin vuelto</small></div>
               <div class="summary-card"><span>Nuevos cargos a cuenta</span><strong>$ {{ formatMoney(result.newAccountCharges) }}</strong><small>No ingresaron a caja</small></div>
+              <div class="summary-card"><span>Saldo a favor aplicado</span><strong>$ {{ formatMoney(result.creditApplied) }}</strong><small>No ingresó otra vez a caja</small></div>
             </div>
             <div class="summary-foot">
-              <p><strong>Cargos a cuenta acumulados:</strong> $ {{ formatMoney(result.registeredAccountCharges) }} <small>Importe bruto; las cobranzas aún no están implementadas.</small></p>
+              <p><strong>Cargos a cuenta acumulados:</strong> $ {{ formatMoney(result.registeredAccountCharges) }} <small>Importe bruto; el saldo neto se muestra en los estados de cuenta.</small></p>
               @if (result.paymentsByMethod.length) {
                 <p><strong>Cobros de ventas por medio:</strong>
                   @for (payment of result.paymentsByMethod; track payment.method) {

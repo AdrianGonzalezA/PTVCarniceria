@@ -54,6 +54,8 @@ public static class AdminHistoryEndpoints
             .ToArrayAsync(cancellationToken);
         var payments = paymentRows.OrderBy(row => row.Method)
             .Select(row => new PaymentSummary(PaymentMethodName(row.Method), row.Amount)).ToArray();
+        var creditApplied = await sales.SumAsync(sale => (decimal?)sale.CreditAppliedAmount,
+            cancellationToken) ?? 0;
 
         var charges = db.CustomerSaleCharges.AsNoTracking().Where(charge =>
             charge.CompanyId == companyId && (!branchId.HasValue || charge.BranchId == branchId));
@@ -64,7 +66,7 @@ public static class AdminHistoryEndpoints
             cancellationToken) ?? 0;
         return Results.Ok(new BusinessSummary(window.FromUtc, window.ToUtc, branchId,
             saleTotals?.Count ?? 0, saleTotals?.Total ?? 0, payments.Sum(payment => payment.Amount),
-            payments, newCharges, registeredCharges));
+            payments, newCharges, registeredCharges, creditApplied));
     }
 
     private static async Task<IResult> ListSalesAsync(
@@ -183,7 +185,9 @@ public static class AdminHistoryEndpoints
             {
                 CashLedgerMovementKind.Opening => "opening",
                 CashLedgerMovementKind.SalePayment => "salePayment",
-                _ => "change"
+                CashLedgerMovementKind.Change => "change",
+                CashLedgerMovementKind.AccountCollection => "accountCollection",
+                _ => "unknown"
             }, PaymentMethodName(row.Method), row.AmountDelta)).ToArray(), page, pageSize, total));
     }
 
@@ -260,7 +264,8 @@ public static class AdminHistoryEndpoints
     private sealed record HistoryPage<T>(T[] Items, int Page, int PageSize, long TotalItems);
     private sealed record BusinessSummary(DateTimeOffset FromUtc, DateTimeOffset ToUtc, Guid? BranchId,
         int SaleCount, decimal SalesTotal, decimal ImmediateSalePayments,
-        PaymentSummary[] PaymentsByMethod, decimal NewAccountCharges, decimal RegisteredAccountCharges);
+        PaymentSummary[] PaymentsByMethod, decimal NewAccountCharges, decimal RegisteredAccountCharges,
+        decimal CreditApplied);
     private sealed record PaymentSummary(string Method, decimal Amount);
     private sealed record SaleItem(Guid Id, DateTimeOffset ConfirmedAtUtc, decimal Total,
         Guid BranchId, string BranchName, Guid? TerminalId, string? TerminalName,

@@ -3,6 +3,7 @@ using System;
 using Carnicerias.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Carnicerias.Infrastructure.Migrations
 {
     [DbContext(typeof(PlatformAccessDbContext))]
-    partial class PlatformAccessDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261009100954_AddCustomerCollections")]
+    partial class AddCustomerCollections
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -325,10 +328,6 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("ConfirmedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<decimal>("CreditAppliedAmount")
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)");
-
                     b.Property<string>("CustomerCode")
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
@@ -377,7 +376,7 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.ToTable("confirmed_sales", "pos_sales", t =>
                         {
-                            t.HasCheckConstraint("CK_confirmed_sales_account_charge", "\"AccountChargeAmount\" >= 0 AND \"CreditAppliedAmount\" >= 0 AND \"AccountChargeAmount\" + \"CreditAppliedAmount\" <= \"Total\" AND (\"AccountChargeAmount\" + \"CreditAppliedAmount\" = 0 OR (\"CustomerId\" IS NOT NULL AND \"CustomerCode\" IS NOT NULL AND \"CustomerName\" IS NOT NULL))");
+                            t.HasCheckConstraint("CK_confirmed_sales_account_charge", "\"AccountChargeAmount\" >= 0 AND \"AccountChargeAmount\" <= \"Total\" AND (\"AccountChargeAmount\" = 0 OR (\"CustomerId\" IS NOT NULL AND \"CustomerCode\" IS NOT NULL AND \"CustomerName\" IS NOT NULL))");
 
                             t.HasCheckConstraint("CK_confirmed_sales_total_positive", "\"Total\" > 0");
                         });
@@ -601,56 +600,6 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.ToTable("collection_receipts", "customers_credit", t =>
                         {
                             t.HasCheckConstraint("CK_collection_receipts_amounts", "\"Amount\" > 0 AND \"CreditAmount\" >= 0 AND \"CreditAmount\" <= \"Amount\"");
-                        });
-                });
-
-            modelBuilder.Entity("Carnicerias.Infrastructure.CustomerCreditApplication", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)");
-
-                    b.Property<Guid>("BranchId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("CashierId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("CashierShiftId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("CustomerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("SaleId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CashierId");
-
-                    b.HasIndex("SaleId")
-                        .IsUnique();
-
-                    b.HasIndex("CompanyId", "CashierShiftId");
-
-                    b.HasIndex("CompanyId", "SaleId");
-
-                    b.HasIndex("CompanyId", "CustomerId", "CreatedAtUtc");
-
-                    b.ToTable("credit_applications", "customers_credit", t =>
-                        {
-                            t.HasCheckConstraint("CK_credit_applications_amount_positive", "\"Amount\" > 0");
                         });
                 });
 
@@ -1671,36 +1620,6 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasForeignKey("CompanyId", "BranchId", "PosTerminalId")
                         .HasPrincipalKey("CompanyId", "BranchId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
-                });
-
-            modelBuilder.Entity("Carnicerias.Infrastructure.CustomerCreditApplication", b =>
-                {
-                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
-                        .WithMany()
-                        .HasForeignKey("CashierId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Carnicerias.Infrastructure.CashierShift", null)
-                        .WithMany()
-                        .HasForeignKey("CompanyId", "CashierShiftId")
-                        .HasPrincipalKey("CompanyId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Carnicerias.Infrastructure.CustomerAccount", null)
-                        .WithMany()
-                        .HasForeignKey("CompanyId", "CustomerId")
-                        .HasPrincipalKey("CompanyId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Carnicerias.Infrastructure.ConfirmedSale", null)
-                        .WithMany()
-                        .HasForeignKey("CompanyId", "SaleId")
-                        .HasPrincipalKey("CompanyId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Carnicerias.Infrastructure.CustomerSaleCharge", b =>

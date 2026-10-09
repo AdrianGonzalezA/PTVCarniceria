@@ -5,7 +5,7 @@ import { formatSerialReceipt } from '../src/serial-receipt';
 const receipt: ReceiptRequest = {
   saleId: 'VENTA-123', branch: 'Sucursal Visual', terminal: 'Caja 1', cashier: 'cajero1',
   confirmedAtUtc: '2026-10-08T15:00:00Z', total: 10200, changeAmount: 150,
-  accountChargeAmount: 0,
+  accountChargeAmount: 0, creditAppliedAmount: 0,
   customerCode: null, customerName: null,
   lines: [
     { code: '2546', name: 'Cortito c/falda', unit: 'kg', quantity: 0.5,

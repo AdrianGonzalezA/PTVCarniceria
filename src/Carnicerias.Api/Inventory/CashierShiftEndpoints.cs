@@ -159,8 +159,18 @@ public static class CashierShiftEndpoints
                 CashBalance = group.Where(movement => movement.Method == PaymentMethod.Cash)
                     .Sum(movement => movement.AmountDelta),
                 CashSales = group.Where(movement => movement.Method == PaymentMethod.Cash &&
-                    movement.Kind != CashLedgerMovementKind.Opening).Sum(movement => movement.AmountDelta),
-                CollectedSales = group.Where(movement => movement.Kind != CashLedgerMovementKind.Opening)
+                    (movement.Kind == CashLedgerMovementKind.SalePayment ||
+                     movement.Kind == CashLedgerMovementKind.Change))
+                    .Sum(movement => movement.AmountDelta),
+                CollectedSales = group.Where(movement =>
+                    (movement.Kind == CashLedgerMovementKind.SalePayment ||
+                     movement.Kind == CashLedgerMovementKind.Change))
+                    .Sum(movement => movement.AmountDelta),
+                CashCollections = group.Where(movement => movement.Method == PaymentMethod.Cash &&
+                    movement.Kind == CashLedgerMovementKind.AccountCollection)
+                    .Sum(movement => movement.AmountDelta),
+                NonCashCollections = group.Where(movement => movement.Method != PaymentMethod.Cash &&
+                    movement.Kind == CashLedgerMovementKind.AccountCollection)
                     .Sum(movement => movement.AmountDelta)
             })
             .SingleOrDefaultAsync(cancellationToken);
@@ -174,8 +184,13 @@ public static class CashierShiftEndpoints
             .Where(charge => charge.CompanyId == shift.CompanyId && charge.BranchId == shift.BranchId &&
                 charge.CashierShiftId == shift.Id)
             .SumAsync(charge => (decimal?)charge.Amount, cancellationToken) ?? 0;
+        var creditApplied = await db.CustomerCreditApplications.AsNoTracking()
+            .Where(application => application.CompanyId == shift.CompanyId &&
+                application.BranchId == shift.BranchId && application.CashierShiftId == shift.Id)
+            .SumAsync(application => (decimal?)application.Amount, cancellationToken) ?? 0;
         return new ShiftResponse(shift.Id, shift.OpeningCash, shift.OpenedAtUtc, shift.ClosedAtUtc,
-            cashSales, collectedSales - cashSales, accountSales, salesTotal, totals?.CashBalance ?? 0);
+            cashSales, collectedSales - cashSales, accountSales, salesTotal, totals?.CashBalance ?? 0,
+            totals?.CashCollections ?? 0, totals?.NonCashCollections ?? 0, creditApplied);
     }
 
     private static IResult Error(int statusCode, string code) => Results.Json(
@@ -185,5 +200,6 @@ public static class CashierShiftEndpoints
     private sealed record OpenShiftRequest(decimal OpeningCash);
     private sealed record ShiftResponse(
         Guid Id, decimal OpeningCash, DateTimeOffset OpenedAtUtc, DateTimeOffset? ClosedAtUtc,
-        decimal CashSales, decimal NonCashSales, decimal AccountSales, decimal SalesTotal, decimal CashBalance);
+        decimal CashSales, decimal NonCashSales, decimal AccountSales, decimal SalesTotal, decimal CashBalance,
+        decimal CashCollections, decimal NonCashCollections, decimal CreditApplied);
 }

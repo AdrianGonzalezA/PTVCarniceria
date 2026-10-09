@@ -111,4 +111,32 @@ public sealed class PaymentSettlementTests
 
         Assert.Equal(PaymentSettlementError.NonCashOverpayment, error.Error);
     }
+
+    [Fact]
+    public void AppliesCustomerCreditWithoutAddingCashOrNewDebt()
+    {
+        var settlement = PaymentSettlement.CalculateWithAccountCharge(875m,
+            [new PaymentTender(PaymentMethod.Cash, 275m)], 100m, 500m);
+
+        Assert.Equal(875m, settlement.SaleTotal);
+        Assert.Equal(275m, Assert.Single(settlement.AppliedPayments).AppliedAmount);
+        Assert.Equal(0m, settlement.ChangeAmount);
+    }
+
+    [Fact]
+    public void AllowsCreditToCoverEntireSale()
+    {
+        var settlement = PaymentSettlement.CalculateWithAccountCharge(875m, [], 0m, 875m);
+
+        Assert.Empty(settlement.AppliedPayments);
+    }
+
+    [Fact]
+    public void RejectsCreditAndNewDebtAboveTotal()
+    {
+        var error = Assert.Throws<PaymentSettlementException>(() =>
+            PaymentSettlement.CalculateWithAccountCharge(875m, [], 500m, 500m));
+
+        Assert.Equal(PaymentSettlementError.InvalidAmount, error.Error);
+    }
 }

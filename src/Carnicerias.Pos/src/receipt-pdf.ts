@@ -7,6 +7,7 @@ export interface ReceiptRequest {
   readonly total: number;
   readonly changeAmount: number;
   readonly accountChargeAmount: number;
+  readonly creditAppliedAmount: number;
   readonly customerCode: string | null;
   readonly customerName: string | null;
   readonly lines: readonly {
@@ -52,10 +53,12 @@ export function validateReceiptRequest(value: unknown): ReceiptRequest {
   }
   const total = amount(data['total'], true);
   const accountChargeAmount = amount(data['accountChargeAmount'] ?? 0);
-  if (accountChargeAmount > total || (payments.length === 0 && accountChargeAmount !== total))
+  const creditAppliedAmount = amount(data['creditAppliedAmount'] ?? 0);
+  if (accountChargeAmount + creditAppliedAmount > total ||
+      (payments.length === 0 && accountChargeAmount + creditAppliedAmount !== total))
     throw new Error('Invalid receipt settlement');
-  const customerCode = accountChargeAmount > 0 ? label(data['customerCode'], 80) : null;
-  const customerName = accountChargeAmount > 0 ? label(data['customerName']) : null;
+  const customerCode = accountChargeAmount + creditAppliedAmount > 0 ? label(data['customerCode'], 80) : null;
+  const customerName = accountChargeAmount + creditAppliedAmount > 0 ? label(data['customerName']) : null;
   const confirmedAtUtc = label(data['confirmedAtUtc'], 40);
   if (Number.isNaN(Date.parse(confirmedAtUtc))) throw new Error('Invalid receipt date');
   const result: ReceiptRequest = {
@@ -67,6 +70,7 @@ export function validateReceiptRequest(value: unknown): ReceiptRequest {
     total,
     changeAmount: amount(data['changeAmount']),
     accountChargeAmount,
+    creditAppliedAmount,
     customerCode,
     customerName,
     lines: lines.map((input: unknown) => {
@@ -89,7 +93,8 @@ export function validateReceiptRequest(value: unknown): ReceiptRequest {
       };
     }),
   };
-  const settled = result.payments.reduce((sum, payment) => sum + payment.appliedAmount, 0) + accountChargeAmount;
+  const settled = result.payments.reduce((sum, payment) => sum + payment.appliedAmount, 0) +
+    accountChargeAmount + creditAppliedAmount;
   if (Math.abs(settled - total) > 0.001) throw new Error('Invalid receipt settlement');
   return result;
 }
@@ -109,6 +114,8 @@ export function createReceiptHtml(receipt: ReceiptRequest): string {
   const payments = receipt.payments.map((payment) => `<tr><td>${methods[payment.method]}</td><td>$ ${money(payment.appliedAmount)}</td></tr>`).join('');
   const accountCharge = receipt.accountChargeAmount > 0
     ? `<tr><td>Cuenta corriente</td><td>$ ${money(receipt.accountChargeAmount)}</td></tr>` : '';
+  const creditApplied = receipt.creditAppliedAmount > 0
+    ? `<tr><td>Saldo a favor aplicado</td><td>$ ${money(receipt.creditAppliedAmount)}</td></tr>` : '';
   const customer = receipt.customerName && receipt.customerCode
     ? `<p class="meta">Cliente: ${escapeHtml(receipt.customerName)} (${escapeHtml(receipt.customerCode)})</p>` : '';
   const date = new Date(receipt.confirmedAtUtc).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
@@ -122,7 +129,7 @@ export function createReceiptHtml(receipt: ReceiptRequest): string {
   </style></head><body><div class="warning">DOCUMENTO DE PRUEBA<br>NO FISCAL</div>
     <h1>${escapeHtml(receipt.branch)}</h1><p class="meta">${escapeHtml(receipt.terminal)} · ${escapeHtml(receipt.cashier)}</p>
     <p class="meta">Venta ${escapeHtml(receipt.saleId)}</p><p class="meta">${escapeHtml(date)}</p>${customer}
-    <h2>Productos</h2><table>${rows}</table><h2>Pagos y saldo a cuenta</h2><table>${payments}${accountCharge}
+    <h2>Productos</h2><table>${rows}</table><h2>Pagos y saldo a cuenta</h2><table>${payments}${accountCharge}${creditApplied}
     <tr class="total"><td>Total</td><td>$ ${money(receipt.total)}</td></tr>
     ${receipt.changeAmount > 0 ? `<tr><td>Vuelto</td><td>$ ${money(receipt.changeAmount)}</td></tr>` : ''}</table>
     <p class="footer">Simulación de impresión. No es factura ni comprobante fiscal válido.</p></body></html>`;

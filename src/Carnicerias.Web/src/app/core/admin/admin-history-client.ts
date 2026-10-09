@@ -27,6 +27,7 @@ export interface BusinessSummary {
   readonly paymentsByMethod: readonly { readonly method: string; readonly amount: number }[];
   readonly newAccountCharges: number;
   readonly registeredAccountCharges: number;
+  readonly creditApplied: number;
 }
 
 export interface SaleHistoryItem {

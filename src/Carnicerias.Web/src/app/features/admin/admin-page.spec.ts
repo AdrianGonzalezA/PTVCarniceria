@@ -63,7 +63,7 @@ describe('AdminPage', () => {
       fromUtc: '2026-10-08T03:00:00Z', toUtc: '2026-10-09T03:00:00Z', branchId: null,
       saleCount: 2, salesTotal: 2500, immediateSalePayments: 1500,
       paymentsByMethod: [{ method: 'cash', amount: 1500 }],
-      newAccountCharges: 1000, registeredAccountCharges: 1000,
+      newAccountCharges: 1000, registeredAccountCharges: 1000, creditApplied: 0,
     });
     fixture.detectChanges();
 
@@ -72,7 +72,7 @@ describe('AdminPage', () => {
     expect(page.textContent).toContain('Importe bruto');
     expect(page.textContent).toContain('Efectivo');
     expect(page.textContent).toContain('$ 2.500,00');
-    expect(page.querySelectorAll('.summary-card').length).toBe(4);
+    expect(page.querySelectorAll('.summary-card').length).toBe(5);
     const branch = page.querySelector('#summary-branch') as HTMLSelectElement;
     branch.value = 'branch-id';
     branch.dispatchEvent(new Event('change'));
@@ -81,6 +81,6 @@ describe('AdminPage', () => {
     expect(filtered.request.withCredentials).toBe(true);
     filtered.flush({ fromUtc: '2026-10-08T03:00:00Z', toUtc: '2026-10-09T03:00:00Z',
       branchId: 'branch-id', saleCount: 0, salesTotal: 0, immediateSalePayments: 0,
-      paymentsByMethod: [], newAccountCharges: 0, registeredAccountCharges: 0 });
+      paymentsByMethod: [], newAccountCharges: 0, registeredAccountCharges: 0, creditApplied: 0 });
   });
 });

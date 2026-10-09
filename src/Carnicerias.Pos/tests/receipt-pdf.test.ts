@@ -39,6 +39,13 @@ describe('virtual receipt PDF content', () => {
     expect(html).not.toContain('<script>');
   });
 
+  it('shows customer credit as settlement without a new cash payment', () => {
+    const html = createReceiptHtml(validateReceiptRequest({ ...validRequest, payments: [],
+      creditAppliedAmount: 2400, customerCode: 'CLI-001', customerName: 'Cliente cuenta' }));
+    expect(html).toContain('Saldo a favor aplicado');
+    expect(html).not.toContain('<td>Efectivo</td>');
+  });
+
   it('prints each traceable piece with its own weight and identifier', () => {
     const html = createReceiptHtml(validateReceiptRequest({ ...validRequest,
       lines: [

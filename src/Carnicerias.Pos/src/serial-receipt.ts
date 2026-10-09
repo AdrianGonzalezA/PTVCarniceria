@@ -48,6 +48,8 @@ export function formatSerialReceipt(receipt: ReceiptRequest): string {
     lines.push(`${paymentNames[payment.method] ?? printable(payment.method)} $ ${money(payment.appliedAmount)}`);
   if (receipt.accountChargeAmount > 0)
     lines.push(`Cuenta corriente $ ${money(receipt.accountChargeAmount)}`);
+  if (receipt.creditAppliedAmount > 0)
+    lines.push(`Saldo a favor $ ${money(receipt.creditAppliedAmount)}`);
   lines.push('----------------------------------------', `TOTAL $ ${money(receipt.total)}`);
   if (receipt.changeAmount > 0) lines.push(`Vuelto $ ${money(receipt.changeAmount)}`);
   lines.push('NO ES FACTURA NI COMPROBANTE FISCAL', '');

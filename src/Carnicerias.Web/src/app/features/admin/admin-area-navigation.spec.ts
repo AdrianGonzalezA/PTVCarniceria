@@ -33,7 +33,7 @@ describe('administrator areas', () => {
       TestBed.inject(HttpTestingController).expectOne('/api/admin/history/summary').flush({
         fromUtc: '2026-10-08T03:00:00Z', toUtc: '2026-10-09T03:00:00Z', branchId: null,
         saleCount: 0, salesTotal: 0, immediateSalePayments: 0, paymentsByMethod: [],
-        newAccountCharges: 0, registeredAccountCharges: 0,
+        newAccountCharges: 0, registeredAccountCharges: 0, creditApplied: 0,
       });
     }
     harness.detectChanges();

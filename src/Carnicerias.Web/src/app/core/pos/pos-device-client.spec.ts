@@ -33,6 +33,7 @@ describe('PosDeviceClient', () => {
     const result = await TestBed.inject(PosDeviceClient).print({
       id: 'sale-1', confirmedAtUtc: '2026-10-08T15:00:00Z', total: 2450, changeAmount: 0,
       customerId: null, customerCode: null, customerName: null, accountChargeAmount: 0,
+      creditAppliedAmount: 0,
       lines: [{ code: '1002', name: 'Asado', unit: 'kg', quantity: 0.5, unitPrice: 4900, lineTotal: 2450 }],
       payments: [{ method: 'cash', tenderedAmount: 2450, appliedAmount: 2450 }],
     }, 'Sucursal', 'Caja 1', 'cajero');

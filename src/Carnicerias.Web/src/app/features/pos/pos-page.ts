@@ -14,6 +14,7 @@ import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { CashierShift, CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { CreditCustomerAccount, CreditCustomerClient, CreditCustomerOption } from '../../core/customers/credit-customer-client';
+import { AccountCollectionDialog } from './account-collection-dialog';
 
 type SaleMode = 'weight' | 'unit';
 
@@ -74,7 +75,7 @@ const demoPriceLists = [
 
 @Component({
   selector: 'app-pos-page',
-  imports: [RouterLink],
+  imports: [RouterLink, AccountCollectionDialog],
   templateUrl: './pos-page.html',
 })
 export class PosPage implements OnInit {
@@ -196,8 +197,14 @@ export class PosPage implements OnInit {
   protected readonly creditCustomerLoadError = signal<string | null>(null);
   protected readonly accountChargeDraft = signal('0');
   protected readonly accountChargeAmount = computed(() => Number(this.accountChargeDraft().replace(',', '.')));
+  protected readonly creditAppliedDraft = signal('0');
+  protected readonly creditAppliedAmount = computed(() => Number(this.creditAppliedDraft().replace(',', '.')));
+  protected readonly dueNow = computed(() => this.subtotal() - this.accountChargeAmount() - this.creditAppliedAmount());
   protected readonly canChargeToAccount = computed(() =>
     !!this.session()?.context?.permissions.includes('pos.account.charge'));
+  protected readonly collectionDialog = signal(false);
+  protected readonly collectionScopeKey = computed(() => [this.session()?.userId,
+    this.session()?.context?.companyId, this.session()?.context?.branchId, this.terminal()?.id].join(':'));
   protected readonly paymentMethods: readonly { readonly id: SalePaymentMethod; readonly label: string }[] = [
     { id: 'cash', label: 'Efectivo' }, { id: 'debit', label: 'Débito' },
     { id: 'credit', label: 'Crédito' }, { id: 'transfer', label: 'Transferencia' },
@@ -207,26 +214,34 @@ export class PosPage implements OnInit {
     const selected = this.selectedPayments();
     const cash = selected.find((payment) => payment.method === 'cash')?.amount ?? 0;
     const nonCash = selected.filter((payment) => payment.method !== 'cash').reduce((sum, payment) => sum + payment.amount, 0);
-    const dueNow = this.subtotal() - this.accountChargeAmount();
+    const dueNow = this.dueNow();
     return nonCash > dueNow ? 0 : Math.max(0, Math.round((cash + nonCash - dueNow) * 100) / 100);
   });
-  protected readonly paymentBalance = computed(() => Math.max(0, Math.round((this.subtotal() - this.accountChargeAmount() -
+  protected readonly paymentBalance = computed(() => Math.max(0, Math.round((this.dueNow() -
     this.selectedPayments().reduce((sum, payment) => sum + payment.amount, 0)) * 100) / 100));
   protected readonly paymentProblem = computed(() => {
     const accountCharge = this.accountChargeAmount();
     if (!Number.isFinite(accountCharge) || accountCharge < 0 || accountCharge > this.subtotal() ||
         Math.abs(Math.round(accountCharge * 100) - accountCharge * 100) > 0.000001)
       return 'Ingresá un importe válido a cuenta corriente, sin superar el total.';
-    if (accountCharge > 0 && (!this.canChargeToAccount() || !this.creditCustomerId()))
+    const creditApplied = this.creditAppliedAmount();
+    if (!Number.isFinite(creditApplied) || creditApplied < 0 ||
+        Math.abs(Math.round(creditApplied * 100) - creditApplied * 100) > 0.000001 ||
+        accountCharge + creditApplied > this.subtotal())
+      return 'El saldo a favor aplicado no es válido o supera el total.';
+    if (creditApplied > (this.creditCustomerAccount()?.creditAvailable ?? 0))
+      return 'El saldo a favor aplicado supera el disponible del cliente.';
+    if ((accountCharge > 0 || creditApplied > 0) &&
+        (!this.canChargeToAccount() || !this.creditCustomerId() || !this.creditCustomerAccount()))
       return 'Elegí un cliente habilitado para cuenta corriente.';
     const payments = this.selectedPayments();
-    if (payments.length === 0 && accountCharge !== this.subtotal()) return 'Seleccioná al menos un medio de pago.';
+    if (payments.length === 0 && this.dueNow() !== 0) return 'Seleccioná al menos un medio de pago.';
     if (payments.some((payment) => !Number.isFinite(payment.amount) || payment.amount <= 0 ||
         Math.round(payment.amount * 100) !== payment.amount * 100))
       return 'Completá cada medio de pago con un importe válido.';
     const nonCash = payments.filter((payment) => payment.method !== 'cash')
       .reduce((sum, payment) => sum + payment.amount, 0);
-    if (nonCash > this.subtotal() - accountCharge) return 'Los medios sin efectivo no pueden superar el importe a cobrar ahora.';
+    if (nonCash > this.dueNow()) return 'Los medios sin efectivo no pueden superar el importe a cobrar ahora.';
     if (this.paymentBalance() > 0) return 'Los medios de pago todavía no cubren el total.';
     return null;
   });
@@ -910,6 +925,7 @@ export class PosPage implements OnInit {
     }
     this.selectedPayments.set([{ method: 'cash', amount: this.subtotal() }]);
     this.accountChargeDraft.set('0');
+    this.creditAppliedDraft.set('0');
     this.creditCustomerId.set('');
     this.creditCustomerAccount.set(null);
     this.creditCustomerAccountStatus.set('idle');
@@ -1011,8 +1027,8 @@ export class PosPage implements OnInit {
   protected togglePayment(method: SalePaymentMethod, event: Event): void {
     const checked = (event.target as HTMLInputElement).checked;
     this.selectedPayments.update((payments) => checked
-      ? [...payments, { method, amount: method === 'cash' ? this.subtotal() - this.accountChargeAmount() :
-        Math.max(0, this.subtotal() - this.accountChargeAmount() - payments.reduce((sum, item) => sum + item.amount, 0)) }]
+      ? [...payments, { method, amount: method === 'cash' ? this.dueNow() :
+        Math.max(0, this.dueNow() - payments.reduce((sum, item) => sum + item.amount, 0)) }]
       : payments.filter((payment) => payment.method !== method));
     this.checkoutError.set(null);
   }
@@ -1075,15 +1091,26 @@ export class PosPage implements OnInit {
   }
 
   protected updateAccountCharge(event: Event): void {
-    const previousDueNow = this.subtotal() - this.accountChargeAmount();
+    const previousDueNow = this.dueNow();
     this.accountChargeDraft.set((event.target as HTMLInputElement).value);
-    const newDueNow = this.subtotal() - this.accountChargeAmount();
+    this.adjustCashToDue(previousDueNow);
+    this.checkoutError.set(null);
+  }
+
+  protected updateCreditApplied(event: Event): void {
+    const previousDueNow = this.dueNow();
+    this.creditAppliedDraft.set((event.target as HTMLInputElement).value);
+    this.adjustCashToDue(previousDueNow);
+    this.checkoutError.set(null);
+  }
+
+  private adjustCashToDue(previousDueNow: number): void {
+    const newDueNow = this.dueNow();
     const payments = this.selectedPayments();
     if (payments.length === 1 && payments[0].method === 'cash' && payments[0].amount === previousDueNow &&
         Number.isFinite(newDueNow) && newDueNow >= 0) {
       this.selectedPayments.set(newDueNow === 0 ? [] : [{ method: 'cash', amount: newDueNow }]);
     }
-    this.checkoutError.set(null);
   }
 
   protected confirmSale(): void {
@@ -1095,6 +1122,7 @@ export class PosPage implements OnInit {
     }
     const payments = this.selectedPayments();
     const accountCharge = this.accountChargeAmount();
+    const creditApplied = this.creditAppliedAmount();
     const customer = this.creditCustomerOptions().find((item) => item.id === this.creditCustomerId());
     if (accountCharge > 0 && !window.confirm(
       `¿Cargar ${this.formatMoney(accountCharge)} a la cuenta corriente de ${customer?.name ?? 'este cliente'}?`,
@@ -1102,7 +1130,9 @@ export class PosPage implements OnInit {
     this.checkoutBusy.set(true);
     this.checkoutError.set(null);
     this.saleDraftClient.confirm(this.draftId(), payments,
-      accountCharge > 0 ? { customerId: this.creditCustomerId(), amount: accountCharge } : undefined).subscribe({
+      accountCharge > 0 || creditApplied > 0
+        ? { customerId: this.creditCustomerId(), amount: accountCharge, creditAppliedAmount: creditApplied }
+        : undefined).subscribe({
       next: (sale) => this.finishConfirmedSale(sale),
       error: (error: HttpErrorResponse) => {
         this.checkoutBusy.set(false);
@@ -1134,6 +1164,7 @@ export class PosPage implements OnInit {
     this.draftStatus.set('saved');
     this.selectedPayments.set([]);
     this.accountChargeDraft.set('0');
+    this.creditAppliedDraft.set('0');
     this.creditCustomerId.set('');
     this.creditCustomerAccount.set(null);
     this.creditCustomerAccountStatus.set('idle');
@@ -1181,6 +1212,7 @@ export class PosPage implements OnInit {
     if (code === 'PAYMENT_TOTAL_MISMATCH') return 'Los medios de pago no alcanzan a cubrir el total.';
     if (code === 'INVALID_CHANGE') return 'El vuelto solo puede entregarse cuando se paga en efectivo.';
     if (code === 'CUSTOMER_CREDIT_UNAVAILABLE') return 'La cuenta corriente del cliente ya no está habilitada. Elegí otro medio de pago.';
+    if (code === 'CUSTOMER_CREDIT_INSUFFICIENT') return 'El saldo a favor del cliente cambió. Consultá la cuenta y ajustá el importe aplicado.';
     if (code === 'ACCOUNT_CHARGE_FORBIDDEN') return 'Tu rol no tiene permiso para cargar ventas a cuenta corriente.';
     if (code === 'IDEMPOTENCY_CONFLICT') return 'La venta ya fue confirmada con otro pago. Actualizá el estado antes de continuar.';
     return 'El ticket cambió o ya se procesó. Revisá el estado de la venta e intentá de nuevo.';

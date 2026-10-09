@@ -1,0 +1,112 @@
+<div class="dialog-backdrop">
+  <section class="pos-dialog account-collection-dialog" role="dialog" aria-modal="true" aria-labelledby="collection-title">
+    <button class="dialog-close" type="button" aria-label="Cerrar cobro de cuenta" (click)="closed.emit()">×</button>
+    <p class="eyebrow">Cuenta corriente · recibo interno no fiscal</p>
+    <h2 id="collection-title">{{ receipt() ? 'Cobro registrado' : 'Cobrar cuenta corriente' }}</h2>
+
+    @if (receipt(); as result) {
+      <div class="shift-summary" role="status">
+        <span>Recibo interno</span><strong>N.º {{ result.receiptNumber }}</strong>
+        <span>Importe recibido</span><strong>{{ formatMoney(result.amount) }}</strong>
+        <span>Aplicado a ventas</span><strong>{{ formatMoney(result.amount - result.creditAmount) }}</strong>
+        <span>Saldo a favor</span><strong>{{ formatMoney(result.creditAmount) }}</strong>
+      </div>
+      <p class="payment-guidance">Este recibo no es una factura ni un comprobante fiscal.</p>
+      <div class="dialog-actions">
+        <button class="dialog-cancel" type="button" (click)="closed.emit()">Volver al POS</button>
+        <button class="finish-button" type="button" (click)="newCollection()">Nuevo cobro</button>
+      </div>
+    } @else if (pending(); as previous) {
+      <p class="payment-guidance">Hay un cobro pendiente de confirmación. Reintentá la misma operación; no se duplicará.</p>
+      <div class="shift-summary">
+        <span>Importe</span><strong>{{ formatMoney(previous.amount) }}</strong>
+        <span>Cliente</span><strong>{{ previous.customerId.slice(0, 8) }}</strong>
+      </div>
+      @if (error(); as message) { <p class="payment-guidance" role="alert">{{ message }}</p> }
+      <div class="dialog-actions">
+        <button class="dialog-cancel" type="button" (click)="closed.emit()">Volver al POS</button>
+        <button class="finish-button" type="button" [disabled]="busy()" (click)="retryPending()">
+          {{ busy() ? 'Comprobando…' : 'Reintentar cobro' }}
+        </button>
+      </div>
+    } @else {
+      <div class="credit-customer-search">
+        <label for="collection-search">Cliente, código o nombre</label>
+        <div>
+          <input id="collection-search" type="search" [value]="search()" (input)="updateSearch($event)"
+            (keydown.enter)="findCustomers()" placeholder="Buscar cliente" autocomplete="off" />
+          <button type="button" [disabled]="loading()" (click)="findCustomers()">Buscar</button>
+        </div>
+      </div>
+      <label class="quantity-field" for="collection-customer">Cliente
+        <select id="collection-customer" [value]="customer()?.id ?? ''" (change)="chooseCustomer($event)">
+          <option value="">Elegí un cliente</option>
+          @for (option of options(); track option.id) {
+            <option [value]="option.id">{{ option.code }} · {{ option.name }}</option>
+          }
+        </select>
+      </label>
+
+      @if (account(); as current) {
+        <div class="shift-summary account-balance-summary">
+          <span>Deuda pendiente</span><strong>{{ formatMoney(current.totalDebt) }}</strong>
+          <span>Saldo a favor previo</span><strong>{{ formatMoney(current.creditAvailable) }}</strong>
+        </div>
+        <p class="payment-guidance">Podés cobrar parcialmente. La propuesta aplica primero a las ventas más antiguas.</p>
+        <div class="account-collection-fields">
+          <label class="quantity-field" for="collection-amount">Importe recibido
+            <input id="collection-amount" type="text" inputmode="decimal" placeholder="0,00"
+              [value]="amount()" (input)="updateAmount($event)" />
+          </label>
+          <label class="quantity-field" for="collection-method">Medio de cobro
+            <select id="collection-method" [value]="method()" (change)="updateMethod($event)">
+              @for (item of methods; track item.id) {
+                <option [value]="item.id">{{ item.label }}</option>
+              }
+            </select>
+          </label>
+        </div>
+        <label class="account-allocation-toggle">
+          <input type="checkbox" [checked]="manual()" (change)="setManual($event)" />
+          Asignar importes a ventas manualmente
+        </label>
+        @if (manual()) {
+          <div class="account-allocation-list" role="group" aria-label="Asignación por venta">
+            @for (sale of current.sales; track sale.saleId) {
+              @if (sale.outstandingAmount > 0) {
+                <label class="account-allocation-row">
+                  <span>Venta {{ sale.saleId.slice(0, 8) }} · {{ sale.chargedAtUtc.slice(0, 10) }}<br />
+                    <small>Pendiente: {{ formatMoney(sale.outstandingAmount) }}</small></span>
+                  <input type="text" inputmode="decimal" [attr.aria-label]="'Asignar a venta ' + sale.saleId.slice(0, 8)"
+                    [value]="allocations()[sale.saleId] ?? ''" (input)="updateAllocation(sale.saleId, $event)"
+                    placeholder="0,00" />
+                </label>
+              }
+            }
+          </div>
+          @if (current.saleCount > current.sales.length) {
+            <div class="account-page-controls">
+              <button type="button" [disabled]="page() <= 1 || loading()" (click)="changePage(-1)">Anterior</button>
+              <span>Página {{ page() }} de {{ pageCount() }}</span>
+              <button type="button" [disabled]="page() * 50 >= current.saleCount || loading()" (click)="changePage(1)">Siguiente</button>
+            </div>
+            <p class="payment-guidance">Al cambiar de página se limpia la asignación manual de esta vista.</p>
+          }
+        }
+        <div class="shift-summary account-balance-summary">
+          <span>{{ manual() ? 'Asignado a ventas' : 'Propuesta a ventas' }}</span>
+          <strong>{{ formatMoney(manual() ? allocatedAmount() : proposedAllocation()) }}</strong>
+          <span>Nuevo saldo a favor</span><strong>{{ formatMoney(creditPreview()) }}</strong>
+        </div>
+      }
+
+      @if (error(); as message) { <p class="payment-guidance" role="alert">{{ message }}</p> }
+      @if (account() && problem(); as issue) { <p class="payment-guidance" role="alert">{{ issue }}</p> }
+      <div class="dialog-actions">
+        <button class="dialog-cancel" type="button" (click)="closed.emit()">Cancelar</button>
+        <button class="finish-button" type="button" [disabled]="!!problem() || busy() || loading()"
+          (click)="collect()">{{ busy() ? 'Guardando cobro…' : 'Confirmar cobro' }}</button>
+      </div>
+    }
+  </section>
+</div>

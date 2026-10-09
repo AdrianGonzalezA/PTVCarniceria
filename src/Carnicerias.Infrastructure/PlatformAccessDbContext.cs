@@ -30,6 +30,12 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<CustomerSaleCharge> CustomerSaleCharges => Set<CustomerSaleCharge>();
 
+    public DbSet<CustomerCollectionReceipt> CustomerCollectionReceipts => Set<CustomerCollectionReceipt>();
+
+    public DbSet<CustomerCollectionAllocation> CustomerCollectionAllocations => Set<CustomerCollectionAllocation>();
+
+    public DbSet<CustomerCreditApplication> CustomerCreditApplications => Set<CustomerCreditApplication>();
+
     public DbSet<BranchPriceList> BranchPriceLists => Set<BranchPriceList>();
 
     public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
@@ -210,6 +216,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.ToTable("sale_charges", "customers_credit", table =>
                 table.HasCheckConstraint("CK_sale_charges_amount_positive", "\"Amount\" > 0"));
             entity.HasKey(charge => charge.Id);
+            entity.HasAlternateKey(charge => new { charge.CompanyId, charge.CustomerId, charge.SaleId });
             entity.Property(charge => charge.Amount).HasPrecision(12, 2);
             entity.HasOne<CustomerAccount>().WithMany()
                 .HasForeignKey(charge => new { charge.CompanyId, charge.CustomerId })
@@ -231,6 +238,85 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(charge => charge.SaleId).IsUnique();
             entity.HasIndex(charge => new { charge.CompanyId, charge.CustomerId, charge.CreatedAtUtc });
+        });
+
+        modelBuilder.Entity<CustomerCollectionReceipt>(entity =>
+        {
+            entity.ToTable("collection_receipts", "customers_credit", table =>
+                table.HasCheckConstraint("CK_collection_receipts_amounts",
+                    "\"Amount\" > 0 AND \"CreditAmount\" >= 0 AND \"CreditAmount\" <= \"Amount\""));
+            entity.HasKey(receipt => receipt.Id);
+            entity.HasAlternateKey(receipt => new { receipt.CompanyId, receipt.Id });
+            entity.Property(receipt => receipt.ReceiptNumber).ValueGeneratedOnAdd();
+            entity.Property(receipt => receipt.RequestHash).HasMaxLength(64).IsRequired();
+            entity.Property(receipt => receipt.Method).HasConversion<int>().IsRequired();
+            entity.Property(receipt => receipt.Amount).HasPrecision(12, 2);
+            entity.Property(receipt => receipt.CreditAmount).HasPrecision(12, 2);
+            entity.HasOne<CustomerAccount>().WithMany()
+                .HasForeignKey(receipt => new { receipt.CompanyId, receipt.CustomerId })
+                .HasPrincipalKey(customer => new { customer.CompanyId, customer.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Branch>().WithMany()
+                .HasForeignKey(receipt => new { receipt.CompanyId, receipt.BranchId })
+                .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CashierShift>().WithMany()
+                .HasForeignKey(receipt => new { receipt.CompanyId, receipt.CashierShiftId })
+                .HasPrincipalKey(shift => new { shift.CompanyId, shift.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<PosTerminal>().WithMany()
+                .HasForeignKey(receipt => new { receipt.CompanyId, receipt.BranchId, receipt.PosTerminalId })
+                .HasPrincipalKey(terminal => new { terminal.CompanyId, terminal.BranchId, terminal.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany().HasForeignKey(receipt => receipt.CashierId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(receipt => receipt.ReceiptNumber).IsUnique();
+            entity.HasIndex(receipt => new { receipt.CompanyId, receipt.OperationId }).IsUnique();
+            entity.HasIndex(receipt => new { receipt.CompanyId, receipt.CustomerId, receipt.CreatedAtUtc });
+            entity.HasIndex(receipt => new { receipt.CompanyId, receipt.CashierShiftId });
+            entity.HasMany(receipt => receipt.Allocations).WithOne()
+                .HasForeignKey(allocation => new { allocation.CompanyId, allocation.ReceiptId })
+                .HasPrincipalKey(receipt => new { receipt.CompanyId, receipt.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CustomerCollectionAllocation>(entity =>
+        {
+            entity.ToTable("collection_allocations", "customers_credit", table =>
+                table.HasCheckConstraint("CK_collection_allocations_amount_positive", "\"Amount\" > 0"));
+            entity.HasKey(allocation => allocation.Id);
+            entity.Property(allocation => allocation.Amount).HasPrecision(12, 2);
+            entity.HasOne<CustomerSaleCharge>().WithMany()
+                .HasForeignKey(allocation => new { allocation.CompanyId, allocation.CustomerId, allocation.SaleId })
+                .HasPrincipalKey(charge => new { charge.CompanyId, charge.CustomerId, charge.SaleId })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(allocation => new { allocation.ReceiptId, allocation.SaleId }).IsUnique();
+            entity.HasIndex(allocation => new { allocation.CompanyId, allocation.CustomerId, allocation.SaleId });
+        });
+
+        modelBuilder.Entity<CustomerCreditApplication>(entity =>
+        {
+            entity.ToTable("credit_applications", "customers_credit", table =>
+                table.HasCheckConstraint("CK_credit_applications_amount_positive", "\"Amount\" > 0"));
+            entity.HasKey(application => application.Id);
+            entity.Property(application => application.Amount).HasPrecision(12, 2);
+            entity.HasOne<CustomerAccount>().WithMany()
+                .HasForeignKey(application => new { application.CompanyId, application.CustomerId })
+                .HasPrincipalKey(customer => new { customer.CompanyId, customer.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ConfirmedSale>().WithMany()
+                .HasForeignKey(application => new { application.CompanyId, application.SaleId })
+                .HasPrincipalKey(sale => new { sale.CompanyId, sale.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CashierShift>().WithMany()
+                .HasForeignKey(application => new { application.CompanyId, application.CashierShiftId })
+                .HasPrincipalKey(shift => new { shift.CompanyId, shift.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(application => application.CashierId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(application => application.SaleId).IsUnique();
+            entity.HasIndex(application => new { application.CompanyId, application.CustomerId, application.CreatedAtUtc });
         });
 
         modelBuilder.Entity<BranchPriceList>(entity =>
@@ -451,12 +537,13 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             {
                 table.HasCheckConstraint("CK_confirmed_sales_total_positive", "\"Total\" > 0");
                 table.HasCheckConstraint("CK_confirmed_sales_account_charge",
-                    "\"AccountChargeAmount\" >= 0 AND \"AccountChargeAmount\" <= \"Total\" AND (\"AccountChargeAmount\" = 0 OR (\"CustomerId\" IS NOT NULL AND \"CustomerCode\" IS NOT NULL AND \"CustomerName\" IS NOT NULL))");
+                    "\"AccountChargeAmount\" >= 0 AND \"CreditAppliedAmount\" >= 0 AND \"AccountChargeAmount\" + \"CreditAppliedAmount\" <= \"Total\" AND (\"AccountChargeAmount\" + \"CreditAppliedAmount\" = 0 OR (\"CustomerId\" IS NOT NULL AND \"CustomerCode\" IS NOT NULL AND \"CustomerName\" IS NOT NULL))");
             });
             entity.HasKey(sale => sale.Id);
             entity.HasAlternateKey(sale => new { sale.CompanyId, sale.Id });
             entity.Property(sale => sale.Total).HasPrecision(12, 2);
             entity.Property(sale => sale.AccountChargeAmount).HasPrecision(12, 2);
+            entity.Property(sale => sale.CreditAppliedAmount).HasPrecision(12, 2);
             entity.Property(sale => sale.CustomerCode).HasMaxLength(80);
             entity.Property(sale => sale.CustomerName).HasMaxLength(200);
             entity.Property(sale => sale.PaymentRequestHash).HasMaxLength(64).IsRequired();
@@ -539,7 +626,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.ToTable("cash_ledger", "payments_cash", table =>
             {
                 table.HasCheckConstraint("CK_cash_ledger_amount_nonzero", "\"AmountDelta\" <> 0");
-                table.HasCheckConstraint("CK_cash_ledger_kind", "\"Kind\" IN (0, 1, 2)");
+                table.HasCheckConstraint("CK_cash_ledger_kind", "\"Kind\" IN (0, 1, 2, 3)");
             });
             entity.HasKey(movement => movement.Id);
             entity.Property(movement => movement.Method).HasConversion<int>().IsRequired();

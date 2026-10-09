@@ -31,8 +31,9 @@ public static class SaleConfirmationEndpoints
     {
         if (draftId == Guid.Empty || request?.Payments is null || request.Payments.Count > 6 ||
             request.Payments.Any(payment => payment is null) || request.CustomerId == Guid.Empty ||
-            (request.CustomerId is not null && request.AccountChargeAmount <= 0) ||
-            (request.CustomerId is null && request.AccountChargeAmount != 0))
+            (request.CustomerId is not null && request.AccountChargeAmount <= 0 && request.CreditAppliedAmount <= 0) ||
+            (request.CustomerId is null && (request.AccountChargeAmount != 0 || request.CreditAppliedAmount != 0)) ||
+            request.AccountChargeAmount < 0 || request.CreditAppliedAmount < 0)
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var tenders = new List<PaymentTender>(request.Payments.Count);
@@ -43,7 +44,8 @@ public static class SaleConfirmationEndpoints
             tenders.Add(new PaymentTender(method, payment.Amount));
         }
 
-        var requestHash = HashPaymentRequest(tenders, request.CustomerId, request.AccountChargeAmount);
+        var requestHash = HashPaymentRequest(tenders, request.CustomerId, request.AccountChargeAmount,
+            request.CreditAppliedAmount);
         var context = accessor.Context;
         try
         {
@@ -75,23 +77,35 @@ public static class SaleConfirmationEndpoints
             var total = draft.Lines.Sum(line => decimal.Round(
                 line.Quantity * line.UnitPrice, 2, MidpointRounding.AwayFromZero));
             CustomerAccount? creditCustomer = null;
-            if (request.AccountChargeAmount > 0)
+            if (request.AccountChargeAmount > 0 || request.CreditAppliedAmount > 0)
             {
                 if (!context.Permissions.Contains(PlatformPermissionCatalog.PosAccountCharge))
                     return Error(StatusCodes.Status403Forbidden, "ACCOUNT_CHARGE_FORBIDDEN");
-                if (!request.AccountChargeConfirmed)
+                if (request.AccountChargeAmount > 0 && !request.AccountChargeConfirmed)
                     return Error(StatusCodes.Status400BadRequest, "ACCOUNT_CHARGE_CONFIRMATION_REQUIRED");
                 creditCustomer = await db.CustomerAccounts.SingleOrDefaultAsync(customer =>
                     customer.CompanyId == context.CompanyId && customer.Id == request.CustomerId,
                     cancellationToken);
                 if (creditCustomer?.CanChargeToAccount != true)
                     return Error(StatusCodes.Status409Conflict, "CUSTOMER_CREDIT_UNAVAILABLE");
+                if (request.CreditAppliedAmount > 0)
+                {
+                    var receivedCredit = await db.CustomerCollectionReceipts.AsNoTracking()
+                        .Where(item => item.CompanyId == context.CompanyId && item.CustomerId == request.CustomerId)
+                        .SumAsync(item => (decimal?)item.CreditAmount, cancellationToken) ?? 0;
+                    var usedCredit = await db.CustomerCreditApplications.AsNoTracking()
+                        .Where(item => item.CompanyId == context.CompanyId && item.CustomerId == request.CustomerId)
+                        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0;
+                    if (request.CreditAppliedAmount > receivedCredit - usedCredit)
+                        return Error(StatusCodes.Status409Conflict, "CUSTOMER_CREDIT_INSUFFICIENT");
+                }
             }
             PaymentSettlementResult settlement;
             try
             {
-                settlement = request.AccountChargeAmount > 0
-                    ? PaymentSettlement.CalculateWithAccountCharge(total, tenders, request.AccountChargeAmount)
+                settlement = request.AccountChargeAmount > 0 || request.CreditAppliedAmount > 0
+                    ? PaymentSettlement.CalculateWithAccountCharge(total, tenders,
+                        request.AccountChargeAmount, request.CreditAppliedAmount)
                     : PaymentSettlement.Calculate(total, tenders);
             }
             catch (PaymentSettlementException exception)
@@ -106,16 +120,21 @@ public static class SaleConfirmationEndpoints
                     return Error(StatusCodes.Status409Conflict, "PIECE_ALREADY_USED");
             var sale = new ConfirmedSale(context.CompanyId, context.BranchId, context.UserId,
                 shift.Id, draft.Id, draft.PriceListId, total, requestHash, now, accessor.TerminalId,
-                request.CustomerId, request.AccountChargeAmount, creditCustomer?.Code, creditCustomer?.Name);
+                request.CustomerId, request.AccountChargeAmount, creditCustomer?.Code, creditCustomer?.Name,
+                request.CreditAppliedAmount);
             sale.Lines.AddRange(draft.Lines.Select(line => new ConfirmedSaleLine(
                 context.CompanyId, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
                 line.SaleMode, line.Quantity, line.UnitPrice, line.InventoryPieceId, line.PieceIdentifier)));
             sale.Payments.AddRange(settlement.AppliedPayments.Select(payment => new SalePayment(
                 payment.Method, payment.TenderedAmount, payment.AppliedAmount)));
             db.ConfirmedSales.Add(sale);
-            if (request.CustomerId is Guid customerId)
+            if (request.CustomerId is Guid customerId && request.AccountChargeAmount > 0)
                 db.CustomerSaleCharges.Add(new CustomerSaleCharge(context.CompanyId, context.BranchId,
                     customerId, sale.Id, context.UserId, shift.Id, request.AccountChargeAmount, now));
+            if (request.CustomerId is Guid creditCustomerId && request.CreditAppliedAmount > 0)
+                db.CustomerCreditApplications.Add(new CustomerCreditApplication(context.CompanyId,
+                    context.BranchId, creditCustomerId, sale.Id, context.UserId, shift.Id,
+                    request.CreditAppliedAmount, now));
 
             foreach (var group in draft.Lines.GroupBy(line => line.ProductId))
             {
@@ -184,12 +203,17 @@ public static class SaleConfirmationEndpoints
                 .Sum(payment => payment.TenderedAmount - payment.AppliedAmount)))
             : Error(StatusCodes.Status409Conflict, "IDEMPOTENCY_CONFLICT");
 
-    private static string HashPaymentRequest(IEnumerable<PaymentTender> tenders, Guid? customerId, decimal accountCharge)
+    private static string HashPaymentRequest(IEnumerable<PaymentTender> tenders, Guid? customerId,
+        decimal accountCharge, decimal creditApplied)
     {
         var canonical = string.Join('|', tenders.OrderBy(tender => tender.Method)
             .Select(tender => $"{(int)tender.Method}:{tender.TenderedAmount.ToString("0.00", CultureInfo.InvariantCulture)}"));
         if (customerId is not null)
+        {
             canonical += $"|account:{customerId.Value:N}:{accountCharge.ToString("0.00", CultureInfo.InvariantCulture)}";
+            if (creditApplied > 0)
+                canonical += $":{creditApplied.ToString("0.00", CultureInfo.InvariantCulture)}";
+        }
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
 
@@ -218,6 +242,7 @@ public static class SaleConfirmationEndpoints
 
     private static SaleConfirmationResponse ToResponse(ConfirmedSale sale, decimal change) => new(
         sale.Id, sale.Total, change, sale.ConfirmedAtUtc, sale.CustomerId, sale.AccountChargeAmount,
+        sale.CreditAppliedAmount,
         sale.CustomerCode, sale.CustomerName,
         sale.Lines.OrderBy(line => line.ProductName).ThenBy(line => line.PieceIdentifier)
             .Select(line => new SaleConfirmationLineResponse(
@@ -249,10 +274,12 @@ public static class SaleConfirmationEndpoints
         new ErrorResponse(new ApiError(code, "No se pudo completar la solicitud", [])), statusCode: statusCode);
 
     private sealed record ConfirmSaleRequest(IReadOnlyList<PaymentRequest>? Payments, Guid? CustomerId = null,
-        decimal AccountChargeAmount = 0, bool AccountChargeConfirmed = false);
+        decimal AccountChargeAmount = 0, bool AccountChargeConfirmed = false,
+        decimal CreditAppliedAmount = 0);
     private sealed record PaymentRequest(string? Method, decimal Amount);
     private sealed record SaleConfirmationResponse(Guid Id, decimal Total, decimal ChangeAmount,
         DateTimeOffset ConfirmedAtUtc, Guid? CustomerId, decimal AccountChargeAmount,
+        decimal CreditAppliedAmount,
         string? CustomerCode, string? CustomerName,
         IReadOnlyList<SaleConfirmationLineResponse> Lines,
         IReadOnlyList<SaleConfirmationPaymentResponse> Payments);

@@ -40,15 +40,17 @@ public static class PaymentSettlement
     private const int MaximumMethods = 6;
 
     public static PaymentSettlementResult CalculateWithAccountCharge(
-        decimal saleTotal, IReadOnlyList<PaymentTender> tenders, decimal accountCharge)
+        decimal saleTotal, IReadOnlyList<PaymentTender> tenders, decimal accountCharge,
+        decimal creditApplied = 0)
     {
         ArgumentNullException.ThrowIfNull(tenders);
         ValidateAmount(saleTotal);
         ValidateAmount(accountCharge);
-        if (saleTotal == 0 || accountCharge > saleTotal)
+        ValidateAmount(creditApplied);
+        if (saleTotal == 0 || accountCharge + creditApplied > saleTotal)
             throw new PaymentSettlementException(PaymentSettlementError.InvalidAmount);
 
-        var immediateTotal = saleTotal - accountCharge;
+        var immediateTotal = saleTotal - accountCharge - creditApplied;
         if (immediateTotal == 0 && tenders.Count == 0)
             return new PaymentSettlementResult(saleTotal, [], 0);
 

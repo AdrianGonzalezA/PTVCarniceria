@@ -197,6 +197,21 @@
 .shift-dialog { max-height: min(90dvh, 48rem); overflow: auto; }
 .shift-dialog > p:not(.eyebrow) { line-height: 1.5; }
 .shift-dialog .quantity-field { margin-top: 0.75rem; }
+.account-collection-dialog { width: min(100%, 44rem); max-height: min(90dvh, 50rem); overflow: auto; }
+.account-collection-dialog .credit-customer-search input { box-sizing: border-box; flex: 1; min-width: 0; min-height: 2.3rem; padding: 0.4rem; border: 1px solid var(--pos-border); border-radius: 0.25rem; font: inherit; }
+.account-collection-dialog .quantity-field { margin-top: 0.75rem; }
+.account-balance-summary { margin-top: 0.8rem; }
+.account-collection-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.account-allocation-toggle { display: flex; align-items: center; gap: 0.5rem; margin: 0.9rem 0; font-size: 0.82rem; font-weight: 650; }
+.account-allocation-toggle input { width: 1rem; height: 1rem; accent-color: var(--pos-teal); }
+.account-allocation-list { display: grid; max-height: 12rem; overflow: auto; border: 1px solid var(--pos-border); border-radius: 0.3rem; }
+.account-allocation-row { display: grid; grid-template-columns: 1fr 7rem; align-items: center; gap: 0.7rem; padding: 0.45rem 0.65rem; border-bottom: 1px solid var(--pos-border); font-size: 0.78rem; }
+.account-allocation-row:last-child { border-bottom: 0; }
+.account-allocation-row small { color: var(--pos-muted); }
+.account-allocation-row input { box-sizing: border-box; width: 100%; min-height: 2rem; padding: 0.3rem; border: 1px solid var(--pos-border); border-radius: 0.25rem; text-align: right; }
+.account-page-controls { display: flex; align-items: center; justify-content: center; gap: 0.7rem; margin-top: 0.5rem; font-size: 0.75rem; }
+.account-page-controls button { padding: 0.35rem 0.6rem; border: 1px solid var(--pos-border); border-radius: 0.25rem; background: #fff; cursor: pointer; }
+@media (max-width: 42rem) { .account-collection-fields { grid-template-columns: 1fr; } }
 .checkout-total { display: flex; justify-content: space-between; margin-top: 1rem; padding: 0.8rem; background: #e7e7e4; border-radius: 0.3rem; }
 .checkout-total strong { font-size: 1.1rem; }
 .sale-receipt { max-height: min(90dvh, 48rem); overflow: auto; }

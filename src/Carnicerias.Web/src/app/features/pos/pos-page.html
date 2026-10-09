@@ -9,6 +9,9 @@
       <span class="terminal-label">{{ terminal()?.name ?? 'Caja sin configurar' }}</span>
       <span class="cashier-name">{{ session()?.username }}</span>
       <button class="shift-status" type="button" [disabled]="!terminal()" (click)="openShiftDialog()">{{ cashierShift() ? 'Turno abierto' : 'Abrir turno' }}</button>
+      @if (canOperate() && canChargeToAccount()) {
+        <button class="stock-manage-button" type="button" (click)="collectionDialog.set(true)">Cobrar cuenta</button>
+      }
       @if (canOperate() && session()?.context?.permissions?.includes('inventory.stock.manage')) {
         <button class="stock-manage-button" type="button" aria-label="Administrar stock" title="Administrar stock" (click)="openInventory()">Stock</button>
       }
@@ -363,6 +366,7 @@
             </select>
             @if (creditCustomerAccount(); as account) {
               <p class="credit-account-summary" role="status">Deuda registrada: <strong>{{ formatMoney(account.totalDebt) }}</strong> · Ventas a cuenta: {{ account.saleCount }}</p>
+              <p class="credit-account-summary">Saldo a favor disponible: <strong>{{ formatMoney(account.creditAvailable) }}</strong></p>
             } @else if (creditCustomerAccountStatus() === 'loading') {
               <p role="status">Consultando saldo del cliente…</p>
             } @else if (creditCustomerAccountStatus() === 'error') {
@@ -374,11 +378,18 @@
             }
             <label for="account-charge">Importe a cuenta corriente</label>
             <input id="account-charge" type="number" min="0" step="0.01" [max]="subtotal()" [value]="accountChargeDraft()" [disabled]="checkoutBusy()" (input)="updateAccountCharge($event)" />
+            <label for="credit-applied">Aplicar saldo a favor (parcial o total)</label>
+            <input id="credit-applied" type="number" min="0" step="0.01"
+              [max]="creditCustomerAccount()?.creditAvailable ?? 0" [value]="creditAppliedDraft()"
+              [disabled]="checkoutBusy() || !creditCustomerAccount()" (input)="updateCreditApplied($event)" />
           </section>
         }
         <div class="checkout-total"><span>Total del ticket</span><strong>{{ formatMoney(subtotal()) }}</strong></div>
         @if (accountChargeAmount() > 0) {
           <p class="payment-balance"><span>A cuenta corriente</span><strong>{{ formatMoney(accountChargeAmount()) }}</strong></p>
+        }
+        @if (creditAppliedAmount() > 0) {
+          <p class="payment-balance"><span>Saldo a favor aplicado (sin ingreso de caja)</span><strong>{{ formatMoney(creditAppliedAmount()) }}</strong></p>
         }
         @if (paymentBalance() > 0) { <p class="payment-balance" role="status">Falta cubrir: <strong>{{ formatMoney(paymentBalance()) }}</strong></p> }
         @if (paymentProblem(); as problem) { <p class="payment-guidance" role="status">{{ problem }}</p> }
@@ -407,6 +418,10 @@
         @if (sale.accountChargeAmount > 0) {
           <p class="checkout-context">Cliente: {{ sale.customerName }} ({{ sale.customerCode }})</p>
           <p class="payment-balance"><span>A cuenta corriente</span><strong>{{ formatMoney(sale.accountChargeAmount) }}</strong></p>
+        }
+        @if (sale.creditAppliedAmount > 0) {
+          <p class="checkout-context">Cliente: {{ sale.customerName }} ({{ sale.customerCode }})</p>
+          <p class="payment-balance"><span>Saldo a favor aplicado</span><strong>{{ formatMoney(sale.creditAppliedAmount) }}</strong></p>
         }
         @if (sale.changeAmount > 0) {
           <p class="change-preview">Vuelto en efectivo: <strong>{{ formatMoney(sale.changeAmount) }}</strong></p>
@@ -452,6 +467,9 @@
             <span>De esas ventas, en efectivo</span><strong>{{ formatMoney(shift.cashSales) }}</strong>
             <span>Otros medios</span><strong>{{ formatMoney(shift.nonCashSales) }}</strong>
             <span>A cuenta corriente (sin ingreso de caja)</span><strong>{{ formatMoney(shift.accountSales) }}</strong>
+            <span>Saldo a favor aplicado (sin ingreso de caja)</span><strong>{{ formatMoney(shift.creditApplied) }}</strong>
+            <span>Cobranzas de cuenta en efectivo</span><strong>{{ formatMoney(shift.cashCollections) }}</strong>
+            <span>Cobranzas de cuenta por otros medios</span><strong>{{ formatMoney(shift.nonCashCollections) }}</strong>
             <span>Efectivo registrado en caja</span><strong>{{ formatMoney(shift.cashBalance) }}</strong>
             <small>Turno {{ shift.id.slice(0, 8) }} · El saldo no es un arqueo físico.</small>
           </div>
@@ -470,6 +488,9 @@
               <span>De esas ventas, en efectivo</span><strong>{{ formatMoney(closed.cashSales) }}</strong>
               <span>Otros medios</span><strong>{{ formatMoney(closed.nonCashSales) }}</strong>
               <span>A cuenta corriente (sin ingreso de caja)</span><strong>{{ formatMoney(closed.accountSales) }}</strong>
+              <span>Saldo a favor aplicado (sin ingreso de caja)</span><strong>{{ formatMoney(closed.creditApplied) }}</strong>
+              <span>Cobranzas de cuenta en efectivo</span><strong>{{ formatMoney(closed.cashCollections) }}</strong>
+              <span>Cobranzas de cuenta por otros medios</span><strong>{{ formatMoney(closed.nonCashCollections) }}</strong>
               <span>Efectivo registrado al cierre</span><strong>{{ formatMoney(closed.cashBalance) }}</strong>
               <small>Saldo calculado desde movimientos; no representa un arqueo físico.</small>
             </div>
@@ -528,5 +549,9 @@
         }
       </section>
     </div>
+  }
+  @if (collectionDialog()) {
+    <app-account-collection-dialog [scopeKey]="collectionScopeKey()" (closed)="collectionDialog.set(false)"
+      (completed)="loadCashierShift()" />
   }
 </div>

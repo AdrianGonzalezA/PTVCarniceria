@@ -35,6 +35,7 @@ export interface ConfirmedSale {
   readonly customerCode: string | null;
   readonly customerName: string | null;
   readonly accountChargeAmount: number;
+  readonly creditAppliedAmount: number;
   readonly lines: readonly { readonly code: string; readonly name: string; readonly unit: string; readonly quantity: number; readonly unitPrice: number; readonly lineTotal: number; readonly pieceIdentifier?: string | null }[];
   readonly payments: readonly { readonly method: SalePaymentMethod; readonly tenderedAmount: number; readonly appliedAmount: number }[];
 }
@@ -61,11 +62,11 @@ export class SaleDraftClient {
   }
 
   confirm(draftId: string, payments: readonly { readonly method: SalePaymentMethod; readonly amount: number }[],
-    account?: { readonly customerId: string; readonly amount: number }) {
+    account?: { readonly customerId: string; readonly amount: number; readonly creditAppliedAmount: number }) {
     return this.http.post<ConfirmedSale>(`/api/sales/drafts/${draftId}/confirmation`, {
       payments,
       ...(account ? { customerId: account.customerId, accountChargeAmount: account.amount,
-        accountChargeConfirmed: true } : {}),
+        creditAppliedAmount: account.creditAppliedAmount, accountChargeConfirmed: account.amount > 0 } : {}),
     }, { withCredentials: true });
   }
 

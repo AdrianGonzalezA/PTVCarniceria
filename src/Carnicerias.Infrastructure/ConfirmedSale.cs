@@ -79,6 +79,7 @@ public sealed class ConfirmedSaleLine
         ProductSaleMode saleMode, decimal quantity, decimal unitPrice,
         Guid? inventoryPieceId = null, string? pieceIdentifier = null)
     {
+        Id = Guid.NewGuid();
         CompanyId = companyId;
         ProductId = productId;
         ProductCode = code;
@@ -105,6 +106,30 @@ public sealed class ConfirmedSaleLine
     public decimal LineTotal { get; private set; }
     public Guid? InventoryPieceId { get; private set; }
     public string? PieceIdentifier { get; private set; }
+    public decimal OrderDiscountAmount { get; private set; }
+    public decimal? NetAfterDiscount { get; private set; }
+    public Guid? TaxRuleId { get; private set; }
+    public SaleTaxTreatment? TaxTreatment { get; private set; }
+    public decimal? TaxRatePercent { get; private set; }
+    public decimal? TaxableBase { get; private set; }
+    public decimal? TaxAmount { get; private set; }
+
+    public void SetAmountSnapshot(SaleLineAmount amount, ProductTaxRule? rule)
+    {
+        if (amount.LineId != Id || amount.GrossBeforeDiscount != LineTotal ||
+            amount.LineDiscount != 0 || amount.Total < 0 ||
+            amount.OrderDiscount < 0 || amount.Total + amount.OrderDiscount != LineTotal ||
+            (rule is not null && (rule.CompanyId != CompanyId || rule.ProductId != ProductId ||
+                rule.Treatment != amount.TaxTreatment || rule.RatePercent != amount.TaxRatePercent)))
+            throw new ArgumentException("The amount snapshot does not match the confirmed line.", nameof(amount));
+        OrderDiscountAmount = amount.OrderDiscount;
+        NetAfterDiscount = amount.Total;
+        TaxRuleId = rule?.Id;
+        TaxTreatment = rule?.Treatment;
+        TaxRatePercent = rule?.RatePercent;
+        TaxableBase = rule is null ? null : amount.TaxableBase;
+        TaxAmount = rule is null ? null : amount.TaxAmount;
+    }
 }
 
 public sealed class SalePayment

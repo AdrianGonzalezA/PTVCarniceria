@@ -154,6 +154,10 @@ export class HistoryPage implements OnInit {
     return names[method] ?? method;
   }
 
+  protected taxTreatmentLabel(treatment: string): string {
+    return { Taxed: 'Gravado', Exempt: 'Exento', NotTaxed: 'No alcanzado' }[treatment] ?? treatment;
+  }
+
   protected cashKindLabel(kind: CashHistoryItem['kind']): string {
     return { opening: 'Apertura', salePayment: 'Cobro', change: 'Vuelto' }[kind];
   }

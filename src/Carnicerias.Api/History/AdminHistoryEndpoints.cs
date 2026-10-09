@@ -155,10 +155,24 @@ public static class AdminHistoryEndpoints
             sale.Total,
             sale.DiscountAmount,
             sale.DiscountReason,
+            sale.Lines.Any(line => line.NetAfterDiscount is null) ? "legacy" :
+                sale.Lines.Any(line => line.TaxRuleId is null) ? "unconfigured" : "complete",
+            sale.Lines.All(line => line.TaxRuleId is not null)
+                ? sale.Lines.Sum(line => line.TaxableBase ?? 0m) : null,
+            sale.Lines.All(line => line.TaxRuleId is not null)
+                ? sale.Lines.Sum(line => line.TaxAmount ?? 0m) : null,
+            sale.Lines.All(line => line.TaxRuleId is not null)
+                ? sale.Lines.Where(line => line.TaxTreatment == Carnicerias.Domain.Sales.SaleTaxTreatment.Exempt)
+                    .Sum(line => line.NetAfterDiscount ?? 0m) : null,
+            sale.Lines.All(line => line.TaxRuleId is not null)
+                ? sale.Lines.Where(line => line.TaxTreatment == Carnicerias.Domain.Sales.SaleTaxTreatment.NotTaxed)
+                    .Sum(line => line.NetAfterDiscount ?? 0m) : null,
             sale.Lines.OrderBy(line => line.ProductName).Select(line => new SaleLineItem(
                 line.ProductCode, line.ProductName, line.Unit,
                 line.SaleMode == ProductSaleMode.Unit ? "unit" : "weight",
-                line.Quantity, line.UnitPrice, line.LineTotal)).ToArray(),
+                line.Quantity, line.UnitPrice, line.LineTotal,
+                line.OrderDiscountAmount, line.NetAfterDiscount, line.TaxTreatment?.ToString(),
+                line.TaxRatePercent, line.TaxableBase, line.TaxAmount)).ToArray(),
             sale.Payments.OrderBy(payment => payment.Method).Select(payment => new SalePaymentItem(
                 PaymentMethodName(payment.Method), payment.TenderedAmount, payment.AppliedAmount)).ToArray()));
     }
@@ -319,9 +333,13 @@ public static class AdminHistoryEndpoints
         Guid CashierId, string CashierName, Guid ShiftId);
     private sealed record SaleDetail(Guid Id, DateTimeOffset ConfirmedAtUtc, decimal Total,
         decimal DiscountAmount, string? DiscountReason,
+        string TaxSnapshotStatus, decimal? TaxableBase, decimal? TaxAmount,
+        decimal? ExemptAmount, decimal? NotTaxedAmount,
         SaleLineItem[] Lines, SalePaymentItem[] Payments);
     private sealed record SaleLineItem(string Code, string Name, string Unit, string SaleMode,
-        decimal Quantity, decimal UnitPrice, decimal LineTotal);
+        decimal Quantity, decimal UnitPrice, decimal LineTotal,
+        decimal OrderDiscountAmount, decimal? NetAfterDiscount, string? TaxTreatment,
+        decimal? TaxRatePercent, decimal? TaxableBase, decimal? TaxAmount);
     private sealed record SalePaymentItem(string Method, decimal TenderedAmount, decimal AppliedAmount);
     private sealed record ShiftRow(Guid Id, DateTimeOffset OpenedAtUtc, DateTimeOffset? ClosedAtUtc,
         CashierShiftStatus Status, decimal OpeningCash, Guid BranchId, string BranchName,

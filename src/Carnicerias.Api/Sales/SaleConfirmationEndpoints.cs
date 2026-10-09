@@ -129,6 +129,25 @@ public static class SaleConfirmationEndpoints
             sale.Lines.AddRange(draft.Lines.Select(line => new ConfirmedSaleLine(
                 context.CompanyId, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
                 line.SaleMode, line.Quantity, line.UnitPrice, line.InventoryPieceId, line.PieceIdentifier)));
+            var productIds = sale.Lines.Select(line => line.ProductId).Distinct().ToArray();
+            var taxRules = await db.ProductTaxRules.AsNoTracking()
+                .Where(rule => rule.CompanyId == context.CompanyId && productIds.Contains(rule.ProductId) &&
+                    rule.EffectiveFromUtc <= now && (rule.EffectiveToUtc == null || rule.EffectiveToUtc > now))
+                .ToDictionaryAsync(rule => rule.ProductId, cancellationToken);
+            var calculated = SaleAmountCalculator.Calculate(sale.Lines.Select(line =>
+            {
+                taxRules.TryGetValue(line.ProductId, out var rule);
+                return new SaleAmountInput(line.Id, line.Quantity, line.UnitPrice, 0m,
+                    rule?.Treatment ?? SaleTaxTreatment.NotTaxed, rule?.RatePercent ?? 0m);
+            }).ToArray(), draft.DiscountAmount);
+            if (calculated.Total != total)
+                throw new InvalidOperationException("The fiscal amount snapshot does not reconcile with the sale.");
+            var amounts = calculated.Lines.ToDictionary(line => line.LineId);
+            foreach (var line in sale.Lines)
+            {
+                taxRules.TryGetValue(line.ProductId, out var rule);
+                line.SetAmountSnapshot(amounts[line.Id], rule);
+            }
             sale.Payments.AddRange(settlement.AppliedPayments.Select(payment => new SalePayment(
                 payment.Method, payment.TenderedAmount, payment.AppliedAmount)));
             db.ConfirmedSales.Add(sale);

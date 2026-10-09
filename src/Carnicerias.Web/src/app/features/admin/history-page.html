@@ -143,8 +143,20 @@
           @if (ticket.discountAmount > 0) { <p>Descuento global: − $ {{ ticket.discountAmount | number:'1.2-2' }} · {{ ticket.discountReason }}</p> }
           <h4>Artículos</h4>
           <ul>@for (line of ticket.lines; track line.code) {
-            <li>{{ line.name }} · {{ line.quantity }} {{ line.unit }} × $ {{ line.unitPrice | number:'1.2-2' }} = $ {{ line.lineTotal | number:'1.2-2' }}</li>
+            <li>{{ line.name }} · {{ line.quantity }} {{ line.unit }} × $ {{ line.unitPrice | number:'1.2-2' }} = $ {{ line.lineTotal | number:'1.2-2' }}
+              @if (line.netAfterDiscount !== null) {
+                <br />Descuento asignado: $ {{ line.orderDiscountAmount | number:'1.2-2' }} · Neto comercial: $ {{ line.netAfterDiscount | number:'1.2-2' }}
+              }
+              @if (line.taxTreatment) {
+                <br />Tratamiento configurado: {{ taxTreatmentLabel(line.taxTreatment) }} · Alícuota {{ line.taxRatePercent | number:'1.0-2' }} % · Base $ {{ line.taxableBase | number:'1.2-2' }} · Impuesto $ {{ line.taxAmount | number:'1.2-2' }}
+              } @else if (line.netAfterDiscount !== null) { <br />Sin clasificación fiscal configurada al confirmar. }
+            </li>
           }</ul>
+          @if (ticket.taxSnapshotStatus === 'complete') {
+            <p>Snapshot impositivo completo: base gravada $ {{ ticket.taxableBase | number:'1.2-2' }} · impuesto $ {{ ticket.taxAmount | number:'1.2-2' }} · exento $ {{ ticket.exemptAmount | number:'1.2-2' }} · no alcanzado $ {{ ticket.notTaxedAmount | number:'1.2-2' }}. Cálculo informativo, no factura.</p>
+          } @else if (ticket.taxSnapshotStatus === 'unconfigured') {
+            <p>Snapshot impositivo incompleto: uno o más artículos no tenían clasificación fiscal configurada. No emitir factura con este cálculo.</p>
+          } @else { <p>Venta anterior al registro de snapshots impositivos. No recalcularla con reglas actuales.</p> }
           <h4>Pagos</h4>
           <ul>@for (payment of ticket.payments; track payment.method) {
             <li>{{ paymentLabel(payment.method) }}: $ {{ payment.appliedAmount | number:'1.2-2' }} aplicado

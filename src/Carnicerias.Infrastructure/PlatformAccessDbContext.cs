@@ -681,6 +681,12 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(line => line.Quantity).HasPrecision(12, 3);
             entity.Property(line => line.UnitPrice).HasPrecision(12, 2);
             entity.Property(line => line.LineTotal).HasPrecision(12, 2);
+            entity.Property(line => line.OrderDiscountAmount).HasPrecision(12, 2);
+            entity.Property(line => line.NetAfterDiscount).HasPrecision(12, 2);
+            entity.Property(line => line.TaxTreatment).HasConversion<int?>();
+            entity.Property(line => line.TaxRatePercent).HasPrecision(5, 2);
+            entity.Property(line => line.TaxableBase).HasPrecision(12, 2);
+            entity.Property(line => line.TaxAmount).HasPrecision(12, 2);
             entity.Property(line => line.PieceIdentifier).HasMaxLength(80);
             entity.HasOne<InventoryPiece>().WithMany().HasForeignKey(line => line.InventoryPieceId)
                 .OnDelete(DeleteBehavior.Restrict);

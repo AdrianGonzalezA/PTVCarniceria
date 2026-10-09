@@ -57,6 +57,11 @@ export interface SaleDetail {
   readonly total: number;
   readonly discountAmount: number;
   readonly discountReason: string | null;
+  readonly taxSnapshotStatus: 'legacy' | 'unconfigured' | 'complete';
+  readonly taxableBase: number | null;
+  readonly taxAmount: number | null;
+  readonly exemptAmount: number | null;
+  readonly notTaxedAmount: number | null;
   readonly lines: readonly {
     readonly code: string;
     readonly name: string;
@@ -65,6 +70,12 @@ export interface SaleDetail {
     readonly quantity: number;
     readonly unitPrice: number;
     readonly lineTotal: number;
+    readonly orderDiscountAmount: number;
+    readonly netAfterDiscount: number | null;
+    readonly taxTreatment: string | null;
+    readonly taxRatePercent: number | null;
+    readonly taxableBase: number | null;
+    readonly taxAmount: number | null;
   }[];
   readonly payments: readonly {
     readonly method: string;

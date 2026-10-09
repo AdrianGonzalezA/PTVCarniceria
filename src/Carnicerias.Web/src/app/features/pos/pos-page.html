@@ -415,8 +415,8 @@
             </div>
             @if (mercadoPagoIntent(); as intent) {
               <p class="mercado-pago-state" role="status">Orden {{ intent.providerOrderId || 'pendiente de respuesta' }} ·
-                {{ intent.approved ? 'Acreditado' : intent.status === 'Expired' ? 'Vencido' : intent.status === 'Rejected' ? 'Rechazado' : 'Pendiente' }}</p>
-              @if (intent.mode === 'qr' && mercadoPagoQrImage(); as image) {
+                {{ intent.approved ? 'Acreditado' : intent.status === 'Canceled' ? 'Cancelado' : intent.status === 'Expired' ? 'Vencido' : intent.status === 'Rejected' ? 'Rechazado' : 'Pendiente' }}</p>
+              @if (intent.mode === 'qr' && mercadoPagoOrderActive() && !intent.approved && mercadoPagoQrImage(); as image) {
                 <img class="mercado-pago-qr" [src]="image" alt="QR de Mercado Pago para esta venta" width="240" height="240" />
               } @else if (intent.mode === 'point' && intent.providerOrderId) {
                 <p>La orden se envió a la terminal Point configurada para esta caja.</p>

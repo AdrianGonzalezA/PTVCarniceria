@@ -1150,16 +1150,21 @@ describe('PosPage', () => {
       .toContain('no corresponde a un artículo ni a una pieza');
   });
 
-  it('allows another Mercado Pago order after a rejected payment without closing the sale', async () => {
+  it.each([
+    ['Rejected', 'Rechazado'],
+    ['Canceled', 'Cancelado'],
+  ])('allows another Mercado Pago order after %s and labels it %s', async (status, label) => {
     const session: CurrentSession = {
       userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-09T20:00:00Z',
       context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
         branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
     };
-    const pending = { id: 'intent-id', mode: 'point', amount: 2500, status: 'Pending',
-      providerOrderId: 'order-id', qrData: null, approved: false, createdAtUtc: '2026-10-09T16:00:00Z' };
+    const paymentMode = status === 'Canceled' ? 'qr' : 'point';
+    const pending = { id: 'intent-id', mode: paymentMode, amount: 2500, status: 'Pending',
+      providerOrderId: 'order-id', qrData: paymentMode === 'qr' ? 'https://mpago.la/test' : null,
+      approved: false, createdAtUtc: '2026-10-09T16:00:00Z' };
     const start = vi.fn().mockReturnValue(of(pending));
-    const check = vi.fn().mockReturnValue(of({ ...pending, status: 'Rejected' }));
+    const check = vi.fn().mockReturnValue(of({ ...pending, status }));
     TestBed.configureTestingModule({ providers: [
       provideRouter([]),
       { provide: SessionClient, useValue: { current: () => of(session) } },
@@ -1184,17 +1189,23 @@ describe('PosPage', () => {
     options[4].click();
     fixture.detectChanges();
     const mode = fixture.nativeElement.querySelector('#mercado-pago-mode') as HTMLSelectElement;
-    mode.value = 'point';
+    mode.value = paymentMode;
     mode.dispatchEvent(new Event('change', { bubbles: true }));
     const request = fixture.nativeElement.querySelector('.mercado-pago-actions button') as HTMLButtonElement;
     request.click();
     fixture.detectChanges();
+    if (paymentMode === 'qr') await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.mercado-pago-qr')).not.toBeNull();
+    });
     expect(request.disabled).toBe(true);
     (fixture.nativeElement.querySelectorAll('.mercado-pago-actions button')[1] as HTMLButtonElement).click();
     fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.mercado-pago-state').textContent).toContain(label);
+    if (paymentMode === 'qr') expect(fixture.nativeElement.querySelector('.mercado-pago-qr')).toBeNull();
     expect(request.disabled).toBe(false);
     expect(mode.disabled).toBe(false);
-    expect(start).toHaveBeenCalledWith('draft-id', 'point', 2500);
+    expect(start).toHaveBeenCalledWith('draft-id', paymentMode, 2500);
     expect(check).toHaveBeenCalledWith('draft-id', 'intent-id');
   });
 });

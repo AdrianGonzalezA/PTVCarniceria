@@ -2,6 +2,8 @@
 
 **Estado (9/10/2026):** relevamiento técnico y orden de desarrollo, no habilitación fiscal ni conexión productiva. El usuario autorizó avanzar sin detener el desarrollo por preguntas de implementación; las decisiones tributarias definitivas requieren validar el encuadre de cada empresa y artículo antes de emitir comprobantes reales. Se mantiene **solo** `carnicerias_test_visual` (55433) durante este desarrollo.
 
+**Primer componente técnico:** `SaleAmountCalculator` calcula importes desde precios finales, distribuye descuentos globales en centavos de forma determinística y extrae bases/IVA para tratamientos gravado, exento y no gravado. Tiene pruebas unitarias; todavía **no** está conectado al catálogo, borradores, cobro ni emisión fiscal. Ninguna venta existente se recalcula.
+
 ## Situación actual y frontera
 
 El POS confirma ventas y stock, permite pagos inmediatos, cuenta corriente, cobranzas y recibos **internos no fiscales**. `PaymentMethod` ya distingue efectivo, débito, crédito, transferencia, Mercado Pago y cheque, pero los últimos cinco son por ahora importes **declarados por el cajero**, no confirmaciones de un adquirente ni instrumentos bancarios con trazabilidad. No hay alícuotas/impuestos por artículo, descuentos persistidos, CAE ni vínculo con un punto de venta ARCA. El PDF/ticket actual no es factura. La vista Negocio es comercial, no un libro IVA.

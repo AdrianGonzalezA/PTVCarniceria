@@ -13,5 +13,6 @@ src/Carnicerias.Pos/web/
 **/.env.*
 **/appsettings.Local.json
 **/appsettings.*.Local.json
+Documentos/Arca/
 INFORME_ROTACION_COLABORADORES_2026.md
 diferencia_desposte_ultimas_20_producciones.csv

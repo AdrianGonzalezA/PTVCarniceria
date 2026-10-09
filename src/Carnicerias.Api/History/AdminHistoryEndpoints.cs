@@ -153,6 +153,8 @@ public static class AdminHistoryEndpoints
             sale.Id,
             sale.ConfirmedAtUtc,
             sale.Total,
+            sale.DiscountAmount,
+            sale.DiscountReason,
             sale.Lines.OrderBy(line => line.ProductName).Select(line => new SaleLineItem(
                 line.ProductCode, line.ProductName, line.Unit,
                 line.SaleMode == ProductSaleMode.Unit ? "unit" : "weight",
@@ -316,6 +318,7 @@ public static class AdminHistoryEndpoints
         Guid BranchId, string BranchName, Guid? TerminalId, string? TerminalName,
         Guid CashierId, string CashierName, Guid ShiftId);
     private sealed record SaleDetail(Guid Id, DateTimeOffset ConfirmedAtUtc, decimal Total,
+        decimal DiscountAmount, string? DiscountReason,
         SaleLineItem[] Lines, SalePaymentItem[] Payments);
     private sealed record SaleLineItem(string Code, string Name, string Unit, string SaleMode,
         decimal Quantity, decimal UnitPrice, decimal LineTotal);

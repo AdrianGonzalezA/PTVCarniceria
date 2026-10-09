@@ -550,13 +550,16 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
         modelBuilder.Entity<SaleDraft>(entity =>
         {
-            entity.ToTable("sale_drafts", "pos_sales");
+            entity.ToTable("sale_drafts", "pos_sales", table => table.HasCheckConstraint(
+                "CK_sale_drafts_discount", "\"DiscountAmount\" >= 0 AND (\"DiscountAmount\" = 0 OR \"DiscountReason\" IS NOT NULL)"));
             entity.HasKey(draft => draft.Id);
             entity.HasAlternateKey(draft => new { draft.CompanyId, draft.Id });
             entity.Property(draft => draft.CreatedAtUtc).IsRequired();
             entity.Property(draft => draft.UpdatedAtUtc).IsRequired();
             entity.Property(draft => draft.Status).HasConversion<int>().IsRequired();
             entity.Property(draft => draft.TicketSlot).HasConversion<string>().HasMaxLength(1).IsRequired();
+            entity.Property(draft => draft.DiscountAmount).HasPrecision(12, 2);
+            entity.Property(draft => draft.DiscountReason).HasMaxLength(200);
             entity.HasOne<Branch>().WithMany()
                 .HasForeignKey(draft => new { draft.CompanyId, draft.BranchId })
                 .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
@@ -614,6 +617,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.ToTable("confirmed_sales", "pos_sales", table =>
             {
                 table.HasCheckConstraint("CK_confirmed_sales_total_positive", "\"Total\" > 0");
+                table.HasCheckConstraint("CK_confirmed_sales_discount", "\"DiscountAmount\" >= 0 AND (\"DiscountAmount\" = 0 OR \"DiscountReason\" IS NOT NULL)");
                 table.HasCheckConstraint("CK_confirmed_sales_account_charge",
                     "\"AccountChargeAmount\" >= 0 AND \"CreditAppliedAmount\" >= 0 AND \"AccountChargeAmount\" + \"CreditAppliedAmount\" <= \"Total\" AND (\"AccountChargeAmount\" + \"CreditAppliedAmount\" = 0 OR (\"CustomerId\" IS NOT NULL AND \"CustomerCode\" IS NOT NULL AND \"CustomerName\" IS NOT NULL))");
             });
@@ -622,6 +626,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(sale => sale.Total).HasPrecision(12, 2);
             entity.Property(sale => sale.AccountChargeAmount).HasPrecision(12, 2);
             entity.Property(sale => sale.CreditAppliedAmount).HasPrecision(12, 2);
+            entity.Property(sale => sale.DiscountAmount).HasPrecision(12, 2);
+            entity.Property(sale => sale.DiscountReason).HasMaxLength(200);
             entity.Property(sale => sale.CustomerCode).HasMaxLength(80);
             entity.Property(sale => sale.CustomerName).HasMaxLength(200);
             entity.Property(sale => sale.PaymentRequestHash).HasMaxLength(64).IsRequired();

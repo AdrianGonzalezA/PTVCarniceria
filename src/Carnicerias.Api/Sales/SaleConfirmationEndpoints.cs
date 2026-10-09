@@ -74,8 +74,11 @@ public static class SaleConfirmationEndpoints
             if (accessor.TerminalId is not null && draft.CashierShiftId != shift.Id)
                 return Error(StatusCodes.Status409Conflict, "SALE_NOT_CONFIRMABLE");
 
-            var total = draft.Lines.Sum(line => decimal.Round(
-                line.Quantity * line.UnitPrice, 2, MidpointRounding.AwayFromZero));
+            if (draft.DiscountAmount > 0 &&
+                !context.Permissions.Contains(PlatformPermissionCatalog.PosDiscountApply))
+                return Error(StatusCodes.Status403Forbidden, "DISCOUNT_FORBIDDEN");
+            var total = draft.TotalAfterDiscount;
+            if (total <= 0) return Error(StatusCodes.Status409Conflict, "SALE_NOT_CONFIRMABLE");
             CustomerAccount? creditCustomer = null;
             if (request.AccountChargeAmount > 0 || request.CreditAppliedAmount > 0)
             {
@@ -122,7 +125,7 @@ public static class SaleConfirmationEndpoints
             var sale = new ConfirmedSale(context.CompanyId, context.BranchId, context.UserId,
                 shift.Id, draft.Id, draft.PriceListId, total, requestHash, now, accessor.TerminalId,
                 request.CustomerId, request.AccountChargeAmount, creditCustomer?.Code, creditCustomer?.Name,
-                request.CreditAppliedAmount);
+                request.CreditAppliedAmount, draft.DiscountAmount, draft.DiscountReason);
             sale.Lines.AddRange(draft.Lines.Select(line => new ConfirmedSaleLine(
                 context.CompanyId, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
                 line.SaleMode, line.Quantity, line.UnitPrice, line.InventoryPieceId, line.PieceIdentifier)));
@@ -243,7 +246,7 @@ public static class SaleConfirmationEndpoints
 
     private static SaleConfirmationResponse ToResponse(ConfirmedSale sale, decimal change) => new(
         sale.Id, sale.Total, change, sale.ConfirmedAtUtc, sale.CustomerId, sale.AccountChargeAmount,
-        sale.CreditAppliedAmount,
+        sale.CreditAppliedAmount, sale.DiscountAmount, sale.DiscountReason,
         sale.CustomerCode, sale.CustomerName,
         sale.Lines.OrderBy(line => line.ProductName).ThenBy(line => line.PieceIdentifier)
             .Select(line => new SaleConfirmationLineResponse(
@@ -280,7 +283,7 @@ public static class SaleConfirmationEndpoints
     private sealed record PaymentRequest(string? Method, decimal Amount);
     private sealed record SaleConfirmationResponse(Guid Id, decimal Total, decimal ChangeAmount,
         DateTimeOffset ConfirmedAtUtc, Guid? CustomerId, decimal AccountChargeAmount,
-        decimal CreditAppliedAmount,
+        decimal CreditAppliedAmount, decimal DiscountAmount, string? DiscountReason,
         string? CustomerCode, string? CustomerName,
         IReadOnlyList<SaleConfirmationLineResponse> Lines,
         IReadOnlyList<SaleConfirmationPaymentResponse> Payments);

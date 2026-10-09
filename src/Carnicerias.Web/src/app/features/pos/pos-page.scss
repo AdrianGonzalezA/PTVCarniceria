@@ -237,6 +237,12 @@
   .ticket-panel { padding: 0.55rem; }
 }
 
+.sale-discount-fields { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: end; padding: 0.7rem; border-top: 1px solid #d5d8d4; background: #f2f4f0; }
+.sale-discount-fields label { display: grid; gap: 0.25rem; min-width: 10rem; font-size: 0.72rem; font-weight: 700; }
+.sale-discount-fields input { width: 100%; min-height: 2.2rem; padding: 0.25rem 0.4rem; border: 1px solid #7f8e8d; background: white; color: #1c2221; }
+.sale-discount-fields p { width: 100%; margin: 0; color: #a63024; font-size: 0.72rem; }
+.total-field small { display: block; font-size: 0.68rem; font-weight: 500; }
+
 @media (max-width: 48rem) {
   .pos-header { padding-inline: 0.7rem; }
   .brand-mark { display: none; }

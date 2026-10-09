@@ -25,11 +25,27 @@ async function main() {
     socket.addEventListener('message', onMessage);
     socket.send(JSON.stringify({ id, method, params }));
   });
+  const navigation = process.argv.find((item) => item.startsWith('--navigate='));
+  if (navigation) {
+    await send('Page.navigate', { url: navigation.slice(11) });
+    await new Promise((done) => setTimeout(done, 1800));
+  } else if (process.argv.includes('--reload')) {
+    await send('Page.reload', { ignoreCache: true });
+    await new Promise((done) => setTimeout(done, 1200));
+  }
+  if (process.argv.includes('--click-first-detail')) {
+    await send('Runtime.evaluate', { expression: "document.querySelector('table tbody button')?.click()" });
+    await new Promise((done) => setTimeout(done, 450));
+    await send('Runtime.evaluate', { expression: "document.querySelector('.ticket-detail')?.scrollIntoView()" });
+  }
   const state = await send('Runtime.evaluate', {
-    expression: `({ title: document.title, headings: [...document.querySelectorAll('h1,h2')]
+    expression: `({ title: document.title, readyState: document.readyState,
+      location: location.href, htmlLength: document.documentElement?.outerHTML.length,
+      headings: [...document.querySelectorAll('h1,h2')]
       .map(item => item.textContent?.trim()).slice(0, 12),
       buttons: [...document.querySelectorAll('button')].map(item => item.textContent?.trim()).filter(Boolean).slice(0, 30),
-      text: document.body.innerText.slice(0, 1200) })`, returnByValue: true,
+      text: document.body.innerText.slice(0, 1200),
+      detail: document.querySelector('.ticket-detail')?.innerText ?? null })`, returnByValue: true,
   });
   console.log(JSON.stringify(state.result.value, null, 2));
   if (process.argv.includes('--screenshot')) {

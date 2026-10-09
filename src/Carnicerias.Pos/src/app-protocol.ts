@@ -4,8 +4,9 @@ const applicationOrigin = 'app://bundle';
 const backendOrigin = 'http://localhost:5197';
 const angularRoutes = new Set([
   '', '/', '/pos', '/users', '/admin', '/admin/configuracion',
-  '/admin/categories', '/admin/products', '/admin/price-lists', '/admin/organization',
+  '/admin/categories', '/admin/products', '/admin/taxes', '/admin/price-lists', '/admin/organization',
   '/admin/customers', '/admin/stock', '/admin/barcode-layouts', '/admin/pieces', '/admin/history',
+  '/admin/accounts',
 ]);
 
 export function resolveAppAsset(webRoot: string, candidate: string): string {

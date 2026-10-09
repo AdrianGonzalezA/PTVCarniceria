@@ -8,6 +8,8 @@ export interface ReceiptRequest {
   readonly changeAmount: number;
   readonly accountChargeAmount: number;
   readonly creditAppliedAmount: number;
+  readonly discountAmount?: number;
+  readonly discountReason?: string | null;
   readonly customerCode: string | null;
   readonly customerName: string | null;
   readonly lines: readonly {
@@ -54,6 +56,8 @@ export function validateReceiptRequest(value: unknown): ReceiptRequest {
   const total = amount(data['total'], true);
   const accountChargeAmount = amount(data['accountChargeAmount'] ?? 0);
   const creditAppliedAmount = amount(data['creditAppliedAmount'] ?? 0);
+  const discountAmount = amount(data['discountAmount'] ?? 0);
+  const discountReason = discountAmount > 0 ? label(data['discountReason'], 200) : null;
   if (accountChargeAmount + creditAppliedAmount > total ||
       (payments.length === 0 && accountChargeAmount + creditAppliedAmount !== total))
     throw new Error('Invalid receipt settlement');
@@ -71,6 +75,8 @@ export function validateReceiptRequest(value: unknown): ReceiptRequest {
     changeAmount: amount(data['changeAmount']),
     accountChargeAmount,
     creditAppliedAmount,
+    discountAmount,
+    discountReason,
     customerCode,
     customerName,
     lines: lines.map((input: unknown) => {
@@ -116,6 +122,8 @@ export function createReceiptHtml(receipt: ReceiptRequest): string {
     ? `<tr><td>Cuenta corriente</td><td>$ ${money(receipt.accountChargeAmount)}</td></tr>` : '';
   const creditApplied = receipt.creditAppliedAmount > 0
     ? `<tr><td>Saldo a favor aplicado</td><td>$ ${money(receipt.creditAppliedAmount)}</td></tr>` : '';
+  const discount = (receipt.discountAmount ?? 0) > 0
+    ? `<tr><td>Descuento global<small>${escapeHtml(receipt.discountReason ?? '')}</small></td><td>− $ ${money(receipt.discountAmount ?? 0)}</td></tr>` : '';
   const customer = receipt.customerName && receipt.customerCode
     ? `<p class="meta">Cliente: ${escapeHtml(receipt.customerName)} (${escapeHtml(receipt.customerCode)})</p>` : '';
   const date = new Date(receipt.confirmedAtUtc).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
@@ -129,7 +137,7 @@ export function createReceiptHtml(receipt: ReceiptRequest): string {
   </style></head><body><div class="warning">DOCUMENTO DE PRUEBA<br>NO FISCAL</div>
     <h1>${escapeHtml(receipt.branch)}</h1><p class="meta">${escapeHtml(receipt.terminal)} · ${escapeHtml(receipt.cashier)}</p>
     <p class="meta">Venta ${escapeHtml(receipt.saleId)}</p><p class="meta">${escapeHtml(date)}</p>${customer}
-    <h2>Productos</h2><table>${rows}</table><h2>Pagos y saldo a cuenta</h2><table>${payments}${accountCharge}${creditApplied}
+    <h2>Productos</h2><table>${rows}${discount}</table><h2>Pagos y saldo a cuenta</h2><table>${payments}${accountCharge}${creditApplied}
     <tr class="total"><td>Total</td><td>$ ${money(receipt.total)}</td></tr>
     ${receipt.changeAmount > 0 ? `<tr><td>Vuelto</td><td>$ ${money(receipt.changeAmount)}</td></tr>` : ''}</table>
     <p class="footer">Simulación de impresión. No es factura ni comprobante fiscal válido.</p></body></html>`;

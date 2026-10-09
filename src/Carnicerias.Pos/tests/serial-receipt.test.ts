@@ -38,6 +38,13 @@ describe('serial receipt', () => {
     expect(text.match(/TOTAL \$/g)).toHaveLength(1);
   });
 
+  it('prints the discount separately from the gross product values', () => {
+    const text = formatSerialReceipt({ ...receipt, discountAmount: 200,
+      discountReason: 'Promoción de caja' });
+    expect(text).toContain('Descuento global - $ 200,00');
+    expect(text).toContain('Promoción de caja');
+  });
+
   it('prints the account charge separately from money received', () => {
     const text = formatSerialReceipt({ ...receipt, accountChargeAmount: 5200,
       customerCode: 'CLI-001', customerName: 'Cliente prueba',

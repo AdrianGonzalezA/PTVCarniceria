@@ -1004,7 +1004,7 @@ describe('PosPage', () => {
     expect(measuredQuantity.readOnly).toBe(true);
     (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
-    expect(save).toHaveBeenCalledWith('list-id', [expect.objectContaining({ productId: asado.id, quantity: 0.5, inventoryPieceId: 'piece-id' })], 'A');
+    expect(save).toHaveBeenCalledWith('list-id', [expect.objectContaining({ productId: asado.id, quantity: 0.5, inventoryPieceId: 'piece-id' })], 'A', 0, null);
     expect((fixture.nativeElement.querySelector('.quantity-input') as HTMLInputElement).value).toBe('0.5');
     expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('5.750,00');
 
@@ -1023,7 +1023,7 @@ describe('PosPage', () => {
     expect(save).toHaveBeenLastCalledWith('list-id', [
       expect.objectContaining({ productId: asado.id, quantity: 0.5, inventoryPieceId: 'piece-id' }),
       expect.objectContaining({ productId: asado.id, quantity: 0.75, inventoryPieceId: 'piece-id-2' }),
-    ], 'A');
+    ], 'A', 0, null);
 
     search.value = '2999001005009';
     search.dispatchEvent(new Event('input', { bubbles: true }));

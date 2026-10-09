@@ -11,7 +11,8 @@ public sealed class ConfirmedSale
         DateTimeOffset confirmedAtUtc, Guid? posTerminalId = null,
         Guid? customerId = null, decimal accountChargeAmount = 0,
         string? customerCode = null, string? customerName = null,
-        decimal creditAppliedAmount = 0)
+        decimal creditAppliedAmount = 0, decimal discountAmount = 0,
+        string? discountReason = null)
     {
         if (posTerminalId == Guid.Empty)
             throw new ArgumentException("Terminal id cannot be empty.", nameof(posTerminalId));
@@ -24,6 +25,10 @@ public sealed class ConfirmedSale
         if (accountChargeAmount + creditAppliedAmount > 0 && (string.IsNullOrWhiteSpace(customerCode) ||
             string.IsNullOrWhiteSpace(customerName) || customerCode.Length > 80 || customerName.Length > 200))
             throw new ArgumentException("Account settlement requires a customer identity snapshot.");
+        if (total <= 0 || discountAmount < 0 || decimal.Round(discountAmount, 2) != discountAmount ||
+            (discountAmount > 0 && (string.IsNullOrWhiteSpace(discountReason) ||
+                discountReason.Trim().Length is < 10 or > 200)))
+            throw new ArgumentException("A discounted sale requires a valid amount and reason.");
         Id = Guid.NewGuid();
         CompanyId = companyId;
         BranchId = branchId;
@@ -40,6 +45,8 @@ public sealed class ConfirmedSale
         CreditAppliedAmount = creditAppliedAmount;
         CustomerCode = customerCode;
         CustomerName = customerName;
+        DiscountAmount = discountAmount;
+        DiscountReason = discountAmount > 0 ? discountReason?.Trim() : null;
     }
 
     public Guid Id { get; private set; }
@@ -58,6 +65,8 @@ public sealed class ConfirmedSale
     public decimal CreditAppliedAmount { get; private set; }
     public string? CustomerCode { get; private set; }
     public string? CustomerName { get; private set; }
+    public decimal DiscountAmount { get; private set; }
+    public string? DiscountReason { get; private set; }
     public List<ConfirmedSaleLine> Lines { get; private set; } = [];
     public List<SalePayment> Payments { get; private set; } = [];
 }

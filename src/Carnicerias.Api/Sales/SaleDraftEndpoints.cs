@@ -1,5 +1,6 @@
 using Carnicerias.Api.Security;
 using Carnicerias.Infrastructure;
+using Carnicerias.PlatformAccess;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
 
@@ -81,10 +82,16 @@ public static class SaleDraftEndpoints
             request.Lines.Select(line => (line.ProductId, line.InventoryPieceId)).Distinct().Count() != request.Lines.Count ||
             request.Lines.Where(line => line.InventoryPieceId is not null)
                 .Select(line => line.InventoryPieceId).Distinct().Count() !=
-            request.Lines.Count(line => line.InventoryPieceId is not null))
+            request.Lines.Count(line => line.InventoryPieceId is not null) ||
+            request.DiscountAmount < 0 || decimal.Round(request.DiscountAmount, 2) != request.DiscountAmount ||
+            (request.DiscountAmount > 0 && (string.IsNullOrWhiteSpace(request.DiscountReason) ||
+                request.DiscountReason.Trim().Length is < 10 or > 200)))
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var context = accessor.Context;
+        if (request.DiscountAmount > 0 &&
+            !context.Permissions.Contains(PlatformPermissionCatalog.PosDiscountApply))
+            return Error(StatusCodes.Status403Forbidden, "DISCOUNT_FORBIDDEN");
         var now = timeProvider.GetUtcNow();
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var shift = await FindOpenShiftAsync(db, accessor, cancellationToken);
@@ -159,6 +166,11 @@ public static class SaleDraftEndpoints
                 piece?.Id, piece?.ExternalIdentifier));
         }
 
+        var undiscountedTotal = lines.Sum(line => decimal.Round(line.Quantity * line.UnitPrice,
+            2, MidpointRounding.AwayFromZero));
+        if (request.DiscountAmount >= undiscountedTotal)
+            return Error(StatusCodes.Status400BadRequest, "DISCOUNT_EXCEEDS_TOTAL");
+
         if (draft is null)
         {
             draft = new SaleDraft(context.CompanyId, context.BranchId, context.UserId, request.PriceListId, now,
@@ -188,6 +200,7 @@ public static class SaleDraftEndpoints
         }
 
         draft.ReplaceLines(lines, now);
+        draft.SetDiscount(request.DiscountAmount, request.DiscountReason);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return Results.Ok(ToResponse(draft));
@@ -251,6 +264,7 @@ public static class SaleDraftEndpoints
 
     private static SaleDraftResponse ToResponse(SaleDraft draft) => new(
         draft.Id, draft.TicketSlot.ToString(), draft.PriceListId, draft.UpdatedAtUtc,
+        draft.DiscountAmount, draft.DiscountReason,
         draft.Lines.OrderBy(line => line.ProductName).ThenBy(line => line.PieceIdentifier)
             .Select(line => new SaleDraftLineResponse(
                 line.Id, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
@@ -262,9 +276,11 @@ public static class SaleDraftEndpoints
             new Carnicerias.Api.Contracts.ApiError(code, "No se pudo completar la solicitud", [])),
         statusCode: statusCode);
 
-    private sealed record SaveSaleDraftRequest(Guid PriceListId, IReadOnlyList<SaveSaleDraftLineRequest> Lines);
+    private sealed record SaveSaleDraftRequest(Guid PriceListId, IReadOnlyList<SaveSaleDraftLineRequest> Lines,
+        decimal DiscountAmount = 0, string? DiscountReason = null);
     private sealed record SaveSaleDraftLineRequest(Guid ProductId, decimal Quantity, Guid? InventoryPieceId = null);
     private sealed record SaleDraftResponse(Guid Id, string TicketSlot, Guid PriceListId, DateTimeOffset UpdatedAtUtc,
+        decimal DiscountAmount, string? DiscountReason,
         IReadOnlyList<SaleDraftLineResponse> Lines);
     private sealed record SaleDraftLineResponse(Guid Id, Guid ProductId, string ProductCode, string ProductName,
         string Unit, string SaleMode, decimal Quantity, decimal UnitPrice,

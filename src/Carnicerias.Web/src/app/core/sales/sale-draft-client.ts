@@ -19,6 +19,8 @@ export interface SaleDraft {
   readonly ticketSlot: SaleTicketSlot;
   readonly priceListId: string;
   readonly updatedAtUtc: string;
+  readonly discountAmount?: number;
+  readonly discountReason?: string | null;
   readonly lines: readonly SaleDraftLine[];
 }
 
@@ -36,6 +38,8 @@ export interface ConfirmedSale {
   readonly customerName: string | null;
   readonly accountChargeAmount: number;
   readonly creditAppliedAmount: number;
+  readonly discountAmount?: number;
+  readonly discountReason?: string | null;
   readonly lines: readonly { readonly code: string; readonly name: string; readonly unit: string; readonly quantity: number; readonly unitPrice: number; readonly lineTotal: number; readonly pieceIdentifier?: string | null }[];
   readonly payments: readonly { readonly method: SalePaymentMethod; readonly tenderedAmount: number; readonly appliedAmount: number }[];
 }
@@ -53,8 +57,9 @@ export class SaleDraftClient {
   }
 
   save(priceListId: string, lines: readonly { readonly productId: string; readonly quantity: number; readonly inventoryPieceId?: string }[],
-    slot: SaleTicketSlot = 'A') {
-    return this.http.put<SaleDraft>(this.draftUrl(slot), { priceListId, lines }, { withCredentials: true });
+    slot: SaleTicketSlot = 'A', discountAmount = 0, discountReason: string | null = null) {
+    return this.http.put<SaleDraft>(this.draftUrl(slot),
+      { priceListId, lines, discountAmount, discountReason }, { withCredentials: true });
   }
 
   cancel(slot: SaleTicketSlot = 'A') {

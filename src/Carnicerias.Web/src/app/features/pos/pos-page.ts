@@ -94,7 +94,8 @@ export class PosPage implements OnInit {
   private readonly draftOperations = new Subject<{
     readonly revision: number;
     readonly slot: SaleTicketSlot;
-    readonly operation: 'cancel' | { readonly priceListId: string; readonly lines: readonly SaleLine[] };
+    readonly operation: 'cancel' | { readonly priceListId: string; readonly lines: readonly SaleLine[];
+      readonly discountAmount: number; readonly discountReason: string | null };
   }>();
   private draftRevision = 0;
   private ticketSlotsRequestRevision = 0;
@@ -196,6 +197,13 @@ export class PosPage implements OnInit {
   protected readonly creditCustomerLoading = signal(false);
   protected readonly creditCustomerLoadError = signal<string | null>(null);
   protected readonly accountChargeDraft = signal('0');
+  protected readonly discountDraft = signal('0');
+  protected readonly discountReason = signal('');
+  private readonly persistedDiscountAmount = signal(0);
+  private readonly persistedDiscountReason = signal('');
+  protected readonly discountAmount = computed(() => Number(this.discountDraft().replace(',', '.')));
+  protected readonly canDiscount = computed(() =>
+    !!this.session()?.context?.permissions.includes('pos.discount.apply'));
   protected readonly accountChargeAmount = computed(() => Number(this.accountChargeDraft().replace(',', '.')));
   protected readonly creditAppliedDraft = signal('0');
   protected readonly creditAppliedAmount = computed(() => Number(this.creditAppliedDraft().replace(',', '.')));
@@ -255,7 +263,21 @@ export class PosPage implements OnInit {
   protected readonly adjustmentReason = signal('Carga o ajuste de stock');
   protected readonly inventoryMessage = signal<string | null>(null);
   protected readonly realSearchSubmitted = signal(false);
-  protected readonly subtotal = computed(() => this.lines().reduce((total, line) => total + this.lineTotal(line), 0));
+  protected readonly grossSubtotal = computed(() => this.lines().reduce((total, line) => total + this.lineTotal(line), 0));
+  protected readonly subtotal = computed(() => Math.round((this.grossSubtotal() - this.discountAmount()) * 100) / 100);
+  protected readonly discountProblem = computed(() => {
+    const amount = this.discountAmount();
+    if (!Number.isFinite(amount) || amount < 0 ||
+        Math.abs(Math.round(amount * 100) - amount * 100) > 0.000001 ||
+        (amount > 0 && amount >= this.grossSubtotal()))
+      return 'El descuento debe ser menor al subtotal y tener hasta dos decimales.';
+    if (amount > 0 && !this.canDiscount()) return 'Tu rol no permite aplicar descuentos.';
+    if (amount > 0 && this.discountReason().trim().length < 10)
+      return 'Indicá un motivo de al menos 10 caracteres para el descuento.';
+    if (this.discountReason().trim().length > 200)
+      return 'El motivo del descuento no puede superar 200 caracteres.';
+    return null;
+  });
   protected readonly visibleProducts = computed(() => {
     if (!this.isDemoPriceList()) return this.realSearchSubmitted() || !this.searchText().trim()
       ? this.realProducts()
@@ -282,7 +304,7 @@ export class PosPage implements OnInit {
               productId: line.product.id,
               quantity: line.quantity,
               ...(line.inventoryPieceId ? { inventoryPieceId: line.inventoryPieceId } : {}),
-            })), slot);
+            })), slot, operation.discountAmount, operation.discountReason);
         return request.pipe(
           map((result) => ({ revision, slot, operation, result, error: null as HttpErrorResponse | null })),
           catchError((error: HttpErrorResponse) => of({ revision, slot, operation, result: null, error })),
@@ -296,6 +318,8 @@ export class PosPage implements OnInit {
           if (operation === 'cancel') this.lines.set(this.persistedLines());
           if (['INSUFFICIENT_STOCK', 'PIECE_ALREADY_USED', 'PIECE_NOT_AVAILABLE'].includes(error.error?.error?.code)) {
             this.lines.set(this.persistedLines());
+            this.discountDraft.set(String(this.persistedDiscountAmount()));
+            this.discountReason.set(this.persistedDiscountReason());
             this.draftStatus.set('saved');
             this.errorMessage.set(error.error?.error?.code === 'INSUFFICIENT_STOCK'
               ? 'No hay stock suficiente. El producto o la cantidad rechazada no se agregó al ticket. Revisá las existencias.'
@@ -313,9 +337,13 @@ export class PosPage implements OnInit {
       if (result === null || result === undefined) {
         this.persistedLines.set([]);
         this.draftId.set('');
+        this.persistedDiscountAmount.set(0);
+        this.persistedDiscountReason.set('');
       } else {
         const savedDraft = result as SaleDraft;
         this.draftId.set(savedDraft.id);
+        this.persistedDiscountAmount.set(savedDraft.discountAmount ?? 0);
+        this.persistedDiscountReason.set(savedDraft.discountReason ?? '');
         this.lines.update((currentLines) => currentLines.map((line) => {
           const savedLine = savedDraft.lines.find((item) => item.productId === line.product.id &&
             (item.inventoryPieceId ?? null) === (line.inventoryPieceId ?? null));
@@ -757,9 +785,22 @@ export class PosPage implements OnInit {
     const line = this.lines().find((item) => item.id === lineId);
     if (!line || !window.confirm(`¿Querés quitar ${line.product.name} del detalle?`)) return;
     this.lines.update((lines) => lines.filter((item) => item.id !== lineId));
-    if (this.lines().length === 0 && !this.isDemoPriceList() && this.selectedPriceListId())
+    if (this.lines().length === 0 && !this.isDemoPriceList() && this.selectedPriceListId()) {
+      this.discountDraft.set('0');
+      this.discountReason.set('');
       this.queueDraftOperation('cancel');
-    else this.persistCurrentDraft();
+    } else this.persistCurrentDraft();
+  }
+
+  protected updateDiscountAmount(event: Event): void {
+    this.discountDraft.set((event.target as HTMLInputElement).value);
+    if (this.discountAmount() === 0) this.discountReason.set('');
+    this.persistCurrentDraft();
+  }
+
+  protected updateDiscountReason(event: Event): void {
+    this.discountReason.set((event.target as HTMLInputElement).value);
+    this.persistCurrentDraft();
   }
 
   protected cancelSale(): void {
@@ -769,6 +810,8 @@ export class PosPage implements OnInit {
       this.queueDraftOperation('cancel');
     }
     this.lines.set([]);
+    this.discountDraft.set('0');
+    this.discountReason.set('');
     this.checkoutNotice.set(false);
     this.errorMessage.set(null);
   }
@@ -786,7 +829,11 @@ export class PosPage implements OnInit {
     this.activeTicketSlot.set(slot);
     this.rememberActiveTicket(slot);
     this.lines.set([]);
+    this.discountDraft.set('0');
+    this.discountReason.set('');
     this.persistedLines.set([]);
+    this.persistedDiscountAmount.set(0);
+    this.persistedDiscountReason.set('');
     this.draftId.set('');
     this.errorMessage.set(null);
     this.searchText.set('');
@@ -911,6 +958,10 @@ export class PosPage implements OnInit {
     }
     if (this.draftStatus() === 'error') {
       this.errorMessage.set(this.errorMessage() ?? 'No se pudo guardar el ticket. Revisá el detalle y reintentá el guardado.');
+      return;
+    }
+    if (this.discountProblem()) {
+      this.errorMessage.set(this.discountProblem());
       return;
     }
     if (this.draftStatus() !== 'saved' || !this.draftId()) {
@@ -1159,7 +1210,11 @@ export class PosPage implements OnInit {
     this.serialPrintResult.set(null);
     this.serialPrintError.set(null);
     this.lines.set([]);
+    this.discountDraft.set('0');
+    this.discountReason.set('');
     this.persistedLines.set([]);
+    this.persistedDiscountAmount.set(0);
+    this.persistedDiscountReason.set('');
     this.draftId.set('');
     this.draftStatus.set('saved');
     this.selectedPayments.set([]);
@@ -1331,10 +1386,18 @@ export class PosPage implements OnInit {
       return;
     }
     if (this.lines().length === 0) return;
-    this.queueDraftOperation({ priceListId: this.selectedPriceListId(), lines: this.lines() });
+    if (this.discountProblem()) {
+      this.draftStatus.set('error');
+      this.errorMessage.set(this.discountProblem());
+      return;
+    }
+    this.queueDraftOperation({ priceListId: this.selectedPriceListId(), lines: this.lines(),
+      discountAmount: this.discountAmount(), discountReason: this.discountAmount() > 0
+        ? this.discountReason().trim() : null });
   }
 
-  private queueDraftOperation(operation: 'cancel' | { readonly priceListId: string; readonly lines: readonly SaleLine[] }): void {
+  private queueDraftOperation(operation: 'cancel' | { readonly priceListId: string; readonly lines: readonly SaleLine[];
+    readonly discountAmount: number; readonly discountReason: string | null }): void {
     if (!this.canOperate()) return;
     this.draftStatus.set('saving');
     this.draftOperations.next({ revision: ++this.draftRevision, slot: this.activeTicketSlot(), operation });
@@ -1348,12 +1411,20 @@ export class PosPage implements OnInit {
         if (slot !== this.activeTicketSlot()) return;
         if (!draft) {
           this.lines.set([]);
+          this.discountDraft.set('0');
+          this.discountReason.set('');
           this.persistedLines.set([]);
+          this.persistedDiscountAmount.set(0);
+          this.persistedDiscountReason.set('');
           this.draftId.set('');
           this.draftStatus.set('saved');
           return;
         }
         this.draftId.set(draft.id);
+        this.discountDraft.set(String(draft.discountAmount ?? 0));
+        this.discountReason.set(draft.discountReason ?? '');
+        this.persistedDiscountAmount.set(draft.discountAmount ?? 0);
+        this.persistedDiscountReason.set(draft.discountReason ?? '');
         this.selectedPriceListId.set(draft.priceListId);
         this.lines.set(draft.lines.map((item: SaleDraftLine) => ({
           id: item.id,

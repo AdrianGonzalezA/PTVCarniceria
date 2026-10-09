@@ -43,6 +43,10 @@ export function formatSerialReceipt(receipt: ReceiptRequest): string {
     lines.push(`  ${quantity} ${printable(line.unit)} x $ ${money(line.unitPrice)}`);
     lines.push(`  Importe $ ${money(line.lineTotal)}`);
   }
+  if ((receipt.discountAmount ?? 0) > 0) {
+    lines.push(`Descuento global - $ ${money(receipt.discountAmount ?? 0)}`);
+    lines.push(`  ${printable(receipt.discountReason ?? '')}`);
+  }
   lines.push('----------------------------------------', 'PAGOS');
   for (const payment of receipt.payments)
     lines.push(`${paymentNames[payment.method] ?? printable(payment.method)} $ ${money(payment.appliedAmount)}`);

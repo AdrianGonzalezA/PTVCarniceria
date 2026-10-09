@@ -53,6 +53,10 @@ public sealed class SaleDraft
     public Guid? CancelledByUserId { get; private set; }
     public Guid? ConfirmedSaleId { get; private set; }
     public DateTimeOffset? ConfirmedAtUtc { get; private set; }
+    public decimal DiscountAmount { get; private set; }
+    public string? DiscountReason { get; private set; }
+    public decimal TotalAfterDiscount => Lines.Sum(line => decimal.Round(line.Quantity * line.UnitPrice,
+        2, MidpointRounding.AwayFromZero)) - DiscountAmount;
     public List<SaleDraftLine> Lines { get; private set; } = [];
 
     public void ReplaceLines(IEnumerable<SaleDraftLine> lines, DateTimeOffset updatedAtUtc)
@@ -67,6 +71,19 @@ public sealed class SaleDraft
         }
         Lines.AddRange(requestedLines.Values);
         UpdatedAtUtc = updatedAtUtc.ToUniversalTime();
+    }
+
+    public void SetDiscount(decimal amount, string? reason)
+    {
+        if (amount < 0 || decimal.Round(amount, 2) != amount ||
+            (amount > 0 && amount >= Lines.Sum(line => decimal.Round(line.Quantity * line.UnitPrice,
+                2, MidpointRounding.AwayFromZero))))
+            throw new ArgumentOutOfRangeException(nameof(amount));
+        var normalized = reason?.Trim();
+        if (amount > 0 && (string.IsNullOrWhiteSpace(normalized) || normalized.Length is < 10 or > 200))
+            throw new ArgumentException("A reason between 10 and 200 characters is required.", nameof(reason));
+        DiscountAmount = amount;
+        DiscountReason = amount > 0 ? normalized : null;
     }
 
     public void Cancel(Guid userId, DateTimeOffset cancelledAtUtc)

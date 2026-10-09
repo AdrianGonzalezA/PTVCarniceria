@@ -140,6 +140,7 @@
         <section class="ticket-detail" aria-labelledby="ticket-title">
           <header><h3 id="ticket-title">Ticket {{ ticket.id }}</h3><button type="button" class="secondary-button" (click)="closeDetail()">Cerrar detalle</button></header>
           <p>{{ ticket.confirmedAtUtc | date:'dd/MM/yyyy HH:mm' }} · Total $ {{ ticket.total | number:'1.2-2' }}</p>
+          @if (ticket.discountAmount > 0) { <p>Descuento global: − $ {{ ticket.discountAmount | number:'1.2-2' }} · {{ ticket.discountReason }}</p> }
           <h4>Artículos</h4>
           <ul>@for (line of ticket.lines; track line.code) {
             <li>{{ line.name }} · {{ line.quantity }} {{ line.unit }} × $ {{ line.unitPrice | number:'1.2-2' }} = $ {{ line.lineTotal | number:'1.2-2' }}</li>

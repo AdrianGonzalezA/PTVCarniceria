@@ -55,6 +55,8 @@ export interface SaleDetail {
   readonly id: string;
   readonly confirmedAtUtc: string;
   readonly total: number;
+  readonly discountAmount: number;
+  readonly discountReason: string | null;
   readonly lines: readonly {
     readonly code: string;
     readonly name: string;

@@ -18,6 +18,17 @@ describe('virtual receipt PDF content', () => {
     expect(html).toContain('2.400,00');
   });
 
+  it('shows the persisted discount and escapes its reason', () => {
+    const html = createReceiptHtml(validateReceiptRequest({ ...validRequest,
+      total: 2200, discountAmount: 200, discountReason: '<promoción>',
+      payments: [{ method: 'cash', tenderedAmount: 2200, appliedAmount: 2200 }],
+    }));
+    expect(html).toContain('Descuento global');
+    expect(html).toContain('&lt;promoción&gt;');
+    expect(html).toContain('2.200,00');
+    expect(() => validateReceiptRequest({ ...validRequest, discountAmount: 200 })).toThrow();
+  });
+
   it('renders a full account charge without inventing a cash payment', () => {
     const html = createReceiptHtml(validateReceiptRequest({
       ...validRequest, payments: [], accountChargeAmount: 2400,

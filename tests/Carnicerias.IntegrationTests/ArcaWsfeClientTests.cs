@@ -9,6 +9,48 @@ public sealed class ArcaWsfeClientTests
     private static readonly ArcaAccessTicket Ticket = new("token<&", "firma", "20111111112");
 
     [Fact]
+    public async Task ListsHomologationPointsOfSaleWithoutIssuingAnInvoice()
+    {
+        var handler = new FakeHandler("""
+            <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+              <soap:Body><FEParamGetPtosVentaResponse xmlns="http://ar.gov.afip.dif.FEV1/">
+                <FEParamGetPtosVentaResult><ResultGet>
+                  <PtoVenta><Nro>12</Nro><EmisionTipo>CAE</EmisionTipo><Bloqueado>N</Bloqueado></PtoVenta>
+                  <PtoVenta><Nro>13</Nro><EmisionTipo>CAE</EmisionTipo><Bloqueado>S</Bloqueado><FchBaja>20261001</FchBaja></PtoVenta>
+                </ResultGet></FEParamGetPtosVentaResult>
+              </FEParamGetPtosVentaResponse></soap:Body>
+            </soap:Envelope>
+            """);
+        var client = new ArcaWsfeClient(new HttpClient(handler));
+
+        var points = await client.GetPointsOfSaleAsync(Ticket);
+
+        Assert.Equal(2, points.Count);
+        Assert.Equal(12, points[0].Number);
+        Assert.False(points[0].IsBlocked);
+        Assert.Null(points[0].DeactivatedOn);
+        Assert.True(points[1].IsBlocked);
+        Assert.Equal(new DateOnly(2026, 10, 1), points[1].DeactivatedOn);
+        Assert.Contains("FEParamGetPtosVenta", handler.Body);
+        Assert.DoesNotContain("FECAESolicitar", handler.Body);
+        Assert.DoesNotContain(Ticket.Token, handler.Url);
+    }
+
+    [Fact]
+    public async Task RejectsMalformedPointOfSaleResults()
+    {
+        var handler = new FakeHandler("""
+            <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>
+              <FEParamGetPtosVentaResult><ResultGet><PtoVenta><Nro>12</Nro>
+                <EmisionTipo>CAE</EmisionTipo><Bloqueado>?</Bloqueado>
+              </PtoVenta></ResultGet></FEParamGetPtosVentaResult>
+            </soap:Body></soap:Envelope>
+            """);
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            new ArcaWsfeClient(new HttpClient(handler)).GetPointsOfSaleAsync(Ticket));
+    }
+
+    [Fact]
     public async Task ReadsLastAuthorizedNumberWithoutLeakingCredentialsIntoTheUrl()
     {
         var handler = new FakeHandler("""

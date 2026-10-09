@@ -15,6 +15,9 @@ public sealed record ArcaInvoiceLookup(int PointOfSale, int VoucherType, long Nu
     decimal Total, string Result, string AuthorizationCode, string AuthorizationKind,
     DateOnly? AuthorizationExpiry);
 
+public sealed record ArcaPointOfSale(int Number, string IssuanceType, bool IsBlocked,
+    DateOnly? DeactivatedOn);
+
 public sealed record ArcaVatAmount(int ArcaRateCode, decimal TaxableBase, decimal TaxAmount);
 
 public sealed class ArcaCaeRequest
@@ -78,6 +81,38 @@ public sealed class ArcaWsfeClient(HttpClient httpClient)
     private const string Endpoint = "https://wswhomo.afip.gov.ar/wsfev1/service.asmx";
     private static readonly XNamespace Soap = "http://schemas.xmlsoap.org/soap/envelope/";
     private static readonly XNamespace Wsfe = "http://ar.gov.afip.dif.FEV1/";
+
+    public async Task<IReadOnlyList<ArcaPointOfSale>> GetPointsOfSaleAsync(
+        ArcaAccessTicket ticket, CancellationToken cancellationToken = default)
+    {
+        ValidateTicket(ticket);
+        var result = await SendAsync("FEParamGetPtosVenta", ticket, [], cancellationToken);
+        var entries = Child(result, "ResultGet")?.Elements()
+            .Where(element => element.Name.LocalName == "PtoVenta").ToArray() ?? [];
+        if (entries.Length > 100_000)
+            throw new InvalidDataException("WSFE returned too many points of sale.");
+        var points = new List<ArcaPointOfSale>(entries.Length);
+        foreach (var entry in entries)
+        {
+            var number = ReadInt(entry, "Nro");
+            var issuanceType = ReadText(entry, "EmisionTipo");
+            var blocked = ReadText(entry, "Bloqueado");
+            var deactivatedText = Child(entry, "FchBaja")?.Value.Trim();
+            DateOnly? deactivated = null;
+            if (!string.IsNullOrWhiteSpace(deactivatedText))
+            {
+                if (!DateOnly.TryParseExact(deactivatedText, "yyyyMMdd", CultureInfo.InvariantCulture,
+                        DateTimeStyles.None, out var parsed))
+                    throw new InvalidDataException("WSFE returned an invalid deactivation date.");
+                deactivated = parsed;
+            }
+            if (number is < 1 or > 99998 || issuanceType.Length > 8 ||
+                blocked is not ("S" or "N") || points.Any(point => point.Number == number))
+                throw new InvalidDataException("WSFE returned an invalid point of sale.");
+            points.Add(new ArcaPointOfSale(number, issuanceType, blocked == "S", deactivated));
+        }
+        return points;
+    }
 
     public async Task<long> GetLastAuthorizedAsync(ArcaAccessTicket ticket,
         int pointOfSale, int voucherType, CancellationToken cancellationToken = default)
@@ -223,11 +258,17 @@ public sealed class ArcaWsfeClient(HttpClient httpClient)
 
     private static void Validate(ArcaAccessTicket ticket, int pointOfSale, int voucherType)
     {
+        ValidateTicket(ticket);
+        if (pointOfSale <= 0 || voucherType <= 0)
+            throw new ArgumentException("A valid point of sale and voucher type are required.");
+    }
+
+    private static void ValidateTicket(ArcaAccessTicket ticket)
+    {
         ArgumentNullException.ThrowIfNull(ticket);
         if (string.IsNullOrWhiteSpace(ticket.Token) || string.IsNullOrWhiteSpace(ticket.Sign) ||
-            ticket.Cuit is null || ticket.Cuit.Length != 11 || !ticket.Cuit.All(char.IsAsciiDigit) ||
-            pointOfSale <= 0 || voucherType <= 0)
-            throw new ArgumentException("A valid WSAA ticket, CUIT, point of sale and voucher type are required.");
+            ticket.Cuit is null || ticket.Cuit.Length != 11 || !ticket.Cuit.All(char.IsAsciiDigit))
+            throw new ArgumentException("A valid WSAA ticket and CUIT are required.");
     }
 
     private static XElement? Child(XElement source, string name) =>

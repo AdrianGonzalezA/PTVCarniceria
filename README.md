@@ -60,6 +60,7 @@ Las pruebas de integración PostgreSQL actualmente requieren `CARNICERIAS_TEST_C
 
 ## Documentación
 
+- [Base del manual de usuarios](documentacion/manual-usuarios/README.md): acceso, POS, cobros, negocio, configuración y límites vigentes.
 - `REQUERIMIENTOS_MVP.md` y `CAPABILITY_MAP.md`: alcance y módulos.
 - `SPEC-pos-sales.md`, `SPEC-pos-checkout.md` y `SPEC-catalog-pricing.md`: contratos del POS.
 - `SPEC-platform-access.md`, `SPEC-admin.md` y `tasks/admin-plan.md`: acceso y administración.

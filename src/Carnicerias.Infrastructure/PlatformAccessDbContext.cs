@@ -68,6 +68,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<SalePayment> SalePayments => Set<SalePayment>();
 
+    public DbSet<PointPaymentIntent> PointPaymentIntents => Set<PointPaymentIntent>();
+
     public DbSet<CashLedgerMovement> CashLedgerMovements => Set<CashLedgerMovement>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -709,6 +711,44 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(payment => payment.Method).HasConversion<int>().IsRequired();
             entity.Property(payment => payment.TenderedAmount).HasPrecision(12, 2);
             entity.Property(payment => payment.AppliedAmount).HasPrecision(12, 2);
+        });
+
+        modelBuilder.Entity<PointPaymentIntent>(entity =>
+        {
+            entity.ToTable("point_payment_intents", "payments_cash", table =>
+            {
+                table.HasCheckConstraint("CK_point_payment_intents_amount_positive", "\"Amount\" > 0");
+                table.HasCheckConstraint("CK_point_payment_intents_status", "\"Status\" BETWEEN 0 AND 7");
+            });
+            entity.HasKey(intent => intent.Id);
+            entity.Property(intent => intent.Amount).HasPrecision(12, 2);
+            entity.Property(intent => intent.Status).HasConversion<int>().IsRequired();
+            entity.Property(intent => intent.TerminalId).HasMaxLength(100).IsRequired();
+            entity.Property(intent => intent.ProviderOrderId).HasMaxLength(100);
+            entity.Property(intent => intent.ProviderPaymentId).HasMaxLength(100);
+            entity.Property(intent => intent.ProviderOrderStatus).HasMaxLength(40);
+            entity.Property(intent => intent.ProviderPaymentStatus).HasMaxLength(40);
+            entity.Property(intent => intent.ProviderPaymentStatusDetail).HasMaxLength(80);
+            entity.Ignore(intent => intent.ExternalReference);
+            entity.HasOne<SaleDraft>().WithMany()
+                .HasForeignKey(intent => new { intent.CompanyId, intent.SaleDraftId })
+                .HasPrincipalKey(draft => new { draft.CompanyId, draft.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CashierShift>().WithMany()
+                .HasForeignKey(intent => new { intent.CompanyId, intent.CashierShiftId })
+                .HasPrincipalKey(shift => new { shift.CompanyId, shift.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<PosTerminal>().WithMany()
+                .HasForeignKey(intent => new { intent.CompanyId, intent.BranchId, intent.PosTerminalId })
+                .HasPrincipalKey(terminal => new { terminal.CompanyId, terminal.BranchId, terminal.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(intent => intent.CashierId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(intent => intent.IdempotencyKey).IsUnique();
+            entity.HasIndex(intent => intent.ProviderOrderId).IsUnique()
+                .HasFilter("\"ProviderOrderId\" IS NOT NULL");
+            entity.HasIndex(intent => new { intent.CompanyId, intent.SaleDraftId, intent.CreatedAtUtc });
         });
 
         modelBuilder.Entity<CashLedgerMovement>(entity =>

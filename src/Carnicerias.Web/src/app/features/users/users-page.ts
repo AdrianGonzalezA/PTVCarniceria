@@ -3,12 +3,13 @@ import { DatePipe } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { AdminAreaTabs } from '../admin/admin-area-tabs';
+import { AdminDetailDialog } from '../admin/admin-detail-dialog';
 import { UserAssignments, UserDirectoryClient, UserListPage } from '../../core/users/user-directory-client';
 import { OperationalBranchOption, SessionClient } from '../../core/session/session-client';
 
 @Component({
   selector: 'app-users-page',
-  imports: [DatePipe, RouterLink, AdminAreaTabs],
+  imports: [DatePipe, RouterLink, AdminAreaTabs, AdminDetailDialog],
   templateUrl: './users-page.html',
   styleUrl: './users-page.scss',
 })
@@ -47,6 +48,9 @@ export class UsersPage implements OnInit {
   protected readonly isLoading = signal(true);
   protected readonly isSigningOut = signal(false);
   protected readonly actionUserId = signal<string | null>(null);
+  protected readonly pendingAction = signal<{ userId: string; kind: 'status' | 'sessions'; isActive?: boolean } | null>(null);
+  protected readonly pendingUsername = computed(() => this.pageData()?.items.find((user) =>
+    user.userId === this.pendingAction()?.userId)?.username ?? 'usuario');
   protected readonly actionMessage = signal<string | null>(null);
   protected readonly actionError = signal<string | null>(null);
   protected readonly loadError = signal<string | null>(null);
@@ -220,7 +224,6 @@ export class UsersPage implements OnInit {
       this.actionError.set(`La contraseña nueva debe tener al menos ${this.minimumPasswordLength()} caracteres.`);
       return;
     }
-    if (!window.confirm('¿Restablecer la contraseña y cerrar las sesiones de este usuario?')) return;
     this.resettingPassword.set(true);
     this.actionError.set(null);
     this.usersClient.resetUserPassword(userId, password).subscribe({
@@ -271,6 +274,7 @@ export class UsersPage implements OnInit {
   }
 
   protected cancelEditing(): void {
+    if (this.actionUserId()) return;
     this.editingUserId.set(null);
     this.draftUsername.set('');
     this.draftEmail.set('');
@@ -306,9 +310,10 @@ export class UsersPage implements OnInit {
 
   protected toggleUser(userId: string, isActive: boolean): void {
     if (this.actionUserId() || this.currentUserId() === userId) return;
-    if (isActive && !window.confirm('Al inactivar este usuario se cerrarán todas sus sesiones. ¿Querés continuar?')) {
-      return;
-    }
+    this.pendingAction.set({ userId, kind: 'status', isActive });
+  }
+
+  private executeToggleUser(userId: string, isActive: boolean): void {
 
     this.actionUserId.set(userId);
     this.actionMessage.set(null);
@@ -318,6 +323,7 @@ export class UsersPage implements OnInit {
         this.replaceUser(updatedUser);
         this.actionMessage.set(isActive ? 'Usuario inactivado y sesiones cerradas.' : 'Usuario reactivado. Las sesiones anteriores no se restauraron.');
         this.actionUserId.set(null);
+        this.pendingAction.set(null);
       },
       error: (error: HttpErrorResponse) => {
         this.actionError.set(
@@ -328,13 +334,17 @@ export class UsersPage implements OnInit {
             : 'No se pudo actualizar el usuario. Revisá la conexión e intentá de nuevo.',
         );
         this.actionUserId.set(null);
+        this.pendingAction.set(null);
       },
     });
   }
 
   protected revokeSessions(userId: string): void {
     if (this.actionUserId() || this.currentUserId() === userId) return;
-    if (!window.confirm('Se cerrarán todas las sesiones activas de este usuario. ¿Querés continuar?')) return;
+    this.pendingAction.set({ userId, kind: 'sessions' });
+  }
+
+  private executeRevokeSessions(userId: string): void {
 
     this.actionUserId.set(userId);
     this.actionMessage.set(null);
@@ -343,6 +353,7 @@ export class UsersPage implements OnInit {
       next: (result) => {
         this.actionMessage.set(`Se cerraron ${result.revokedSessions} sesiones activas.`);
         this.actionUserId.set(null);
+        this.pendingAction.set(null);
       },
       error: (error: HttpErrorResponse) => {
         this.actionError.set(
@@ -353,8 +364,20 @@ export class UsersPage implements OnInit {
             : 'No se pudieron cerrar las sesiones. Revisá la conexión e intentá de nuevo.',
         );
         this.actionUserId.set(null);
+        this.pendingAction.set(null);
       },
     });
+  }
+
+  protected confirmAction(): void {
+    const action = this.pendingAction();
+    if (!action || this.actionUserId()) return;
+    if (action.kind === 'status') this.executeToggleUser(action.userId, !!action.isActive);
+    else this.executeRevokeSessions(action.userId);
+  }
+
+  protected closeAction(): void {
+    if (!this.actionUserId()) this.pendingAction.set(null);
   }
 
   protected signOut(): void {

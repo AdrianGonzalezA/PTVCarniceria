@@ -46,4 +46,27 @@ describe('TaxCatalogPanel', () => {
     fixture.detectChanges();
     expect(page.textContent).toContain('Percepción IIBB');
   });
+
+  it('confirms tax deactivation in a dialog before sending the request', () => {
+    const fixture = TestBed.createComponent(TaxCatalogPanel);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne((request) => request.url === '/api/admin/taxes').flush({
+      page: 1, pageSize: 25, total: 1,
+      items: [{ id: 'other-id', code: 'IIBB_3', name: 'IIBB', kind: 'otro',
+        ratePercent: 3, isActive: true, createdAtUtc: '', deactivatedAtUtc: null }],
+    });
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    page.querySelector<HTMLButtonElement>('tbody button')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector('dialog[aria-labelledby="tax-action-title"]')).not.toBeNull();
+    http.expectNone('/api/admin/taxes/other-id');
+    page.querySelector<HTMLButtonElement>('.confirm-tax-action')!.click();
+    const update = http.expectOne('/api/admin/taxes/other-id');
+    expect(update.request.method).toBe('PATCH');
+    update.flush({});
+    http.expectOne((request) => request.url === '/api/admin/taxes').flush({ page: 1,
+      pageSize: 25, total: 1, items: [] });
+  });
 });

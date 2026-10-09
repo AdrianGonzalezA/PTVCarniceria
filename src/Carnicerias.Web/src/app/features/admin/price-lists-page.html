@@ -34,18 +34,21 @@
       @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
 
       @if (editorOpen()) {
+        <app-admin-detail-dialog labelledBy="price-list-editor-title" [compact]="true" [canClose]="!isSaving()" (closed)="cancelEdit()">
         <form class="editor-form" [formGroup]="editorForm" (ngSubmit)="save()">
-          <h3>{{ editingList() ? 'Editar lista' : 'Nueva lista' }}</h3>
+          <h3 id="price-list-editor-title">{{ editingList() ? 'Editar lista' : 'Nueva lista' }}</h3>
           <label for="price-list-name">Nombre</label>
           <input id="price-list-name" formControlName="name" maxlength="160" required />
           @if (editorForm.controls.name.touched && editorForm.controls.name.invalid) {
             <p class="field-error" role="alert">Ingresá un nombre de hasta 160 caracteres.</p>
           }
+          @if (actionError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
           <div class="editor-actions">
             <button type="submit" [disabled]="isSaving()">{{ isSaving() ? 'Guardando…' : 'Guardar' }}</button>
             <button type="button" class="secondary-button" [disabled]="isSaving()" (click)="cancelEdit()">Cancelar</button>
           </div>
         </form>
+        </app-admin-detail-dialog>
       }
 
       <form class="search-form" (submit)="$event.preventDefault(); search()">
@@ -97,8 +100,22 @@
       }
     </section>
 
+    @if (pendingList(); as list) {
+      <app-admin-detail-dialog labelledBy="price-list-action-title" [compact]="true" [canClose]="!actionId()" (closed)="closeListAction()">
+        <section class="editor-form" aria-labelledby="price-list-action-title">
+          <h3 id="price-list-action-title">{{ list.isActive ? 'Inactivar' : 'Activar' }} lista</h3>
+          <p><strong>{{ list.name }}</strong></p>
+          @if (list.isActive) { <p>Dejará de ofrecerse en caja.</p> }
+          <div class="editor-actions">
+            <button type="button" class="confirm-price-list-action" [disabled]="actionId() !== null" (click)="confirmListToggle()">{{ actionId() ? 'Guardando…' : 'Confirmar' }}</button>
+            <button type="button" class="secondary-button" [disabled]="actionId() !== null" (click)="closeListAction()">Cancelar</button>
+          </div>
+        </section>
+      </app-admin-detail-dialog>
+    }
+
     @if (selectedList(); as selected) {
-      @if (!historyProduct()) {
+      @if (!historyProduct() && !priceEditing()) {
       <app-admin-detail-dialog labelledBy="detail-title" [canClose]="!priceSaving() && !branchActionId()" (closed)="closeDetails()">
       <section class="detail-panel" aria-labelledby="detail-title">
         <header>
@@ -170,24 +187,27 @@
             }
           }
 
-          @if (priceEditing(); as product) {
-            <form class="price-form" [formGroup]="priceForm" (ngSubmit)="savePrice()">
-              <h3>Precio de {{ product.name }}</h3>
-              <p>Costo actual: ARS {{ product.cost.toFixed(2) }}. El nuevo precio será vigente desde ahora.</p>
-              <label for="new-price">Nuevo precio (ARS)</label>
-              <input id="new-price" formControlName="amount" inputmode="decimal" placeholder="0,00" required />
-              @if (priceForm.touched && priceForm.invalid) { <p class="field-error" role="alert">Ingresá un precio positivo de hasta dos decimales.</p> }
-              <div class="editor-actions">
-                <button type="submit" [disabled]="priceSaving()">{{ priceSaving() ? 'Guardando…' : 'Guardar precio' }}</button>
-                <button type="button" class="secondary-button" [disabled]="priceSaving()" (click)="cancelPrice()">Cancelar</button>
-              </div>
-            </form>
-          }
-
         }
       </section>
       </app-admin-detail-dialog>
       }
+    }
+
+    @if (priceEditing(); as product) {
+      <app-admin-detail-dialog labelledBy="price-editor-title" [compact]="true" [canClose]="!priceSaving()" (closed)="cancelPrice()">
+        <form class="price-form" [formGroup]="priceForm" (ngSubmit)="savePrice()">
+          <h3 id="price-editor-title">Precio de {{ product.name }}</h3>
+          <p>Costo actual: ARS {{ product.cost.toFixed(2) }}. El nuevo precio será vigente desde ahora.</p>
+          <label for="new-price">Nuevo precio (ARS)</label>
+          <input id="new-price" formControlName="amount" inputmode="decimal" placeholder="0,00" required />
+          @if (priceForm.touched && priceForm.invalid) { <p class="field-error" role="alert">Ingresá un precio positivo de hasta dos decimales.</p> }
+          @if (priceError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
+          <div class="editor-actions">
+            <button type="submit" [disabled]="priceSaving()">{{ priceSaving() ? 'Guardando…' : 'Guardar precio' }}</button>
+            <button type="button" class="secondary-button" [disabled]="priceSaving()" (click)="cancelPrice()">Cancelar</button>
+          </div>
+        </form>
+      </app-admin-detail-dialog>
     }
 
     @if (historyProduct(); as product) {

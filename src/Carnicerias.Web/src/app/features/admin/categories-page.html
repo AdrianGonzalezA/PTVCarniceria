@@ -33,21 +33,6 @@
       @if (actionMessage(); as message) { <p class="success-message" role="status">{{ message }}</p> }
       @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
 
-      @if (editorOpen()) {
-        <form class="editor-form" [formGroup]="editorForm" (ngSubmit)="save()">
-          <h3>{{ editingId() ? 'Editar categoría' : 'Nueva categoría' }}</h3>
-          <label for="category-name">Nombre</label>
-          <input id="category-name" formControlName="name" maxlength="120" autocomplete="off" required />
-          @if (editorForm.controls.name.touched && editorForm.controls.name.invalid) {
-            <p class="field-error" role="alert">Ingresá un nombre de hasta 120 caracteres.</p>
-          }
-          <div class="editor-actions">
-            <button type="submit" [disabled]="isSaving()">{{ isSaving() ? 'Guardando…' : 'Guardar' }}</button>
-            <button type="button" class="secondary-button" [disabled]="isSaving()" (click)="cancelEdit()">Cancelar</button>
-          </div>
-        </form>
-      }
-
       <form class="search-form" (submit)="$event.preventDefault(); search()">
         <label for="category-search">Buscar categoría</label>
         <div>
@@ -95,5 +80,35 @@
         }
       }
     </section>
+    @if (editorOpen()) {
+      <app-admin-detail-dialog labelledBy="category-editor-title" [compact]="true" [canClose]="!isSaving()" (closed)="cancelEdit()">
+        <form class="editor-form" [formGroup]="editorForm" (ngSubmit)="save()">
+          <h3 id="category-editor-title">{{ editingId() ? 'Editar categoría' : 'Nueva categoría' }}</h3>
+          <label for="category-name">Nombre</label>
+          <input id="category-name" formControlName="name" maxlength="120" autocomplete="off" required />
+          @if (editorForm.controls.name.touched && editorForm.controls.name.invalid) {
+            <p class="field-error" role="alert">Ingresá un nombre de hasta 120 caracteres.</p>
+          }
+          @if (actionError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
+          <div class="editor-actions">
+            <button type="submit" [disabled]="isSaving()">{{ isSaving() ? 'Guardando…' : 'Guardar' }}</button>
+            <button type="button" class="secondary-button" [disabled]="isSaving()" (click)="cancelEdit()">Cancelar</button>
+          </div>
+        </form>
+      </app-admin-detail-dialog>
+    }
+    @if (pendingCategory(); as category) {
+      <app-admin-detail-dialog labelledBy="category-action-title" [compact]="true" [canClose]="!actionId()" (closed)="closeAction()">
+        <section class="editor-form" aria-labelledby="category-action-title">
+          <h3 id="category-action-title">{{ category.isActive ? 'Inactivar' : 'Activar' }} categoría</h3>
+          <p>{{ category.name }}</p>
+          @if (category.isActive) { <p>Sus productos dejarán de aparecer en el punto de venta.</p> }
+          <div class="editor-actions">
+            <button type="button" class="confirm-category-action" [disabled]="actionId() !== null" (click)="confirmToggle()">{{ actionId() ? 'Guardando…' : 'Confirmar' }}</button>
+            <button type="button" class="secondary-button" [disabled]="actionId() !== null" (click)="closeAction()">Cancelar</button>
+          </div>
+        </section>
+      </app-admin-detail-dialog>
+    }
   </div>
 </main>

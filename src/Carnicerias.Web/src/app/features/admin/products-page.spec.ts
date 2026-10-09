@@ -79,6 +79,7 @@ describe('ProductsPage', () => {
     page.querySelector<HTMLButtonElement>('tbody .edit-button')!.click();
     http.expectOne('/api/admin/products/product-1/codes').flush([]);
     fixture.detectChanges();
+    expect(page.querySelector('dialog[aria-labelledby="product-editor-title"]')).not.toBeNull();
     expect(page.querySelector<HTMLInputElement>('#product-code')?.readOnly).toBe(true);
     const name = page.querySelector<HTMLInputElement>('#product-name')!;
     name.value = 'Asado especial';
@@ -120,17 +121,19 @@ describe('ProductsPage', () => {
   });
 
   it('inactivates an article after confirmation', () => {
-    const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { fixture, http, page } = load();
 
     page.querySelector<HTMLButtonElement>('tbody .row-actions button:last-child')!.click();
-    expect(confirmation).toHaveBeenCalled();
+    fixture.detectChanges();
+    expect(page.querySelector('dialog[aria-labelledby="product-action-title"]')).not.toBeNull();
+    http.expectNone('/api/admin/products/product-1');
+    page.querySelector<HTMLButtonElement>('.confirm-product-action')!.click();
     const request = http.expectOne('/api/admin/products/product-1');
     expect(request.request.body).toEqual({ isActive: false });
     request.flush({ ...product, isActive: false });
     fixture.detectChanges();
     expect(page.querySelector('tbody')?.textContent).toContain('Inactivo');
-    confirmation.mockRestore();
+    expect(page.querySelector('dialog[aria-labelledby="product-action-title"]')).toBeNull();
   });
 
   it('does not save a zero-cost article', () => {

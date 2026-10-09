@@ -2,12 +2,13 @@ import { AfterViewInit, Component, ElementRef, input, OnDestroy, output, viewChi
 
 @Component({
   selector: 'app-admin-detail-dialog',
-  template: `<dialog #dialog class="admin-detail-dialog" [attr.aria-labelledby]="labelledBy()"
+  template: `<dialog #dialog class="admin-detail-dialog" [class.admin-detail-dialog-compact]="compact()" [attr.aria-labelledby]="labelledBy()"
     (cancel)="cancel($event)"><ng-content /></dialog>`,
   styleUrl: './admin-detail-dialog.scss',
 })
 export class AdminDetailDialog implements AfterViewInit, OnDestroy {
   readonly labelledBy = input.required<string>();
+  readonly compact = input(false);
   readonly canClose = input(true);
   readonly closed = output<void>();
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');

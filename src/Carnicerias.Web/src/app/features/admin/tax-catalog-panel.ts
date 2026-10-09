@@ -1,9 +1,11 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { AdminTaxCatalogClient, TaxCatalogEntry, TaxCatalogPage,
   TaxKind } from '../../core/admin/admin-tax-catalog-client';
+import { AdminDetailDialog } from './admin-detail-dialog';
 
 @Component({
   selector: 'app-tax-catalog-panel',
+  imports: [AdminDetailDialog],
   templateUrl: './tax-catalog-panel.html',
   styleUrls: ['./categories-page.scss', './tax-catalog-panel.scss'],
 })
@@ -22,6 +24,7 @@ export class TaxCatalogPanel implements OnInit {
   protected readonly saving = signal(false);
   protected readonly saveError = signal<string | null>(null);
   protected readonly saveSuccess = signal<string | null>(null);
+  protected readonly pendingEntry = signal<TaxCatalogEntry | null>(null);
 
   ngOnInit(): void { this.load(); }
 
@@ -88,14 +91,20 @@ export class TaxCatalogPanel implements OnInit {
   }
 
   protected deactivate(entry: TaxCatalogEntry): void {
-    if (this.saving() || !entry.isActive ||
-      !window.confirm(`¿Inactivar ${entry.name}? Primero debe retirarse de todos los artículos.`)) return;
+    if (this.saving() || !entry.isActive) return;
+    this.pendingEntry.set(entry);
+  }
+
+  protected confirmDeactivate(): void {
+    const entry = this.pendingEntry();
+    if (!entry || this.saving()) return;
     this.saving.set(true);
     this.saveError.set(null);
     this.saveSuccess.set(null);
     this.client.deactivate(entry.id).subscribe({
       next: () => {
         this.saving.set(false);
+        this.pendingEntry.set(null);
         this.saveSuccess.set('Entrada inactivada; su historial permanece disponible.');
         this.load();
       },
@@ -104,5 +113,9 @@ export class TaxCatalogPanel implements OnInit {
         this.saveError.set('No se pudo inactivar. Puede tener asignaciones vigentes.');
       },
     });
+  }
+
+  protected closeAction(): void {
+    if (!this.saving()) this.pendingEntry.set(null);
   }
 }

@@ -76,7 +76,6 @@ describe('CategoriesPage', () => {
   });
 
   it('warns before inactivating a category and reflects the saved state', () => {
-    const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(CategoriesPage);
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
@@ -89,7 +88,10 @@ describe('CategoriesPage', () => {
 
     const page = fixture.nativeElement as HTMLElement;
     page.querySelector<HTMLButtonElement>('tbody .toggle-button')!.click();
-    expect(confirmation).toHaveBeenCalled();
+    fixture.detectChanges();
+    expect(page.querySelector('dialog[aria-labelledby="category-action-title"]')).not.toBeNull();
+    http.expectNone('/api/admin/categories/cat-1');
+    page.querySelector<HTMLButtonElement>('.confirm-category-action')!.click();
     const update = http.expectOne('/api/admin/categories/cat-1');
     expect(update.request.method).toBe('PATCH');
     expect(update.request.body).toEqual({ isActive: false });
@@ -97,7 +99,7 @@ describe('CategoriesPage', () => {
     fixture.detectChanges();
 
     expect(page.querySelector('tbody')?.textContent).toContain('Inactiva');
-    confirmation.mockRestore();
+    expect(page.querySelector('dialog[aria-labelledby="category-action-title"]')).toBeNull();
   });
 
   it('renames a category without changing its state', () => {
@@ -114,6 +116,7 @@ describe('CategoriesPage', () => {
     const page = fixture.nativeElement as HTMLElement;
     page.querySelector<HTMLButtonElement>('tbody .row-actions button')!.click();
     fixture.detectChanges();
+    expect(page.querySelector('dialog[aria-labelledby="category-editor-title"]')).not.toBeNull();
     const name = page.querySelector<HTMLInputElement>('#category-name')!;
     name.value = 'Carnes vacunas';
     name.dispatchEvent(new Event('input'));

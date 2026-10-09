@@ -13,6 +13,7 @@
   box-shadow: 0 1rem 3rem #0006;
 }
 .admin-detail-dialog::backdrop { background: #0b191bb8; }
+.admin-detail-dialog-compact { width: min(38rem, calc(100vw - 2rem)); }
 @media (max-width: 40rem) {
   .admin-detail-dialog { width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); }
 }

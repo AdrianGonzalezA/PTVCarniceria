@@ -9,6 +9,11 @@ import { AdminTerminal, AdminTerminalClient, AdminTerminalUpdate, ProvisionedTer
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { AdminDetailDialog } from './admin-detail-dialog';
 
+type OrganizationAction =
+  | { kind: 'company'; company: AdminCompany }
+  | { kind: 'branch'; branch: AdminBranch }
+  | { kind: 'terminal' | 'rotate'; terminal: AdminTerminal };
+
 @Component({
   selector: 'app-organization-page',
   imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, ReactiveFormsModule],
@@ -59,6 +64,7 @@ export class OrganizationPage implements OnInit {
   protected readonly terminalSaving = signal(false);
   protected readonly terminalActionId = signal<string | null>(null);
   protected readonly shownCredential = signal<string | null>(null);
+  protected readonly pendingAction = signal<OrganizationAction | null>(null);
 
   ngOnInit(): void {
     this.sessions.current().subscribe({
@@ -140,18 +146,22 @@ export class OrganizationPage implements OnInit {
 
   protected toggleCompany(company: AdminCompany): void {
     if (this.companyActionId() || this.session()?.context?.companyId === company.id) return;
-    if (company.isActive && !window.confirm('¿Inactivar esta empresa y dejar de ofrecer sus sucursales?'))
-      return;
+    this.pendingAction.set({ kind: 'company', company });
+  }
+
+  private executeCompanyToggle(company: AdminCompany): void {
     this.companyActionId.set(company.id);
     this.actionError.set(null);
     this.client.updateCompany(company.id, { isActive: !company.isActive }).subscribe({
       next: (updated) => {
         this.replaceCompany(updated);
         this.companyActionId.set(null);
+        this.pendingAction.set(null);
         this.actionMessage.set(updated.isActive ? 'Empresa activada.' : 'Empresa inactivada.');
       },
       error: (error: HttpErrorResponse) => {
         this.companyActionId.set(null);
+        this.pendingAction.set(null);
         this.actionError.set(this.organizationError(error));
       },
     });
@@ -213,9 +223,12 @@ export class OrganizationPage implements OnInit {
     if (!company || this.branchActionId() ||
         (this.session()?.context?.companyId === company.id &&
          this.session()?.context?.branchId === branch.id)) return;
-    if (branch.isActive && !window.confirm(
-      '¿Inactivar esta sucursal? No debe tener turnos ni tickets abiertos.',
-    )) return;
+    this.pendingAction.set({ kind: 'branch', branch });
+  }
+
+  private executeBranchToggle(branch: AdminBranch): void {
+    const company = this.selectedCompany();
+    if (!company || this.branchActionId()) return;
     this.branchActionId.set(branch.id);
     this.actionError.set(null);
     this.client.updateBranch(company.id, branch.id, { isActive: !branch.isActive }).subscribe({
@@ -224,10 +237,12 @@ export class OrganizationPage implements OnInit {
         this.replaceCompany({ ...company,
           activeBranchCount: company.activeBranchCount + (updated.isActive ? 1 : -1) });
         this.branchActionId.set(null);
+        this.pendingAction.set(null);
         this.actionMessage.set(updated.isActive ? 'Sucursal activada.' : 'Sucursal inactivada.');
       },
       error: (error: HttpErrorResponse) => {
         this.branchActionId.set(null);
+        this.pendingAction.set(null);
         this.actionError.set(this.organizationError(error));
       },
     });
@@ -312,10 +327,14 @@ export class OrganizationPage implements OnInit {
   protected toggleTerminal(terminal: AdminTerminal): void {
     const company = this.selectedCompany();
     const branch = this.selectedTerminalBranch();
+    if (!company || !branch || this.terminalActionId() || this.shownCredential()) return;
+    this.pendingAction.set({ kind: 'terminal', terminal });
+  }
+
+  private executeTerminalToggle(terminal: AdminTerminal): void {
+    const company = this.selectedCompany();
+    const branch = this.selectedTerminalBranch();
     if (!company || !branch || this.terminalActionId()) return;
-    if (terminal.isActive && !window.confirm(
-      '¿Inactivar esta caja? Su credencial y sesiones dejarán de funcionar.',
-    )) return;
     this.terminalActionId.set(terminal.id);
     this.actionError.set(null);
     this.terminalsClient.update(company.id, branch.id, terminal.id,
@@ -325,11 +344,13 @@ export class OrganizationPage implements OnInit {
         this.updateBranchTerminalCount(branch.id, updated.isActive ? 1 : -1);
         if (updated.newCredential) this.shownCredential.set(updated.newCredential);
         this.terminalActionId.set(null);
+        this.pendingAction.set(null);
         this.actionMessage.set(updated.isActive
           ? 'Caja reactivada con credencial nueva. Guardala ahora.' : 'Caja inactivada.');
       },
       error: (error: HttpErrorResponse) => {
         this.terminalActionId.set(null);
+        this.pendingAction.set(null);
         this.actionError.set(error.error?.error?.code === 'TERMINAL_HAS_OPEN_OPERATIONS'
           ? 'La caja tiene turno o ticket abierto. Cerralo antes de inactivar.'
           : 'No se pudo cambiar el estado de la caja.');
@@ -340,24 +361,70 @@ export class OrganizationPage implements OnInit {
   protected rotateTerminal(terminal: AdminTerminal): void {
     const company = this.selectedCompany();
     const branch = this.selectedTerminalBranch();
-    if (!company || !branch || this.terminalActionId() || !window.confirm(
-      '¿Rotar la credencial? La anterior y las sesiones de esta caja dejarán de funcionar.',
-    )) return;
+    if (!company || !branch || this.terminalActionId() || this.shownCredential()) return;
+    this.pendingAction.set({ kind: 'rotate', terminal });
+  }
+
+  private executeTerminalRotation(terminal: AdminTerminal): void {
+    const company = this.selectedCompany();
+    const branch = this.selectedTerminalBranch();
+    if (!company || !branch || this.terminalActionId()) return;
     this.terminalActionId.set(terminal.id);
     this.actionError.set(null);
     this.terminalsClient.rotate(company.id, branch.id, terminal.id).subscribe({
       next: (result) => {
         this.shownCredential.set(result.credential);
         this.terminalActionId.set(null);
+        this.pendingAction.set(null);
         this.actionMessage.set('Credencial rotada. Guardá la nueva ahora.');
       },
       error: (error: HttpErrorResponse) => {
         this.terminalActionId.set(null);
+        this.pendingAction.set(null);
         this.actionError.set(error.error?.error?.code === 'TERMINAL_HAS_OPEN_OPERATIONS'
           ? 'Cerrá el turno y los tickets de esa caja antes de rotar.'
           : 'No se pudo rotar la credencial.');
       },
     });
+  }
+
+  protected confirmAction(): void {
+    const action = this.pendingAction();
+    if (!action) return;
+    switch (action.kind) {
+      case 'company': this.executeCompanyToggle(action.company); break;
+      case 'branch': this.executeBranchToggle(action.branch); break;
+      case 'terminal': this.executeTerminalToggle(action.terminal); break;
+      case 'rotate': this.executeTerminalRotation(action.terminal); break;
+    }
+  }
+
+  protected closeAction(): void {
+    if (!this.companyActionId() && !this.branchActionId() && !this.terminalActionId())
+      this.pendingAction.set(null);
+  }
+
+  protected actionTitle(action: OrganizationAction): string {
+    if (action.kind === 'rotate') return 'Rotar credencial de caja';
+    const active = action.kind === 'company' ? action.company.isActive :
+      action.kind === 'branch' ? action.branch.isActive : action.terminal.isActive;
+    return `${active ? 'Inactivar' : 'Activar'} ${action.kind === 'company' ? 'empresa' :
+      action.kind === 'branch' ? 'sucursal' : 'caja'}`;
+  }
+
+  protected actionName(action: OrganizationAction): string {
+    return action.kind === 'company' ? action.company.name :
+      action.kind === 'branch' ? action.branch.name : action.terminal.name;
+  }
+
+  protected actionWarning(action: OrganizationAction): string {
+    switch (action.kind) {
+      case 'company': return action.company.isActive ? 'Sus sucursales dejarán de ofrecerse.' : '';
+      case 'branch': return action.branch.isActive ? 'No debe tener turnos ni tickets abiertos.' : '';
+      case 'terminal': return action.terminal.isActive ? 'Su credencial y sesiones dejarán de funcionar.' :
+        'Se emitirá una credencial nueva que deberás guardar.';
+      case 'rotate': return 'La credencial anterior y las sesiones de esta caja dejarán de funcionar.';
+    }
   }
 
   private loadCompanies(): void {

@@ -41,6 +41,23 @@ describe('PriceListsPage', () => {
     expect(page.querySelector('tbody')?.textContent).toContain('1 precio');
   });
 
+  it('edits and changes list status in dialogs', () => {
+    const { fixture, http, page } = load();
+    page.querySelector<HTMLButtonElement>('tbody .row-actions button')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector('dialog[aria-labelledby="price-list-editor-title"]')).not.toBeNull();
+    page.querySelector<HTMLButtonElement>('.editor-actions .secondary-button')!.click();
+    fixture.detectChanges();
+    page.querySelector<HTMLButtonElement>('tbody .row-actions button:last-child')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector('dialog[aria-labelledby="price-list-action-title"]')).not.toBeNull();
+    http.expectNone('/api/admin/price-lists/list-1');
+    page.querySelector<HTMLButtonElement>('.confirm-price-list-action')!.click();
+    const request = http.expectOne('/api/admin/price-lists/list-1');
+    expect(request.request.body).toEqual({ isActive: false });
+    request.flush({ ...list, isActive: false });
+  });
+
   it('creates a price list and refreshes the listing', () => {
     const { fixture, http, page } = load([]);
     page.querySelector<HTMLButtonElement>('.create-button')!.click();
@@ -88,6 +105,8 @@ describe('PriceListsPage', () => {
     fixture.detectChanges();
     page.querySelector<HTMLButtonElement>('.price-row .set-price-button')!.click();
     fixture.detectChanges();
+    expect(page.querySelector('dialog[aria-labelledby="price-editor-title"]')).not.toBeNull();
+    expect(page.querySelector('dialog[open] .detail-panel')).toBeNull();
     const amount = page.querySelector<HTMLInputElement>('#new-price')!;
     amount.value = '700,50';
     amount.dispatchEvent(new Event('input'));

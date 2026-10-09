@@ -2,7 +2,6 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { vi } from 'vitest';
 import { UsersPage } from './users-page';
 
 describe('UsersPage', () => {
@@ -42,6 +41,7 @@ describe('UsersPage', () => {
     const { fixture, http, page } = load();
     page.querySelector<HTMLButtonElement>('.create-user-button')!.click();
     fixture.detectChanges();
+    expect(page.querySelector('dialog[aria-labelledby="user-create-title"]')).not.toBeNull();
     for (const [id, value] of Object.entries({
       'create-username': 'nuevo-cajero', 'create-email': 'nuevo@example.test',
       'create-password': 'segura-de-prueba-2026',
@@ -73,6 +73,7 @@ describe('UsersPage', () => {
     button.click();
     http.expectOne('/api/users/admin-id/assignments').flush({ role: 'administrator', branchIds: [] });
     fixture.detectChanges();
+    expect(page.querySelector('dialog[aria-labelledby="user-assignments-title"]')).not.toBeNull();
     expect(page.textContent).toContain('administrador único');
     page.querySelector<HTMLButtonElement>('.user-editor .secondary-button')!.click();
     fixture.detectChanges();
@@ -97,13 +98,12 @@ describe('UsersPage', () => {
 
   it('resets a cashier password without exposing it in the user list', () => {
     const { fixture, http, page } = load();
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    try {
       const cashierRow = page.querySelectorAll('tbody tr')[1];
       const button = Array.from(cashierRow.querySelectorAll('button'))
         .find((item) => item.textContent?.includes('Contraseña'))!;
       button.click();
       fixture.detectChanges();
+      expect(page.querySelector('dialog[aria-labelledby="user-password-title"]')).not.toBeNull();
       const input = page.querySelector<HTMLInputElement>('#reset-password')!;
       input.value = 'clave-nueva-de-prueba';
       input.dispatchEvent(new Event('input'));
@@ -116,15 +116,42 @@ describe('UsersPage', () => {
       fixture.detectChanges();
       expect(page.querySelector('#reset-password')).toBeNull();
       expect(page.querySelector('tbody')?.textContent).not.toContain('clave-nueva-de-prueba');
-    } finally {
-      confirm.mockRestore();
-    }
+  });
+
+  it('edits user details in a dialog, leaving the grid read-only', () => {
+    const { fixture, http, page } = load();
+    page.querySelectorAll<HTMLButtonElement>('tbody .row-actions button')[5].click();
+    fixture.detectChanges();
+    expect(page.querySelector('tbody input')).toBeNull();
+    expect(page.querySelector('dialog[aria-labelledby="user-editor-title"]')).not.toBeNull();
+    const username = page.querySelector<HTMLInputElement>('#edit-username')!;
+    username.value = 'cajero-nuevo';
+    username.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    page.querySelector<HTMLButtonElement>('.save-user-button')!.click();
+    const update = http.expectOne('/api/users/cashier-id');
+    expect(update.request.body).toEqual({ username: 'cajero-nuevo', email: cashier.email });
+    update.flush({ ...cashier, username: 'cajero-nuevo' });
+    fixture.detectChanges();
+    expect(page.querySelector('tbody')?.textContent).toContain('cajero-nuevo');
+  });
+
+  it('confirms a row status action before sending it', () => {
+    const { fixture, http, page } = load();
+    const row = page.querySelectorAll('tbody tr')[1];
+    Array.from(row.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('Inactivar'))!.click();
+    fixture.detectChanges();
+    expect(page.querySelector('dialog[aria-labelledby="user-action-title"]')).not.toBeNull();
+    http.expectNone('/api/users/cashier-id');
+    page.querySelector<HTMLButtonElement>('.confirm-user-action')!.click();
+    const update = http.expectOne('/api/users/cashier-id');
+    expect(update.request.body).toEqual({ isActive: false });
+    update.flush({ ...cashier, isActive: false });
   });
 
   it('allows the administrator to reset their own password with the local policy', () => {
     const { fixture, http, page } = load();
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    try {
       const adminRow = page.querySelectorAll('tbody tr')[0];
       const button = Array.from(adminRow.querySelectorAll('button'))
         .find((item) => item.textContent?.includes('Contraseña')) as HTMLButtonElement;
@@ -139,8 +166,5 @@ describe('UsersPage', () => {
       const request = http.expectOne('/api/users/admin-id/password');
       expect(request.request.body).toEqual({ password: 'abcdef' });
       request.flush(null, { status: 204, statusText: 'No Content' });
-    } finally {
-      confirm.mockRestore();
-    }
   });
 });

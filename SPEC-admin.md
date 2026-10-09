@@ -6,6 +6,8 @@ Dar al administrador una interfaz web para mantener los maestros que alimentan a
 
 **Separación aprobada:** el administrador tendrá pestañas principales **Negocio** y **Configuración**, sin otro login. Este documento conserva el contrato de los ABM y permisos actuales; `SPEC-reporting.md` define el dashboard, ventas y estados de cuenta. Existencias y Recepción de piezas pertenecen a Negocio; Lectura de etiquetas queda en Configuración. Los enlaces y APIs existentes permanecen operativos durante el cambio de navegación.
 
+**Acciones de grilla:** en Configuración, editar una fila, consultar su detalle o historial y confirmar cambios de estado se hace en un diálogo modal, sin insertar el editor debajo de la tabla ni exigir desplazarse hasta él. Los formularios de alta pueden compartir ese diálogo. El cierre por Escape o Cancelar no envía cambios; mientras se guarda, el diálogo no se cierra. Las listas y búsquedas conservan su posición al volver. Esto aplica a categorías, artículos, listas y precios, clientes, organización, cajas, usuarios e impuestos. Los perfiles de lectura mantienen su probador como pantalla de trabajo, porque no son una grilla de edición.
+
 ## Alcance y orden
 
 El mapa aprobado en `CAPABILITY_MAP.md` sigue siendo el índice modular. La administración se entrega por capacidades verificables:

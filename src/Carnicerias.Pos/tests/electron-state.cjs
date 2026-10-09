@@ -33,6 +33,16 @@ async function main() {
     await send('Page.reload', { ignoreCache: true });
     await new Promise((done) => setTimeout(done, 1200));
   }
+  const clickSelector = process.argv.find((item) => item.startsWith('--click-selector='))?.slice(17);
+  if (clickSelector) {
+    const clicked = await send('Runtime.evaluate', {
+      expression: `(() => { const button = document.querySelector(${JSON.stringify(clickSelector)});
+        if (!button || button.disabled) return false; button.click(); return true; })()`,
+      returnByValue: true,
+    });
+    if (!clicked.result.value) throw new Error(`No se pudo abrir la acción: ${clickSelector}`);
+    await new Promise((done) => setTimeout(done, 400));
+  }
   if (process.argv.includes('--click-first-detail')) {
     await send('Runtime.evaluate', { expression: "document.querySelector('table tbody button')?.click()" });
     await new Promise((done) => setTimeout(done, 450));
@@ -45,6 +55,12 @@ async function main() {
       .map(item => item.textContent?.trim()).slice(0, 12),
       buttons: [...document.querySelectorAll('button')].map(item => item.textContent?.trim()).filter(Boolean).slice(0, 30),
       text: document.body.innerText.slice(0, 1200),
+      dialogs: [...document.querySelectorAll('dialog[open]')].map(dialog => ({
+        label: document.getElementById(dialog.getAttribute('aria-labelledby'))?.textContent?.trim(),
+        width: Math.round(dialog.getBoundingClientRect().width),
+        visible: dialog.getBoundingClientRect().top >= 0 &&
+          dialog.getBoundingClientRect().bottom <= innerHeight,
+      })),
       detail: document.querySelector('.ticket-detail')?.innerText ?? null })`, returnByValue: true,
   });
   console.log(JSON.stringify(state.result.value, null, 2));

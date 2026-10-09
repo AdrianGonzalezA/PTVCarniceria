@@ -30,8 +30,9 @@
       </header>
 
       @if (createOpen()) {
+        <app-admin-detail-dialog labelledBy="user-create-title" [compact]="true" [canClose]="!creating()" (closed)="closeCreate()">
         <form class="user-editor" (submit)="$event.preventDefault(); createCashier()">
-          <h3>Nuevo cajero</h3>
+          <h3 id="user-create-title">Nuevo cajero</h3>
           <label for="create-username">Usuario</label>
           <input id="create-username" name="username" autocomplete="off" maxlength="100" required [value]="createUsername()" (input)="updateCreateField('username', $event)" />
           <label for="create-email">Correo electrónico</label>
@@ -48,16 +49,19 @@
               </label>
             }
           </fieldset>
-          <div class="editor-actions">
+          @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+          <div class="row-actions">
             <button type="submit" [disabled]="creating()">{{ creating() ? 'Creando…' : 'Crear cajero' }}</button>
             <button type="button" class="secondary-button" [disabled]="creating()" (click)="closeCreate()">Cancelar</button>
           </div>
         </form>
+        </app-admin-detail-dialog>
       }
 
       @if (assignmentUserId(); as userId) {
-        <section class="user-editor" aria-labelledby="assignments-title">
-          <h3 id="assignments-title">Asignaciones de {{ assignmentUsername() }}</h3>
+        <app-admin-detail-dialog labelledBy="user-assignments-title" [compact]="true" [canClose]="!assignmentSaving()" (closed)="closeAssignments()">
+        <section class="user-editor" aria-labelledby="user-assignments-title">
+          <h3 id="user-assignments-title">Asignaciones de {{ assignmentUsername() }}</h3>
           @if (assignmentLoading()) {
             <p role="status">Cargando asignaciones…</p>
           } @else if (assignmentData(); as assignments) {
@@ -77,22 +81,27 @@
               <button type="button" [disabled]="assignmentSaving()" (click)="saveAssignments()">{{ assignmentSaving() ? 'Guardando…' : 'Guardar asignaciones' }}</button>
             }
           }
+          @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
           <button type="button" class="secondary-button" [disabled]="assignmentSaving()" (click)="closeAssignments()">Cerrar</button>
         </section>
+        </app-admin-detail-dialog>
       }
 
       @if (passwordUserId()) {
+        <app-admin-detail-dialog labelledBy="user-password-title" [compact]="true" [canClose]="!resettingPassword()" (closed)="closePasswordReset()">
         <form class="user-editor" (submit)="$event.preventDefault(); resetUserPassword()">
-          <h3>Restablecer contraseña de {{ passwordUsername() }}</h3>
+          <h3 id="user-password-title">Restablecer contraseña de {{ passwordUsername() }}</h3>
           <p>Este usuario deberá usar la contraseña nueva para ingresar. Sus sesiones actuales se cerrarán.</p>
           <label for="reset-password">Contraseña nueva</label>
           <input id="reset-password" name="new-password" type="password" autocomplete="new-password" [attr.minlength]="minimumPasswordLength()" required [value]="resetPasswordDraft()" (input)="updateResetPassword($event)" />
           <p class="form-help">Mínimo {{ minimumPasswordLength() }} caracteres.@if (passwordUserId() === currentUserId()) { Al cambiar tu propia clave, volverás al ingreso. }</p>
-          <div class="editor-actions">
+          @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+          <div class="row-actions">
             <button type="submit" [disabled]="resettingPassword()">{{ resettingPassword() ? 'Guardando…' : 'Restablecer' }}</button>
             <button type="button" class="secondary-button" [disabled]="resettingPassword()" (click)="closePasswordReset()">Cancelar</button>
           </div>
         </form>
+        </app-admin-detail-dialog>
       }
 
       <form class="search-form" (ngSubmit)="search()">
@@ -142,22 +151,8 @@
               <tbody>
                 @for (user of page.items; track user.userId) {
                   <tr>
-                    <td class="username">
-                      @if (editingUserId() === user.userId) {
-                        <label class="visually-hidden" [for]="'username-' + user.userId">Nombre de usuario</label>
-                        <input [id]="'username-' + user.userId" [value]="draftUsername()" maxlength="100" (input)="updateDraftUsername($event)" />
-                      } @else {
-                        {{ user.username }}
-                      }
-                    </td>
-                    <td>
-                      @if (editingUserId() === user.userId) {
-                        <label class="visually-hidden" [for]="'email-' + user.userId">Correo electrónico</label>
-                        <input [id]="'email-' + user.userId" type="email" [value]="draftEmail()" maxlength="320" (input)="updateDraftEmail($event)" />
-                      } @else {
-                        {{ user.email }}
-                      }
-                    </td>
+                    <td class="username">{{ user.username }}</td>
+                    <td>{{ user.email }}</td>
                     <td>
                       <span class="status" [class.status-active]="user.isActive">
                         {{ user.isActive ? 'Activo' : 'Inactivo' }}
@@ -166,19 +161,6 @@
                     <td>{{ user.createdAtUtc | date: 'dd/MM/yyyy' }}</td>
                     <td>
                       <div class="row-actions">
-                      @if (editingUserId() === user.userId) {
-                        <button
-                          type="button"
-                          class="secondary-button"
-                          [disabled]="actionUserId() === user.userId || !draftUsername().trim() || !draftEmail().trim()"
-                          (click)="saveUser(user.userId)"
-                        >
-                          {{ actionUserId() === user.userId ? 'Guardando…' : 'Guardar' }}
-                        </button>
-                        <button type="button" class="secondary-button" [disabled]="actionUserId() === user.userId" (click)="cancelEditing()">
-                          Cancelar
-                        </button>
-                      } @else {
                         <button type="button" class="secondary-button" [disabled]="actionUserId() !== null" (click)="startEditing(user.userId)">
                           Editar
                         </button>
@@ -200,7 +182,6 @@
                       </button>
                       <button type="button" class="secondary-button" [disabled]="actionUserId() !== null" (click)="openAssignments(user.userId)">Sucursales</button>
                       <button type="button" class="secondary-button" [disabled]="actionUserId() !== null" (click)="openPasswordReset(user.userId)">Contraseña</button>
-                      }
                       </div>
                     </td>
                   </tr>
@@ -224,5 +205,34 @@
         }
       }
     </section>
+    @if (editingUserId(); as userId) {
+      <app-admin-detail-dialog labelledBy="user-editor-title" [compact]="true" [canClose]="!actionUserId()" (closed)="cancelEditing()">
+        <section class="user-editor" aria-labelledby="user-editor-title">
+          <h3 id="user-editor-title">Editar usuario</h3>
+          <label for="edit-username">Nombre de usuario</label>
+          <input id="edit-username" [value]="draftUsername()" maxlength="100" (input)="updateDraftUsername($event)" />
+          <label for="edit-email">Correo electrónico</label>
+          <input id="edit-email" type="email" [value]="draftEmail()" maxlength="320" (input)="updateDraftEmail($event)" />
+          @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+          <div class="row-actions">
+            <button type="button" class="save-user-button" [disabled]="actionUserId() !== null || !draftUsername().trim() || !draftEmail().trim()" (click)="saveUser(userId)">{{ actionUserId() ? 'Guardando…' : 'Guardar' }}</button>
+            <button type="button" class="secondary-button" [disabled]="actionUserId() !== null" (click)="cancelEditing()">Cancelar</button>
+          </div>
+        </section>
+      </app-admin-detail-dialog>
+    }
+    @if (pendingAction(); as action) {
+      <app-admin-detail-dialog labelledBy="user-action-title" [compact]="true" [canClose]="!actionUserId()" (closed)="closeAction()">
+        <section class="user-editor" aria-labelledby="user-action-title">
+          <h3 id="user-action-title">{{ action.kind === 'sessions' ? 'Cerrar sesiones' : action.isActive ? 'Inactivar usuario' : 'Reactivar usuario' }}</h3>
+          <p><strong>{{ pendingUsername() }}</strong></p>
+          <p>{{ action.kind === 'sessions' ? 'Se cerrarán todas sus sesiones activas.' : action.isActive ? 'Se cerrarán sus sesiones y no podrá ingresar.' : 'Podrá ingresar de nuevo; las sesiones anteriores no se restauran.' }}</p>
+          <div class="row-actions">
+            <button type="button" class="confirm-user-action" [disabled]="actionUserId() !== null" (click)="confirmAction()">Confirmar</button>
+            <button type="button" class="secondary-button" [disabled]="actionUserId() !== null" (click)="closeAction()">Cancelar</button>
+          </div>
+        </section>
+      </app-admin-detail-dialog>
+    }
   </div>
 </main>

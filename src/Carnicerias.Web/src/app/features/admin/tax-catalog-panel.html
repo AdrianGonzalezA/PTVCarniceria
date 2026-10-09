@@ -54,3 +54,17 @@
     }
   }
 </section>
+@if (pendingEntry(); as entry) {
+  <app-admin-detail-dialog labelledBy="tax-action-title" [compact]="true" [canClose]="!saving()" (closed)="closeAction()">
+    <section class="editor-form" aria-labelledby="tax-action-title">
+      <h3 id="tax-action-title">Inactivar impuesto o gravamen</h3>
+      <p><strong>{{ entry.name }}</strong> · {{ entry.code }}</p>
+      <p>Primero debe retirarse de todos los artículos.</p>
+      @if (saveError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
+      <div class="editor-actions">
+        <button type="button" class="confirm-tax-action" [disabled]="saving()" (click)="confirmDeactivate()">{{ saving() ? 'Guardando…' : 'Confirmar' }}</button>
+        <button type="button" class="secondary-button" [disabled]="saving()" (click)="closeAction()">Cancelar</button>
+      </div>
+    </section>
+  </app-admin-detail-dialog>
+}

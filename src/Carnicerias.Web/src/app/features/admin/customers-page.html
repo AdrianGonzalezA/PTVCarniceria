@@ -33,27 +33,6 @@
       @if (actionMessage(); as message) { <p class="success-message" role="status">{{ message }}</p> }
       @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
 
-      @if (editorOpen()) {
-        <form class="editor-form" [formGroup]="editorForm" (ngSubmit)="save()">
-          <h3>{{ editingId() ? 'Editar cliente' : 'Nuevo cliente' }}</h3>
-          <label for="customer-code">Código</label>
-          <input id="customer-code" formControlName="code" maxlength="80" autocomplete="off" required />
-          @if (editorForm.controls.code.touched && editorForm.controls.code.invalid) {
-            <p class="field-error" role="alert">Ingresá un código de hasta 80 caracteres.</p>
-          }
-          <label for="customer-name">Nombre o razón social</label>
-          <input id="customer-name" formControlName="name" maxlength="200" autocomplete="off" required />
-          @if (editorForm.controls.name.touched && editorForm.controls.name.invalid) {
-            <p class="field-error" role="alert">Ingresá un nombre de hasta 200 caracteres.</p>
-          }
-          <p>El cliente se crea sin cuenta corriente; podés habilitarla después desde la lista.</p>
-          <div class="editor-actions">
-            <button type="submit" [disabled]="isSaving()">{{ isSaving() ? 'Guardando…' : 'Guardar' }}</button>
-            <button type="button" class="secondary-button" [disabled]="isSaving()" (click)="cancelEdit()">Cancelar</button>
-          </div>
-        </form>
-      }
-
       <form class="search-form" (submit)="$event.preventDefault(); search()">
         <label for="customer-search">Buscar cliente</label>
         <div>
@@ -101,5 +80,45 @@
         }
       }
     </section>
+    @if (editorOpen()) {
+      <app-admin-detail-dialog labelledBy="customer-editor-title" [compact]="true" [canClose]="!isSaving()" (closed)="cancelEdit()">
+        <form class="editor-form" [formGroup]="editorForm" (ngSubmit)="save()">
+          <h3 id="customer-editor-title">{{ editingId() ? 'Editar cliente' : 'Nuevo cliente' }}</h3>
+          <label for="customer-code">Código</label>
+          <input id="customer-code" formControlName="code" maxlength="80" autocomplete="off" required />
+          @if (editorForm.controls.code.touched && editorForm.controls.code.invalid) {
+            <p class="field-error" role="alert">Ingresá un código de hasta 80 caracteres.</p>
+          }
+          <label for="customer-name">Nombre o razón social</label>
+          <input id="customer-name" formControlName="name" maxlength="200" autocomplete="off" required />
+          @if (editorForm.controls.name.touched && editorForm.controls.name.invalid) {
+            <p class="field-error" role="alert">Ingresá un nombre de hasta 200 caracteres.</p>
+          }
+          @if (!editingId()) { <p>El cliente se crea sin cuenta corriente; podés habilitarla después desde la lista.</p> }
+          @if (actionError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
+          <div class="editor-actions">
+            <button type="submit" [disabled]="isSaving()">{{ isSaving() ? 'Guardando…' : 'Guardar' }}</button>
+            <button type="button" class="secondary-button" [disabled]="isSaving()" (click)="cancelEdit()">Cancelar</button>
+          </div>
+        </form>
+      </app-admin-detail-dialog>
+    }
+    @if (pendingAction(); as pending) {
+      <app-admin-detail-dialog labelledBy="customer-action-title" [compact]="true" [canClose]="!actionId()" (closed)="closeAction()">
+        <section class="editor-form" aria-labelledby="customer-action-title">
+          <h3 id="customer-action-title">Confirmar cambio de cliente</h3>
+          <p><strong>{{ pending.customer.name }}</strong></p>
+          <p>@if (pending.kind === 'active') {
+            {{ pending.customer.isActive ? 'Se inactivará el cliente y se deshabilitará su cuenta corriente.' : 'Se activará el cliente.' }}
+          } @else {
+            {{ pending.customer.creditEnabled ? 'Se quitará el acceso a cuenta corriente.' : 'Se habilitará la cuenta corriente.' }}
+          }</p>
+          <div class="editor-actions">
+            <button type="button" class="confirm-customer-action" [disabled]="actionId() !== null" (click)="confirmAction()">{{ actionId() ? 'Guardando…' : 'Confirmar' }}</button>
+            <button type="button" class="secondary-button" [disabled]="actionId() !== null" (click)="closeAction()">Cancelar</button>
+          </div>
+        </section>
+      </app-admin-detail-dialog>
+    }
   </div>
 </main>

@@ -20,12 +20,12 @@ describe('OrganizationPage', () => {
   }));
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
-  function load() {
+  function load(companies = [company]) {
     const fixture = TestBed.createComponent(OrganizationPage);
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
     http.expectOne('/api/sessions/current').flush(session);
-    http.expectOne('/api/admin/companies').flush([company]);
+    http.expectOne('/api/admin/companies').flush(companies);
     fixture.detectChanges();
     return { fixture, http, page: fixture.nativeElement as HTMLElement };
   }
@@ -47,6 +47,7 @@ describe('OrganizationPage', () => {
     const { fixture, http, page } = load();
     page.querySelector<HTMLButtonElement>('.create-company-button')!.click();
     fixture.detectChanges();
+    expect(page.querySelector('dialog[aria-labelledby="company-editor-title"]')).not.toBeNull();
     for (const [id, value] of Object.entries({
       'company-name': 'Nueva empresa', 'initial-branch-name': 'Principal',
     })) {
@@ -73,6 +74,8 @@ describe('OrganizationPage', () => {
     fixture.detectChanges();
     page.querySelector<HTMLButtonElement>('.create-branch-button')!.click();
     fixture.detectChanges();
+    expect(page.querySelector('dialog[aria-labelledby="branch-editor-title"]')).not.toBeNull();
+    expect(page.querySelector('.branches-panel')).toBeNull();
     const name = page.querySelector<HTMLInputElement>('#branch-name')!;
     name.value = 'Norte';
     name.dispatchEvent(new Event('input'));
@@ -97,6 +100,8 @@ describe('OrganizationPage', () => {
     expect(page.querySelector('.branches-panel')).toBeNull();
     page.querySelector<HTMLButtonElement>('.create-terminal-button')!.click();
     fixture.detectChanges();
+    expect(page.querySelector('dialog[aria-labelledby="terminal-editor-title"]')).not.toBeNull();
+    expect(page.querySelector('.terminals-panel')).toBeNull();
     const name = page.querySelector<HTMLInputElement>('#terminal-name')!;
     name.value = 'Caja 2';
     name.dispatchEvent(new Event('input'));
@@ -113,5 +118,60 @@ describe('OrganizationPage', () => {
     page.querySelector<HTMLButtonElement>('.terminals-panel .header-actions .secondary-button')!.click();
     fixture.detectChanges();
     expect(page.querySelector('dialog[open] .branches-panel')).not.toBeNull();
+  });
+
+  it('confirms company inactivation in a dialog before updating', () => {
+    const other = { id: 'company-2', name: 'Otra empresa', isActive: true, activeBranchCount: 0 };
+    const { fixture, http, page } = load([company, other]);
+    page.querySelector<HTMLButtonElement>('.company-row:last-child .toggle-button')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector('dialog[aria-labelledby="organization-action-title"]')).not.toBeNull();
+    http.expectNone('/api/admin/companies/company-2');
+    page.querySelector<HTMLButtonElement>('.confirm-organization-action')!.click();
+    const update = http.expectOne('/api/admin/companies/company-2');
+    expect(update.request.body).toEqual({ isActive: false });
+    update.flush({ ...other, isActive: false });
+    fixture.detectChanges();
+    expect(page.querySelector('dialog')).toBeNull();
+  });
+
+  it('confirms a branch status change without leaving two dialogs open', () => {
+    const { fixture, http, page } = load();
+    page.querySelector<HTMLButtonElement>('.company-row button')!.click();
+    http.expectOne('/api/admin/companies/company-1/branches').flush([branch,
+      { id: 'branch-2', name: 'Norte', isActive: true, activeTerminalCount: 0 }]);
+    fixture.detectChanges();
+    page.querySelector<HTMLButtonElement>('.branch-row:last-child .toggle-button')!.click();
+    fixture.detectChanges();
+    expect(page.querySelectorAll('dialog[open]')).toHaveLength(1);
+    expect(page.querySelector('dialog[aria-labelledby="organization-action-title"]')).not.toBeNull();
+    page.querySelector<HTMLButtonElement>('.confirm-organization-action')!.click();
+    const update = http.expectOne('/api/admin/companies/company-1/branches/branch-2');
+    expect(update.request.body).toEqual({ isActive: false });
+    update.flush({ id: 'branch-2', name: 'Norte', isActive: false, activeTerminalCount: 0 });
+    fixture.detectChanges();
+    expect(page.querySelector('.branches-panel')?.textContent).toContain('Norte');
+  });
+
+  it('confirms credential rotation and then shows the one-time value', () => {
+    const { fixture, http, page } = load();
+    page.querySelector<HTMLButtonElement>('.company-row button')!.click();
+    http.expectOne('/api/admin/companies/company-1/branches').flush([branch]);
+    fixture.detectChanges();
+    page.querySelector<HTMLButtonElement>('.branch-row .terminals-button')!.click();
+    http.expectOne('/api/admin/companies/company-1/branches/branch-1/terminals').flush([
+      { id: 'terminal-1', name: 'Caja 1', isActive: true, isHistorical: false, hasCredential: true },
+    ]);
+    fixture.detectChanges();
+    page.querySelectorAll<HTMLButtonElement>('.terminal-row button')[1].click();
+    fixture.detectChanges();
+    expect(page.querySelectorAll('dialog[open]')).toHaveLength(1);
+    expect(page.querySelector('dialog[aria-labelledby="organization-action-title"]')).not.toBeNull();
+    page.querySelector<HTMLButtonElement>('.confirm-organization-action')!.click();
+    const rotate = http.expectOne('/api/admin/companies/company-1/branches/branch-1/terminals/terminal-1/rotate');
+    expect(rotate.request.method).toBe('POST');
+    rotate.flush({ credential: 'new-secret' });
+    fixture.detectChanges();
+    expect(page.querySelector('.credential-notice')?.textContent).toContain('new-secret');
   });
 });

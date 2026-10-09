@@ -3,6 +3,7 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AdminAreaTabs } from './admin-area-tabs';
+import { AdminDetailDialog } from './admin-detail-dialog';
 import { AdminCategoryClient, AdminCategoryOption } from '../../core/admin/admin-category-client';
 import { AdminProductCode, AdminProductCodeClient } from '../../core/admin/admin-product-code-client';
 import { AdminProduct, AdminProductClient, AdminProductPage, SaleMode } from '../../core/admin/admin-product-client';
@@ -10,7 +11,7 @@ import { CurrentSession, SessionClient } from '../../core/session/session-client
 
 @Component({
   selector: 'app-products-page',
-  imports: [RouterLink, AdminAreaTabs, ReactiveFormsModule],
+  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, ReactiveFormsModule],
   templateUrl: './products-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './products-page.scss'],
 })
@@ -45,6 +46,7 @@ export class ProductsPage implements OnInit {
   protected readonly editingProduct = signal<AdminProduct | null>(null);
   protected readonly isSaving = signal(false);
   protected readonly actionId = signal<string | null>(null);
+  protected readonly pendingProduct = signal<AdminProduct | null>(null);
   protected readonly actionMessage = signal<string | null>(null);
   protected readonly actionError = signal<string | null>(null);
   protected readonly alternateCodes = signal<readonly AdminProductCode[]>([]);
@@ -175,9 +177,12 @@ export class ProductsPage implements OnInit {
 
   protected toggleActive(product: AdminProduct): void {
     if (this.actionId() || this.isSaving()) return;
-    if (product.isActive && !window.confirm(
-      '¿Inactivar este artículo? Dejará de aparecer en el punto de venta.',
-    )) return;
+    this.pendingProduct.set(product);
+  }
+
+  protected confirmToggle(): void {
+    const product = this.pendingProduct();
+    if (!product || this.actionId() || this.isSaving()) return;
     this.actionId.set(product.id);
     this.actionError.set(null);
     this.actionMessage.set(null);
@@ -185,6 +190,7 @@ export class ProductsPage implements OnInit {
       next: (updated) => {
         this.replaceProduct(updated);
         this.actionId.set(null);
+        this.pendingProduct.set(null);
         this.actionMessage.set(updated.isActive ? 'Artículo activado.' : 'Artículo inactivado.');
       },
       error: (error: HttpErrorResponse) => {
@@ -192,6 +198,10 @@ export class ProductsPage implements OnInit {
         this.actionError.set(this.actionErrorMessage(error));
       },
     });
+  }
+
+  protected closeAction(): void {
+    if (!this.actionId()) this.pendingProduct.set(null);
   }
 
   protected updateAlternateDraft(event: Event): void {

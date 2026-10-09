@@ -38,6 +38,7 @@ export class PriceListsPage implements OnInit {
   protected readonly loadError = signal<string | null>(null);
   protected readonly editorOpen = signal(false);
   protected readonly editingList = signal<AdminPriceList | null>(null);
+  protected readonly pendingList = signal<AdminPriceList | null>(null);
   protected readonly isSaving = signal(false);
   protected readonly actionId = signal<string | null>(null);
   protected readonly actionMessage = signal<string | null>(null);
@@ -146,13 +147,19 @@ export class PriceListsPage implements OnInit {
 
   protected toggleList(list: AdminPriceList): void {
     if (this.actionId()) return;
-    if (list.isActive && !window.confirm('¿Inactivar esta lista? Dejará de ofrecerse en caja.')) return;
+    this.pendingList.set(list);
+  }
+
+  protected confirmListToggle(): void {
+    const list = this.pendingList();
+    if (!list || this.actionId()) return;
     this.actionId.set(list.id);
     this.actionError.set(null);
     this.client.update(list.id, { isActive: !list.isActive }).subscribe({
       next: (updated) => {
         this.replaceList(updated);
         this.actionId.set(null);
+        this.pendingList.set(null);
         this.actionMessage.set(updated.isActive ? 'Lista activada.' : 'Lista inactivada.');
       },
       error: (error: HttpErrorResponse) => {
@@ -162,6 +169,10 @@ export class PriceListsPage implements OnInit {
           : 'No se pudo cambiar el estado de la lista.');
       },
     });
+  }
+
+  protected closeListAction(): void {
+    if (!this.actionId()) this.pendingList.set(null);
   }
 
   protected showBranches(list: AdminPriceList): void {

@@ -34,8 +34,9 @@
       </header>
 
       @if (companyEditorOpen()) {
+        <app-admin-detail-dialog labelledBy="company-editor-title" [compact]="true" [canClose]="!companySaving()" (closed)="cancelCompany()">
         <form class="editor-form company-form" [formGroup]="companyForm" (ngSubmit)="saveCompany()">
-          <h3>{{ editingCompany() ? 'Editar empresa' : 'Nueva empresa' }}</h3>
+          <h3 id="company-editor-title">{{ editingCompany() ? 'Editar empresa' : 'Nueva empresa' }}</h3>
           <label for="company-name">Nombre de la empresa</label>
           <input id="company-name" formControlName="name" maxlength="200" required />
           @if (!editingCompany()) {
@@ -45,11 +46,13 @@
           @if (companyForm.touched && companyForm.invalid) {
             <p class="field-error" role="alert">Ingresá nombres de hasta 200 caracteres.</p>
           }
+          @if (actionError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
           <div class="editor-actions">
             <button type="submit" [disabled]="companySaving()">{{ companySaving() ? 'Guardando…' : 'Guardar' }}</button>
             <button type="button" class="secondary-button" [disabled]="companySaving()" (click)="cancelCompany()">Cancelar</button>
           </div>
         </form>
+        </app-admin-detail-dialog>
       }
 
       @if (companiesError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
@@ -81,7 +84,7 @@
     </section>
 
     @if (selectedCompany(); as company) {
-      @if (!selectedTerminalBranch()) {
+      @if (!selectedTerminalBranch() && !branchEditorOpen() && !pendingAction()) {
       <app-admin-detail-dialog labelledBy="branches-title"
         [canClose]="!branchSaving() && !branchActionId() && !selectedTerminalBranch()" (closed)="closeCompany()">
       <section class="category-panel branches-panel" aria-labelledby="branches-title" [attr.aria-busy]="branchesLoading()">
@@ -95,21 +98,6 @@
             <button type="button" class="secondary-button" [disabled]="branchSaving() || !!branchActionId()" (click)="closeCompany()">Cerrar sucursales</button>
           </div>
         </header>
-
-        @if (branchEditorOpen()) {
-          <form class="editor-form branch-form" [formGroup]="branchForm" (ngSubmit)="saveBranch()">
-            <h3>{{ editingBranch() ? 'Editar sucursal' : 'Nueva sucursal' }}</h3>
-            <label for="branch-name">Nombre</label>
-            <input id="branch-name" formControlName="name" maxlength="200" required />
-            @if (branchForm.controls.name.touched && branchForm.controls.name.invalid) {
-              <p class="field-error" role="alert">Ingresá un nombre de hasta 200 caracteres.</p>
-            }
-            <div class="editor-actions">
-              <button type="submit" [disabled]="branchSaving()">{{ branchSaving() ? 'Guardando…' : 'Guardar' }}</button>
-              <button type="button" class="secondary-button" [disabled]="branchSaving()" (click)="cancelBranch()">Cancelar</button>
-            </div>
-          </form>
-        }
 
         @if (branchesError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
         @if (branchesLoading()) {
@@ -140,9 +128,27 @@
       </section>
       </app-admin-detail-dialog>
       }
+      @if (branchEditorOpen()) {
+        <app-admin-detail-dialog labelledBy="branch-editor-title" [compact]="true" [canClose]="!branchSaving()" (closed)="cancelBranch()">
+          <form class="editor-form branch-form" [formGroup]="branchForm" (ngSubmit)="saveBranch()">
+            <h3 id="branch-editor-title">{{ editingBranch() ? 'Editar sucursal' : 'Nueva sucursal' }}</h3>
+            <label for="branch-name">Nombre</label>
+            <input id="branch-name" formControlName="name" maxlength="200" required />
+            @if (branchForm.controls.name.touched && branchForm.controls.name.invalid) {
+              <p class="field-error" role="alert">Ingresá un nombre de hasta 200 caracteres.</p>
+            }
+            @if (actionError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
+            <div class="editor-actions">
+              <button type="submit" [disabled]="branchSaving()">{{ branchSaving() ? 'Guardando…' : 'Guardar' }}</button>
+              <button type="button" class="secondary-button" [disabled]="branchSaving()" (click)="cancelBranch()">Cancelar</button>
+            </div>
+          </form>
+        </app-admin-detail-dialog>
+      }
     }
 
     @if (selectedTerminalBranch(); as terminalBranch) {
+      @if (!terminalEditorOpen() && !pendingAction()) {
       <app-admin-detail-dialog labelledBy="terminals-title"
         [canClose]="!terminalSaving() && !terminalActionId() && !shownCredential()" (closed)="closeTerminals()">
       <section class="category-panel terminals-panel" aria-labelledby="terminals-title" [attr.aria-busy]="terminalsLoading()">
@@ -166,21 +172,6 @@
           </div>
         }
 
-        @if (terminalEditorOpen()) {
-          <form class="editor-form terminal-form" [formGroup]="terminalForm" (ngSubmit)="saveTerminal()">
-            <h3>{{ editingTerminal() ? 'Editar caja' : 'Nueva caja' }}</h3>
-            <label for="terminal-name">Nombre</label>
-            <input id="terminal-name" formControlName="name" maxlength="120" required />
-            @if (terminalForm.controls.name.touched && terminalForm.controls.name.invalid) {
-              <p class="field-error" role="alert">Ingresá un nombre de hasta 120 caracteres.</p>
-            }
-            <div class="editor-actions">
-              <button type="submit" [disabled]="terminalSaving()">{{ terminalSaving() ? 'Guardando…' : 'Guardar' }}</button>
-              <button type="button" class="secondary-button" [disabled]="terminalSaving()" (click)="cancelTerminal()">Cancelar</button>
-            </div>
-          </form>
-        }
-
         @if (terminalsError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
         @if (terminalsLoading()) {
           <p class="state-message" role="status">Cargando cajas…</p>
@@ -196,9 +187,9 @@
                   <td>{{ terminal.hasCredential ? 'Aprovisionada' : 'Sin credencial' }}</td>
                   <td><span class="status" [class.status-active]="terminal.isActive">{{ terminal.isHistorical ? 'Histórica' : terminal.isActive ? 'Activa' : 'Inactiva' }}</span></td>
                   <td class="row-actions">
-                    <button type="button" class="secondary-button" [disabled]="terminal.isHistorical" (click)="startEditTerminal(terminal)">Editar</button>
-                    <button type="button" class="secondary-button" [disabled]="terminalActionId() !== null || !terminal.isActive" (click)="rotateTerminal(terminal)">Rotar credencial</button>
-                    <button type="button" class="secondary-button" [disabled]="terminalActionId() !== null || terminal.isHistorical || (!terminal.isActive && (!terminalBranch.isActive || !selectedCompany()?.isActive))" (click)="toggleTerminal(terminal)">{{ terminal.isActive ? 'Inactivar' : 'Reactivar' }}</button>
+                    <button type="button" class="secondary-button" [disabled]="terminal.isHistorical || !!shownCredential()" (click)="startEditTerminal(terminal)">Editar</button>
+                    <button type="button" class="secondary-button" [disabled]="terminalActionId() !== null || !terminal.isActive || !!shownCredential()" (click)="rotateTerminal(terminal)">Rotar credencial</button>
+                    <button type="button" class="secondary-button" [disabled]="terminalActionId() !== null || !!shownCredential() || terminal.isHistorical || (!terminal.isActive && (!terminalBranch.isActive || !selectedCompany()?.isActive))" (click)="toggleTerminal(terminal)">{{ terminal.isActive ? 'Inactivar' : 'Reactivar' }}</button>
                   </td>
                 </tr>
               }
@@ -206,6 +197,42 @@
           </table></div>
         }
       </section>
+      </app-admin-detail-dialog>
+      }
+      @if (terminalEditorOpen()) {
+        <app-admin-detail-dialog labelledBy="terminal-editor-title" [compact]="true" [canClose]="!terminalSaving()" (closed)="cancelTerminal()">
+          <form class="editor-form terminal-form" [formGroup]="terminalForm" (ngSubmit)="saveTerminal()">
+            <h3 id="terminal-editor-title">{{ editingTerminal() ? 'Editar caja' : 'Nueva caja' }}</h3>
+            <label for="terminal-name">Nombre</label>
+            <input id="terminal-name" formControlName="name" maxlength="120" required />
+            @if (terminalForm.controls.name.touched && terminalForm.controls.name.invalid) {
+              <p class="field-error" role="alert">Ingresá un nombre de hasta 120 caracteres.</p>
+            }
+            @if (actionError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
+            <div class="editor-actions">
+              <button type="submit" [disabled]="terminalSaving()">{{ terminalSaving() ? 'Guardando…' : 'Guardar' }}</button>
+              <button type="button" class="secondary-button" [disabled]="terminalSaving()" (click)="cancelTerminal()">Cancelar</button>
+            </div>
+          </form>
+        </app-admin-detail-dialog>
+      }
+    }
+    @if (pendingAction(); as action) {
+      <app-admin-detail-dialog labelledBy="organization-action-title" [compact]="true"
+        [canClose]="!companyActionId() && !branchActionId() && !terminalActionId()" (closed)="closeAction()">
+        <section class="editor-form" aria-labelledby="organization-action-title">
+          <h3 id="organization-action-title">{{ actionTitle(action) }}</h3>
+          <p><strong>{{ actionName(action) }}</strong></p>
+          <p>{{ actionWarning(action) }}</p>
+          <div class="editor-actions">
+            <button type="button" class="confirm-organization-action"
+              [disabled]="!!companyActionId() || !!branchActionId() || !!terminalActionId()"
+              (click)="confirmAction()">Confirmar</button>
+            <button type="button" class="secondary-button"
+              [disabled]="!!companyActionId() || !!branchActionId() || !!terminalActionId()"
+              (click)="closeAction()">Cancelar</button>
+          </div>
+        </section>
       </app-admin-detail-dialog>
     }
   </div>

@@ -35,8 +35,9 @@
       @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
 
       @if (editorOpen()) {
+        <app-admin-detail-dialog labelledBy="product-editor-title" [canClose]="!isSaving() && !codeSaving()" (closed)="cancelEdit()">
         <form class="editor-form product-editor" [formGroup]="editorForm" (ngSubmit)="save()">
-          <h3>{{ editingProduct() ? 'Información del artículo' : 'Nuevo artículo' }}</h3>
+          <h3 id="product-editor-title">{{ editingProduct() ? 'Información del artículo' : 'Nuevo artículo' }}</h3>
           <div class="field-grid">
             <label>Código principal
               <input id="product-code" formControlName="code" maxlength="80" [readOnly]="editingProduct() !== null" required />
@@ -67,6 +68,7 @@
           @if (editorForm.touched && editorForm.invalid) {
             <p class="field-error" role="alert">Completá todos los campos. El costo debe ser positivo y tener hasta dos decimales.</p>
           }
+          @if (actionError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
           <p class="editor-note">Los precios de venta se asignan por lista. Un artículo nuevo no se muestra en caja hasta tener precio y stock.</p>
           @if (editingProduct(); as editing) {
             <section class="alternate-codes" aria-labelledby="alternate-codes-title">
@@ -102,6 +104,7 @@
             <button type="button" class="secondary-button" [disabled]="isSaving() || codeSaving()" (click)="cancelEdit()">Cancelar</button>
           </div>
         </form>
+        </app-admin-detail-dialog>
       }
 
       <form class="product-filters" (submit)="$event.preventDefault(); search()">
@@ -165,5 +168,18 @@
         }
       }
     </section>
+    @if (pendingProduct(); as product) {
+      <app-admin-detail-dialog labelledBy="product-action-title" [compact]="true" [canClose]="!actionId()" (closed)="closeAction()">
+        <section class="editor-form" aria-labelledby="product-action-title">
+          <h3 id="product-action-title">{{ product.isActive ? 'Inactivar' : 'Activar' }} artículo</h3>
+          <p><strong>{{ product.name }}</strong> · {{ product.code }}</p>
+          @if (product.isActive) { <p>Dejará de aparecer en el punto de venta.</p> }
+          <div class="editor-actions">
+            <button type="button" class="confirm-product-action" [disabled]="actionId() !== null" (click)="confirmToggle()">{{ actionId() ? 'Guardando…' : 'Confirmar' }}</button>
+            <button type="button" class="secondary-button" [disabled]="actionId() !== null" (click)="closeAction()">Cancelar</button>
+          </div>
+        </section>
+      </app-admin-detail-dialog>
+    }
   </div>
 </main>

@@ -3,12 +3,13 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AdminAreaTabs } from './admin-area-tabs';
+import { AdminDetailDialog } from './admin-detail-dialog';
 import { AdminCustomer, AdminCustomerClient, AdminCustomerPage } from '../../core/admin/admin-customer-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 
 @Component({
   selector: 'app-customers-page',
-  imports: [RouterLink, AdminAreaTabs, ReactiveFormsModule],
+  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, ReactiveFormsModule],
   templateUrl: './customers-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss'],
 })
@@ -32,6 +33,7 @@ export class CustomersPage implements OnInit {
   protected readonly editingId = signal<string | null>(null);
   protected readonly isSaving = signal(false);
   protected readonly actionId = signal<string | null>(null);
+  protected readonly pendingAction = signal<{ customer: AdminCustomer; kind: 'active' | 'credit' } | null>(null);
   protected readonly actionMessage = signal<string | null>(null);
   protected readonly actionError = signal<string | null>(null);
   protected readonly firstItem = computed(() => {
@@ -124,15 +126,26 @@ export class CustomersPage implements OnInit {
   }
 
   protected toggleActive(customer: AdminCustomer): void {
-    if (customer.isActive && !window.confirm('¿Inactivar este cliente? Se deshabilitará su cuenta corriente.')) return;
-    this.change(customer, { isActive: !customer.isActive }, customer.isActive ? 'Cliente inactivado.' : 'Cliente activado.');
+    this.pendingAction.set({ customer, kind: 'active' });
   }
 
   protected toggleCredit(customer: AdminCustomer): void {
     if (!customer.isActive) return;
-    if (!customer.creditEnabled && !window.confirm('¿Habilitar la cuenta corriente de este cliente?')) return;
-    this.change(customer, { creditEnabled: !customer.creditEnabled },
+    this.pendingAction.set({ customer, kind: 'credit' });
+  }
+
+  protected confirmAction(): void {
+    const pending = this.pendingAction();
+    if (!pending) return;
+    const { customer, kind } = pending;
+    if (kind === 'active') this.change(customer, { isActive: !customer.isActive },
+      customer.isActive ? 'Cliente inactivado.' : 'Cliente activado.');
+    else this.change(customer, { creditEnabled: !customer.creditEnabled },
       customer.creditEnabled ? 'Cuenta corriente deshabilitada.' : 'Cuenta corriente habilitada.');
+  }
+
+  protected closeAction(): void {
+    if (!this.actionId()) this.pendingAction.set(null);
   }
 
   private change(customer: AdminCustomer, changes: { isActive?: boolean; creditEnabled?: boolean }, message: string): void {
@@ -144,6 +157,7 @@ export class CustomersPage implements OnInit {
       next: (updated) => {
         this.replaceCustomer(updated);
         this.actionId.set(null);
+        this.pendingAction.set(null);
         this.actionMessage.set(message);
       },
       error: (error: HttpErrorResponse) => {

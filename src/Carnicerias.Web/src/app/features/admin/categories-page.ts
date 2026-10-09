@@ -3,12 +3,13 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AdminAreaTabs } from './admin-area-tabs';
+import { AdminDetailDialog } from './admin-detail-dialog';
 import { AdminCategory, AdminCategoryClient, AdminCategoryPage } from '../../core/admin/admin-category-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 
 @Component({
   selector: 'app-categories-page',
-  imports: [RouterLink, AdminAreaTabs, ReactiveFormsModule],
+  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, ReactiveFormsModule],
   templateUrl: './categories-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss'],
 })
@@ -32,6 +33,7 @@ export class CategoriesPage implements OnInit {
   protected readonly editingId = signal<string | null>(null);
   protected readonly isSaving = signal(false);
   protected readonly actionId = signal<string | null>(null);
+  protected readonly pendingCategory = signal<AdminCategory | null>(null);
   protected readonly actionMessage = signal<string | null>(null);
   protected readonly actionError = signal<string | null>(null);
   protected readonly firstItem = computed(() => {
@@ -126,9 +128,12 @@ export class CategoriesPage implements OnInit {
 
   protected toggleActive(category: AdminCategory): void {
     if (this.actionId() || this.isSaving()) return;
-    if (category.isActive && !window.confirm(
-      '¿Inactivar esta categoría? Sus productos dejarán de aparecer en el punto de venta.',
-    )) return;
+    this.pendingCategory.set(category);
+  }
+
+  protected confirmToggle(): void {
+    const category = this.pendingCategory();
+    if (!category || this.actionId() || this.isSaving()) return;
 
     this.actionId.set(category.id);
     this.actionMessage.set(null);
@@ -137,6 +142,7 @@ export class CategoriesPage implements OnInit {
       next: (updated) => {
         this.replaceCategory(updated);
         this.actionId.set(null);
+        this.pendingCategory.set(null);
         this.actionMessage.set(updated.isActive ? 'Categoría activada.' : 'Categoría inactivada.');
       },
       error: (error: HttpErrorResponse) => {
@@ -144,6 +150,10 @@ export class CategoriesPage implements OnInit {
         this.actionError.set(this.actionErrorMessage(error));
       },
     });
+  }
+
+  protected closeAction(): void {
+    if (!this.actionId()) this.pendingCategory.set(null);
   }
 
   private replaceCategory(category: AdminCategory): void {

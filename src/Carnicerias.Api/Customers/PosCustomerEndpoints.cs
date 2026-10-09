@@ -39,10 +39,10 @@ public static class PosCustomerEndpoints
             charge.CompanyId == companyId && charge.CustomerId == customerId);
         var totalCharges = await charges.SumAsync(charge => (decimal?)charge.Amount, cancellationToken) ?? 0;
         var allocations = db.CustomerCollectionAllocations.AsNoTracking().Where(item =>
-            item.CompanyId == companyId && item.CustomerId == customerId);
+            item.CompanyId == companyId && item.CustomerId == customerId && !item.Receipt.IsVoided);
         var totalAllocated = await allocations.SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0;
         var creditAvailable = await db.CustomerCollectionReceipts.AsNoTracking()
-            .Where(item => item.CompanyId == companyId && item.CustomerId == customerId)
+            .Where(item => item.CompanyId == companyId && item.CustomerId == customerId && !item.IsVoided)
             .SumAsync(item => (decimal?)item.CreditAmount, cancellationToken) ?? 0;
         creditAvailable -= await db.CustomerCreditApplications.AsNoTracking()
             .Where(item => item.CompanyId == companyId && item.CustomerId == customerId)

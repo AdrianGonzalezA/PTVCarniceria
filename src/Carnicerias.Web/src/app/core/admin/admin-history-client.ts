@@ -28,6 +28,14 @@ export interface BusinessSummary {
   readonly newAccountCharges: number;
   readonly registeredAccountCharges: number;
   readonly creditApplied: number;
+  readonly outstandingDebt: number;
+  readonly companyCreditAvailable: number;
+  readonly collectionsReceived: number;
+  readonly collectionsRefunded: number;
+  readonly cashCollectionsNet: number;
+  readonly nonCashCollectionsNet: number;
+  readonly openShiftCount: number;
+  readonly openShiftCashBalance: number;
 }
 
 export interface SaleHistoryItem {

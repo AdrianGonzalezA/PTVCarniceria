@@ -46,6 +46,8 @@ app.MapAdminHistoryEndpoints();
 app.MapAdminCustomerEndpoints();
 app.MapPosCustomerEndpoints();
 app.MapCustomerCollectionEndpoints();
+app.MapCustomerCollectionCorrectionEndpoints();
+app.MapAdminAccountEndpoints();
 app.MapSaleDraftEndpoints();
 app.MapSaleConfirmationEndpoints();
 app.MapInventoryEndpoints();

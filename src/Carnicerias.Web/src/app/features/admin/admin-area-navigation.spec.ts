@@ -34,6 +34,9 @@ describe('administrator areas', () => {
         fromUtc: '2026-10-08T03:00:00Z', toUtc: '2026-10-09T03:00:00Z', branchId: null,
         saleCount: 0, salesTotal: 0, immediateSalePayments: 0, paymentsByMethod: [],
         newAccountCharges: 0, registeredAccountCharges: 0, creditApplied: 0,
+        outstandingDebt: 0, companyCreditAvailable: 0, collectionsReceived: 0,
+        collectionsRefunded: 0, cashCollectionsNet: 0, nonCashCollectionsNet: 0,
+        openShiftCount: 0, openShiftCashBalance: 0,
       });
     }
     harness.detectChanges();

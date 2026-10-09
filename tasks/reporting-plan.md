@@ -20,9 +20,11 @@ Origen: `SPEC-reporting.md`, clasificación confirmada por el usuario el 8/10/20
 
 ### R3. Estado de cuenta y siguientes indicadores
 
-- [ ] Vincular la lista y detalle de clientes al área Negocio; mostrar movimientos netos una vez que recibos, imputaciones y anticipos estén persistidos.
-- [ ] Agregar resumen de caja/turnos sin sumar fondo inicial a ventas; ampliar filtros y conciliación con el historial.
+- [x] Vincular la lista y detalle de clientes al área Negocio; mostrar cargos, recibos, imputaciones, anticipos aplicados y correcciones persistidas, con paginación.
+- [x] Agregar al resumen cajas abiertas, efectivo en turnos abiertos, cobranzas, devoluciones y deuda neta sin sumar fondo inicial a ventas.
 - [ ] Pruebas de aislamiento, dobles conteos y período; revisión de reglas con el usuario antes de interpretar cifras como fiscales.
+
+**Verificación R3 (9/10/2026):** resumen y estado de cuenta consultados en Electron desde la única base. Antes de una corrección se mostraron $51.500 de cargos acumulados, $50.500 de deuda, $1.500 de cobranzas y $0 de saldo a favor luego de aplicar $500 a una venta. Tras reintegrar $1.000, la deuda quedó en $51.500, devoluciones en $1.000 y cobranzas netas de efectivo en $500. Una reasignación previa conservó el ingreso original. Los importes son comerciales no fiscales y la vista de caja abierta incluye fondos iniciales de forma explícita. Las pruebas de aislamiento automatizadas que provisionan otra base no se ejecutan.
 
 ## Dependencias y límites
 

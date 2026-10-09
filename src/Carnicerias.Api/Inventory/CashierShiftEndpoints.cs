@@ -167,10 +167,12 @@ public static class CashierShiftEndpoints
                      movement.Kind == CashLedgerMovementKind.Change))
                     .Sum(movement => movement.AmountDelta),
                 CashCollections = group.Where(movement => movement.Method == PaymentMethod.Cash &&
-                    movement.Kind == CashLedgerMovementKind.AccountCollection)
+                    (movement.Kind == CashLedgerMovementKind.AccountCollection ||
+                     movement.Kind == CashLedgerMovementKind.AccountCollectionRefund))
                     .Sum(movement => movement.AmountDelta),
                 NonCashCollections = group.Where(movement => movement.Method != PaymentMethod.Cash &&
-                    movement.Kind == CashLedgerMovementKind.AccountCollection)
+                    (movement.Kind == CashLedgerMovementKind.AccountCollection ||
+                     movement.Kind == CashLedgerMovementKind.AccountCollectionRefund))
                     .Sum(movement => movement.AmountDelta)
             })
             .SingleOrDefaultAsync(cancellationToken);

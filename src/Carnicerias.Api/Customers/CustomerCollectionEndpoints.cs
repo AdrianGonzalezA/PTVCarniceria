@@ -77,7 +77,8 @@ public static class CustomerCollectionEndpoints
                 .Select(item => new { item.SaleId, item.CreatedAtUtc, item.Amount })
                 .ToArrayAsync(cancellationToken);
             var applied = await db.CustomerCollectionAllocations.AsNoTracking()
-                .Where(item => item.CompanyId == context.CompanyId && item.CustomerId == customerId)
+                .Where(item => item.CompanyId == context.CompanyId && item.CustomerId == customerId &&
+                    !item.Receipt.IsVoided)
                 .GroupBy(item => item.SaleId)
                 .Select(group => new { SaleId = group.Key, Amount = group.Sum(item => item.Amount) })
                 .ToDictionaryAsync(item => item.SaleId, item => item.Amount, cancellationToken);

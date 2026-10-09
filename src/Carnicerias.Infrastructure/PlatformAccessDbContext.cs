@@ -34,6 +34,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<CustomerCollectionAllocation> CustomerCollectionAllocations => Set<CustomerCollectionAllocation>();
 
+    public DbSet<CustomerCollectionCorrection> CustomerCollectionCorrections => Set<CustomerCollectionCorrection>();
+
     public DbSet<CustomerCreditApplication> CustomerCreditApplications => Set<CustomerCreditApplication>();
 
     public DbSet<BranchPriceList> BranchPriceLists => Set<BranchPriceList>();
@@ -243,13 +245,20 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
         modelBuilder.Entity<CustomerCollectionReceipt>(entity =>
         {
             entity.ToTable("collection_receipts", "customers_credit", table =>
+            {
                 table.HasCheckConstraint("CK_collection_receipts_amounts",
-                    "\"Amount\" > 0 AND \"CreditAmount\" >= 0 AND \"CreditAmount\" <= \"Amount\""));
+                    "\"Amount\" > 0 AND \"CreditAmount\" >= 0 AND \"CreditAmount\" <= \"Amount\"");
+                table.HasCheckConstraint("CK_collection_receipts_origin",
+                    "\"Origin\" IN (0, 1) AND ((\"Origin\" = 0 AND \"ReplacesReceiptId\" IS NULL) OR (\"Origin\" = 1 AND \"ReplacesReceiptId\" IS NOT NULL))");
+                table.HasCheckConstraint("CK_collection_receipts_void",
+                    "\"IsVoided\" = (\"VoidedAtUtc\" IS NOT NULL)");
+            });
             entity.HasKey(receipt => receipt.Id);
             entity.HasAlternateKey(receipt => new { receipt.CompanyId, receipt.Id });
             entity.Property(receipt => receipt.ReceiptNumber).ValueGeneratedOnAdd();
             entity.Property(receipt => receipt.RequestHash).HasMaxLength(64).IsRequired();
             entity.Property(receipt => receipt.Method).HasConversion<int>().IsRequired();
+            entity.Property(receipt => receipt.Origin).HasConversion<int>().IsRequired();
             entity.Property(receipt => receipt.Amount).HasPrecision(12, 2);
             entity.Property(receipt => receipt.CreditAmount).HasPrecision(12, 2);
             entity.HasOne<CustomerAccount>().WithMany()
@@ -270,14 +279,56 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<UserIdentity>().WithMany().HasForeignKey(receipt => receipt.CashierId)
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CustomerCollectionReceipt>().WithMany()
+                .HasForeignKey(receipt => new { receipt.CompanyId, receipt.ReplacesReceiptId })
+                .HasPrincipalKey(original => new { original.CompanyId, original.Id })
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(receipt => receipt.ReceiptNumber).IsUnique();
             entity.HasIndex(receipt => new { receipt.CompanyId, receipt.OperationId }).IsUnique();
             entity.HasIndex(receipt => new { receipt.CompanyId, receipt.CustomerId, receipt.CreatedAtUtc });
             entity.HasIndex(receipt => new { receipt.CompanyId, receipt.CashierShiftId });
-            entity.HasMany(receipt => receipt.Allocations).WithOne()
+            entity.HasMany(receipt => receipt.Allocations).WithOne(allocation => allocation.Receipt)
                 .HasForeignKey(allocation => new { allocation.CompanyId, allocation.ReceiptId })
                 .HasPrincipalKey(receipt => new { receipt.CompanyId, receipt.Id })
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CustomerCollectionCorrection>(entity =>
+        {
+            entity.ToTable("collection_corrections", "customers_credit", table =>
+            {
+                table.HasCheckConstraint("CK_collection_corrections_amount", "\"Amount\" > 0");
+                table.HasCheckConstraint("CK_collection_corrections_kind",
+                    "\"Kind\" IN (0, 1) AND ((\"Kind\" = 0 AND \"ReplacementReceiptId\" IS NOT NULL) OR (\"Kind\" = 1 AND \"ReplacementReceiptId\" IS NULL))");
+            });
+            entity.HasKey(correction => correction.Id);
+            entity.Property(correction => correction.CorrectionNumber).ValueGeneratedOnAdd();
+            entity.Property(correction => correction.RequestHash).HasMaxLength(64).IsRequired();
+            entity.Property(correction => correction.Reason).HasMaxLength(240).IsRequired();
+            entity.Property(correction => correction.Kind).HasConversion<int>().IsRequired();
+            entity.Property(correction => correction.Amount).HasPrecision(12, 2);
+            entity.HasOne<CustomerCollectionReceipt>().WithMany()
+                .HasForeignKey(correction => new { correction.CompanyId, correction.OriginalReceiptId })
+                .HasPrincipalKey(receipt => new { receipt.CompanyId, receipt.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CustomerCollectionReceipt>().WithMany()
+                .HasForeignKey(correction => new { correction.CompanyId, correction.ReplacementReceiptId })
+                .HasPrincipalKey(receipt => new { receipt.CompanyId, receipt.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CashierShift>().WithMany()
+                .HasForeignKey(correction => new { correction.CompanyId, correction.CashierShiftId })
+                .HasPrincipalKey(shift => new { shift.CompanyId, shift.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<PosTerminal>().WithMany()
+                .HasForeignKey(correction => new { correction.CompanyId, correction.BranchId, correction.PosTerminalId })
+                .HasPrincipalKey(terminal => new { terminal.CompanyId, terminal.BranchId, terminal.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany().HasForeignKey(correction => correction.CashierId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(correction => correction.CorrectionNumber).IsUnique();
+            entity.HasIndex(correction => new { correction.CompanyId, correction.OperationId }).IsUnique();
+            entity.HasIndex(correction => new { correction.CompanyId, correction.OriginalReceiptId }).IsUnique();
+            entity.HasIndex(correction => new { correction.CompanyId, correction.CreatedAtUtc });
         });
 
         modelBuilder.Entity<CustomerCollectionAllocation>(entity =>
@@ -626,7 +677,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.ToTable("cash_ledger", "payments_cash", table =>
             {
                 table.HasCheckConstraint("CK_cash_ledger_amount_nonzero", "\"AmountDelta\" <> 0");
-                table.HasCheckConstraint("CK_cash_ledger_kind", "\"Kind\" IN (0, 1, 2, 3)");
+                table.HasCheckConstraint("CK_cash_ledger_kind", "\"Kind\" IN (0, 1, 2, 3, 4)");
             });
             entity.HasKey(movement => movement.Id);
             entity.Property(movement => movement.Method).HasConversion<int>().IsRequired();

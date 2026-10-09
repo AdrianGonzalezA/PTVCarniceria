@@ -91,7 +91,8 @@ public static class SaleConfirmationEndpoints
                 if (request.CreditAppliedAmount > 0)
                 {
                     var receivedCredit = await db.CustomerCollectionReceipts.AsNoTracking()
-                        .Where(item => item.CompanyId == context.CompanyId && item.CustomerId == request.CustomerId)
+                        .Where(item => item.CompanyId == context.CompanyId && item.CustomerId == request.CustomerId &&
+                            !item.IsVoided)
                         .SumAsync(item => (decimal?)item.CreditAmount, cancellationToken) ?? 0;
                     var usedCredit = await db.CustomerCreditApplications.AsNoTracking()
                         .Where(item => item.CompanyId == context.CompanyId && item.CustomerId == request.CustomerId)

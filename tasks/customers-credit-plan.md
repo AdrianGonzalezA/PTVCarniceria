@@ -1,6 +1,6 @@
 # Plan de implementación: clientes y cuenta corriente
 
-**Estado:** aprobado provisionalmente el 8 de octubre de 2026; tareas y reglas a revisar durante pruebas. Complementa `SPEC-customers-credit.md`. No modifica las tareas abiertas de `tasks/plan.md` ni `tasks/todo.md`.
+**Estado:** flujo principal y correcciones implementados y verificados el 9 de octubre de 2026; reglas comerciales aún revisables. Complementa `SPEC-customers-credit.md`. No modifica las tareas abiertas de `tasks/plan.md` ni `tasks/todo.md`.
 
 ## Dependencias y decisiones
 
@@ -37,33 +37,35 @@ El POS y la caja ya guardan ventas, pagos, stock y turnos. Se agregará primero 
 
 - [x] Primera consulta paginada por cliente y venta a cuenta, con deuda visible en el POS. Por ahora el importe pendiente coincide con el cargo original porque aún no existen cobranzas.
 - [x] Regla de dominio probada para sugerir deuda más antigua, aceptar una distribución parcial elegida por el cajero y separar el excedente como saldo a favor. Todavía no escribe recibos, caja ni cuenta.
-- [ ] Consulta de deuda por cliente/venta y propuesta de las más antiguas, con selección y parcialidad editables.
-- [ ] Recibo interno idempotente, imputaciones auditables y entrada en caja/turno para cobros reales.
+- [x] Consulta de deuda por cliente/venta y propuesta de las más antiguas, con selección y parcialidad editables.
+- [x] Recibo interno idempotente, imputaciones auditables y entrada en caja/turno para cobros reales.
 - **Verificación:** pruebas de distribución, concurrencia y aislamiento; flujo manual en Electron.
 - **Depende de:** tarea 2.
 
 ### 4. Saldo a favor
 
-- [ ] Excedente de cobranza se conserva como anticipo.
-- [ ] Aplicación explícita de cero, parte o todo en venta posterior, sin nuevo ingreso de caja.
+- [x] Excedente de cobranza se conserva como anticipo.
+- [x] Aplicación explícita de cero, parte o todo en venta posterior, sin nuevo ingreso de caja.
 - **Verificación:** invariantes de saldo y concurrencia; recibo, venta y resumen de caja en Electron.
 - **Depende de:** tarea 3.
 
 ### Checkpoint de cuenta
 
-- [ ] Vender a cuenta, cobrar en parte, dejar excedente a favor y aplicarlo en otra venta; reiniciar Electron entre pasos y conservar saldos.
+- [x] Vender a cuenta, cobrar en parte, dejar excedente a favor y aplicarlo en otra venta; reiniciar Electron entre pasos y conservar saldos.
 
 ### 5. Corrección de cobranza errónea
 
-- [ ] Constancia interna numerada y vinculada al recibo original, motivo/actor y estado anulado sin borrar registros.
-- [ ] Distinguir corrección de imputación sin salida de caja de devolución/no ingreso con reversión de caja; controles de permiso e idempotencia.
+- [x] Constancia interna numerada y vinculada al recibo original, motivo/actor y estado anulado sin borrar registros.
+- [x] Distinguir corrección de imputación sin salida de caja de devolución/no ingreso con reversión de caja; controles de permiso e idempotencia.
 - **Verificación:** pruebas de ambos casos y manual en Electron; revisión contable antes de uso productivo.
 - **Depende de:** tareas 3 y 4.
 
 ### Checkpoint final
 
-- [ ] Conciliación de venta, deuda, anticipo y caja; errores previsibles; documentación de reglas revisadas.
-- [ ] Integración fiscal sigue fuera de alcance hasta aprobación específica.
+- [x] Conciliación de venta, deuda, anticipo y caja; errores previsibles; documentación de reglas revisadas.
+- [ ] Integración fiscal: el usuario autorizó iniciar el trabajo de impuestos, descuentos y capa ARCA; se planifica en `SPEC-fiscal-payments.md`. Ningún recibo ni ticket actual es fiscal.
+
+**Verificación de cuenta (9/10/2026):** en la única base se cobró $1.000 aplicado a deuda, luego $500 como anticipo y se aplicaron $500 a una venta de $2.500 (solo $2.000 ingresaron a caja por esa venta). En una segunda caja Electron se probó el rechazo 409 al intentar revertir el anticipo ya consumido; la reasignación del recibo 1 generó recibo 3 sin tocar caja, y el reintegro posterior reabrió $1.000 de deuda y registró -$1.000 en el turno actual. Repetir la clave idempotente devolvió el mismo resultado. Estado de cuenta y resumen se consultaron visualmente en Electron. Quedan pendientes las pruebas de integración automatizadas que provisionan otra base y la administración general de permisos por rol.
 
 ## Riesgos y controles
 

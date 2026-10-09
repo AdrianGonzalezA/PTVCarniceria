@@ -64,9 +64,51 @@ public static class AdminHistoryEndpoints
             cancellationToken) ?? 0;
         var registeredCharges = await charges.SumAsync(charge => (decimal?)charge.Amount,
             cancellationToken) ?? 0;
+        var chargeSales = charges.Select(charge => charge.SaleId);
+        var allocatedToCharges = await db.CustomerCollectionAllocations.AsNoTracking()
+            .Where(item => item.CompanyId == companyId && !item.Receipt.IsVoided &&
+                chargeSales.Contains(item.SaleId))
+            .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0;
+        var companyCredit = await db.CustomerCollectionReceipts.AsNoTracking()
+            .Where(item => item.CompanyId == companyId && !item.IsVoided)
+            .SumAsync(item => (decimal?)item.CreditAmount, cancellationToken) ?? 0;
+        companyCredit -= await db.CustomerCreditApplications.AsNoTracking()
+            .Where(item => item.CompanyId == companyId)
+            .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0;
+        var collections = await db.CashLedgerMovements.AsNoTracking()
+            .Where(item => item.CompanyId == companyId &&
+                (!branchId.HasValue || item.BranchId == branchId) &&
+                item.CreatedAtUtc >= window.FromUtc && item.CreatedAtUtc < window.ToUtc &&
+                (item.Kind == CashLedgerMovementKind.AccountCollection ||
+                 item.Kind == CashLedgerMovementKind.AccountCollectionRefund))
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                Received = group.Where(item => item.Kind == CashLedgerMovementKind.AccountCollection)
+                    .Sum(item => item.AmountDelta),
+                Refunded = group.Where(item => item.Kind == CashLedgerMovementKind.AccountCollectionRefund)
+                    .Sum(item => -item.AmountDelta),
+                CashNet = group.Where(item => item.Method == PaymentMethod.Cash)
+                    .Sum(item => item.AmountDelta),
+                NonCashNet = group.Where(item => item.Method != PaymentMethod.Cash)
+                    .Sum(item => item.AmountDelta)
+            }).SingleOrDefaultAsync(cancellationToken);
+        var openShifts = db.CashierShifts.AsNoTracking().Where(shift =>
+            shift.CompanyId == companyId && (!branchId.HasValue || shift.BranchId == branchId) &&
+            shift.Status == CashierShiftStatus.Open);
+        var openShiftCount = await openShifts.CountAsync(cancellationToken);
+        var openShiftIds = openShifts.Select(shift => shift.Id);
+        var openShiftCash = await db.CashLedgerMovements.AsNoTracking()
+            .Where(item => item.CompanyId == companyId && item.Method == PaymentMethod.Cash &&
+                openShiftIds.Contains(item.CashierShiftId))
+            .SumAsync(item => (decimal?)item.AmountDelta, cancellationToken) ?? 0;
         return Results.Ok(new BusinessSummary(window.FromUtc, window.ToUtc, branchId,
             saleTotals?.Count ?? 0, saleTotals?.Total ?? 0, payments.Sum(payment => payment.Amount),
-            payments, newCharges, registeredCharges, creditApplied));
+            payments, newCharges, registeredCharges, creditApplied,
+            registeredCharges - allocatedToCharges, companyCredit,
+            collections?.Received ?? 0, collections?.Refunded ?? 0,
+            collections?.CashNet ?? 0, collections?.NonCashNet ?? 0,
+            openShiftCount, openShiftCash));
     }
 
     private static async Task<IResult> ListSalesAsync(
@@ -187,6 +229,7 @@ public static class AdminHistoryEndpoints
                 CashLedgerMovementKind.SalePayment => "salePayment",
                 CashLedgerMovementKind.Change => "change",
                 CashLedgerMovementKind.AccountCollection => "accountCollection",
+                CashLedgerMovementKind.AccountCollectionRefund => "accountCollectionRefund",
                 _ => "unknown"
             }, PaymentMethodName(row.Method), row.AmountDelta)).ToArray(), page, pageSize, total));
     }
@@ -265,7 +308,9 @@ public static class AdminHistoryEndpoints
     private sealed record BusinessSummary(DateTimeOffset FromUtc, DateTimeOffset ToUtc, Guid? BranchId,
         int SaleCount, decimal SalesTotal, decimal ImmediateSalePayments,
         PaymentSummary[] PaymentsByMethod, decimal NewAccountCharges, decimal RegisteredAccountCharges,
-        decimal CreditApplied);
+        decimal CreditApplied, decimal OutstandingDebt, decimal CompanyCreditAvailable,
+        decimal CollectionsReceived, decimal CollectionsRefunded, decimal CashCollectionsNet,
+        decimal NonCashCollectionsNet, int OpenShiftCount, decimal OpenShiftCashBalance);
     private sealed record PaymentSummary(string Method, decimal Amount);
     private sealed record SaleItem(Guid Id, DateTimeOffset ConfirmedAtUtc, decimal Total,
         Guid BranchId, string BranchName, Guid? TerminalId, string? TerminalName,

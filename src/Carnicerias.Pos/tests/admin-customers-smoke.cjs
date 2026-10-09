@@ -134,6 +134,33 @@ async function main() {
     console.log(JSON.stringify({ business, businessPath, configuration, configurationPath, receptionArea, receptionPath, productsArea, summaryCheck }, null, 2));
     return;
   }
+  if (process.argv.includes('--accounts')) {
+    await send('Page.navigate', { url: 'app://bundle/admin' });
+    await waitFor("document.querySelector('h1')?.textContent === 'Negocio'");
+    await evaluate("document.querySelector('a[href=\"/admin/accounts\"]')?.click()");
+    await waitFor("document.querySelector('h1')?.textContent === 'Estados de cuenta'");
+    await waitFor("document.querySelector('.category-panel')?.getAttribute('aria-busy') === 'false'");
+    const state = await evaluate(`({
+      url: location.href,
+      text: document.body.innerText.slice(0, 3000),
+      errors: [...document.querySelectorAll('[role="alert"]')].map(node => node.textContent),
+      rows: document.querySelectorAll('tbody tr').length
+    })`);
+    if (state.errors.length || state.rows < 1) throw new Error(JSON.stringify(state));
+    await evaluate("document.querySelector('tbody tr button')?.click()");
+    await waitFor("document.querySelector('.account-detail-panel')?.getAttribute('aria-busy') === 'false'");
+    const detail = await evaluate(`({
+      text: document.querySelector('.account-detail-panel')?.innerText.slice(0, 2500),
+      errors: [...document.querySelectorAll('[role="alert"]')].map(node => node.textContent)
+    })`);
+    if (detail.errors.length) throw new Error(JSON.stringify(detail));
+    const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    const screenshotPath = resolve(tmpdir(), 'electron-admin-accounts.png');
+    writeFileSync(screenshotPath, Buffer.from(screenshot.data, 'base64'));
+    socket.close();
+    console.log(JSON.stringify({ state, detail, screenshotPath }, null, 2));
+    return;
+  }
   if (process.argv.includes('--customers')) {
     if (!await evaluate("!!document.querySelector('a[href=\"/admin/customers\"]')")) {
       await evaluate("document.querySelector('a[href=\"/admin/configuracion\"]')?.click()");

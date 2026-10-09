@@ -1,0 +1,26 @@
+.account-search { display: flex; align-items: end; flex-wrap: wrap; gap: 0.55rem; margin: 0.75rem 0 1rem; }
+.account-search label { flex-basis: 100%; font-size: 0.8rem; font-weight: 700; }
+.account-search input { flex: 1; min-width: 12rem; min-height: 2.5rem; padding: 0.4rem 0.6rem; border: 1px solid #b6bab3; border-radius: 0.25rem; font: inherit; }
+.account-search button,.account-correction-actions button:not(.secondary-button) { min-height: 2.5rem; padding: 0.45rem 0.85rem; border: 0; border-radius: 0.25rem; background: #e4fb72; color: #17353a; font: inherit; font-weight: 700; cursor: pointer; }
+.account-pages { display: flex; align-items: center; justify-content: flex-end; gap: 0.7rem; margin-top: 0.75rem; color: #565f5a; font-size: 0.8rem; }
+.account-detail-panel { margin-top: 1rem; }
+.account-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem; margin: 0.8rem 0; }
+.account-totals div { display: grid; gap: 0.3rem; padding: 0.9rem; background: #eef1ec; border-radius: 0.3rem; }
+.account-totals span { font-size: 0.75rem; color: #52625c; }
+.account-totals strong { font-size: 1.1rem; }
+.account-note { margin: 0.65rem 0; color: #5b625d; font-size: 0.85rem; line-height: 1.5; }
+.account-ledger-section { margin-top: 1.6rem; }
+.account-ledger-section h3 { margin: 0 0 0.65rem; font-size: 1.05rem; }
+.account-detail-panel td small,.history-panel td small { display: block; margin-top: 0.2rem; color: #656e68; font-size: 0.75rem; line-height: 1.4; }
+.admin-modal-backdrop { position: fixed; z-index: 10; inset: 0; display: grid; padding: 1rem; background: #0009; place-items: center; }
+.account-correction-dialog { position: relative; box-sizing: border-box; display: grid; gap: 0.55rem; width: min(100%, 42rem); max-height: 90dvh; overflow: auto; padding: 1.5rem; background: #f7f8f5; border-radius: 0.4rem; box-shadow: 0 1rem 3rem #0006; }
+.account-correction-dialog h2 { margin: 0 2rem 0 0; }
+.account-correction-dialog p { margin: 0.3rem 0; }
+.account-correction-dialog label { font-size: 0.82rem; font-weight: 700; }
+.account-correction-dialog select,.account-correction-dialog textarea { box-sizing: border-box; width: 100%; min-height: 2.5rem; padding: 0.45rem; border: 1px solid #b6bab3; border-radius: 0.25rem; background: #fff; font: inherit; }
+.account-correction-dialog textarea { resize: vertical; }
+.account-correction-dialog .account-search { margin: 0.3rem 0; }
+.account-correction-close { position: absolute; top: 0.7rem; right: 0.8rem; border: 0; background: transparent; font-size: 1.8rem; cursor: pointer; }
+.account-correction-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 0.5rem; }
+.account-correction-success { padding: 0.7rem; background: #e0f2df; border-radius: 0.3rem; }
+@media (max-width: 45rem) { .account-totals { grid-template-columns: 1fr; } .account-pages { justify-content: space-between; } }

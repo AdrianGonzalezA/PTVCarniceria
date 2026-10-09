@@ -1,0 +1,205 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" routerLink="/admin" aria-label="Volver a Negocio">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Administración</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+
+  <div class="workspace">
+    <app-admin-area-tabs area="business" />
+    <a class="back-link" routerLink="/admin">← Volver a Negocio</a>
+    <p class="eyebrow">Negocio · Clientes</p>
+    <h1>Estados de cuenta</h1>
+    <p class="intro">Consultá deuda por venta, cobranzas, anticipos y correcciones. Los saldos son de empresa; cada movimiento conserva su sucursal y turno.</p>
+
+    @if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Contexto de consulta">
+        <div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Sucursal actual</span><strong>{{ context.branchName }}</strong></div>
+      </section>
+    }
+
+    <section class="category-panel history-panel" aria-labelledby="accounts-title" [attr.aria-busy]="listLoading()">
+      <header class="panel-heading"><div>
+        <h2 id="accounts-title">Cuentas de clientes</h2>
+        <p>Deuda pendiente y saldo a favor no se compensan automáticamente.</p>
+      </div></header>
+      <form class="account-search" (submit)="$event.preventDefault(); searchAccounts()">
+        <label for="account-search-input">Código o nombre</label>
+        <input id="account-search-input" type="search" maxlength="100" [value]="search()"
+          (input)="updateSearch($event)" placeholder="Buscar cliente" />
+        <button type="submit" [disabled]="listLoading()">Buscar</button>
+        <button class="secondary-button" type="button" [disabled]="listLoading()" (click)="loadList()">Actualizar</button>
+      </form>
+      @if (listLoading()) { <p class="state-message" role="status">Consultando cuentas…</p> }
+      @else if (listError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+      @else if (list(); as result) {
+        @if (result.total === 0) { <p class="state-message">No hay clientes para esta búsqueda.</p> }
+        @else {
+          <div class="table-wrap"><table>
+            <thead><tr><th scope="col">Cliente</th><th scope="col">Estado</th><th scope="col">Deuda</th><th scope="col">Saldo a favor</th><th scope="col">Detalle</th></tr></thead>
+            <tbody>
+              @for (customer of result.items; track customer.id) {
+                <tr>
+                  <td><strong>{{ customer.name }}</strong><small>{{ customer.code }}</small></td>
+                  <td>{{ customer.isActive ? 'Activo' : 'Inactivo' }} · {{ customer.creditEnabled ? 'Cuenta habilitada' : 'Sin crédito nuevo' }}</td>
+                  <td>{{ money(customer.totalDebt) }}</td>
+                  <td>{{ money(customer.creditAvailable) }}</td>
+                  <td><button class="secondary-button" type="button" (click)="selectCustomer(customer.id)">Ver estado</button></td>
+                </tr>
+              }
+            </tbody>
+          </table></div>
+          <div class="account-pages">
+            <button type="button" class="secondary-button" [disabled]="page() <= 1" (click)="changePage(-1)">Anterior</button>
+            <span>Página {{ page() }} de {{ pageCount(result.total) }} · {{ result.total }} clientes</span>
+            <button type="button" class="secondary-button" [disabled]="page() >= pageCount(result.total)" (click)="changePage(1)">Siguiente</button>
+          </div>
+        }
+      }
+    </section>
+
+    @if (selectedCustomerId()) {
+      <section class="category-panel account-detail-panel" aria-labelledby="account-detail-title" [attr.aria-busy]="detailLoading()">
+        <header class="panel-heading"><div>
+          <p class="eyebrow">Libro de cuenta corriente</p>
+          <h2 id="account-detail-title">{{ detail()?.name ?? 'Consultando cliente…' }}</h2>
+        </div><button class="secondary-button" type="button" (click)="closeDetail()">Cerrar detalle</button></header>
+        @if (detailLoading()) { <p class="state-message" role="status">Actualizando estado de cuenta…</p> }
+        @else if (detailError(); as error) {
+          <p class="error-message" role="alert">{{ error }}</p>
+          <button type="button" class="secondary-button" (click)="loadDetail()">Reintentar</button>
+        } @else if (detail(); as account) {
+          <div class="account-totals">
+            <div><span>Deuda por ventas</span><strong>{{ money(account.totalDebt) }}</strong></div>
+            <div><span>Anticipo disponible</span><strong>{{ money(account.creditAvailable) }}</strong></div>
+            <div><span>Habilitación</span><strong>{{ account.creditEnabled ? 'Crédito habilitado' : 'Sin crédito nuevo' }}</strong></div>
+          </div>
+          <p class="account-note">Los importes tienen dos fuentes distintas: el cargo nace con la venta y el cobro con el recibo. Aplicar un anticipo a otra venta no vuelve a ingresar dinero en caja.</p>
+
+          <section class="account-ledger-section" aria-labelledby="account-sales-title">
+            <h3 id="account-sales-title">Ventas a cuenta · {{ account.sales.total }}</h3>
+            @if (account.sales.total === 0) { <p class="state-message">Sin ventas a cuenta.</p> }
+            @else { <div class="table-wrap"><table>
+              <thead><tr><th scope="col">Fecha</th><th scope="col">Venta / turno</th><th scope="col">Cargo original</th><th scope="col">Pendiente</th></tr></thead>
+              <tbody>@for (sale of account.sales.items; track sale.saleId) {
+                <tr><td>{{ sale.chargedAtUtc | date:'dd/MM/yyyy HH:mm' }}</td>
+                  <td><small>Venta {{ sale.saleId.slice(0, 8) }} · sucursal {{ sale.branchId.slice(0, 8) }} · turno {{ sale.cashierShiftId.slice(0, 8) }}</small></td>
+                  <td>{{ money(sale.originalAmount) }}</td><td>{{ money(sale.outstandingAmount) }}</td></tr>
+              }</tbody>
+            </table></div> }
+            <div class="account-pages">
+              <button class="secondary-button" type="button" [disabled]="salePage() <= 1" (click)="changeDetailPage('sales', -1)">Anterior</button>
+              <span>{{ salePage() }} / {{ pageCount(account.sales.total) || 1 }}</span>
+              <button class="secondary-button" type="button" [disabled]="salePage() >= pageCount(account.sales.total)" (click)="changeDetailPage('sales', 1)">Siguiente</button>
+            </div>
+          </section>
+
+          <section class="account-ledger-section" aria-labelledby="account-receipts-title">
+            <h3 id="account-receipts-title">Recibos internos · {{ account.receipts.total }}</h3>
+            @if (session()?.context?.permissions?.includes('pos.account.correct') && !correctionReady()) {
+              <p class="account-note">Para corregir un recibo, ingresá desde una caja Electron y abrí tu propio turno. La consulta permanece disponible sin caja.</p>
+            }
+            @if (account.receipts.total === 0) { <p class="state-message">Sin cobranzas registradas.</p> }
+            @else { <div class="table-wrap"><table>
+              <thead><tr><th scope="col">Recibo / fecha</th><th scope="col">Medio / turno</th><th scope="col">Recibido</th><th scope="col">Imputación</th><th scope="col">Estado</th><th scope="col">Acción</th></tr></thead>
+              <tbody>@for (receipt of account.receipts.items; track receipt.id) {
+                <tr>
+                  <td><strong>N.º {{ receipt.receiptNumber }}</strong><small>{{ receipt.createdAtUtc | date:'dd/MM/yyyy HH:mm' }}</small></td>
+                  <td>{{ receipt.method }}<small>{{ receipt.origin === 'reallocation' ? 'Reasignación · ' : '' }}turno {{ receipt.cashierShiftId.slice(0, 8) }}</small></td>
+                  <td>{{ money(receipt.amount) }}</td>
+                  <td><small>
+                    @for (allocation of receipt.allocations; track allocation.saleId) {
+                      Venta {{ allocation.saleId.slice(0, 8) }}: {{ money(allocation.amount) }}<br />
+                    }
+                    @if (receipt.creditAmount > 0) { Anticipo: {{ money(receipt.creditAmount) }} }
+                  </small></td>
+                  <td>{{ receipt.isVoided ? 'Corregido' : 'Vigente' }}
+                    @if (receipt.correction; as correction) {
+                      <small>Constancia {{ correction.correctionNumber }} · {{ correction.kind === 'refund' ? 'devolución' : 'reasignación' }}<br />{{ correction.reason }}</small>
+                    }
+                  </td>
+                  <td>@if (!receipt.isVoided && canCorrect()) {
+                    <button class="secondary-button" type="button" (click)="openCorrection(receipt)">Corregir</button>
+                  }</td>
+                </tr>
+              }</tbody>
+            </table></div> }
+            <div class="account-pages">
+              <button class="secondary-button" type="button" [disabled]="receiptPage() <= 1" (click)="changeDetailPage('receipts', -1)">Anterior</button>
+              <span>{{ receiptPage() }} / {{ pageCount(account.receipts.total) || 1 }}</span>
+              <button class="secondary-button" type="button" [disabled]="receiptPage() >= pageCount(account.receipts.total)" (click)="changeDetailPage('receipts', 1)">Siguiente</button>
+            </div>
+          </section>
+
+          <section class="account-ledger-section" aria-labelledby="account-credits-title">
+            <h3 id="account-credits-title">Anticipos aplicados a ventas · {{ account.creditApplications.total }}</h3>
+            @if (account.creditApplications.total === 0) { <p class="state-message">Sin anticipos aplicados.</p> }
+            @else { <div class="table-wrap"><table>
+              <thead><tr><th scope="col">Fecha</th><th scope="col">Venta / turno</th><th scope="col">Importe</th></tr></thead>
+              <tbody>@for (application of account.creditApplications.items; track application.id) {
+                <tr><td>{{ application.createdAtUtc | date:'dd/MM/yyyy HH:mm' }}</td>
+                  <td><small>Venta {{ application.saleId.slice(0, 8) }} · turno {{ application.cashierShiftId.slice(0, 8) }}</small></td>
+                  <td>{{ money(application.amount) }}</td></tr>
+              }</tbody>
+            </table></div> }
+            <div class="account-pages">
+              <button class="secondary-button" type="button" [disabled]="applicationPage() <= 1" (click)="changeDetailPage('creditApplications', -1)">Anterior</button>
+              <span>{{ applicationPage() }} / {{ pageCount(account.creditApplications.total) || 1 }}</span>
+              <button class="secondary-button" type="button" [disabled]="applicationPage() >= pageCount(account.creditApplications.total)" (click)="changeDetailPage('creditApplications', 1)">Siguiente</button>
+            </div>
+          </section>
+        }
+      </section>
+    }
+  </div>
+
+  @if (correctionReceipt(); as receipt) {
+    <div class="admin-modal-backdrop">
+      <section class="account-correction-dialog" role="dialog" aria-modal="true" aria-labelledby="correction-title">
+        <button class="account-correction-close" type="button" [disabled]="correctionBusy()" aria-label="Cerrar corrección" (click)="closeCorrection()">×</button>
+        <p class="eyebrow">Cuenta corriente · constancia interna no fiscal</p>
+        <h2 id="correction-title">Corregir recibo {{ receipt.receiptNumber }}</h2>
+        @if (correctionResult(); as result) {
+          <p class="account-correction-success" role="status">Constancia {{ result.correctionNumber }} registrada.
+            {{ result.kind === 'refund' ? 'Se revirtió el dinero en el turno actual.' : 'El dinero permaneció en caja y cambió su asignación.' }}</p>
+          @if (result.replacementReceiptNumber) { <p>Nuevo recibo interno {{ result.replacementReceiptNumber }}.</p> }
+          <button class="secondary-button" type="button" (click)="closeCorrection()">Volver al estado de cuenta</button>
+        } @else {
+          <p>Importe original: <strong>{{ money(receipt.amount) }}</strong>. El recibo original quedará visible como corregido.</p>
+          <label for="correction-kind">Tipo de corrección</label>
+          <select id="correction-kind" [value]="correctionKind()" (change)="updateCorrectionKind($event)">
+            <option value="reallocate">El dinero ingresó: reasignar cuenta, sin salida de caja</option>
+            <option value="refund">El dinero no ingresó o se devolvió: revertir caja</option>
+          </select>
+          @if (correctionKind() === 'reallocate') {
+            <form class="account-search" (submit)="$event.preventDefault(); findTargets()">
+              <label for="target-search">Cuenta de destino</label>
+              <input id="target-search" type="search" [value]="targetSearch()" (input)="updateTargetSearch($event)" placeholder="Buscar cliente" />
+              <button type="submit">Buscar</button>
+            </form>
+            <select id="target-customer" aria-label="Cliente de destino" [value]="targetCustomerId()" (change)="selectTarget($event)">
+              <option value="">Elegí la cuenta de destino</option>
+              @for (customer of targetOptions(); track customer.id) {
+                <option [value]="customer.id">{{ customer.code }} · {{ customer.name }}</option>
+              }
+            </select>
+            <p class="account-note">El importe se asignará primero a la deuda más antigua de la cuenta de destino; el excedente quedará como anticipo.</p>
+          }
+          <label for="correction-reason">Motivo de la corrección</label>
+          <textarea id="correction-reason" maxlength="240" rows="3" [value]="correctionReason()" (input)="updateReason($event)" placeholder="Describí qué sucedió y por qué se corrige"></textarea>
+          @if (correctionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+          @if (correctionProblem(); as problem) { <p class="account-note" role="status">{{ problem }}</p> }
+          <div class="account-correction-actions">
+            <button class="secondary-button" type="button" [disabled]="correctionBusy()" (click)="closeCorrection()">Cancelar</button>
+            <button type="button" [disabled]="!!correctionProblem() || correctionBusy()" (click)="correct()">
+              {{ correctionBusy() ? 'Guardando…' : 'Confirmar corrección' }}
+            </button>
+          </div>
+        }
+      </section>
+    </div>
+  }
+</main>

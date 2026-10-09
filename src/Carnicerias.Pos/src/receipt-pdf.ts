@@ -3,12 +3,15 @@ export interface FiscalReceipt {
   readonly issuerCuit: string;
   readonly issuerName: string;
   readonly issuerAddress: string;
+  readonly issuerIibb: string | null;
+  readonly issuerActivityStartDate: string | null;
   readonly pointOfSale: number;
   readonly voucherType: 1 | 6;
   readonly number: number;
   readonly issueDate: string;
   readonly receiverName: string | null;
   readonly receiverAddress: string | null;
+  readonly receiverTaxStatus: 'finalConsumer' | 'registered' | 'smallTaxpayer' | 'exempt';
   readonly receiverDocumentType: number;
   readonly receiverDocumentNumber: number;
   readonly vatBreakdown: readonly { readonly ratePercent: number;
@@ -37,6 +40,9 @@ export interface ReceiptRequest {
     readonly code: string; readonly name: string; readonly unit: string;
     readonly quantity: number; readonly unitPrice: number; readonly lineTotal: number;
     readonly pieceIdentifier?: string | null;
+    readonly netAfterDiscount?: number | null;
+    readonly taxableBase?: number | null;
+    readonly taxAmount?: number | null;
   }[];
   readonly payments: readonly {
     readonly method: string; readonly tenderedAmount: number; readonly appliedAmount: number;
@@ -109,6 +115,9 @@ export function validateReceiptRequest(value: unknown): ReceiptRequest {
         code: label(line['code']), name: label(line['name']), unit: label(line['unit'], 30),
         quantity, unitPrice: amount(line['unitPrice']), lineTotal: amount(line['lineTotal']),
         pieceIdentifier: line['pieceIdentifier'] == null ? null : label(line['pieceIdentifier'], 80),
+        netAfterDiscount: line['netAfterDiscount'] == null ? null : amount(line['netAfterDiscount']),
+        taxableBase: line['taxableBase'] == null ? null : amount(line['taxableBase']),
+        taxAmount: line['taxAmount'] == null ? null : amount(line['taxAmount']),
       };
     }),
     payments: payments.map((input: unknown) => {
@@ -130,6 +139,8 @@ export function validateReceiptRequest(value: unknown): ReceiptRequest {
 
 function validateFiscal(value: unknown, saleId: unknown, total: number): FiscalReceipt {
   const fiscal = object(value);
+  const taxStatus = String(fiscal['receiverTaxStatus']);
+  const receiverTaxStatus = `${taxStatus.slice(0, 1).toLowerCase()}${taxStatus.slice(1)}`;
   const rawVat = fiscal['vatBreakdown'];
   if (!Array.isArray(rawVat) || rawVat.length > 20) throw new Error('Invalid fiscal taxes');
   const vatBreakdown = rawVat.map((entry: unknown) => {
@@ -148,24 +159,34 @@ function validateFiscal(value: unknown, saleId: unknown, total: number): FiscalR
       !/^\d{4}-\d{2}-\d{2}$/.test(String(fiscal['issueDate'])) ||
       !/^\d{4}-\d{2}-\d{2}$/.test(String(fiscal['caeExpiry'])) ||
       !Number.isSafeInteger(fiscal['pointOfSale']) || Number(fiscal['pointOfSale']) < 1 ||
+      Number(fiscal['pointOfSale']) > 99999 ||
       !Number.isSafeInteger(fiscal['number']) || Number(fiscal['number']) < 1 ||
+      Number(fiscal['number']) > 99999999 ||
       ![1, 6].includes(Number(fiscal['voucherType'])) ||
       ![80, 96, 99].includes(Number(fiscal['receiverDocumentType'])) ||
+      !['finalConsumer', 'registered', 'smallTaxpayer', 'exempt'].includes(receiverTaxStatus) ||
       !Number.isSafeInteger(fiscal['receiverDocumentNumber']) ||
       Number(fiscal['receiverDocumentNumber']) < 0 ||
       !['FiscalTicket', 'ElectronicInvoice'].includes(String(fiscal['saleDocumentType'])))
     throw new Error('Invalid fiscal authorization');
+  const issuerActivityStartDate = fiscal['issuerActivityStartDate'];
+  if (issuerActivityStartDate != null &&
+      (typeof issuerActivityStartDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(issuerActivityStartDate)))
+    throw new Error('Invalid issuer activity date');
   return {
     saleDocumentType: fiscal['saleDocumentType'] as FiscalReceipt['saleDocumentType'],
     issuerCuit: String(fiscal['issuerCuit']),
     issuerName: label(fiscal['issuerName'], 200),
     issuerAddress: label(fiscal['issuerAddress'], 200),
+    issuerIibb: fiscal['issuerIibb'] == null ? null : label(fiscal['issuerIibb'], 40),
+    issuerActivityStartDate: issuerActivityStartDate ?? null,
     pointOfSale: Number(fiscal['pointOfSale']),
     voucherType: Number(fiscal['voucherType']) as 1 | 6,
     number: Number(fiscal['number']),
     issueDate: String(fiscal['issueDate']),
     receiverName: fiscal['receiverName'] == null ? null : label(fiscal['receiverName'], 200),
     receiverAddress: fiscal['receiverAddress'] == null ? null : label(fiscal['receiverAddress'], 200),
+    receiverTaxStatus: receiverTaxStatus as FiscalReceipt['receiverTaxStatus'],
     receiverDocumentType: Number(fiscal['receiverDocumentType']),
     receiverDocumentNumber: Number(fiscal['receiverDocumentNumber']),
     vatBreakdown,
@@ -208,7 +229,7 @@ export function createReceiptHtml(receipt: ReceiptRequest): string {
     ${fiscal.receiverAddress ? `<p class="meta">Domicilio: ${escapeHtml(fiscal.receiverAddress)}</p>` : ''}` :
     '<div class="warning">DOCUMENTO DE PRUEBA<br>NO FISCAL</div>';
   const fiscalFooter = fiscal ? `CAE ${escapeHtml(fiscal.cae)} · Vencimiento ${escapeHtml(fiscal.caeExpiry)}<br>
-    Homologación: no usar como comprobante válido. QR pendiente para producción.` :
+    Homologación: no usar como comprobante válido. El QR corresponde solo a factura electrónica.` :
     'Simulación de impresión. No es factura ni comprobante fiscal válido.';
   const fiscalTaxes = fiscal ? `<h2>Desglose impositivo de prueba</h2><table>
     ${fiscal.vatBreakdown.map((item) => `<tr><td>Neto gravado ${item.ratePercent}%</td><td>$ ${money(item.taxableBase)}</td></tr>

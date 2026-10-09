@@ -14,6 +14,10 @@ public sealed class ArcaHomologationTicketProvider(
         out var number) ? number : 0;
     public string IssuerName => configuration["ARCA_HOMO_ISSUER_NAME"] ?? string.Empty;
     public string IssuerAddress => configuration["ARCA_HOMO_ISSUER_ADDRESS"] ?? string.Empty;
+    public string? IssuerIibb => string.IsNullOrWhiteSpace(configuration["ARCA_HOMO_ISSUER_IIBB"])
+        ? null : configuration["ARCA_HOMO_ISSUER_IIBB"];
+    public string? IssuerActivityStartDate => string.IsNullOrWhiteSpace(configuration["ARCA_HOMO_ISSUER_ACTIVITY_START_DATE"])
+        ? null : configuration["ARCA_HOMO_ISSUER_ACTIVITY_START_DATE"];
     public Guid CompanyId => Guid.TryParse(configuration["ARCA_HOMO_COMPANY_ID"],
         out var id) ? id : Guid.Empty;
 

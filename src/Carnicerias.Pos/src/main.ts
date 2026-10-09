@@ -15,6 +15,7 @@ import {
 } from 'electron';
 import { resolveAppAsset, toBackendRequest, toBackendUrl } from './app-protocol';
 import { createDiagnostic } from './diagnostic';
+import { createFiscalInvoiceHtml } from './fiscal-invoice';
 import { NativeChannel } from './native-api';
 import { resolvePosProfile } from './pos-profile';
 import { createReceiptHtml, validateReceiptRequest } from './receipt-pdf';
@@ -80,11 +81,15 @@ function registerNativeApi(): void {
       // Electron's loadURL promise completes after load; printToPDF returns the PDF bytes.
       // https://www.electronjs.org/docs/latest/api/browser-window#winloadurlurl-options
       // https://www.electronjs.org/docs/latest/api/web-contents#contentsprinttopdfoptions
-      await receiptWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(createReceiptHtml(receipt))}`);
+      const electronicInvoice = receipt.fiscal?.saleDocumentType === 'ElectronicInvoice';
+      const html = electronicInvoice ? await createFiscalInvoiceHtml(receipt) : createReceiptHtml(receipt);
+      await receiptWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
       const pdf = await receiptWindow.webContents.printToPDF({
         printBackground: true,
-        pageSize: { width: 3.15, height: 11.7 },
-        margins: { top: 0.12, bottom: 0.12, left: 0.12, right: 0.12 },
+        pageSize: electronicInvoice ? 'A4' : { width: 3.15, height: 11.7 },
+        margins: electronicInvoice
+          ? { top: 0, bottom: 0, left: 0, right: 0 }
+          : { top: 0.12, bottom: 0.12, left: 0.12, right: 0.12 },
       });
       const directory = path.join(app.getPath('userData'), 'tickets');
       await mkdir(directory, { recursive: true });

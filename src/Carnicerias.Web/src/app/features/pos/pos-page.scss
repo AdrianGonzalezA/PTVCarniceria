@@ -175,6 +175,7 @@
 .checkout-context { margin: 0 0 0.8rem; color: #4d5049; font-size: 0.85rem; }
 .sale-document { display: grid; gap: 0.45rem; margin-bottom: 0.85rem; padding: 0.7rem; border: 1px solid var(--pos-border); border-radius: 0.3rem; }
 .sale-document h3 { margin: 0; color: var(--pos-teal); font-size: 0.95rem; }
+.sale-document-choice { margin: 0; font-size: 0.85rem; font-weight: 700; }
 .sale-document-fields { display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(12rem, 2fr); align-items: center; gap: 0.45rem; }
 .sale-document-fields label { font-size: 0.78rem; font-weight: 700; }
 .sale-document-fields select,.sale-document-fields input { box-sizing: border-box; width: 100%; min-height: 2.3rem; padding: 0.4rem; border: 1px solid var(--pos-border); border-radius: 0.25rem; font: inherit; }

@@ -186,6 +186,8 @@ public static class FiscalDocumentEndpoints
             issuerCuit = document?.IssuerCuit,
             issuerName = provider.IssuerName,
             issuerAddress = provider.IssuerAddress,
+            issuerIibb = provider.IssuerIibb,
+            issuerActivityStartDate = provider.IssuerActivityStartDate,
             pointOfSale = document?.PointOfSale,
             voucherType = document?.VoucherType,
             number = document?.Number,
@@ -193,7 +195,14 @@ public static class FiscalDocumentEndpoints
             total = sale.Total,
             receiverName = sale.RecipientName,
             receiverAddress = sale.RecipientAddress,
-            receiverTaxStatus = sale.RecipientTaxStatus.ToString(),
+            receiverTaxStatus = sale.RecipientTaxStatus switch
+            {
+                SaleRecipientTaxStatus.FinalConsumer => "finalConsumer",
+                SaleRecipientTaxStatus.Registered => "registered",
+                SaleRecipientTaxStatus.SmallTaxpayer => "smallTaxpayer",
+                SaleRecipientTaxStatus.Exempt => "exempt",
+                _ => throw new InvalidOperationException("Unsupported recipient tax status")
+            },
             receiverDocumentType = document?.ReceiverDocumentType,
             receiverDocumentNumber = document?.ReceiverDocumentNumber,
             vatBreakdown = sale.Lines.Where(line => line.TaxTreatment == SaleTaxTreatment.Taxed)

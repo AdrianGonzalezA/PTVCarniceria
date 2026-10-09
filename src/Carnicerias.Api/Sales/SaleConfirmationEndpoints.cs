@@ -294,7 +294,8 @@ public static class SaleConfirmationEndpoints
         sale.Lines.OrderBy(line => line.ProductName).ThenBy(line => line.PieceIdentifier)
             .Select(line => new SaleConfirmationLineResponse(
                 line.ProductCode, line.ProductName, line.Unit, line.Quantity, line.UnitPrice,
-                line.LineTotal, line.PieceIdentifier)).ToArray(),
+                line.LineTotal, line.PieceIdentifier, line.NetAfterDiscount,
+                line.TaxableBase, line.TaxAmount)).ToArray(),
         sale.Payments.Select(payment => new SaleConfirmationPaymentResponse(
             MethodName(payment.Method), payment.TenderedAmount, payment.AppliedAmount)).ToArray());
 
@@ -351,6 +352,7 @@ public static class SaleConfirmationEndpoints
         IReadOnlyList<SaleConfirmationLineResponse> Lines,
         IReadOnlyList<SaleConfirmationPaymentResponse> Payments);
     private sealed record SaleConfirmationLineResponse(string Code, string Name, string Unit,
-        decimal Quantity, decimal UnitPrice, decimal LineTotal, string? PieceIdentifier);
+        decimal Quantity, decimal UnitPrice, decimal LineTotal, string? PieceIdentifier,
+        decimal? NetAfterDiscount, decimal? TaxableBase, decimal? TaxAmount);
     private sealed record SaleConfirmationPaymentResponse(string Method, decimal TenderedAmount, decimal AppliedAmount);
 }

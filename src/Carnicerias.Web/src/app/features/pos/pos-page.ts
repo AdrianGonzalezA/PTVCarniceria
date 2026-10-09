@@ -366,6 +366,7 @@ export class PosPage implements OnInit {
         this.draftId.set('');
         this.persistedDiscountAmount.set(0);
         this.persistedDiscountReason.set('');
+        if (operation === 'cancel') this.clearDocumentChoice();
       } else {
         const savedDraft = result as SaleDraft;
         this.draftId.set(savedDraft.id);
@@ -835,7 +836,7 @@ export class PosPage implements OnInit {
     if (!window.confirm('¿Querés cancelar la venta y quitar todos sus productos?')) return;
     if (!this.isDemoPriceList() && this.selectedPriceListId()) {
       this.queueDraftOperation('cancel');
-    }
+    } else this.clearDocumentChoice();
     this.lines.set([]);
     this.discountDraft.set('0');
     this.discountReason.set('');
@@ -855,6 +856,7 @@ export class PosPage implements OnInit {
     this.ticketViewRevision++;
     this.activeTicketSlot.set(slot);
     this.rememberActiveTicket(slot);
+    this.restoreDocumentChoice(slot);
     this.lines.set([]);
     this.discountDraft.set('0');
     this.discountReason.set('');
@@ -1010,8 +1012,6 @@ export class PosPage implements OnInit {
     this.creditCustomerSearch.set('');
     this.creditCustomerOptions.set([]);
     this.creditCustomerLoadError.set(null);
-    this.documentType.set('nonFiscalTicket');
-    this.recipientTaxStatus.set('finalConsumer');
     this.recipientName.set('');
     this.recipientDocumentNumber.set('');
     this.recipientAddress.set('');
@@ -1132,12 +1132,24 @@ export class PosPage implements OnInit {
 
   protected selectDocumentType(event: Event): void {
     this.documentType.set((event.target as HTMLSelectElement).value as SaleDocumentType);
+    this.rememberDocumentChoice();
     this.checkoutError.set(null);
   }
 
   protected selectRecipientTaxStatus(event: Event): void {
     this.recipientTaxStatus.set((event.target as HTMLSelectElement).value as SaleRecipientTaxStatus);
+    this.rememberDocumentChoice();
     this.checkoutError.set(null);
+  }
+
+  protected documentTypeName(): string {
+    return { nonFiscalTicket: 'Ticket no fiscal', fiscalTicket: 'Ticket fiscal',
+      electronicInvoice: 'Factura electrónica' }[this.documentType()];
+  }
+
+  protected recipientTaxStatusName(): string {
+    return { finalConsumer: 'Consumidor final', registered: 'Responsable inscripto',
+      smallTaxpayer: 'Monotributista', exempt: 'Exento' }[this.recipientTaxStatus()];
   }
 
   protected updateRecipientName(event: Event): void {
@@ -1291,8 +1303,7 @@ export class PosPage implements OnInit {
     this.creditCustomerId.set('');
     this.creditCustomerAccount.set(null);
     this.creditCustomerAccountStatus.set('idle');
-    this.documentType.set('nonFiscalTicket');
-    this.recipientTaxStatus.set('finalConsumer');
+    this.clearDocumentChoice();
     this.recipientName.set('');
     this.recipientDocumentNumber.set('');
     this.recipientAddress.set('');
@@ -1574,6 +1585,7 @@ export class PosPage implements OnInit {
     } catch {
       this.activeTicketSlot.set('A');
     }
+    this.restoreDocumentChoice(this.activeTicketSlot());
   }
 
   private rememberActiveTicket(slot: SaleTicketSlot): void {
@@ -1581,5 +1593,43 @@ export class PosPage implements OnInit {
     if (!shift) return;
     try { window.localStorage.setItem(this.activeTicketStorageKey(shift.id), slot); }
     catch { /* The tickets themselves remain in PostgreSQL. */ }
+  }
+
+  private documentChoiceStorageKey(shiftId: string, slot: SaleTicketSlot): string {
+    return `carnicerias:ticket-document:${this.terminal()?.id}:${shiftId}:${this.session()?.userId}:${slot}`;
+  }
+
+  private restoreDocumentChoice(slot: SaleTicketSlot): void {
+    const shift = this.cashierShift();
+    let choice: unknown;
+    try {
+      choice = shift ? JSON.parse(window.localStorage.getItem(this.documentChoiceStorageKey(shift.id, slot)) ?? 'null') : null;
+    } catch { choice = null; }
+    const saved = Array.isArray(choice) ? choice : [];
+    const documentType = saved[0];
+    const taxStatus = saved[1];
+    this.documentType.set(documentType === 'fiscalTicket' || documentType === 'electronicInvoice'
+      ? documentType : 'nonFiscalTicket');
+    this.recipientTaxStatus.set(taxStatus === 'registered' || taxStatus === 'smallTaxpayer' || taxStatus === 'exempt'
+      ? taxStatus : 'finalConsumer');
+  }
+
+  private rememberDocumentChoice(): void {
+    const shift = this.cashierShift();
+    if (!shift) return;
+    try {
+      window.localStorage.setItem(this.documentChoiceStorageKey(shift.id, this.activeTicketSlot()),
+        JSON.stringify([this.documentType(), this.recipientTaxStatus()]));
+    } catch { /* The sale remains usable if local storage is unavailable. */ }
+  }
+
+  private clearDocumentChoice(): void {
+    const shift = this.cashierShift();
+    if (shift) {
+      try { window.localStorage.removeItem(this.documentChoiceStorageKey(shift.id, this.activeTicketSlot())); }
+      catch { /* The current choice still resets below. */ }
+    }
+    this.documentType.set('nonFiscalTicket');
+    this.recipientTaxStatus.set('finalConsumer');
   }
 }

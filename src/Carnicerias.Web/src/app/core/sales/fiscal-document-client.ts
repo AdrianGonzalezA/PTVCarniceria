@@ -8,6 +8,8 @@ export interface AuthorizedFiscalDocument {
   readonly issuerCuit: string | null;
   readonly issuerName: string;
   readonly issuerAddress: string;
+  readonly issuerIibb: string | null;
+  readonly issuerActivityStartDate: string | null;
   readonly pointOfSale: number | null;
   readonly voucherType: number | null;
   readonly number: number | null;

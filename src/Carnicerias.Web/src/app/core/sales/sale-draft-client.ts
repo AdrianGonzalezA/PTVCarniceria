@@ -53,7 +53,8 @@ export interface ConfirmedSale {
   readonly documentType?: SaleDocumentType;
   readonly recipientTaxStatus?: SaleRecipientTaxStatus;
   readonly recipientName?: string | null;
-  readonly lines: readonly { readonly code: string; readonly name: string; readonly unit: string; readonly quantity: number; readonly unitPrice: number; readonly lineTotal: number; readonly pieceIdentifier?: string | null }[];
+  readonly lines: readonly { readonly code: string; readonly name: string; readonly unit: string; readonly quantity: number; readonly unitPrice: number; readonly lineTotal: number; readonly pieceIdentifier?: string | null;
+    readonly netAfterDiscount?: number | null; readonly taxableBase?: number | null; readonly taxAmount?: number | null }[];
   readonly payments: readonly { readonly method: SalePaymentMethod; readonly tenderedAmount: number; readonly appliedAmount: number }[];
 }
 

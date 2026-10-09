@@ -59,8 +59,6 @@ describe('PosPage', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
-    (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
-    fixture.detectChanges();
 
     const select = (id: string, value: string) => {
       const element = fixture.nativeElement.querySelector(`#${id}`) as HTMLSelectElement;
@@ -76,6 +74,18 @@ describe('PosPage', () => {
     };
     select('sale-document-type', 'electronicInvoice');
     select('sale-recipient-tax-status', 'registered');
+    expect(fixture.nativeElement.querySelector('.sale-metadata #sale-document-type')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.sale-metadata #sale-recipient-tax-status')).not.toBeNull();
+    (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.checkout-dialog #sale-document-type')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.checkout-dialog #sale-recipient-tax-status')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.sale-document').textContent).toContain('Factura electr');
+    (fixture.nativeElement.querySelector('.checkout-dialog .dialog-cancel') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect((fixture.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement).value).toBe('electronicInvoice');
+    (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
     expect((fixture.nativeElement.querySelector('.checkout-dialog .finish-button') as HTMLButtonElement).disabled).toBe(true);
     expect(confirm).not.toHaveBeenCalled();
     input('sale-recipient-name', 'Cliente');
@@ -87,6 +97,8 @@ describe('PosPage', () => {
     expect(confirm).toHaveBeenCalledWith('draft-id', [{ method: 'cash', amount: 2500 }], undefined,
       { documentType: 'electronicInvoice', recipientTaxStatus: 'registered', recipientName: 'Cliente',
         recipientDocumentNumber: '20000000001', recipientAddress: 'Calle 123' });
+    expect((fixture.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement).value).toBe('nonFiscalTicket');
+    expect((fixture.nativeElement.querySelector('#sale-recipient-tax-status') as HTMLSelectElement).value).toBe('finalConsumer');
     expect(fixture.nativeElement.querySelector('.sale-receipt').textContent).toContain('pendiente de emisión');
     expect(fixture.nativeElement.querySelector('.serial-print-button')).toBeNull();
   });
@@ -130,11 +142,24 @@ describe('PosPage', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Asado');
 
+    const choose = (id: string, value: string) => {
+      const element = fixture.nativeElement.querySelector(`#${id}`) as HTMLSelectElement;
+      element.value = value;
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+      fixture.detectChanges();
+    };
+    choose('sale-document-type', 'electronicInvoice');
+    choose('sale-recipient-tax-status', 'registered');
+
     (fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).click();
     await fixture.whenStable();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Bondiola');
     expect(fixture.nativeElement.querySelector('.line-table').textContent).not.toContain('Asado');
+    expect((fixture.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement).value).toBe('nonFiscalTicket');
+    expect((fixture.nativeElement.querySelector('#sale-recipient-tax-status') as HTMLSelectElement).value).toBe('finalConsumer');
+    choose('sale-document-type', 'fiscalTicket');
+    choose('sale-recipient-tax-status', 'exempt');
     (fixture.nativeElement.querySelectorAll('.ticket-tab')[2] as HTMLButtonElement).click();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -152,6 +177,16 @@ describe('PosPage', () => {
     expect(reopened.nativeElement.querySelector('.line-table').textContent).toContain('Pan');
     expect((reopened.nativeElement.querySelectorAll('.ticket-tab')[3] as HTMLButtonElement)
       .getAttribute('aria-current')).toBe('page');
+    (reopened.nativeElement.querySelectorAll('.ticket-tab')[0] as HTMLButtonElement).click();
+    await reopened.whenStable();
+    reopened.detectChanges();
+    expect((reopened.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement).value).toBe('electronicInvoice');
+    expect((reopened.nativeElement.querySelector('#sale-recipient-tax-status') as HTMLSelectElement).value).toBe('registered');
+    (reopened.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).click();
+    await reopened.whenStable();
+    reopened.detectChanges();
+    expect((reopened.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement).value).toBe('fiscalTicket');
+    expect((reopened.nativeElement.querySelector('#sale-recipient-tax-status') as HTMLSelectElement).value).toBe('exempt');
   });
 
   it('shows which tickets were saved after reopening the POS', async () => {
@@ -340,10 +375,15 @@ describe('PosPage', () => {
       const fixture = TestBed.createComponent(PosPage);
       fixture.detectChanges();
       await fixture.whenStable();
+      const documentType = fixture.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement;
+      documentType.value = 'electronicInvoice';
+      documentType.dispatchEvent(new Event('change', { bubbles: true }));
+      fixture.detectChanges();
       (fixture.nativeElement.querySelector('.remove-line-button') as HTMLButtonElement).click();
       fixture.detectChanges();
       expect(cancel).toHaveBeenCalledExactlyOnceWith('A');
       expect(fixture.nativeElement.querySelector('.line-table')).toBeNull();
+      expect((fixture.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement).value).toBe('nonFiscalTicket');
       expect((fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).disabled).toBe(false);
     } finally {
       confirm.mockRestore();

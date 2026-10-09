@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, ElementRef, inject, HostListener, OnInit, signal, ViewChild } from '@angular/core';
+import { Component, computed, DestroyRef, ElementRef, inject, HostListener, OnInit, signal, ViewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { Observable, of, Subject } from 'rxjs';
@@ -95,6 +95,7 @@ export class PosPage implements OnInit {
   private readonly terminalClient = inject(PosTerminalClient);
   private readonly creditCustomerClient = inject(CreditCustomerClient);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
   @ViewChild('scanInput') private scanInput?: ElementRef<HTMLInputElement>;
   private readonly draftOperations = new Subject<{
     readonly revision: number;
@@ -109,6 +110,7 @@ export class PosPage implements OnInit {
   private scaleRequestRevision = 0;
   private scannedCode = '';
   private lastScanKeyAt = 0;
+  private mercadoPagoPollTimer: ReturnType<typeof setTimeout> | null = null;
 
   protected readonly session = signal<CurrentSession | null>(null);
   protected readonly terminal = signal<PosTerminal | null>(null);
@@ -342,6 +344,7 @@ export class PosPage implements OnInit {
   );
 
   constructor() {
+    this.destroyRef.onDestroy(() => this.clearMercadoPagoPoll());
     this.draftOperations.pipe(
       concatMap(({ revision, slot, operation }) => {
         const request: Observable<SaleDraft | void> = operation === 'cancel'
@@ -1047,6 +1050,7 @@ export class PosPage implements OnInit {
     if (this.canChargeToAccount()) this.searchCreditCustomers();
     this.checkoutError.set(null);
     this.checkoutNotice.set(true);
+    this.clearMercadoPagoPoll();
     this.mercadoPagoIntent.set(null);
     this.mercadoPagoQrImage.set(null);
     this.mercadoPagoMessage.set(null);
@@ -1206,17 +1210,22 @@ export class PosPage implements OnInit {
 
   protected checkMercadoPago(): void {
     const intent = this.mercadoPagoIntent();
-    if (!intent || !this.draftId() || this.mercadoPagoBusy()) return;
+    const draftId = this.draftId();
+    if (!intent || !draftId || this.mercadoPagoBusy()) return;
     this.mercadoPagoBusy.set(true);
     this.mercadoPagoMessage.set(null);
-    this.mercadoPagoClient.check(this.draftId(), intent.id).subscribe({
+    this.mercadoPagoClient.check(draftId, intent.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (updated) => {
         this.mercadoPagoBusy.set(false);
-        this.acceptMercadoPagoIntent(updated);
+        if (this.checkoutNotice() && this.draftId() === draftId && this.mercadoPagoIntent()?.id === intent.id)
+          this.acceptMercadoPagoIntent(updated);
       },
       error: () => {
         this.mercadoPagoBusy.set(false);
-        this.mercadoPagoMessage.set('No se pudo verificar el estado en Mercado Pago. No cierres la venta todavía.');
+        if (this.checkoutNotice() && this.draftId() === draftId && this.mercadoPagoIntent()?.id === intent.id) {
+          this.mercadoPagoMessage.set('No se pudo verificar el estado en Mercado Pago. No cierres la venta todavía.');
+          this.scheduleMercadoPagoPoll(15000);
+        }
       },
     });
   }
@@ -1244,12 +1253,29 @@ export class PosPage implements OnInit {
     this.mercadoPagoMessage.set(intent.approved ? 'Pago acreditado. Ya podés confirmar la venta.'
       : intent.status === 'Expired' || intent.status === 'Rejected' || intent.status === 'Canceled'
         ? 'La orden terminó sin cobro. Podés iniciar otra o elegir otro medio.'
-        : 'Orden pendiente. Consultá el estado después de realizar el pago.');
+        : 'Orden pendiente. El estado se actualiza automáticamente; también podés consultar el pago.');
     if (intent.qrData) {
       void QRCode.toDataURL(intent.qrData, { width: 240, margin: 2 }).then((image) => {
         if (this.mercadoPagoIntent()?.id === intent.id) this.mercadoPagoQrImage.set(image);
       }).catch(() => this.mercadoPagoMessage.set('No se pudo dibujar el QR. Consultá la orden.'));
     } else this.mercadoPagoQrImage.set(null);
+    this.scheduleMercadoPagoPoll();
+  }
+
+  private clearMercadoPagoPoll(): void {
+    if (this.mercadoPagoPollTimer !== null) clearTimeout(this.mercadoPagoPollTimer);
+    this.mercadoPagoPollTimer = null;
+  }
+
+  private scheduleMercadoPagoPoll(delayMs = 5000): void {
+    this.clearMercadoPagoPoll();
+    if (!this.checkoutNotice() || !this.draftId() || !this.mercadoPagoOrderActive() ||
+        this.mercadoPagoIntent()?.approved) return;
+    this.mercadoPagoPollTimer = setTimeout(() => {
+      this.mercadoPagoPollTimer = null;
+      if (this.mercadoPagoBusy()) this.scheduleMercadoPagoPoll();
+      else this.checkMercadoPago();
+    }, delayMs);
   }
 
   protected paymentAmount(method: SalePaymentMethod): number {
@@ -1406,12 +1432,14 @@ export class PosPage implements OnInit {
 
   protected closeCheckout(): void {
     if (this.checkoutBusy()) return;
+    this.clearMercadoPagoPoll();
     this.checkoutNotice.set(false);
     this.checkoutError.set(null);
   }
 
   private finishConfirmedSale(sale: ConfirmedSale): void {
     this.checkoutBusy.set(false);
+    this.clearMercadoPagoPoll();
     this.checkoutNotice.set(false);
     this.confirmedSale.set(sale);
     this.fiscalDocument.set(null);

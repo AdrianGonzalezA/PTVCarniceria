@@ -1208,4 +1208,95 @@ describe('PosPage', () => {
     expect(start).toHaveBeenCalledWith('draft-id', paymentMode, 2500);
     expect(check).toHaveBeenCalledWith('draft-id', 'intent-id');
   });
+
+  it('reconciles a pending Mercado Pago payment automatically while checkout is open', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-09T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const pending = { id: 'intent-id', mode: 'qr' as const, amount: 2500, status: 'Pending' as const,
+      providerOrderId: 'order-id', qrData: 'https://mpago.la/test', approved: false,
+      createdAtUtc: '2026-10-09T16:00:00Z' };
+    const check = vi.fn().mockReturnValueOnce(of(pending))
+      .mockReturnValue(of({ ...pending, status: 'Approved', approved: true }));
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: { priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
+        categories: () => of([]) } },
+      { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of({
+        id: 'draft-id', ticketSlot: 'A', priceListId: 'list-id', updatedAtUtc: '2026-10-09T15:00:00Z',
+        lines: [{ id: 'line-id', productId: 'product-id', productCode: '1001', productName: 'Asado',
+          unit: 'kg', saleMode: 'weight', quantity: 1, unitPrice: 2500 }],
+      }) } },
+      { provide: MercadoPagoClient, useValue: { get: () => of(pending), start: () => NEVER, check,
+        cancel: () => NEVER } },
+      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    vi.useFakeTimers();
+    try {
+      (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.mercado-pago-state').textContent).toContain('Pendiente');
+      await vi.advanceTimersByTimeAsync(5000);
+      fixture.detectChanges();
+      expect(check).toHaveBeenCalledExactlyOnceWith('draft-id', 'intent-id');
+      expect(fixture.nativeElement.querySelector('.mercado-pago-state').textContent).toContain('Pendiente');
+      await vi.advanceTimersByTimeAsync(5000);
+      fixture.detectChanges();
+      expect(check).toHaveBeenCalledTimes(2);
+      expect(fixture.nativeElement.querySelector('.mercado-pago-state').textContent).toContain('Acreditado');
+      await vi.advanceTimersByTimeAsync(15000);
+      expect(check).toHaveBeenCalledTimes(2);
+    } finally {
+      fixture.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops checking Mercado Pago when the cashier closes checkout', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-09T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const pending = { id: 'intent-id', mode: 'qr' as const, amount: 2500, status: 'Pending' as const,
+      providerOrderId: 'order-id', qrData: 'https://mpago.la/test', approved: false,
+      createdAtUtc: '2026-10-09T16:00:00Z' };
+    const check = vi.fn().mockReturnValue(of(pending));
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: { priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
+        categories: () => of([]) } },
+      { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of({
+        id: 'draft-id', ticketSlot: 'A', priceListId: 'list-id', updatedAtUtc: '2026-10-09T15:00:00Z',
+        lines: [{ id: 'line-id', productId: 'product-id', productCode: '1001', productName: 'Asado',
+          unit: 'kg', saleMode: 'weight', quantity: 1, unitPrice: 2500 }],
+      }) } },
+      { provide: MercadoPagoClient, useValue: { get: () => of(pending), start: () => NEVER, check,
+        cancel: () => NEVER } },
+      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    vi.useFakeTimers();
+    try {
+      (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(check).toHaveBeenCalledTimes(1);
+      (fixture.nativeElement.querySelector('.pos-dialog .dialog-close') as HTMLButtonElement).click();
+      await vi.advanceTimersByTimeAsync(15000);
+      expect(check).toHaveBeenCalledTimes(1);
+    } finally {
+      fixture.destroy();
+      vi.useRealTimers();
+    }
+  });
 });

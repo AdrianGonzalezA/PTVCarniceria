@@ -393,7 +393,7 @@
         @if (hasPayment('mercadoPago')) {
           <section class="mercado-pago-panel" aria-labelledby="mercado-pago-title">
             <h3 id="mercado-pago-title">Cobro integrado · Mercado Pago</h3>
-            <p>La venta no se cerrará hasta que Mercado Pago confirme el pago.</p>
+            <p>La venta no se cerrará hasta que Mercado Pago confirme el pago. El estado se consulta automáticamente cada 5 segundos mientras esta ventana esté abierta.</p>
             <label for="mercado-pago-mode">Modo de cobro</label>
             <select id="mercado-pago-mode" [value]="mercadoPagoMode()"
               [disabled]="mercadoPagoBusy() || mercadoPagoOrderActive()"

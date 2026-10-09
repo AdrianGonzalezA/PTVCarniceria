@@ -4,6 +4,10 @@
 
 **Primer componente técnico:** `SaleAmountCalculator` calcula importes desde precios finales, distribuye descuentos globales en centavos de forma determinística y extrae bases/IVA para tratamientos gravado, exento y no gravado. Tiene pruebas unitarias; todavía **no** está conectado al catálogo, borradores, cobro ni emisión fiscal. Ninguna venta existente se recalcula.
 
+**Segundo componente técnico:** Configuración → Impuestos por artículo permite guardar clasificación/porcentaje sin precarga, conserva historial de vigencia y actor, y muestra explícitamente los productos pendientes. La migración `AddProductTaxRules` se aplicó solo a `carnicerias_test_visual`. En Electron se verificó la consulta, el rechazo de una combinación inválida y dos cambios consecutivos (exento → no alcanzado) sobre un artículo **inactivo de prueba**, con vigencia anterior cerrada e igual resultado al repetir el mismo valor. Las reglas todavía no alimentan ventas ni justifican una factura.
+
+Contrato administrativo actual: `GET /api/admin/product-tax-rules?page&search` devuelve artículos y regla vigente (o `null`); `GET /api/admin/product-tax-rules/{productId}` devuelve hasta 100 versiones recientes; `PUT /api/admin/product-tax-rules/{productId}` recibe `{ treatment: "taxed" | "exempt" | "notTaxed", ratePercent }`. Requiere `catalog.manage`, sesión/contexto y producto de la misma empresa. Repetir el mismo valor no crea otra versión. No es una tabla de códigos oficiales ARCA ni una determinación fiscal automática.
+
 ## Situación actual y frontera
 
 El POS confirma ventas y stock, permite pagos inmediatos, cuenta corriente, cobranzas y recibos **internos no fiscales**. `PaymentMethod` ya distingue efectivo, débito, crédito, transferencia, Mercado Pago y cheque, pero los últimos cinco son por ahora importes **declarados por el cajero**, no confirmaciones de un adquirente ni instrumentos bancarios con trazabilidad. No hay alícuotas/impuestos por artículo, descuentos persistidos, CAE ni vínculo con un punto de venta ARCA. El PDF/ticket actual no es factura. La vista Negocio es comercial, no un libro IVA.

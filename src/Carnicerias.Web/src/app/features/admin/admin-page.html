@@ -92,6 +92,7 @@
             @if (context.permissions.includes('catalog.manage')) {
               <a class="module-link" routerLink="/admin/categories"><span><strong>Categorías</strong><small>Organizar familias de productos para la venta.</small></span><span aria-hidden="true">→</span></a>
               <a class="module-link" routerLink="/admin/products"><span><strong>Artículos</strong><small>Definir productos, unidad de venta, modalidad y costo.</small></span><span aria-hidden="true">→</span></a>
+              <a class="module-link" routerLink="/admin/taxes"><span><strong>Impuestos por artículo</strong><small>Clasificar gravado, exento o no alcanzado, con alícuota e historial.</small></span><span aria-hidden="true">→</span></a>
               <a class="module-link" routerLink="/admin/price-lists"><span><strong>Listas de precios</strong><small>Habilitarlas por sucursal y mantener precios con historial.</small></span><span aria-hidden="true">→</span></a>
             }
             @if (context.permissions.includes('organization.manage')) {

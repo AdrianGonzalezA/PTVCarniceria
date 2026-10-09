@@ -37,6 +37,7 @@ app.MapUserEndpoints();
 app.MapCatalogEndpoints();
 app.MapAdminCategoryEndpoints();
 app.MapAdminProductEndpoints();
+app.MapAdminProductTaxEndpoints();
 app.MapAdminProductCodeEndpoints();
 app.MapAdminPriceListEndpoints();
 app.MapAdminProductPriceEndpoints();

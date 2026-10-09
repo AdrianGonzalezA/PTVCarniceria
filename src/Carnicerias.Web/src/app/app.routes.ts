@@ -13,6 +13,7 @@ export const routes: Routes = [
   { path: 'admin', loadComponent: () => import('./features/admin/admin-page').then((page) => page.AdminPage), canActivate: [userAdminGuard], data: { area: 'business' } },
   { path: 'admin/categories', loadComponent: () => import('./features/admin/categories-page').then((page) => page.CategoriesPage), canActivate: [catalogAdminGuard] },
   { path: 'admin/products', loadComponent: () => import('./features/admin/products-page').then((page) => page.ProductsPage), canActivate: [catalogAdminGuard] },
+  { path: 'admin/taxes', loadComponent: () => import('./features/admin/product-tax-page').then((page) => page.ProductTaxPage), canActivate: [catalogAdminGuard] },
   { path: 'admin/price-lists', loadComponent: () => import('./features/admin/price-lists-page').then((page) => page.PriceListsPage), canActivate: [catalogAdminGuard] },
   { path: 'admin/organization', loadComponent: () => import('./features/admin/organization-page').then((page) => page.OrganizationPage), canActivate: [organizationAdminGuard] },
   { path: 'admin/customers', loadComponent: () => import('./features/admin/customers-page').then((page) => page.CustomersPage), canActivate: [organizationAdminGuard] },

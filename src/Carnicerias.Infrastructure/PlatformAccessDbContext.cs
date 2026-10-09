@@ -48,6 +48,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<ProductPrice> ProductPrices => Set<ProductPrice>();
 
+    public DbSet<ProductTaxRule> ProductTaxRules => Set<ProductTaxRule>();
+
     public DbSet<SaleDraft> SaleDrafts => Set<SaleDraft>();
 
     public DbSet<BranchInventoryBalance> BranchInventoryBalances => Set<BranchInventoryBalance>();
@@ -473,6 +475,31 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(product => new { product.CompanyId, product.NormalizedCode }).IsUnique();
             entity.HasIndex(product => new { product.CompanyId, product.CategoryId, product.IsActive });
+        });
+
+        modelBuilder.Entity<ProductTaxRule>(entity =>
+        {
+            entity.ToTable("product_tax_rules", "catalog_pricing", table =>
+            {
+                table.HasCheckConstraint("CK_product_tax_rules_treatment",
+                    "\"Treatment\" IN (0, 1, 2) AND (\"Treatment\" = 0 OR \"RatePercent\" = 0)");
+                table.HasCheckConstraint("CK_product_tax_rules_rate",
+                    "\"RatePercent\" >= 0 AND \"RatePercent\" <= 100");
+                table.HasCheckConstraint("CK_product_tax_rules_dates",
+                    "\"EffectiveToUtc\" IS NULL OR \"EffectiveToUtc\" > \"EffectiveFromUtc\"");
+            });
+            entity.HasKey(rule => rule.Id);
+            entity.Property(rule => rule.RatePercent).HasPrecision(5, 2);
+            entity.HasOne<CatalogProduct>().WithMany()
+                .HasForeignKey(rule => new { rule.CompanyId, rule.ProductId })
+                .HasPrincipalKey(product => new { product.CompanyId, product.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany().HasForeignKey(rule => rule.ChangedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(rule => new { rule.CompanyId, rule.ProductId, rule.EffectiveToUtc })
+                .HasFilter("\"EffectiveToUtc\" IS NULL").IsUnique();
+            entity.HasIndex(rule => new { rule.CompanyId, rule.ProductId, rule.EffectiveFromUtc })
+                .IsUnique();
         });
 
         modelBuilder.Entity<ProductCode>(entity =>

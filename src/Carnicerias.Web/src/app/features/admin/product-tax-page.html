@@ -1,0 +1,91 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" routerLink="/admin/configuracion" aria-label="Volver a Configuración">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Administración</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+  <div class="workspace">
+    <app-admin-area-tabs area="configuration" />
+    <a class="back-link" routerLink="/admin/configuracion">← Volver a Configuración</a>
+    <p class="eyebrow">Configuración · Catálogo</p>
+    <h1>Impuestos por artículo</h1>
+    <p class="intro">Asigná la clasificación y alícuota de cada artículo. No hay valores fiscales precargados ni se modifican ventas pasadas. Esta configuración todavía no emite facturas.</p>
+    @if (session()?.context; as context) {
+      <section class="context-bar"><div><span>Empresa</span><strong>{{ context.companyName }}</strong></div></section>
+    }
+
+    <section class="category-panel history-panel" aria-labelledby="tax-list-title" [attr.aria-busy]="loading()">
+      <header class="panel-heading"><div>
+        <h2 id="tax-list-title">Clasificación fiscal</h2>
+        <p>Verificá cada tratamiento con el responsable contable antes de facturar.</p>
+      </div></header>
+      <form class="account-search" (submit)="$event.preventDefault(); runSearch()">
+        <label for="tax-search">Código o artículo</label>
+        <input id="tax-search" type="search" maxlength="100" [value]="search()" (input)="searchChanged($event)" placeholder="Buscar artículo" />
+        <button type="submit" [disabled]="loading()">Buscar</button>
+        <button type="button" class="secondary-button" [disabled]="loading()" (click)="load()">Actualizar</button>
+      </form>
+      @if (loading()) { <p class="state-message" role="status">Consultando artículos…</p> }
+      @else if (listError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+      @else if (list(); as result) {
+        @if (result.total === 0) { <p class="state-message">No hay artículos para esta búsqueda.</p> }
+        @else {
+          <div class="table-wrap"><table>
+            <thead><tr><th scope="col">Artículo</th><th scope="col">Estado</th><th scope="col">Tratamiento</th><th scope="col">Alícuota</th><th scope="col">Acción</th></tr></thead>
+            <tbody>@for (product of result.items; track product.id) {
+              <tr>
+                <td><strong>{{ product.name }}</strong><small>{{ product.code }}</small></td>
+                <td>{{ product.isActive ? 'Activo' : 'Inactivo' }}</td>
+                <td>{{ product.currentRule ? label(product.currentRule.treatment) : 'Sin configurar' }}</td>
+                <td>{{ product.currentRule ? product.currentRule.ratePercent + ' %' : '—' }}</td>
+                <td><button class="secondary-button" type="button" (click)="select(product)">Configurar</button></td>
+              </tr>
+            }</tbody>
+          </table></div>
+          <div class="account-pages">
+            <button class="secondary-button" type="button" [disabled]="page() <= 1" (click)="changePage(-1)">Anterior</button>
+            <span>Página {{ page() }} de {{ pageCount(result.total) }} · {{ result.total }} artículos</span>
+            <button class="secondary-button" type="button" [disabled]="page() >= pageCount(result.total)" (click)="changePage(1)">Siguiente</button>
+          </div>
+        }
+      }
+    </section>
+
+    @if (selected(); as product) {
+      <section class="category-panel product-tax-editor" aria-labelledby="tax-editor-title">
+        <header class="panel-heading"><div><p class="eyebrow">Artículo {{ product.code }}</p>
+          <h2 id="tax-editor-title">{{ product.name }}</h2></div>
+          <button class="secondary-button" type="button" (click)="close()">Cerrar</button></header>
+        <div class="tax-editor-body">
+          <p class="account-note">Los precios del POS son finales. La base gravada y el impuesto se extraerán del precio final cuando se conecte esta regla al flujo de venta. No se asume una alícuota por familia de productos.</p>
+          <div class="tax-editor-fields">
+            <div><label for="tax-treatment">Tratamiento</label>
+              <select id="tax-treatment" [value]="treatment()" [disabled]="saving()" (change)="treatmentChanged($event)">
+                <option value="taxed">Gravado</option><option value="exempt">Exento</option><option value="notTaxed">No alcanzado</option>
+              </select></div>
+            <div><label for="tax-rate">Alícuota (%)</label>
+              <input id="tax-rate" type="number" min="0" max="100" step="0.01" [value]="rate()"
+                [disabled]="saving() || treatment() !== 'taxed'" (input)="rateChanged($event)" />
+            </div>
+          </div>
+          @if (saveError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+          @if (saveSuccess()) { <p class="tax-success" role="status">Regla guardada; el historial anterior permanece disponible.</p> }
+          <button type="button" [disabled]="saving()" (click)="save()">{{ saving() ? 'Guardando…' : 'Guardar regla' }}</button>
+          <h3>Historial de reglas</h3>
+          @if (historyError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+          @else if (history().length === 0) { <p class="state-message">Sin reglas anteriores.</p> }
+          @else { <div class="table-wrap"><table>
+            <thead><tr><th scope="col">Desde</th><th scope="col">Hasta</th><th scope="col">Tratamiento</th><th scope="col">Alícuota</th></tr></thead>
+            <tbody>@for (rule of history(); track rule.id) {
+              <tr><td>{{ rule.effectiveFromUtc | date:'dd/MM/yyyy HH:mm' }}</td>
+                <td>{{ rule.effectiveToUtc ? (rule.effectiveToUtc | date:'dd/MM/yyyy HH:mm') : 'Vigente' }}</td>
+                <td>{{ label(rule.treatment) }}</td><td>{{ rule.ratePercent }} %</td></tr>
+            }</tbody>
+          </table></div> }
+        </div>
+      </section>
+    }
+  </div>
+</main>

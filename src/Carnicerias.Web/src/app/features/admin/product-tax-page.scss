@@ -1,0 +1,7 @@
+.product-tax-editor .tax-editor-body { padding: 20px; }
+.product-tax-editor .tax-editor-body > h3 { margin-top: 28px; color: #005f60; }
+.tax-editor-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 260px)); gap: 16px; margin: 18px 0; }
+.tax-editor-fields label { display: block; margin-bottom: 6px; font-weight: 700; }
+.tax-editor-fields select, .tax-editor-fields input { width: 100%; min-height: 42px; padding: 8px; border: 1px solid #929b99; background: white; color: #191919; }
+.tax-success { color: #005f60; font-weight: 700; }
+@media (max-width: 600px) { .tax-editor-fields { grid-template-columns: 1fr; } }

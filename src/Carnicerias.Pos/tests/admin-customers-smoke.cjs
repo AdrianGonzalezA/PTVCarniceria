@@ -161,6 +161,69 @@ async function main() {
     console.log(JSON.stringify({ state, detail, screenshotPath }, null, 2));
     return;
   }
+  if (process.argv.includes('--taxes')) {
+    await send('Page.navigate', { url: 'app://bundle/admin/configuracion' });
+    await waitFor("document.querySelector('h1')?.textContent === 'Configuración'");
+    await waitFor("!!document.querySelector('a[href=\"/admin/taxes\"]')");
+    await evaluate("document.querySelector('a[href=\"/admin/taxes\"]')?.click()");
+    await waitFor("document.querySelector('h1')?.textContent === 'Impuestos por artículo'");
+    await waitFor("document.querySelector('.category-panel')?.getAttribute('aria-busy') === 'false'");
+    const list = await evaluate(`({ text: document.body.innerText.slice(0, 1800),
+      errors: [...document.querySelectorAll('[role="alert"]')].map(item => item.textContent),
+      rows: document.querySelectorAll('tbody tr').length })`);
+    if (list.errors.length || list.rows < 1) throw new Error(JSON.stringify(list));
+    const api = await evaluate(`(async () => {
+      const response = await fetch('/api/admin/product-tax-rules?page=1', { credentials: 'include' });
+      const body = await response.json();
+      const productId = body.items[0].id;
+      const invalid = await fetch('/api/admin/product-tax-rules/' + productId,
+        { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ treatment: 'exempt', ratePercent: 21 }) });
+      return { status: response.status, total: body.total,
+        unconfigured: body.items.filter(item => !item.currentRule).length,
+        invalidStatus: invalid.status };
+    })()`);
+    if (api.status !== 200 || api.invalidStatus !== 400) throw new Error(JSON.stringify(api));
+    await evaluate("document.querySelector('tbody tr button')?.click()");
+    await waitFor("!!document.querySelector('.product-tax-editor')");
+    const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    const screenshotPath = resolve(tmpdir(), 'electron-admin-taxes.png');
+    writeFileSync(screenshotPath, Buffer.from(screenshot.data, 'base64'));
+    socket.close();
+    console.log(JSON.stringify({ list, api, screenshotPath }, null, 2));
+    return;
+  }
+  if (process.argv.includes('--tax-write-test')) {
+    const check = await evaluate(`(async () => {
+      const prefix = '/api/admin/product-tax-rules';
+      const listResponse = await fetch(prefix + '?search=ADM-TEST-20261008',
+        { credentials: 'include' });
+      const list = await listResponse.json();
+      const product = list.items.find(item => item.code === 'ADM-TEST-20261008' && !item.isActive);
+      if (!product) return { error: 'No está el artículo inactivo de prueba' };
+      const treatment = product.currentRule?.treatment === 'exempt' ? 'notTaxed' : 'exempt';
+      const send = () => fetch(prefix + '/' + product.id, {
+        method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ treatment, ratePercent: 0 })
+      });
+      const first = await send();
+      const firstBody = await first.json();
+      const repeat = await send();
+      const repeatBody = await repeat.json();
+      const history = await fetch(prefix + '/' + product.id,
+        { credentials: 'include' }).then(response => response.json());
+      return { firstStatus: first.status, repeatStatus: repeat.status,
+        sameId: firstBody.id === repeatBody.id,
+        treatment: firstBody.treatment, historyLength: history.length,
+        previousClosed: history.length > 1 ? !!history[1].effectiveToUtc : true };
+    })()`);
+    socket.close();
+    console.log(JSON.stringify(check, null, 2));
+    if (check.firstStatus !== 200 || check.repeatStatus !== 200 || !check.sameId ||
+      !check.previousClosed || check.historyLength < 1)
+      throw new Error('No se conservó la regla fiscal con historial e idempotencia de actualización.');
+    return;
+  }
   if (process.argv.includes('--customers')) {
     if (!await evaluate("!!document.querySelector('a[href=\"/admin/customers\"]')")) {
       await evaluate("document.querySelector('a[href=\"/admin/configuracion\"]')?.click()");

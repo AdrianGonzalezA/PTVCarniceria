@@ -14,11 +14,14 @@ using Carnicerias.Domain.PlatformAccess;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
-var connectionString = builder.Configuration.GetConnectionString("PlatformAccess")
-    ?? Environment.GetEnvironmentVariable("CARNICERIAS_CONNECTION_STRING")
-    ?? throw new InvalidOperationException("Configure the application database explicitly before starting the API.");
-
-builder.Services.AddDbContext<PlatformAccessDbContext>(options => options.UseNpgsql(connectionString));
+builder.Services.AddDbContext<PlatformAccessDbContext>((services, options) =>
+{
+    var configuration = services.GetRequiredService<IConfiguration>();
+    var connectionString = configuration.GetConnectionString("PlatformAccess")
+        ?? Environment.GetEnvironmentVariable("CARNICERIAS_CONNECTION_STRING")
+        ?? throw new InvalidOperationException("Configure the application database explicitly before accessing it.");
+    options.UseNpgsql(connectionString);
+});
 builder.Services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<SessionAuthenticationService>();

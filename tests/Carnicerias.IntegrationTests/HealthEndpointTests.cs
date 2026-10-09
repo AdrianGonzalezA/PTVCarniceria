@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 
 namespace Carnicerias.IntegrationTests;
 
@@ -10,7 +11,12 @@ public sealed class HealthEndpointTests : IClassFixture<WebApplicationFactory<Pr
 
     public HealthEndpointTests(WebApplicationFactory<Program> application)
     {
-        client = application.CreateClient();
+        client = application.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:PlatformAccess"] =
+                    "Host=127.0.0.1;Port=55433;Database=carnicerias_test_visual;Username=postgres"
+            }))).CreateClient();
     }
 
     [Fact]

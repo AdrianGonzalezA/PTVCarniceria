@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { resolvePosProfile } from '../src/pos-profile';
+import { initialUrlForProfile, resolvePosProfile } from '../src/pos-profile';
 
 describe('POS profile selection', () => {
   const originalUserData = path.resolve('user-data');
@@ -20,6 +20,17 @@ describe('POS profile selection', () => {
     expect(first.userDataPath).toBe(path.join(originalUserData, 'profiles', 'caja-1'));
     expect(second.userDataPath).toBe(path.join(originalUserData, 'profiles', 'caja-2'));
     expect(first.userDataPath).not.toBe(second.userDataPath);
+  });
+
+  it('starts named registers in the POS even when an admin session is remembered', () => {
+    expect(initialUrlForProfile(resolvePosProfile(['--pos-profile=caja-1'], originalUserData)))
+      .toBe('app://bundle/pos');
+    expect(initialUrlForProfile(resolvePosProfile(['--pos-profile=caja-2'], originalUserData)))
+      .toBe('app://bundle/pos');
+    expect(initialUrlForProfile(resolvePosProfile([], originalUserData)))
+      .toBe('app://bundle/index.html');
+    expect(initialUrlForProfile(resolvePosProfile(['--pos-profile=admin-review'], originalUserData)))
+      .toBe('app://bundle/index.html');
   });
 
   it.each(['../other', 'Caja 1', 'caja/1', '', 'caja-1\\other'])('rejects unsafe names: %s', (name) => {

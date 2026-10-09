@@ -17,7 +17,7 @@ import { resolveAppAsset, toBackendRequest, toBackendUrl } from './app-protocol'
 import { createDiagnostic } from './diagnostic';
 import { createFiscalInvoiceHtml } from './fiscal-invoice';
 import { NativeChannel } from './native-api';
-import { resolvePosProfile } from './pos-profile';
+import { initialUrlForProfile, resolvePosProfile } from './pos-profile';
 import { createReceiptHtml, validateReceiptRequest } from './receipt-pdf';
 import { sendSerialReceipt } from './serial-printer';
 import { SerialScale } from './serial-scale';
@@ -166,7 +166,7 @@ function createWindow(): BrowserWindow {
     window.maximize();
     window.show();
   });
-  void window.loadURL('app://bundle/index.html');
+  void window.loadURL(initialUrlForProfile(profile));
   return window;
 }
 

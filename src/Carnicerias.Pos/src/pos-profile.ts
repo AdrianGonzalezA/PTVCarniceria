@@ -18,3 +18,7 @@ export function resolvePosProfile(args: readonly string[], existingUserDataPath:
 
   return { name, userDataPath: path.join(existingUserDataPath, 'profiles', name) };
 }
+
+export function initialUrlForProfile(profile: PosProfile): string {
+  return profile.name?.startsWith('caja-') ? 'app://bundle/pos' : 'app://bundle/index.html';
+}

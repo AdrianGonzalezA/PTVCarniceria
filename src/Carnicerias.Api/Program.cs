@@ -16,7 +16,7 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("PlatformAccess")
     ?? Environment.GetEnvironmentVariable("CARNICERIAS_CONNECTION_STRING")
-    ?? "Host=localhost;Database=carnicerias_design;Username=postgres";
+    ?? throw new InvalidOperationException("Configure the application database explicitly before starting the API.");
 
 builder.Services.AddDbContext<PlatformAccessDbContext>(options => options.UseNpgsql(connectionString));
 builder.Services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();

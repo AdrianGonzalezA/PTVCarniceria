@@ -8,7 +8,7 @@ public sealed class PlatformAccessDesignTimeFactory : IDesignTimeDbContextFactor
     public PlatformAccessDbContext CreateDbContext(string[] args)
     {
         var connectionString = Environment.GetEnvironmentVariable("CARNICERIAS_CONNECTION_STRING")
-            ?? "Host=localhost;Database=carnicerias_design;Username=postgres";
+            ?? throw new InvalidOperationException("Configure CARNICERIAS_CONNECTION_STRING for migrations.");
 
         var options = new DbContextOptionsBuilder<PlatformAccessDbContext>()
             .UseNpgsql(connectionString)

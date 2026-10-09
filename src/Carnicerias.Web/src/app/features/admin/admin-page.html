@@ -14,8 +14,10 @@
 
   <div class="workspace">
     <p class="eyebrow">Plataforma de gestión</p>
-    <h1>Administración</h1>
-    <p class="intro">Mantené los datos que utiliza el punto de venta.</p>
+    <h1>{{ isConfiguration ? 'Configuración' : 'Negocio' }}</h1>
+    <p class="intro">{{ isConfiguration ? 'Definí los datos y reglas que utiliza el punto de venta.' : 'Consultá las operaciones reales de la empresa y trabajá con sus existencias.' }}</p>
+
+    <app-admin-area-tabs [area]="isConfiguration ? 'configuration' : 'business'" />
 
     @if (loadError(); as error) {
       <p class="error-message" role="alert">{{ error }}</p>
@@ -28,62 +30,80 @@
         <a routerLink="/">Cambiar contexto</a>
       </section>
 
+      @if (!isConfiguration && context.permissions.includes('organization.manage')) {
+        <section class="summary-panel" aria-labelledby="summary-title" [attr.aria-busy]="summaryLoading()">
+          <header class="summary-heading">
+            <div>
+              <p class="summary-kicker">OPERACIÓN COMERCIAL</p>
+              <h2 id="summary-title">Resumen de hoy</h2>
+              <p>Argentina · {{ summaryDate() || 'Cargando fecha…' }} · Ventas confirmadas, no facturación fiscal.</p>
+            </div>
+            <label for="summary-branch">Sucursal
+              <select id="summary-branch" [value]="selectedBranchId()" (change)="selectSummaryBranch($event)">
+                <option value="">Todas las sucursales</option>
+                @for (branch of branches(); track branch.id) {
+                  <option [value]="branch.id">{{ branch.name }}</option>
+                }
+              </select>
+            </label>
+          </header>
+          @if (branchError(); as error) { <p class="summary-warning" role="alert">{{ error }}</p> }
+          @if (summaryLoading()) {
+            <p class="summary-status" role="status">Consultando operaciones…</p>
+          } @else if (summaryError(); as error) {
+            <p class="summary-status" role="alert">{{ error }} <button type="button" (click)="reloadSummary()">Reintentar</button></p>
+          } @else if (summary(); as result) {
+            <div class="summary-grid">
+              <div class="summary-card"><span>Ventas confirmadas</span><strong>{{ result.saleCount }}</strong><small>Tickets de hoy</small></div>
+              <div class="summary-card"><span>Importe vendido</span><strong>$ {{ formatMoney(result.salesTotal) }}</strong><small>Incluye lo cargado a cuenta</small></div>
+              <div class="summary-card"><span>Cobrado en ventas</span><strong>$ {{ formatMoney(result.immediateSalePayments) }}</strong><small>Pagos aplicados, sin vuelto</small></div>
+              <div class="summary-card"><span>Nuevos cargos a cuenta</span><strong>$ {{ formatMoney(result.newAccountCharges) }}</strong><small>No ingresaron a caja</small></div>
+            </div>
+            <div class="summary-foot">
+              <p><strong>Cargos a cuenta acumulados:</strong> $ {{ formatMoney(result.registeredAccountCharges) }} <small>Importe bruto; las cobranzas aún no están implementadas.</small></p>
+              @if (result.paymentsByMethod.length) {
+                <p><strong>Cobros de ventas por medio:</strong>
+                  @for (payment of result.paymentsByMethod; track payment.method) {
+                    <span>{{ paymentLabel(payment.method) }} $ {{ formatMoney(payment.amount) }}</span>
+                  }
+                </p>
+              }
+            </div>
+            @if (result.saleCount === 0) { <p class="summary-empty">Todavía no hay ventas confirmadas en este período.</p> }
+          }
+        </section>
+      }
+
       <section class="module-panel" aria-labelledby="modules-title">
         <header>
-          <h2 id="modules-title">Áreas de trabajo</h2>
-          <p>Elegí qué datos querés consultar o mantener.</p>
+          <h2 id="modules-title">{{ isConfiguration ? 'Parámetros y catálogos' : 'Operación del negocio' }}</h2>
+          <p>{{ isConfiguration ? 'Mantené los maestros y la configuración del sistema.' : 'Entrá al historial y a las tareas de inventario de la sucursal.' }}</p>
         </header>
         <div class="module-list">
-          @if (context.permissions.includes('catalog.manage')) {
-            <a class="module-link" routerLink="/admin/categories">
-              <span><strong>Categorías</strong><small>Organizar familias de productos para la venta.</small></span>
-              <span aria-hidden="true">→</span>
-            </a>
-            <a class="module-link" routerLink="/admin/products">
-              <span><strong>Artículos</strong><small>Definir productos, unidad de venta, modalidad y costo.</small></span>
-              <span aria-hidden="true">→</span>
-            </a>
-            <a class="module-link" routerLink="/admin/price-lists">
-              <span><strong>Listas de precios</strong><small>Habilitarlas por sucursal y mantener precios con historial.</small></span>
-              <span aria-hidden="true">→</span>
-            </a>
+          @if (isConfiguration) {
+            @if (context.permissions.includes('catalog.manage')) {
+              <a class="module-link" routerLink="/admin/categories"><span><strong>Categorías</strong><small>Organizar familias de productos para la venta.</small></span><span aria-hidden="true">→</span></a>
+              <a class="module-link" routerLink="/admin/products"><span><strong>Artículos</strong><small>Definir productos, unidad de venta, modalidad y costo.</small></span><span aria-hidden="true">→</span></a>
+              <a class="module-link" routerLink="/admin/price-lists"><span><strong>Listas de precios</strong><small>Habilitarlas por sucursal y mantener precios con historial.</small></span><span aria-hidden="true">→</span></a>
+            }
+            @if (context.permissions.includes('organization.manage')) {
+              <a class="module-link" routerLink="/admin/customers"><span><strong>Clientes</strong><small>Registrar clientes y habilitar su cuenta corriente.</small></span><span aria-hidden="true">→</span></a>
+              <a class="module-link" routerLink="/admin/organization"><span><strong>Organización</strong><small>Empresas, sucursales y su estado operativo.</small></span><span aria-hidden="true">→</span></a>
+            }
+            @if (context.permissions.includes('inventory.stock.manage')) {
+              <a class="module-link" routerLink="/admin/barcode-layouts"><span><strong>Lectura de etiquetas</strong><small>Probar fórmulas configurables con un código escrito.</small></span><span aria-hidden="true">→</span></a>
+            }
+            <a class="module-link" routerLink="/users"><span><strong>Usuarios</strong><small>Consultar cuentas, modificar datos y controlar el acceso.</small></span><span aria-hidden="true">→</span></a>
+          } @else {
+            @if (context.permissions.includes('organization.manage')) {
+              <a class="module-link" routerLink="/admin/history"><span><strong>Ventas e historial</strong><small>Consultar tickets, pagos, turnos y movimientos por sucursal y caja.</small></span><span aria-hidden="true">→</span></a>
+            }
+            @if (context.permissions.includes('inventory.stock.manage')) {
+              <a class="module-link" routerLink="/admin/stock"><span><strong>Existencias</strong><small>Consultar stock y registrar entradas o salidas de la sucursal.</small></span><span aria-hidden="true">→</span></a>
+              <a class="module-link" routerLink="/admin/pieces"><span><strong>Recepción de piezas</strong><small>Leer etiquetas y registrar piezas con stock en esta sucursal.</small></span><span aria-hidden="true">→</span></a>
+            }
           }
-          @if (context.permissions.includes('organization.manage')) {
-            <a class="module-link" routerLink="/admin/customers">
-              <span><strong>Clientes</strong><small>Registrar clientes y habilitar su cuenta corriente.</small></span>
-              <span aria-hidden="true">→</span>
-            </a>
-            <a class="module-link" routerLink="/admin/organization">
-              <span><strong>Organización</strong><small>Empresas, sucursales y su estado operativo.</small></span>
-              <span aria-hidden="true">→</span>
-            </a>
-            <a class="module-link" routerLink="/admin/history">
-              <span><strong>Historial</strong><small>Consultar tickets, pagos, turnos y movimientos por sucursal y caja.</small></span>
-              <span aria-hidden="true">→</span>
-            </a>
-          }
-          @if (context.permissions.includes('inventory.stock.manage')) {
-            <a class="module-link" routerLink="/admin/stock">
-              <span><strong>Existencias</strong><small>Consultar stock y registrar entradas o salidas de la sucursal.</small></span>
-              <span aria-hidden="true">→</span>
-            </a>
-            <a class="module-link" routerLink="/admin/barcode-layouts">
-              <span><strong>Lectura de etiquetas</strong><small>Probar fórmulas configurables con un código escrito.</small></span>
-              <span aria-hidden="true">→</span>
-            </a>
-            <a class="module-link" routerLink="/admin/pieces">
-              <span><strong>Recepción de piezas</strong><small>Leer etiquetas y registrar piezas con stock en esta sucursal.</small></span>
-              <span aria-hidden="true">→</span>
-            </a>
-          }
-          <a class="module-link" routerLink="/users">
-            <span><strong>Usuarios</strong><small>Consultar cuentas, modificar datos y controlar el acceso.</small></span>
-            <span aria-hidden="true">→</span>
-          </a>
-          <a class="module-link" routerLink="/pos">
-            <span><strong>Punto de venta</strong><small>Volver a la operación de la caja y los tickets.</small></span>
-            <span aria-hidden="true">→</span>
-          </a>
+          <a class="module-link" routerLink="/pos"><span><strong>Punto de venta</strong><small>Volver a la operación de la caja y los tickets.</small></span><span aria-hidden="true">→</span></a>
         </div>
       </section>
     }

@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { AdminAreaTabs } from './admin-area-tabs';
 import { BarcodeLayoutClient, BarcodePreviewResponse, BarcodeProfile } from '../../core/inventory/barcode-layout-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 
@@ -15,7 +16,7 @@ const EAN13_EXAMPLE = {
 
 @Component({
   selector: 'app-barcode-layout-page',
-  imports: [RouterLink, ReactiveFormsModule],
+  imports: [RouterLink, AdminAreaTabs, ReactiveFormsModule],
   templateUrl: './barcode-layout-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './barcode-layout-page.scss'],
 })

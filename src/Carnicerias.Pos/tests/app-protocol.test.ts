@@ -26,6 +26,9 @@ describe('app protocol boundary', () => {
     expect(resolveAppAsset(root, 'app://bundle/admin/stock')).toBe(path.join(root, 'index.html'));
     expect(resolveAppAsset(root, 'app://bundle/admin/barcode-layouts')).toBe(path.join(root, 'index.html'));
     expect(resolveAppAsset(root, 'app://bundle/admin/history')).toBe(path.join(root, 'index.html'));
+    expect(resolveAppAsset(root, 'app://bundle/admin/configuracion')).toBe(path.join(root, 'index.html'));
+    expect(resolveAppAsset(root, 'app://bundle/admin/pieces')).toBe(path.join(root, 'index.html'));
+    expect(resolveAppAsset(root, 'app://bundle/admin/customers')).toBe(path.join(root, 'index.html'));
   });
 
   it('maps only app API requests to the fixed local backend', () => {

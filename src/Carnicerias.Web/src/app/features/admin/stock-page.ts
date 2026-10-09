@@ -2,12 +2,13 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { AdminAreaTabs } from './admin-area-tabs';
 import { InventoryClient, InventoryStockItem } from '../../core/inventory/inventory-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 
 @Component({
   selector: 'app-stock-page',
-  imports: [RouterLink, ReactiveFormsModule],
+  imports: [RouterLink, AdminAreaTabs, ReactiveFormsModule],
   templateUrl: './stock-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './stock-page.scss'],
 })

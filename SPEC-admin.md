@@ -4,6 +4,8 @@
 
 Dar al administrador una interfaz web para mantener los maestros que alimentan al punto de venta, dentro de la misma instalación PostgreSQL. El administrador inicial es `visual-admin`, con el rol `administrator`; los cajeros existentes conservan su acceso al POS, pero no al administrador. La UI administrativa puede abrirse en Angular web y su revisión visual durante el desarrollo se hace en Electron.
 
+**Separación aprobada:** el administrador tendrá pestañas principales **Negocio** y **Configuración**, sin otro login. Este documento conserva el contrato de los ABM y permisos actuales; `SPEC-reporting.md` define el dashboard, ventas y estados de cuenta. Existencias y Recepción de piezas pertenecen a Negocio; Lectura de etiquetas queda en Configuración. Los enlaces y APIs existentes permanecen operativos durante el cambio de navegación.
+
 ## Alcance y orden
 
 El mapa aprobado en `CAPABILITY_MAP.md` sigue siendo el índice modular. La administración se entrega por capacidades verificables:

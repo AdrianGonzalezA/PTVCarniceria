@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { AfterViewInit, Component, ElementRef, inject, OnInit, signal, ViewChild } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { AdminAreaTabs } from './admin-area-tabs';
 import { BarcodeLayoutClient, BarcodeProfile } from '../../core/inventory/barcode-layout-client';
 import { InventoryClient, InventoryStockItem } from '../../core/inventory/inventory-client';
 import { InventoryPieceClient, InventoryPieceListItem, InventoryPieceReceipt } from '../../core/inventory/inventory-piece-client';
@@ -9,7 +10,7 @@ import { CurrentSession, SessionClient } from '../../core/session/session-client
 
 @Component({
   selector: 'app-piece-receipt-page',
-  imports: [RouterLink, ReactiveFormsModule],
+  imports: [RouterLink, AdminAreaTabs, ReactiveFormsModule],
   templateUrl: './piece-receipt-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './piece-receipt-page.scss'],
 })

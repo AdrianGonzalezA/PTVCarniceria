@@ -14,11 +14,57 @@ public static class AdminHistoryEndpoints
         var history = endpoints.MapGroup("/api/admin/history")
             .RequireOperationalPermission(PlatformPermissionCatalog.OrganizationManage);
         history.MapGet("/sales", ListSalesAsync);
+        history.MapGet("/summary", GetSummaryAsync);
         history.MapGet("/sales/{saleId:guid}", GetSaleAsync);
         history.MapGet("/shifts", ListShiftsAsync);
         history.MapGet("/cash-movements", ListCashMovementsAsync);
         history.MapGet("/stock-movements", ListStockMovementsAsync);
         return endpoints;
+    }
+
+    private static async Task<IResult> GetSummaryAsync(
+        PlatformAccessDbContext db, OperationalContextAccessor accessor, TimeProvider timeProvider,
+        CancellationToken cancellationToken, DateTimeOffset? fromUtc = null,
+        DateTimeOffset? toUtc = null, Guid? branchId = null)
+    {
+        if (branchId == Guid.Empty)
+            return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+        BusinessSummaryWindow window;
+        if (fromUtc.HasValue || toUtc.HasValue)
+        {
+            if (!BusinessSummaryWindow.TryCreate(fromUtc, toUtc, out window))
+                return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+        }
+        else window = BusinessSummaryWindow.TodayArgentina(timeProvider);
+        var companyId = accessor.Context.CompanyId;
+        if (branchId.HasValue && !await db.Branches.AsNoTracking().AnyAsync(branch =>
+                branch.Id == branchId && branch.CompanyId == companyId, cancellationToken))
+            return Error(StatusCodes.Status404NotFound, "BRANCH_NOT_FOUND");
+
+        var sales = db.ConfirmedSales.AsNoTracking().Where(sale =>
+            sale.CompanyId == companyId && (!branchId.HasValue || sale.BranchId == branchId) &&
+            sale.ConfirmedAtUtc >= window.FromUtc && sale.ConfirmedAtUtc < window.ToUtc);
+        var saleTotals = await sales.GroupBy(_ => 1).Select(group => new
+        {
+            Count = group.Count(), Total = group.Sum(sale => sale.Total)
+        }).SingleOrDefaultAsync(cancellationToken);
+        var paymentRows = await sales.SelectMany(sale => sale.Payments)
+            .GroupBy(payment => payment.Method)
+            .Select(group => new { Method = group.Key, Amount = group.Sum(payment => payment.AppliedAmount) })
+            .ToArrayAsync(cancellationToken);
+        var payments = paymentRows.OrderBy(row => row.Method)
+            .Select(row => new PaymentSummary(PaymentMethodName(row.Method), row.Amount)).ToArray();
+
+        var charges = db.CustomerSaleCharges.AsNoTracking().Where(charge =>
+            charge.CompanyId == companyId && (!branchId.HasValue || charge.BranchId == branchId));
+        var newCharges = await charges.Where(charge => charge.CreatedAtUtc >= window.FromUtc &&
+            charge.CreatedAtUtc < window.ToUtc).SumAsync(charge => (decimal?)charge.Amount,
+            cancellationToken) ?? 0;
+        var registeredCharges = await charges.SumAsync(charge => (decimal?)charge.Amount,
+            cancellationToken) ?? 0;
+        return Results.Ok(new BusinessSummary(window.FromUtc, window.ToUtc, branchId,
+            saleTotals?.Count ?? 0, saleTotals?.Total ?? 0, payments.Sum(payment => payment.Amount),
+            payments, newCharges, registeredCharges));
     }
 
     private static async Task<IResult> ListSalesAsync(
@@ -212,6 +258,10 @@ public static class AdminHistoryEndpoints
         statusCode: statusCode);
 
     private sealed record HistoryPage<T>(T[] Items, int Page, int PageSize, long TotalItems);
+    private sealed record BusinessSummary(DateTimeOffset FromUtc, DateTimeOffset ToUtc, Guid? BranchId,
+        int SaleCount, decimal SalesTotal, decimal ImmediateSalePayments,
+        PaymentSummary[] PaymentsByMethod, decimal NewAccountCharges, decimal RegisteredAccountCharges);
+    private sealed record PaymentSummary(string Method, decimal Amount);
     private sealed record SaleItem(Guid Id, DateTimeOffset ConfirmedAtUtc, decimal Total,
         Guid BranchId, string BranchName, Guid? TerminalId, string? TerminalName,
         Guid CashierId, string CashierName, Guid ShiftId);

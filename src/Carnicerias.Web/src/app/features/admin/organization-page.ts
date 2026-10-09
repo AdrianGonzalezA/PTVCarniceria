@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { AdminAreaTabs } from './admin-area-tabs';
 import { Observable } from 'rxjs';
 import { AdminBranch, AdminCompany, AdminCompanyCreated, AdminOrganizationClient } from '../../core/admin/admin-organization-client';
 import { AdminTerminal, AdminTerminalClient, AdminTerminalUpdate, ProvisionedTerminal } from '../../core/admin/admin-terminal-client';
@@ -9,7 +10,7 @@ import { CurrentSession, SessionClient } from '../../core/session/session-client
 
 @Component({
   selector: 'app-organization-page',
-  imports: [RouterLink, ReactiveFormsModule],
+  imports: [RouterLink, AdminAreaTabs, ReactiveFormsModule],
   templateUrl: './organization-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './organization-page.scss'],
 })

@@ -14,7 +14,8 @@
   </header>
 
   <div class="workspace">
-    <a class="back-link" routerLink="/admin">← Volver a administración</a>
+    <app-admin-area-tabs area="configuration" />
+    <a class="back-link" routerLink="/admin/configuracion">← Volver a configuración</a>
     <p class="eyebrow">Administración</p>
     <h1>Usuarios</h1>
     <p class="intro">Administrá las cuentas asignadas a {{ currentCompanyName() }}. En esta etapa sólo se pueden dar de alta cajeros; el administrador existente permanece único.</p>

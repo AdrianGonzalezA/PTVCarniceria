@@ -3,6 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { AdminAreaTabs } from './admin-area-tabs';
 import {
   AdminPriceHistory, AdminPriceList, AdminPriceListClient, AdminPriceListPage,
   AdminProductPrice, AdminProductPricePage, BranchPriceListAssignment,
@@ -11,7 +12,7 @@ import { CurrentSession, SessionClient } from '../../core/session/session-client
 
 @Component({
   selector: 'app-price-lists-page',
-  imports: [RouterLink, ReactiveFormsModule, DatePipe],
+  imports: [RouterLink, AdminAreaTabs, ReactiveFormsModule, DatePipe],
   templateUrl: './price-lists-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './price-lists-page.scss'],
 })

@@ -2,12 +2,13 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { DatePipe } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
+import { AdminAreaTabs } from '../admin/admin-area-tabs';
 import { UserAssignments, UserDirectoryClient, UserListPage } from '../../core/users/user-directory-client';
 import { OperationalBranchOption, SessionClient } from '../../core/session/session-client';
 
 @Component({
   selector: 'app-users-page',
-  imports: [DatePipe, RouterLink],
+  imports: [DatePipe, RouterLink, AdminAreaTabs],
   templateUrl: './users-page.html',
   styleUrl: './users-page.scss',
 })

@@ -17,6 +17,18 @@ export interface HistoryPage<T> {
   readonly totalItems: number;
 }
 
+export interface BusinessSummary {
+  readonly fromUtc: string;
+  readonly toUtc: string;
+  readonly branchId: string | null;
+  readonly saleCount: number;
+  readonly salesTotal: number;
+  readonly immediateSalePayments: number;
+  readonly paymentsByMethod: readonly { readonly method: string; readonly amount: number }[];
+  readonly newAccountCharges: number;
+  readonly registeredAccountCharges: number;
+}
+
 export interface SaleHistoryItem {
   readonly id: string;
   readonly confirmedAtUtc: string;
@@ -97,6 +109,13 @@ export interface StockHistoryItem {
 @Injectable({ providedIn: 'root' })
 export class AdminHistoryClient {
   private readonly http = inject(HttpClient);
+
+  summary(branchId?: string) {
+    return this.http.get<BusinessSummary>('/api/admin/history/summary', {
+      params: branchId ? new HttpParams().set('branchId', branchId) : undefined,
+      withCredentials: true,
+    });
+  }
 
   sales(filters: HistoryFilters) {
     return this.http.get<HistoryPage<SaleHistoryItem>>('/api/admin/history/sales', {

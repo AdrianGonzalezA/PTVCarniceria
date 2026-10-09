@@ -9,7 +9,8 @@ import { posCanDeactivateGuard, posGuard } from './core/pos/pos.guard';
 export const routes: Routes = [
   { path: '', component: WelcomePage },
   { path: 'users', loadComponent: () => import('./features/users/users-page').then((page) => page.UsersPage), canActivate: [userAdminGuard] },
-  { path: 'admin', loadComponent: () => import('./features/admin/admin-page').then((page) => page.AdminPage), canActivate: [userAdminGuard] },
+  { path: 'admin/configuracion', loadComponent: () => import('./features/admin/admin-page').then((page) => page.AdminPage), canActivate: [userAdminGuard], data: { area: 'configuration' } },
+  { path: 'admin', loadComponent: () => import('./features/admin/admin-page').then((page) => page.AdminPage), canActivate: [userAdminGuard], data: { area: 'business' } },
   { path: 'admin/categories', loadComponent: () => import('./features/admin/categories-page').then((page) => page.CategoriesPage), canActivate: [catalogAdminGuard] },
   { path: 'admin/products', loadComponent: () => import('./features/admin/products-page').then((page) => page.ProductsPage), canActivate: [catalogAdminGuard] },
   { path: 'admin/price-lists', loadComponent: () => import('./features/admin/price-lists-page').then((page) => page.PriceListsPage), canActivate: [catalogAdminGuard] },

@@ -1,6 +1,7 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
+import { AdminAreaTabs } from './admin-area-tabs';
 import { AdminBranch, AdminOrganizationClient } from '../../core/admin/admin-organization-client';
 import { AdminTerminal, AdminTerminalClient } from '../../core/admin/admin-terminal-client';
 import { AdminHistoryClient, CashHistoryItem, HistoryFilters, HistoryPage as HistoryPageData, SaleDetail,
@@ -11,7 +12,7 @@ type HistoryTab = 'sales' | 'shifts' | 'cash' | 'stock';
 
 @Component({
   selector: 'app-history-page',
-  imports: [RouterLink, DatePipe, DecimalPipe],
+  imports: [RouterLink, AdminAreaTabs, DatePipe, DecimalPipe],
   templateUrl: './history-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './history-page.scss'],
 })

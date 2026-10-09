@@ -15,9 +15,63 @@ public sealed record ArcaInvoiceLookup(int PointOfSale, int VoucherType, long Nu
     decimal Total, string Result, string AuthorizationCode, string AuthorizationKind,
     DateOnly? AuthorizationExpiry);
 
+public sealed record ArcaVatAmount(int ArcaRateCode, decimal TaxableBase, decimal TaxAmount);
+
+public sealed class ArcaCaeRequest
+{
+    public ArcaCaeRequest(int pointOfSale, int voucherType, long number, DateOnly issueDate,
+        int receiverDocumentType, long receiverDocumentNumber, int receiverVatConditionCode,
+        decimal total, decimal taxableBase, decimal exemptAmount, decimal notTaxedAmount,
+        IReadOnlyList<ArcaVatAmount> vatAmounts)
+    {
+        ArgumentNullException.ThrowIfNull(vatAmounts);
+        if (pointOfSale <= 0 || voucherType <= 0 || number <= 0 || issueDate == default ||
+            receiverDocumentType <= 0 || receiverDocumentNumber < 0 || receiverVatConditionCode <= 0 ||
+            !Money(total) || total <= 0 || !Money(taxableBase) || !Money(exemptAmount) ||
+            !Money(notTaxedAmount) || vatAmounts.Count > 20 ||
+            vatAmounts.Any(item => item.ArcaRateCode <= 0 || !Money(item.TaxableBase) ||
+                !Money(item.TaxAmount) || item.TaxableBase <= 0 || item.TaxAmount < 0) ||
+            vatAmounts.Select(item => item.ArcaRateCode).Distinct().Count() != vatAmounts.Count ||
+            vatAmounts.Sum(item => item.TaxableBase) != taxableBase ||
+            taxableBase + exemptAmount + notTaxedAmount + vatAmounts.Sum(item => item.TaxAmount) != total)
+            throw new ArgumentException("An explicit, balanced fiscal request is required.");
+        PointOfSale = pointOfSale;
+        VoucherType = voucherType;
+        Number = number;
+        IssueDate = issueDate;
+        ReceiverDocumentType = receiverDocumentType;
+        ReceiverDocumentNumber = receiverDocumentNumber;
+        ReceiverVatConditionCode = receiverVatConditionCode;
+        Total = total;
+        TaxableBase = taxableBase;
+        ExemptAmount = exemptAmount;
+        NotTaxedAmount = notTaxedAmount;
+        VatAmounts = vatAmounts.ToArray();
+    }
+
+    public int PointOfSale { get; }
+    public int VoucherType { get; }
+    public long Number { get; }
+    public DateOnly IssueDate { get; }
+    public int ReceiverDocumentType { get; }
+    public long ReceiverDocumentNumber { get; }
+    public int ReceiverVatConditionCode { get; }
+    public decimal Total { get; }
+    public decimal TaxableBase { get; }
+    public decimal ExemptAmount { get; }
+    public decimal NotTaxedAmount { get; }
+    public IReadOnlyList<ArcaVatAmount> VatAmounts { get; }
+
+    private static bool Money(decimal amount) => amount >= 0 && amount <= 9_999_999_999.99m &&
+        decimal.Round(amount, 2) == amount;
+}
+
+public sealed record ArcaCaeResult(int PointOfSale, int VoucherType, long Number,
+    string Cae, DateOnly Expiry);
+
 /// <summary>
 /// Read-only WSFEv1 homologation adapter. The WSAA ticket must be supplied by a separate
-/// credential provider. It never creates a CAE or calls the production endpoint.
+/// credential provider. It never calls the production endpoint.
 /// </summary>
 public sealed class ArcaWsfeClient(HttpClient httpClient)
 {
@@ -73,6 +127,61 @@ public sealed class ArcaWsfeClient(HttpClient httpClient)
         }
         return new ArcaInvoiceLookup(pointOfSale, voucherType, number,
             total, resultCode, authorization, kind, expiry);
+    }
+
+    public async Task<ArcaCaeResult> RequestCaeAsync(ArcaAccessTicket ticket,
+        ArcaCaeRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Validate(ticket, request.PointOfSale, request.VoucherType);
+        var details = new XElement(Wsfe + "FECAEDetRequest",
+            new XElement(Wsfe + "Concepto", 1),
+            new XElement(Wsfe + "DocTipo", request.ReceiverDocumentType),
+            new XElement(Wsfe + "DocNro", request.ReceiverDocumentNumber),
+            new XElement(Wsfe + "CbteDesde", request.Number),
+            new XElement(Wsfe + "CbteHasta", request.Number),
+            new XElement(Wsfe + "CbteFch", request.IssueDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture)),
+            new XElement(Wsfe + "ImpTotal", Amount(request.Total)),
+            new XElement(Wsfe + "ImpTotConc", Amount(request.NotTaxedAmount)),
+            new XElement(Wsfe + "ImpNeto", Amount(request.TaxableBase)),
+            new XElement(Wsfe + "ImpOpEx", Amount(request.ExemptAmount)),
+            new XElement(Wsfe + "ImpTrib", 0),
+            new XElement(Wsfe + "ImpIVA", Amount(request.VatAmounts.Sum(item => item.TaxAmount))),
+            new XElement(Wsfe + "MonId", "PES"),
+            new XElement(Wsfe + "MonCotiz", 1),
+            new XElement(Wsfe + "CondicionIVAReceptorId", request.ReceiverVatConditionCode));
+        if (request.VatAmounts.Count > 0)
+            details.Add(new XElement(Wsfe + "Iva", request.VatAmounts.Select(item =>
+                new XElement(Wsfe + "AlicIva",
+                    new XElement(Wsfe + "Id", item.ArcaRateCode),
+                    new XElement(Wsfe + "BaseImp", Amount(item.TaxableBase)),
+                    new XElement(Wsfe + "Importe", Amount(item.TaxAmount))))));
+        var result = await SendAsync("FECAESolicitar", ticket,
+            [new XElement(Wsfe + "FeCAEReq",
+                new XElement(Wsfe + "FeCabReq",
+                    new XElement(Wsfe + "CantReg", 1),
+                    new XElement(Wsfe + "PtoVta", request.PointOfSale),
+                    new XElement(Wsfe + "CbteTipo", request.VoucherType)),
+                new XElement(Wsfe + "FeDetReq", details))], cancellationToken);
+        var header = Child(result, "FeCabResp")
+            ?? throw new InvalidDataException("WSFE omitted the CAE response header.");
+        var line = Child(Child(result, "FeDetResp")
+            ?? throw new InvalidDataException("WSFE omitted the CAE response detail."), "FECAEDetResponse")
+            ?? throw new InvalidDataException("WSFE omitted the CAE response line.");
+        var cae = ReadText(line, "CAE");
+        var expiryText = ReadText(line, "CAEFchVto");
+        if (ReadInt(header, "PtoVta") != request.PointOfSale ||
+            ReadInt(header, "CbteTipo") != request.VoucherType ||
+            ReadInt(header, "CantReg") != 1 ||
+            ReadLong(line, "CbteDesde") != request.Number ||
+            ReadLong(line, "CbteHasta") != request.Number ||
+            ReadText(line, "Resultado") != "A" ||
+            cae.Length != 14 || !cae.All(char.IsAsciiDigit) ||
+            !DateOnly.TryParseExact(expiryText, "yyyyMMdd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var expiry))
+            throw new InvalidDataException("WSFE did not authorize the requested invoice.");
+        return new ArcaCaeResult(request.PointOfSale, request.VoucherType, request.Number,
+            cae, expiry);
     }
 
     private async Task<XElement> SendAsync(string operation, ArcaAccessTicket ticket,
@@ -140,4 +249,6 @@ public sealed class ArcaWsfeClient(HttpClient httpClient)
         decimal.TryParse(ReadText(source, name), NumberStyles.AllowDecimalPoint,
             CultureInfo.InvariantCulture, out var value)
             ? value : throw new InvalidDataException($"WSFE returned invalid {name}.");
+
+    private static string Amount(decimal value) => value.ToString("0.00", CultureInfo.InvariantCulture);
 }

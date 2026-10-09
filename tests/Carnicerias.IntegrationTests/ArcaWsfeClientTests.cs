@@ -89,6 +89,56 @@ public sealed class ArcaWsfeClientTests
         await Assert.ThrowsAnyAsync<Exception>(() => unsafeXml.GetLastAuthorizedAsync(Ticket, 12, 6));
     }
 
+    [Fact]
+    public async Task BuildsAnExplicitBalancedCaeRequestAndAcceptsOnlyTheMatchingAuthorization()
+    {
+        var handler = new FakeHandler("""
+            <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+              <soap:Body><FECAESolicitarResponse xmlns="http://ar.gov.afip.dif.FEV1/">
+                <FECAESolicitarResult><FeCabResp><PtoVta>12</PtoVta><CbteTipo>6</CbteTipo><CantReg>1</CantReg></FeCabResp>
+                  <FeDetResp><FECAEDetResponse><CbteDesde>43</CbteDesde><CbteHasta>43</CbteHasta>
+                    <Resultado>A</Resultado><CAE>12345678901234</CAE><CAEFchVto>20261019</CAEFchVto>
+                  </FECAEDetResponse></FeDetResp>
+                </FECAESolicitarResult>
+              </FECAESolicitarResponse></soap:Body>
+            </soap:Envelope>
+            """);
+        var client = new ArcaWsfeClient(new HttpClient(handler));
+        var request = new ArcaCaeRequest(12, 6, 43, new DateOnly(2026, 10, 9),
+            80, 20111111112, 1, 121m, 100m, 0m, 0m,
+            [new ArcaVatAmount(5, 100m, 21m)]);
+
+        var result = await client.RequestCaeAsync(Ticket, request);
+
+        Assert.Equal("12345678901234", result.Cae);
+        Assert.Contains("<CondicionIVAReceptorId>1</CondicionIVAReceptorId>", handler.Body);
+        Assert.Contains("<ImpNeto>100.00</ImpNeto>", handler.Body);
+        Assert.Contains("<Importe>21.00</Importe>", handler.Body);
+        Assert.Throws<ArgumentException>(() => new ArcaCaeRequest(12, 6, 43,
+            new DateOnly(2026, 10, 9), 80, 20111111112, 1, 122m, 100m, 0m, 0m,
+            [new ArcaVatAmount(5, 100m, 21m)]));
+    }
+
+    [Fact]
+    public async Task NeverTreatsARejectedCaeResponseAsAnAuthorizedInvoice()
+    {
+        var handler = new FakeHandler("""
+            <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>
+              <FECAESolicitarResult><FeCabResp><PtoVta>12</PtoVta><CbteTipo>6</CbteTipo><CantReg>1</CantReg></FeCabResp>
+                <FeDetResp><FECAEDetResponse><CbteDesde>43</CbteDesde><CbteHasta>43</CbteHasta>
+                  <Resultado>R</Resultado><CAE></CAE><CAEFchVto></CAEFchVto>
+                </FECAEDetResponse></FeDetResp>
+              </FECAESolicitarResult>
+            </soap:Body></soap:Envelope>
+            """);
+        var client = new ArcaWsfeClient(new HttpClient(handler));
+        var request = new ArcaCaeRequest(12, 6, 43, new DateOnly(2026, 10, 9),
+            80, 20111111112, 1, 121m, 100m, 0m, 0m,
+            [new ArcaVatAmount(5, 100m, 21m)]);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => client.RequestCaeAsync(Ticket, request));
+    }
+
     private sealed class FakeHandler(string response) : HttpMessageHandler
     {
         public string Url { get; private set; } = "";

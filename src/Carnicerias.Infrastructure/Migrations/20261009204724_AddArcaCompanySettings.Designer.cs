@@ -3,6 +3,7 @@ using System;
 using Carnicerias.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Carnicerias.Infrastructure.Migrations
 {
     [DbContext(typeof(PlatformAccessDbContext))]
-    partial class PlatformAccessDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261009204724_AddArcaCompanySettings")]
+    partial class AddArcaCompanySettings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -997,25 +1000,10 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<DateOnly>("IssueDate")
                         .HasColumnType("date");
 
-                    b.Property<DateOnly?>("IssuerActivityStartDate")
-                        .HasColumnType("date");
-
-                    b.Property<string>("IssuerAddress")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
                     b.Property<string>("IssuerCuit")
                         .IsRequired()
                         .HasMaxLength(11)
                         .HasColumnType("character varying(11)");
-
-                    b.Property<string>("IssuerIibb")
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<string>("IssuerName")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
 
                     b.Property<long>("Number")
                         .HasColumnType("bigint");

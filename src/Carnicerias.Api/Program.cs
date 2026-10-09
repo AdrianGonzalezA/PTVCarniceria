@@ -14,6 +14,7 @@ using Carnicerias.Api.Customers;
 using Carnicerias.Api.ExcelImport;
 using Carnicerias.Domain.PlatformAccess;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<PlatformAccessDbContext>((services, options) =>
@@ -26,9 +27,11 @@ builder.Services.AddDbContext<PlatformAccessDbContext>((services, options) =>
 });
 builder.Services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddDataProtection().SetApplicationName("Carnicerias.Fiscal");
 builder.Services.AddHttpClient<ArcaWsaaClient>(client => client.Timeout = TimeSpan.FromSeconds(45));
 builder.Services.AddHttpClient<ArcaWsfeClient>(client => client.Timeout = TimeSpan.FromSeconds(45));
 builder.Services.AddSingleton<ArcaHomologationTicketProvider>();
+builder.Services.AddScoped<ArcaSettingsResolver>();
 builder.Services.AddScoped<SessionAuthenticationService>();
 builder.Services.AddScoped<PosTerminalAuthenticationService>();
 builder.Services.AddScoped<PosTerminalProvisioningService>();
@@ -52,6 +55,7 @@ app.MapAdminProductCodeEndpoints();
 app.MapAdminPriceListEndpoints();
 app.MapAdminProductPriceEndpoints();
 app.MapAdminOrganizationEndpoints();
+app.MapAdminArcaSettingsEndpoints();
 app.MapAdminTerminalEndpoints();
 app.MapAdminHistoryEndpoints();
 app.MapAdminCustomerEndpoints();

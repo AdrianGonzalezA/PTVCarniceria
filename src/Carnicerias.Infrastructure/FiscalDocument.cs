@@ -9,7 +9,9 @@ public sealed class FiscalDocument
 
     public FiscalDocument(Guid companyId, Guid saleId, string issuerCuit, int pointOfSale,
         int voucherType, long number, DateOnly issueDate, decimal total,
-        int receiverDocumentType, long receiverDocumentNumber, DateTimeOffset createdAtUtc)
+        int receiverDocumentType, long receiverDocumentNumber, DateTimeOffset createdAtUtc,
+        string? issuerName = null, string? issuerAddress = null, string? issuerIibb = null,
+        DateOnly? issuerActivityStartDate = null)
     {
         if (companyId == Guid.Empty || saleId == Guid.Empty ||
             issuerCuit.Length != 11 || !issuerCuit.All(char.IsAsciiDigit) ||
@@ -25,6 +27,10 @@ public sealed class FiscalDocument
         CompanyId = companyId;
         SaleId = saleId;
         IssuerCuit = issuerCuit;
+        IssuerName = issuerName;
+        IssuerAddress = issuerAddress;
+        IssuerIibb = issuerIibb;
+        IssuerActivityStartDate = issuerActivityStartDate;
         PointOfSale = pointOfSale;
         VoucherType = voucherType;
         Number = number;
@@ -40,6 +46,10 @@ public sealed class FiscalDocument
     public Guid CompanyId { get; private set; }
     public Guid SaleId { get; private set; }
     public string IssuerCuit { get; private set; }
+    public string? IssuerName { get; private set; }
+    public string? IssuerAddress { get; private set; }
+    public string? IssuerIibb { get; private set; }
+    public DateOnly? IssuerActivityStartDate { get; private set; }
     public int PointOfSale { get; private set; }
     public int VoucherType { get; private set; }
     public long Number { get; private set; }

@@ -35,6 +35,28 @@ async function main() {
   }
   const downloadPath = process.argv.find((item) => item.startsWith('--download-path='))?.slice(16);
   if (downloadPath) await send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath });
+  for (const field of ['credential', 'password']) {
+    const value = process.argv.find((item) => item.startsWith(`--fill-${field}=`))?.slice(field.length + 8);
+    if (value === undefined) continue;
+    const selector = `[formControlName="${field}"]`;
+    const filled = await send('Runtime.evaluate', {
+      expression: `(() => { const input = document.querySelector(${JSON.stringify(selector)});
+        if (!input) return false; const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        setter.call(input, ${JSON.stringify(value)}); input.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`,
+      returnByValue: true,
+    });
+    if (!filled.result.value) throw new Error(`No se encontrÃ³ el campo: ${selector}`);
+  }
+  if (process.argv.includes('--select-context')) {
+    const selected = await send('Runtime.evaluate', {
+      expression: `(() => { for (const id of ['company', 'branch']) {
+        const input = document.getElementById(id); const option = input?.querySelector('option[value]:not([value=""])');
+        if (!option) return false; input.value = option.value;
+        input.dispatchEvent(new Event('change', { bubbles: true })); } return true; })()`,
+      returnByValue: true,
+    });
+    if (!selected.result.value) throw new Error('No se pudo seleccionar la empresa y sucursal.');
+  }
   const clickSelector = process.argv.find((item) => item.startsWith('--click-selector='))?.slice(17);
   if (clickSelector) {
     const clicked = await send('Runtime.evaluate', {
@@ -47,9 +69,10 @@ async function main() {
   }
   const selectedFile = process.argv.find((item) => item.startsWith('--select-file='))?.slice(14);
   if (selectedFile) {
+    const fileSelector = process.argv.find((item) => item.startsWith('--file-selector='))?.slice(16) ?? 'dialog input[type="file"]';
     const document = await send('DOM.getDocument', { depth: 1 });
     const input = await send('DOM.querySelector', {
-      nodeId: document.root.nodeId, selector: 'dialog input[type="file"]',
+      nodeId: document.root.nodeId, selector: fileSelector,
     });
     if (!input.nodeId) throw new Error('No se encontró el selector de archivo del modal.');
     await send('DOM.setFileInputFiles', { files: [selectedFile], nodeId: input.nodeId });
@@ -87,7 +110,8 @@ async function main() {
   });
   console.log(JSON.stringify(state.result.value, null, 2));
   if (process.argv.includes('--screenshot')) {
-    const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    const screenshot = await send('Page.captureScreenshot', { format: 'png',
+      captureBeyondViewport: process.argv.includes('--full-screenshot') });
     const path = join(tmpdir(), `carnicerias-electron-${port}.png`);
     writeFileSync(path, Buffer.from(screenshot.data, 'base64'));
     console.log(`Captura: ${path}`);

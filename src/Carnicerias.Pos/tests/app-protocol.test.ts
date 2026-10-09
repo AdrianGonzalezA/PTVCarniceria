@@ -24,6 +24,7 @@ describe('app protocol boundary', () => {
     expect(resolveAppAsset(root, 'app://bundle/admin/taxes')).toBe(path.join(root, 'index.html'));
     expect(resolveAppAsset(root, 'app://bundle/admin/price-lists')).toBe(path.join(root, 'index.html'));
     expect(resolveAppAsset(root, 'app://bundle/admin/organization')).toBe(path.join(root, 'index.html'));
+    expect(resolveAppAsset(root, 'app://bundle/admin/arca')).toBe(path.join(root, 'index.html'));
     expect(resolveAppAsset(root, 'app://bundle/admin/stock')).toBe(path.join(root, 'index.html'));
     expect(resolveAppAsset(root, 'app://bundle/admin/barcode-layouts')).toBe(path.join(root, 'index.html'));
     expect(resolveAppAsset(root, 'app://bundle/admin/history')).toBe(path.join(root, 'index.html'));

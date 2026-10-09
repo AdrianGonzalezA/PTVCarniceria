@@ -59,6 +59,7 @@ describe('administrator areas', () => {
     expect(page.querySelector('a[href="/admin/customers"]')).not.toBeNull();
     expect(page.querySelector('a[href="/admin/barcode-layouts"]')).not.toBeNull();
     expect(page.querySelector('a[href="/admin/taxes"]')).not.toBeNull();
+    expect(page.querySelector('a[href="/admin/arca"]')).not.toBeNull();
     expect(page.querySelector('a[href="/users"]')).not.toBeNull();
     expect(page.querySelector('a[href="/admin/history"]')).toBeNull();
     expect(page.querySelector('a[href="/admin/configuracion"]')?.getAttribute('aria-current')).toBe('page');

@@ -55,6 +55,16 @@ La prioridad pasa al sitio administrativo sin modificar la base única `carnicer
 - [ ] Prueba de conexión/lectura/impresión desde la caja, estado visible y fallback de peso manual sin afectar ventas confirmadas.
 - [ ] Retirar COM1/COM6 fijos del producto; el controlador virtual de desarrollo tiene licencia temporal de 14 días y no es requisito del despliegue.
 
+### A8. Configuración ARCA por empresa (9 de octubre de 2026)
+
+- [x] Sección **Configuración → ARCA** para `organization.manage`: CUIT, punto de venta, emisor, domicilio, IIBB e inicio de actividades de homologación.
+- [x] Carga/renovación de PFX con validación de formato, clave privada y vigencia; muestra sujeto, huella y fecha de vencimiento sin devolver clave ni contraseña.
+- [x] PFX y contraseña protegidos con Data Protection en la única base `carnicerias_test_visual`; la API usa esta configuración sin variables `ARCA_HOMO_*` tras reiniciar.
+- [x] Nuevos intentos fiscales guardan snapshot del emisor para reimpresión; las autorizaciones existentes se consultan aunque falte el certificado actual.
+- [x] API, Angular y Electron compilados y probados; carga real y recarga de ruta verificadas en Electron. Ver `SPEC-admin-arca-settings.md` y `tasks/arca-homologacion.md`.
+- [ ] Verificar un **nuevo** CAE de homologación usando exclusivamente el PFX guardado, sin duplicar venta ni descontar stock al reintentar.
+- [ ] Antes del despliegue: almacén de claves Data Protection persistente, protegido y respaldado; validación de datos fiscales reales y política de renovación del certificado.
+
 ## Riesgos y controles
 
 - Cambio de catálogo durante tickets abiertos: precio/detalle congelado en borrador y prohibición de borrado físico.

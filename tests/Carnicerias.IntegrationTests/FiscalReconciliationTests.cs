@@ -6,6 +6,20 @@ namespace Carnicerias.IntegrationTests;
 public sealed class FiscalReconciliationTests
 {
     [Fact]
+    public void FiscalAttemptKeepsIssuerDetailsForLaterReprints()
+    {
+        var attempt = new FiscalDocument(Guid.NewGuid(), Guid.NewGuid(), "30710106513",
+            99, 6, 7, new DateOnly(2026, 10, 9), 1210m, 96, 12345678,
+            DateTimeOffset.UtcNow, "Emisor al emitir", "Domicilio al emitir", "12345",
+            new DateOnly(2020, 1, 1));
+
+        Assert.Equal("Emisor al emitir", attempt.IssuerName);
+        Assert.Equal("Domicilio al emitir", attempt.IssuerAddress);
+        Assert.Equal("12345", attempt.IssuerIibb);
+        Assert.Equal(new DateOnly(2020, 1, 1), attempt.IssuerActivityStartDate);
+    }
+
+    [Fact]
     public void AcceptsOnlyTheSameAuthorizedInvoiceOnASharedPointOfSale()
     {
         var date = new DateOnly(2026, 10, 9);

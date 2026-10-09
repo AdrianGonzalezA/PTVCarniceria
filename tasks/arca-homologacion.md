@@ -13,6 +13,7 @@ Se probaron dos ventas ficticias de Gaseosa cola 1,5 L. Para ellas se cargó exp
 | `70b23df6-5a72-4a16-a88a-b22ce45a849d` | Factura B 00099-00000003 | 86410975393203 | 19/10/2026 |
 | `074a24ea-deeb-4a41-9d58-fcf3fdf84e0b` | Ticket fiscal de prueba B 00099-00000004 | 86410975401751 | 19/10/2026 |
 | `6830dbd0-0f07-45a2-b098-2c22659af4a0` | Factura B 00099-00000005 | 86410975719376 | 19/10/2026 |
+| `73c61b32-2fb8-468e-b5cb-548c5ec9c6b7` | Factura B 00099-00000006 | 86410977273862 | 19/10/2026 |
 
 Los intentos, números y CAE persisten en `pos_sales.fiscal_documents`. La segunda venta se envió a COM1/9600; el controlador virtual informó escritura, pero no confirmó vaciado, de modo que la recepción debe observarse en PuTTY. El PDF de la primera venta se regeneró después de reiniciar Electron y se inspeccionó visualmente: muestra CUIT, numeración, CAE y vencimiento. La primera generación, hecha por la instancia antigua de Electron, fue **no fiscal** y no debe utilizarse.
 
@@ -39,6 +40,10 @@ La factura A muestra importes netos e IVA separado; B muestra importes finales y
 En el POS, «Tipo de comprobante» y «Tipo de cliente» se eligen en la venta, antes de cobrar. La elección se conserva por caja, turno, cajero y ticket A–D en el almacenamiento local de Electron; al cambiar de ticket o reabrir el POS se recupera. Al cancelar o confirmar esa venta vuelve al valor predeterminado. La ventana de cobro presenta la elección sin duplicar los selectores y solicita nombre, documento y domicilio solo para comprobantes fiscales, con obligatoriedad según tipo de cliente e importe. Los datos personales no se guardan en ese almacenamiento local: se completan al cierre. La elección sigue siendo un dato local de interfaz hasta confirmar; no se agregó al borrador PostgreSQL.
 
 ## Configuración local
+
+Desde el 9/10/2026, **Configuración → ARCA** permite al administrador de la empresa editar CUIT, punto de venta, razón social, domicilio, IIBB e inicio de actividades, cargar/renovar el PFX y ver sujeto, huella y vencimiento. La carga validada quedó en la única base `carnicerias_test_visual`; en Electron se comprobó que el PFX de homologación vence el **29/09/2028**. El archivo y la contraseña se protegen antes de persistirse; la API no los devuelve. La clave de Data Protection del perfil Windows debe conservarse para poder descifrarlos. Al desplegar en otro servidor hay que configurar y respaldar un almacén persistente y protegido de claves; no basta con restaurar PostgreSQL. Ver `SPEC-admin-arca-settings.md`.
+
+Los nuevos intentos fiscales guardan copia de los datos del emisor para que una reimpresión posterior no use valores modificados. Los comprobantes anteriores a esta migración no tenían ese snapshot y pueden mostrar los datos del emisor actualmente configurados; CUIT, punto de venta, número, CAE y vencimiento autorizados sí permanecen en su registro original. No se recalculan ni se reemiten automáticamente. La prueba completa de un CAE nuevo usando el PFX almacenado queda pendiente de una próxima venta de homologación; la carga, persistencia, lectura de vencimiento y pruebas unitarias ya se verificaron.
 
 Variables de entorno del API, nunca en Git: `ARCA_HOMO_PFX_PATH`, `ARCA_HOMO_CUIT`, `ARCA_HOMO_COMPANY_ID`, `ARCA_HOMO_POINT_OF_SALE=99`, `ARCA_HOMO_ISSUER_NAME`, `ARCA_HOMO_ISSUER_ADDRESS` y, solo si el PFX la requiere, `ARCA_HOMO_PFX_PASSWORD`. Para completar el encabezado se admiten `ARCA_HOMO_ISSUER_IIBB` y `ARCA_HOMO_ISSUER_ACTIVITY_START_DATE` (ISO `AAAA-MM-DD`). El ticket WSAA se conserva en memoria hasta cerca de su vencimiento. Reiniciar el API durante su vigencia puede causar `coe.alreadyAuthenticated`; no reintentar WSAA en bucle. El API tiene endpoints de homologación fijos, sin ruta de producción.
 

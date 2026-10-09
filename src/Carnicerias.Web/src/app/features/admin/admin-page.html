@@ -98,6 +98,7 @@
             @if (context.permissions.includes('organization.manage')) {
               <a class="module-link" routerLink="/admin/customers"><span><strong>Clientes</strong><small>Registrar clientes y habilitar su cuenta corriente.</small></span><span aria-hidden="true">→</span></a>
               <a class="module-link" routerLink="/admin/organization"><span><strong>Organización</strong><small>Empresas, sucursales y su estado operativo.</small></span><span aria-hidden="true">→</span></a>
+              <a class="module-link" routerLink="/admin/arca"><span><strong>ARCA</strong><small>Datos fiscales, punto de venta y certificado PFX de homologación.</small></span><span aria-hidden="true">→</span></a>
             }
             @if (context.permissions.includes('inventory.stock.manage')) {
               <a class="module-link" routerLink="/admin/barcode-layouts"><span><strong>Lectura de etiquetas</strong><small>Probar fórmulas configurables con un código escrito.</small></span><span aria-hidden="true">→</span></a>

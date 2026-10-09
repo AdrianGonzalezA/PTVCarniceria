@@ -22,6 +22,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<PosTerminal> PosTerminals => Set<PosTerminal>();
 
+    public DbSet<ArcaCompanySettings> ArcaCompanySettings => Set<ArcaCompanySettings>();
+
     public DbSet<UserSession> Sessions => Set<UserSession>();
 
     public DbSet<PriceList> PriceLists => Set<PriceList>();
@@ -158,6 +160,28 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .IsUnique();
             entity.HasIndex(terminal => terminal.CredentialHash)
                 .IsUnique().HasFilter("\"CredentialHash\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<ArcaCompanySettings>(entity =>
+        {
+            entity.ToTable("arca_company_settings", table =>
+            {
+                table.HasCheckConstraint("CK_arca_company_settings_point_of_sale",
+                    "\"PointOfSale\" > 0 AND \"PointOfSale\" < 99999");
+                table.HasCheckConstraint("CK_arca_company_settings_certificate_range",
+                    "\"CertificateNotAfterUtc\" IS NULL OR \"CertificateNotAfterUtc\" > \"CertificateNotBeforeUtc\"");
+            });
+            entity.HasKey(settings => settings.CompanyId);
+            entity.Property(settings => settings.IssuerCuit).HasMaxLength(11).IsRequired();
+            entity.Property(settings => settings.IssuerName).HasMaxLength(200).IsRequired();
+            entity.Property(settings => settings.IssuerAddress).HasMaxLength(300).IsRequired();
+            entity.Property(settings => settings.IssuerIibb).HasMaxLength(40);
+            entity.Property(settings => settings.CertificateSubject).HasMaxLength(500);
+            entity.Property(settings => settings.CertificateThumbprint).HasMaxLength(40);
+            entity.HasOne<Company>().WithOne().HasForeignKey<ArcaCompanySettings>(settings => settings.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany().HasForeignKey(settings => settings.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<UserAssignment>(entity =>
@@ -784,6 +808,9 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             });
             entity.HasKey(document => document.Id);
             entity.Property(document => document.IssuerCuit).HasMaxLength(11).IsRequired();
+            entity.Property(document => document.IssuerName).HasMaxLength(200);
+            entity.Property(document => document.IssuerAddress).HasMaxLength(300);
+            entity.Property(document => document.IssuerIibb).HasMaxLength(40);
             entity.Property(document => document.Total).HasPrecision(12, 2);
             entity.Property(document => document.Cae).HasMaxLength(14);
             entity.Property(document => document.ErrorCodes).HasMaxLength(140);

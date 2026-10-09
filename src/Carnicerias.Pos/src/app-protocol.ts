@@ -5,6 +5,7 @@ const backendOrigin = 'http://localhost:5197';
 const angularRoutes = new Set([
   '', '/', '/pos', '/users', '/admin', '/admin/configuracion',
   '/admin/categories', '/admin/products', '/admin/taxes', '/admin/price-lists', '/admin/organization',
+  '/admin/arca',
   '/admin/customers', '/admin/stock', '/admin/barcode-layouts', '/admin/pieces', '/admin/history',
   '/admin/accounts',
 ]);

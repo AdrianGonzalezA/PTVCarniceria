@@ -1,0 +1,78 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" routerLink="/admin/configuracion" aria-label="Volver a configuración">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Administración</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+
+  <div class="workspace">
+    <app-admin-area-tabs area="configuration" />
+    <a class="back-link" routerLink="/admin/configuracion">← Volver a configuración</a>
+    <p class="eyebrow">Configuración fiscal</p>
+    <h1>ARCA · Homologación</h1>
+    <p class="intro">Configurá el emisor y su certificado para solicitar CAE desde las cajas de esta empresa.</p>
+
+    @if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Empresa configurada">
+        <div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Ambiente</span><strong>Homologación</strong></div>
+      </section>
+    }
+
+    @if (message(); as notice) { <p class="arca-notice" role="status">{{ notice }}</p> }
+    @if (error(); as problem) { <p class="arca-error" role="alert">{{ problem }}</p> }
+    @if (loading()) {
+      <p class="arca-loading" role="status">Cargando configuración…</p>
+    } @else {
+      <section class="category-panel" aria-labelledby="issuer-title">
+        <header class="panel-heading"><div><h2 id="issuer-title">Datos del emisor</h2>
+          <p>Se aplican a los próximos comprobantes; los ya emitidos no cambian.</p></div></header>
+        <form class="arca-form" [formGroup]="form" (ngSubmit)="save()">
+          <label>CUIT <input formControlName="issuerCuit" inputmode="numeric" maxlength="11" autocomplete="off" required /></label>
+          <label>Punto de venta <input formControlName="pointOfSale" type="number" min="1" max="99998" required /></label>
+          <label>Razón social <input formControlName="issuerName" maxlength="200" required /></label>
+          <label>Domicilio fiscal <input formControlName="issuerAddress" maxlength="300" required /></label>
+          <label>Ingresos brutos <input formControlName="issuerIibb" maxlength="40" /></label>
+          <label>Inicio de actividades <input formControlName="issuerActivityStartDate" type="date" /></label>
+          @if (form.touched && form.invalid) {
+            <p class="field-error" role="alert">Completá CUIT de 11 dígitos, punto de venta y datos obligatorios.</p>
+          }
+          <div class="arca-actions"><button type="submit" [disabled]="saving()">{{ saving() ? 'Guardando…' : 'Guardar datos' }}</button></div>
+        </form>
+      </section>
+
+      <section class="category-panel" aria-labelledby="certificate-title">
+        <header class="panel-heading"><div><h2 id="certificate-title">Certificado PFX</h2>
+          <p>Archivo con clave privada para WSAA. La contraseña no se muestra ni se devuelve.</p></div></header>
+        <div class="certificate-content">
+          @if (settings()?.certificate; as certificate) {
+            <p class="certificate-state" [class.expired]="certificate.isExpired || !certificate.isAccessible">{{ !certificate.isAccessible ? 'Clave no disponible' : certificate.isExpired ? 'Vencido' : 'Vigente' }}</p>
+            @if (!certificate.isAccessible) { <p class="arca-hint" role="alert">No se puede leer el PFX guardado. Volvé a cargarlo antes de emitir.</p> }
+            <dl>
+              <div><dt>Vence</dt><dd>{{ expiry(certificate.expiresAtUtc) }}</dd></div>
+              <div><dt>Válido desde</dt><dd>{{ expiry(certificate.validFromUtc) }}</dd></div>
+              <div><dt>Titular</dt><dd>{{ certificate.subject }}</dd></div>
+              <div><dt>Huella</dt><dd class="thumbprint">{{ certificate.thumbprint }}</dd></div>
+            </dl>
+          } @else { <p>No hay un certificado cargado para esta empresa.</p> }
+          @if (settings()?.source === 'environment') {
+            <p class="arca-hint">Actualmente se usa el certificado local configurado para desarrollo. Guardá los datos y subí el PFX para administrarlo desde aquí.</p>
+          }
+          @if (settings()?.source === 'database' && !settings()?.certificate) {
+            <p class="arca-hint">La emisión está incompleta hasta que cargues un PFX válido.</p>
+          }
+          <div class="upload-controls">
+            <label for="arca-pfx-file">Archivo .pfx</label>
+            <input id="arca-pfx-file" type="file" accept=".pfx,.p12" (change)="selectFile($event)" />
+            <label for="arca-pfx-password">Contraseña del PFX (si tiene)</label>
+            <input id="arca-pfx-password" type="password" autocomplete="new-password" />
+            <button type="button" [disabled]="!file() || uploading() || settings()?.source !== 'database'"
+              (click)="upload()">{{ uploading() ? 'Cargando…' : 'Cargar o renovar PFX' }}</button>
+          </div>
+        </div>
+      </section>
+    }
+  </div>
+</main>

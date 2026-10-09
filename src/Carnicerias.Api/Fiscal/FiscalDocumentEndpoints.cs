@@ -18,18 +18,21 @@ public static class FiscalDocumentEndpoints
     }
 
     private static async Task<IResult> GetAsync(Guid saleId, PlatformAccessDbContext db,
-        OperationalContextAccessor accessor, ArcaHomologationTicketProvider provider,
+        OperationalContextAccessor accessor, ArcaSettingsResolver settingsResolver,
         CancellationToken cancellationToken)
     {
         var sale = await FindSaleAsync(db, accessor, saleId, cancellationToken);
         if (sale is null) return Error(404, "SALE_NOT_FOUND");
         var document = await LatestAsync(db, sale, cancellationToken);
-        return Results.Ok(ToResponse(sale, document, provider));
+        var settings = await settingsResolver.ResolveAsync(sale.CompanyId, cancellationToken,
+            includeCertificate: false);
+        return Results.Ok(ToResponse(sale, document, settings));
     }
 
     private static async Task<IResult> IssueAsync(Guid saleId, PlatformAccessDbContext db,
         OperationalContextAccessor accessor, ArcaHomologationTicketProvider provider,
-        ArcaWsfeClient wsfe, TimeProvider timeProvider, HttpContext httpContext,
+        ArcaSettingsResolver settingsResolver, ArcaWsfeClient wsfe,
+        TimeProvider timeProvider, HttpContext httpContext,
         CancellationToken cancellationToken)
     {
         var origin = httpContext.Request.Headers.Origin.ToString();
@@ -39,13 +42,22 @@ public static class FiscalDocumentEndpoints
         if (sale is null) return Error(404, "SALE_NOT_FOUND");
         if (sale.DocumentType == SaleDocumentType.NonFiscalTicket)
             return Error(409, "NOT_FISCAL_SALE");
-        if (!provider.IsConfigured || sale.CompanyId != provider.CompanyId)
+        // Existing authorizations remain readable even if the current credential is unavailable.
+        var current = await LatestAsync(db, sale, cancellationToken);
+        if (current?.Status == FiscalDocumentStatus.Authorized)
+        {
+            var publicSettings = await settingsResolver.ResolveAsync(sale.CompanyId,
+                cancellationToken, includeCertificate: false);
+            return Results.Ok(ToResponse(sale, current, publicSettings));
+        }
+        ArcaRuntimeSettings settings;
+        try { settings = await settingsResolver.ResolveAsync(sale.CompanyId, cancellationToken); }
+        catch (System.Security.Cryptography.CryptographicException)
+        { return Error(503, "ARCA_CERTIFICATE_UNAVAILABLE"); }
+        if (!settings.IsConfigured)
             return Error(503, "ARCA_HOMO_NOT_CONFIGURED");
 
         // The sale, payments and stock were committed independently; ARCA failure never rolls them back.
-        var current = await LatestAsync(db, sale, cancellationToken);
-        if (current?.Status == FiscalDocumentStatus.Authorized)
-            return Results.Ok(ToResponse(sale, current, provider));
         if (current?.Status == FiscalDocumentStatus.Prepared)
         {
             if (current.CreatedAtUtc > timeProvider.GetUtcNow().AddMinutes(-1))
@@ -56,10 +68,10 @@ public static class FiscalDocumentEndpoints
         }
         if (current?.Status == FiscalDocumentStatus.Rejected &&
             current.ErrorCodes?.Split(',').Contains("10016") != true)
-            return Results.Ok(ToResponse(sale, current, provider));
+            return Results.Ok(ToResponse(sale, current, settings));
 
         ArcaAccessTicket ticket;
-        try { ticket = await provider.GetAsync(cancellationToken); }
+        try { ticket = await provider.GetAsync(settings, cancellationToken); }
         catch (Exception exception) when (exception is not OperationCanceledException)
         { return Error(503, "ARCA_AUTH_UNAVAILABLE"); }
 
@@ -90,7 +102,7 @@ public static class FiscalDocumentEndpoints
             long last;
             try
             {
-                last = await wsfe.GetLastAuthorizedAsync(ticket, provider.PointOfSale,
+                last = await wsfe.GetLastAuthorizedAsync(ticket, settings.PointOfSale,
                 VoucherType(sale), cancellationToken);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
@@ -100,16 +112,20 @@ public static class FiscalDocumentEndpoints
             ArcaCaeRequest request;
             try
             {
-                request = FiscalRequestBuilder.Build(sale, provider.PointOfSale,
+                request = FiscalRequestBuilder.Build(sale, settings.PointOfSale,
                 last + 1, ArgentinaToday(timeProvider));
             }
             catch (FiscalSaleNotReadyException exception)
             { return Error(409, exception.Code); }
 
-            var document = new FiscalDocument(sale.CompanyId, sale.Id, provider.IssuerCuit,
+            var document = new FiscalDocument(sale.CompanyId, sale.Id, settings.IssuerCuit,
                 request.PointOfSale, request.VoucherType, request.Number, request.IssueDate,
                 request.Total, request.ReceiverDocumentType, request.ReceiverDocumentNumber,
-                timeProvider.GetUtcNow());
+                timeProvider.GetUtcNow(), settings.IssuerName, settings.IssuerAddress,
+                settings.IssuerIibb, DateOnly.TryParseExact(settings.IssuerActivityStartDate,
+                    "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var activityStartDate)
+                    ? activityStartDate : null);
             db.FiscalDocuments.Add(document);
             try { await db.SaveChangesAsync(cancellationToken); }
             catch (DbUpdateException exception) when (IsUniqueConflict(exception))
@@ -125,7 +141,7 @@ public static class FiscalDocumentEndpoints
                 document.Reject(exception.Codes);
                 await db.SaveChangesAsync(CancellationToken.None);
                 if (exception.Codes.Contains(10016) && retry == 0) continue;
-                return Results.Ok(ToResponse(sale, document, provider));
+                return Results.Ok(ToResponse(sale, document, settings));
             }
             catch (Exception)
             {
@@ -138,7 +154,7 @@ public static class FiscalDocumentEndpoints
             try { await db.SaveChangesAsync(CancellationToken.None); }
             catch (DbUpdateException)
             { return Error(503, "FISCAL_AUTHORIZATION_PERSISTENCE_FAILED"); }
-            return Results.Ok(ToResponse(sale, document, provider));
+            return Results.Ok(ToResponse(sale, document, settings));
         }
         return Error(409, "FISCAL_NUMBER_CONFLICT");
     }
@@ -178,16 +194,18 @@ public static class FiscalDocumentEndpoints
             .FirstOrDefaultAsync(cancellationToken);
 
     private static object ToResponse(ConfirmedSale sale, FiscalDocument? document,
-        ArcaHomologationTicketProvider provider) => new
+        ArcaRuntimeSettings settings) => new
         {
             saleId = sale.Id,
             status = document?.Status.ToString() ?? "NotRequested",
             saleDocumentType = sale.DocumentType.ToString(),
             issuerCuit = document?.IssuerCuit,
-            issuerName = provider.IssuerName,
-            issuerAddress = provider.IssuerAddress,
-            issuerIibb = provider.IssuerIibb,
-            issuerActivityStartDate = provider.IssuerActivityStartDate,
+            issuerName = document?.IssuerName ?? settings.IssuerName,
+            issuerAddress = document?.IssuerAddress ?? settings.IssuerAddress,
+            issuerIibb = document?.IssuerName is null ? settings.IssuerIibb : document.IssuerIibb,
+            issuerActivityStartDate = document?.IssuerName is null ? settings.IssuerActivityStartDate :
+                document.IssuerActivityStartDate?.ToString("yyyy-MM-dd",
+                    System.Globalization.CultureInfo.InvariantCulture),
             pointOfSale = document?.PointOfSale,
             voucherType = document?.VoucherType,
             number = document?.Number,

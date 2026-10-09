@@ -62,4 +62,20 @@ public sealed class ProductManagementTests
         Assert.Equal("779123456", code.Code);
         Assert.Equal("779123456", code.NormalizedCode);
     }
+
+    [Fact]
+    public void CostVersionClosesWithoutLosingItsOriginalAmount()
+    {
+        var from = new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero);
+        var until = from.AddMinutes(1);
+        var version = new ProductCostVersion(Guid.NewGuid(), Guid.NewGuid(),
+            100.125m, from, Guid.NewGuid());
+
+        version.CloseAt(until);
+
+        Assert.Equal(100.13m, version.Amount);
+        Assert.Equal(from, version.EffectiveFromUtc);
+        Assert.Equal(until, version.EffectiveToUtc);
+        Assert.Throws<ArgumentOutOfRangeException>(() => version.CloseAt(until.AddMinutes(1)));
+    }
 }

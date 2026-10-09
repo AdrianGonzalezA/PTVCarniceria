@@ -3,6 +3,7 @@ using System;
 using Carnicerias.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Carnicerias.Infrastructure.Migrations
 {
     [DbContext(typeof(PlatformAccessDbContext))]
-    partial class PlatformAccessDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261009193745_AddProductCostVersions")]
+    partial class AddProductCostVersions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -22,41 +25,6 @@ namespace Carnicerias.Infrastructure.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("Carnicerias.Infrastructure.AdminImportOperation", b =>
-                {
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("OperationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("RequestHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("ResultJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("CompanyId", "OperationId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("admin_import_operations", "catalog_pricing");
-                });
 
             modelBuilder.Entity("Carnicerias.Infrastructure.BarcodeProfile", b =>
                 {
@@ -1997,21 +1965,6 @@ namespace Carnicerias.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_sessions_context_pair", "(\"CompanyId\" IS NULL AND \"BranchId\" IS NULL) OR (\"CompanyId\" IS NOT NULL AND \"BranchId\" IS NOT NULL)");
                         });
-                });
-
-            modelBuilder.Entity("Carnicerias.Infrastructure.AdminImportOperation", b =>
-                {
-                    b.HasOne("Carnicerias.PlatformAccess.Company", null)
-                        .WithMany()
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Carnicerias.Infrastructure.BarcodeProfile", b =>

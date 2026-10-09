@@ -139,6 +139,45 @@ public sealed class ProductCode
     public void Deactivate() => IsActive = false;
 }
 
+public sealed class ProductCostVersion
+{
+    private ProductCostVersion() { }
+
+    public ProductCostVersion(Guid companyId, Guid productId, decimal amount,
+        DateTimeOffset effectiveFromUtc, Guid changedByUserId)
+    {
+        if (companyId == Guid.Empty || productId == Guid.Empty || changedByUserId == Guid.Empty)
+            throw new ArgumentException("Company, product and user ids are required.");
+        var rounded = decimal.Round(amount, 2, MidpointRounding.AwayFromZero);
+        if (rounded <= 0 || rounded > 9_999_999_999.99m)
+            throw new ArgumentOutOfRangeException(nameof(amount));
+
+        Id = Guid.NewGuid();
+        CompanyId = companyId;
+        ProductId = productId;
+        Amount = rounded;
+        EffectiveFromUtc = effectiveFromUtc.ToUniversalTime();
+        ChangedByUserId = changedByUserId;
+    }
+
+    public Guid Id { get; private set; }
+    public Guid CompanyId { get; private set; }
+    public Guid ProductId { get; private set; }
+    public decimal Amount { get; private set; }
+    public DateTimeOffset EffectiveFromUtc { get; private set; }
+    public DateTimeOffset? EffectiveToUtc { get; private set; }
+    // Null only for the baseline backfilled from products predating cost history.
+    public Guid? ChangedByUserId { get; private set; }
+
+    public void CloseAt(DateTimeOffset effectiveToUtc)
+    {
+        var end = effectiveToUtc.ToUniversalTime();
+        if (end <= EffectiveFromUtc || EffectiveToUtc is not null)
+            throw new ArgumentOutOfRangeException(nameof(effectiveToUtc));
+        EffectiveToUtc = end;
+    }
+}
+
 public sealed class ProductPrice
 {
     private ProductPrice() { }

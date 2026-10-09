@@ -48,6 +48,10 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<ProductPrice> ProductPrices => Set<ProductPrice>();
 
+    public DbSet<ProductCostVersion> ProductCostVersions => Set<ProductCostVersion>();
+
+    public DbSet<AdminImportOperation> AdminImportOperations => Set<AdminImportOperation>();
+
     public DbSet<ProductTaxRule> ProductTaxRules => Set<ProductTaxRule>();
 
     public DbSet<TaxCatalogEntry> TaxCatalogEntries => Set<TaxCatalogEntry>();
@@ -565,6 +569,41 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .HasFilter("\"EffectiveToUtc\" IS NULL").IsUnique();
             entity.HasIndex(assignment => new
                 { assignment.CompanyId, assignment.TaxCatalogEntryId, assignment.EffectiveToUtc });
+        });
+
+        modelBuilder.Entity<AdminImportOperation>(entity =>
+        {
+            entity.ToTable("admin_import_operations", "catalog_pricing");
+            entity.HasKey(operation => new { operation.CompanyId, operation.OperationId });
+            entity.Property(operation => operation.Kind).HasMaxLength(32).IsRequired();
+            entity.Property(operation => operation.RequestHash).HasMaxLength(64).IsRequired();
+            entity.Property(operation => operation.ResultJson).HasColumnType("jsonb").IsRequired();
+            entity.HasOne<Company>().WithMany().HasForeignKey(operation => operation.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany().HasForeignKey(operation => operation.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ProductCostVersion>(entity =>
+        {
+            entity.ToTable("product_cost_versions", "catalog_pricing", table =>
+            {
+                table.HasCheckConstraint("CK_product_cost_versions_amount_positive", "\"Amount\" > 0");
+                table.HasCheckConstraint("CK_product_cost_versions_effective_range",
+                    "\"EffectiveToUtc\" IS NULL OR \"EffectiveToUtc\" > \"EffectiveFromUtc\"");
+            });
+            entity.HasKey(cost => cost.Id);
+            entity.Property(cost => cost.Amount).HasPrecision(12, 2);
+            entity.HasOne<CatalogProduct>().WithMany()
+                .HasForeignKey(cost => new { cost.CompanyId, cost.ProductId })
+                .HasPrincipalKey(product => new { product.CompanyId, product.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany().HasForeignKey(cost => cost.ChangedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(cost => new { cost.CompanyId, cost.ProductId, cost.EffectiveToUtc })
+                .HasFilter("\"EffectiveToUtc\" IS NULL").IsUnique();
+            entity.HasIndex(cost => new { cost.CompanyId, cost.ProductId, cost.EffectiveFromUtc })
+                .IsUnique();
         });
 
         modelBuilder.Entity<ProductCode>(entity =>

@@ -110,9 +110,6 @@ public static class AdminProductPriceEndpoints
             item.CompanyId == context.CompanyId && item.Id == productId, cancellationToken);
         if (product is null) return Error(StatusCodes.Status404NotFound, "PRODUCT_NOT_FOUND");
         var amount = decimal.Round(request.Amount, 2, MidpointRounding.AwayFromZero);
-        if (amount < product.Cost)
-            return Error(StatusCodes.Status409Conflict, "PRICE_BELOW_COST");
-
         var current = await db.ProductPrices.SingleOrDefaultAsync(price =>
             price.CompanyId == context.CompanyId && price.PriceListId == listId &&
             price.ProductId == productId && price.EffectiveToUtc == null, cancellationToken);

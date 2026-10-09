@@ -11,6 +11,7 @@ using Carnicerias.Api.Organization;
 using Carnicerias.Api.History;
 using Carnicerias.Api.Fiscal;
 using Carnicerias.Api.Customers;
+using Carnicerias.Api.ExcelImport;
 using Carnicerias.Domain.PlatformAccess;
 using Microsoft.EntityFrameworkCore;
 
@@ -54,6 +55,7 @@ app.MapAdminOrganizationEndpoints();
 app.MapAdminTerminalEndpoints();
 app.MapAdminHistoryEndpoints();
 app.MapAdminCustomerEndpoints();
+app.MapAdminExcelImportEndpoints();
 app.MapPosCustomerEndpoints();
 app.MapCustomerCollectionEndpoints();
 app.MapCustomerCollectionCorrectionEndpoints();

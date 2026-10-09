@@ -17,6 +17,7 @@ public static class AdminProductEndpoints
         products.MapGet("", ListAsync);
         products.MapPost("", CreateAsync);
         products.MapPatch("/{productId:guid}", UpdateAsync);
+        products.MapGet("/{productId:guid}/cost-history", CostHistoryAsync);
         return endpoints;
     }
 
@@ -80,6 +81,7 @@ public static class AdminProductEndpoints
         PlatformAccessDbContext db,
         OperationalContextAccessor contextAccessor,
         HttpContext httpContext,
+        TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         if (!AllowedOrigin(httpContext)) return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
@@ -103,6 +105,8 @@ public static class AdminProductEndpoints
         var product = new CatalogProduct(companyId, category.Id, request.Code,
             request.Name, request.Unit, saleMode, request.Cost);
         db.CatalogProducts.Add(product);
+        db.ProductCostVersions.Add(new ProductCostVersion(companyId, product.Id,
+            product.Cost, timeProvider.GetUtcNow(), contextAccessor.Context.UserId));
         try
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -122,6 +126,7 @@ public static class AdminProductEndpoints
         PlatformAccessDbContext db,
         OperationalContextAccessor contextAccessor,
         HttpContext httpContext,
+        TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         if (!AllowedOrigin(httpContext)) return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
@@ -157,13 +162,22 @@ public static class AdminProductEndpoints
         if ((nextUnit.Trim() != product.Unit || nextMode != product.SaleMode) &&
             await HasQuantityHistoryAsync(db, companyId, productId, cancellationToken))
             return Error(StatusCodes.Status409Conflict, "PRODUCT_QUANTITY_HISTORY_EXISTS");
-        if (request.Cost is decimal requestedCost)
+        var nextCost = request.Cost is decimal requestedCost
+            ? decimal.Round(requestedCost, 2, MidpointRounding.AwayFromZero)
+            : product.Cost;
+        if (nextCost != product.Cost)
         {
-            var roundedCost = decimal.Round(requestedCost, 2, MidpointRounding.AwayFromZero);
-            if (await db.ProductPrices.AnyAsync(price => price.CompanyId == companyId &&
-                price.ProductId == productId && price.EffectiveToUtc == null &&
-                price.Amount < roundedCost, cancellationToken))
-                return Error(StatusCodes.Status409Conflict, "COST_ABOVE_CURRENT_PRICE");
+            var currentCost = await db.ProductCostVersions.SingleOrDefaultAsync(version =>
+                version.CompanyId == companyId && version.ProductId == productId &&
+                version.EffectiveToUtc == null, cancellationToken);
+            if (currentCost is null) return Error(StatusCodes.Status409Conflict, "COST_HISTORY_MISSING");
+            var now = timeProvider.GetUtcNow();
+            if (now <= currentCost.EffectiveFromUtc)
+                return Error(StatusCodes.Status409Conflict, "COST_NOT_YET_EFFECTIVE");
+            currentCost.CloseAt(now);
+            await db.SaveChangesAsync(cancellationToken);
+            db.ProductCostVersions.Add(new ProductCostVersion(companyId, productId,
+                nextCost, now, contextAccessor.Context.UserId));
         }
 
         if (request.CategoryId is not null || request.Name is not null || request.Unit is not null ||
@@ -181,6 +195,28 @@ public static class AdminProductEndpoints
         var alternateCodeCount = await db.ProductCodes.CountAsync(code =>
             code.CompanyId == companyId && code.ProductId == productId && code.IsActive, cancellationToken);
         return Results.Ok(ToResponse(product, category.Name, alternateCodeCount));
+    }
+
+    private static async Task<IResult> CostHistoryAsync(
+        Guid productId,
+        PlatformAccessDbContext db,
+        OperationalContextAccessor contextAccessor,
+        CancellationToken cancellationToken)
+    {
+        var companyId = contextAccessor.Context.CompanyId;
+        if (!await db.CatalogProducts.AnyAsync(product => product.CompanyId == companyId &&
+                product.Id == productId, cancellationToken))
+            return Error(StatusCodes.Status404NotFound, "PRODUCT_NOT_FOUND");
+
+        var history = await db.ProductCostVersions.AsNoTracking()
+            .Where(version => version.CompanyId == companyId && version.ProductId == productId)
+            .OrderByDescending(version => version.EffectiveFromUtc)
+            .Select(version => new CostHistoryRow(version.Id, version.Amount,
+                version.EffectiveFromUtc, version.EffectiveToUtc,
+                db.Users.Where(user => user.Id == version.ChangedByUserId)
+                    .Select(user => user.Username).FirstOrDefault()))
+            .ToArrayAsync(cancellationToken);
+        return Results.Ok(history);
     }
 
     private static async Task<bool> HasQuantityHistoryAsync(
@@ -257,4 +293,6 @@ public static class AdminProductEndpoints
         string SaleMode, decimal Cost, bool IsActive, int AlternateCodeCount);
     private sealed record ProductPage(
         IReadOnlyList<ProductResponse> Items, int Page, int PageSize, long TotalItems, long TotalPages);
+    private sealed record CostHistoryRow(Guid Id, decimal Amount, DateTimeOffset EffectiveFromUtc,
+        DateTimeOffset? EffectiveToUtc, string? ChangedByUsername);
 }

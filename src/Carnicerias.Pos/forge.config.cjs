@@ -5,6 +5,7 @@ module.exports = {
     executableName: 'Carnicerias.Pos',
     ignore: [
       /^\/(?:scripts|src|tests)(?:\/|$)/,
+      /^\/out(?:\/|$)/,
       /^\/tsconfig(?:\.build)?\.json$/,
     ],
     name: 'Carnicerias POS',

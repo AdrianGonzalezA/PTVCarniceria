@@ -50,6 +50,12 @@ try {
     finally { Pop-Location }
 }
 finally { $env:CARNICERIAS_FORGE_OUT = $previousForgeOutput }
+foreach ($package in (Get-ChildItem -LiteralPath $posOutput -Directory)) {
+    $nestedOutput = Join-Path $package.FullName 'resources\app.asar.unpacked\out'
+    if (Test-Path -LiteralPath $nestedOutput) {
+        throw "El paquete contiene una compilación anterior: $nestedOutput"
+    }
+}
 Copy-Item -LiteralPath (Join-Path $repository 'tools\Start-PosTerminal.ps1') -Destination $posOutput
 Copy-Item -LiteralPath (Join-Path $repository 'documentacion\despliegue\pos-config.ejemplo.json') -Destination $posOutput
 

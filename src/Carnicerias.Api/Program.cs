@@ -73,6 +73,15 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
+var serveWeb = !app.Configuration.GetValue<bool>("Clover:TunnelOnly") &&
+    app.Environment.WebRootPath is { } webRoot &&
+    File.Exists(Path.Combine(webRoot, "index.html"));
+
+if (serveWeb)
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+}
 
 if (app.Configuration.GetValue<bool>("Clover:TunnelOnly"))
 {
@@ -129,6 +138,13 @@ app.MapBarcodeProfileEndpoints();
 app.MapInventoryPieceEndpoints();
 app.MapCashierShiftEndpoints();
 app.MapPosTerminalEndpoints();
+
+if (serveWeb)
+{
+    // Unknown API paths must not return the Angular shell with HTTP 200.
+    app.MapFallback("/api/{**path}", () => Results.NotFound());
+    app.MapFallbackToFile("index.html");
+}
 
 app.Run();
 

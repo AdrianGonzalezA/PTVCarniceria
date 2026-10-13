@@ -34,9 +34,12 @@ describe('app protocol boundary', () => {
     expect(resolveAppAsset(root, 'app://bundle/admin/customers')).toBe(path.join(root, 'index.html'));
   });
 
-  it('maps only app API requests to the fixed local backend', () => {
-    expect(toBackendUrl('app://bundle/api/health')).toBe('http://localhost:5197/api/health');
-    expect(toBackendUrl('app://bundle/assets/logo.svg')).toBeUndefined();
+  it('maps only app API requests to the configured backend', () => {
+    expect(toBackendUrl('app://bundle/api/health', 'http://localhost:5197'))
+      .toBe('http://localhost:5197/api/health');
+    expect(toBackendUrl('app://bundle/api/health', 'https://pos-sucursal.local'))
+      .toBe('https://pos-sucursal.local/api/health');
+    expect(toBackendUrl('app://bundle/assets/logo.svg', 'https://pos-sucursal.local')).toBeUndefined();
   });
 
   it('replaces a renderer-supplied terminal credential with the main-process credential', () => {
@@ -44,12 +47,20 @@ describe('app protocol boundary', () => {
       headers: { 'X-Pos-Terminal-Credential': 'forged-by-renderer' },
     });
 
-    const authenticated = toBackendRequest(incoming, 'main-process-secret');
+    const authenticated = toBackendRequest(incoming, {
+      backendOrigin: 'http://localhost:5197', terminalCredential: 'main-process-secret',
+    });
     expect(authenticated.url).toBe('http://localhost:5197/api/pos-terminals/current');
     expect(authenticated.headers.get('X-Pos-Terminal-Credential')).toBe('main-process-secret');
 
-    const unprovisioned = toBackendRequest(incoming);
+    const unprovisioned = toBackendRequest(incoming, { backendOrigin: 'http://localhost:5197' });
     expect(unprovisioned.headers.has('X-Pos-Terminal-Credential')).toBe(false);
+
+    const remote = toBackendRequest(incoming, {
+      backendOrigin: 'https://pos-sucursal.local', terminalCredential: 'main-process-secret',
+    });
+    expect(remote.url).toBe('https://pos-sucursal.local/api/pos-terminals/current');
+    expect(remote.headers.get('X-Pos-Terminal-Credential')).toBe('main-process-secret');
   });
 
   it('preserves a sale request body while adding the terminal credential', async () => {
@@ -59,7 +70,9 @@ describe('app protocol boundary', () => {
       body: '{"priceListId":"test"}',
     });
 
-    const forwarded = toBackendRequest(incoming, 'main-process-secret');
+    const forwarded = toBackendRequest(incoming, {
+      backendOrigin: 'http://localhost:5197', terminalCredential: 'main-process-secret',
+    });
     expect(forwarded.method).toBe('POST');
     expect(await forwarded.text()).toBe('{"priceListId":"test"}');
     expect(forwarded.headers.get('Content-Type')).toBe('application/json');

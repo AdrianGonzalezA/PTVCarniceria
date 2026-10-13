@@ -16,6 +16,16 @@ const receipt: ReceiptRequest = {
 afterEach(() => SerialPortMock.binding.reset());
 
 describe('serial printer', () => {
+  it('prints on the port and baud rate configured for this terminal', async () => {
+    SerialPortMock.binding.createPort('COM3', { record: true });
+    const result = await sendSerialReceipt(receipt, (options) => {
+      expect(options).toMatchObject({ path: 'COM3', baudRate: 4800, dataBits: 8,
+        stopBits: 1, parity: 'none' });
+      return new SerialPortMock(options);
+    }, { port: 'COM3', baudRate: 4800 });
+    expect(result.port).toBe('COM3');
+  });
+
   it('writes and drains a receipt to COM1 at 9600 8N1, then releases the port', async () => {
     SerialPortMock.binding.createPort('COM1', { record: true });
     let port: SerialPortMock | undefined;

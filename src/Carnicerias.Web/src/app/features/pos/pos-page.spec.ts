@@ -543,7 +543,7 @@ describe('PosPage', () => {
     let saveAttempts = 0;
     let confirmationAttempts = 0;
     const receiptPdf = vi.fn().mockResolvedValue('C:\\tickets\\ticket-test.pdf');
-    const serialPrint = vi.fn().mockResolvedValue({ port: 'COM1', bytesWritten: 480,
+    const serialPrint = vi.fn().mockResolvedValue({ port: 'COM3', bytesWritten: 480,
       confirmation: 'write-only' });
     TestBed.configureTestingModule({
       providers: [
@@ -642,7 +642,8 @@ describe('PosPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(serialPrint).toHaveBeenCalledWith(expect.objectContaining({ id: 'sale-id' }), 'Sucursal', 'Caja 1', 'cajero');
-    expect(receipt.textContent).toContain('COM1');
+    expect(receipt.textContent).toContain('COM3');
+    expect(receipt.textContent).not.toContain('COM1');
     (receipt.querySelector('.save-pdf-button') as HTMLButtonElement).click();
     await fixture.whenStable();
     fixture.detectChanges();

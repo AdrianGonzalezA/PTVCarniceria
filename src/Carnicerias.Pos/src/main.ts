@@ -1,11 +1,12 @@
 import path from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   net,
   protocol,
@@ -15,6 +16,7 @@ import {
 } from 'electron';
 import { resolveAppAsset, toBackendRequest, toBackendUrl } from './app-protocol';
 import { createDiagnostic } from './diagnostic';
+import { parseDeploymentConfig, resolveConfigPath, type SerialDeviceConfig } from './deployment-config';
 import { createFiscalInvoiceHtml } from './fiscal-invoice';
 import { NativeChannel } from './native-api';
 import { initialUrlForProfile, resolvePosProfile } from './pos-profile';
@@ -44,7 +46,6 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const profile = resolvePosProfile(process.argv, app.getPath('userData'));
-const serialScale = new SerialScale();
 const initialTerminalCredential = process.env.CARNICERIAS_POS_TERMINAL_TOKEN;
 delete process.env.CARNICERIAS_POS_TERMINAL_TOKEN;
 if (initialTerminalCredential && !profile.name) {
@@ -62,7 +63,7 @@ function validateIpcSender(event: IpcMainInvokeEvent): void {
   }
 }
 
-function registerNativeApi(): void {
+function registerNativeApi(serialScale: SerialScale, printer: SerialDeviceConfig): void {
   ipcMain.handle(NativeChannel.Diagnostic, (event) => {
     validateIpcSender(event);
     return createDiagnostic(process.platform, process.versions.electron);
@@ -110,17 +111,17 @@ function registerNativeApi(): void {
   ipcMain.handle(NativeChannel.PrintSerialReceipt, async (event, payload: unknown) => {
     validateIpcSender(event);
     const receipt = validateReceiptRequest(payload);
-    return sendSerialReceipt(receipt);
+    return sendSerialReceipt(receipt, undefined, printer);
   });
 }
 
-function registerApplicationProtocol(terminalCredential?: string): void {
+function registerApplicationProtocol(apiOrigin: string, terminalCredential?: string): void {
   const webRoot = path.join(__dirname, '..', 'web');
 
   protocol.handle('app', async (request) => {
-    const backendUrl = toBackendUrl(request.url);
+    const backendUrl = toBackendUrl(request.url, apiOrigin);
     if (backendUrl) {
-      return net.fetch(toBackendRequest(request, terminalCredential));
+      return net.fetch(toBackendRequest(request, { terminalCredential, backendOrigin: apiOrigin }));
     }
 
     if (request.method !== 'GET') {
@@ -171,6 +172,12 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(async () => {
+  const configPath = resolveConfigPath(process.argv);
+  const deploymentConfig = parseDeploymentConfig(
+    configPath ? JSON.parse(readFileSync(configPath, 'utf8')) as unknown : undefined,
+    app.isPackaged,
+  );
+  const serialScale = new SerialScale(undefined, deploymentConfig.scale);
   const terminalCredential = await loadTerminalCredential(
     app.getPath('userData'),
     initialTerminalCredential,
@@ -178,21 +185,22 @@ app.whenReady().then(async () => {
   );
   session.defaultSession.setPermissionCheckHandler(() => false);
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
-  registerApplicationProtocol(terminalCredential);
-  registerNativeApi();
+  registerApplicationProtocol(deploymentConfig.apiOrigin, terminalCredential);
+  registerNativeApi(serialScale, deploymentConfig.printer);
   serialScale.start();
+  app.on('before-quit', () => { void serialScale.stop(); });
   createWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 }).catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : 'POS startup failed');
+  const message = error instanceof Error ? error.message : 'POS startup failed';
+  console.error(message);
+  dialog.showErrorBox('No se pudo iniciar Carnicerías POS', message);
   app.quit();
 });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
-
-app.on('before-quit', () => { void serialScale.stop(); });

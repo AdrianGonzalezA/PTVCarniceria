@@ -1,4 +1,5 @@
 module.exports = {
+  outDir: process.env.CARNICERIAS_FORGE_OUT || 'out',
   packagerConfig: {
     asar: { unpack: '**/*.node' },
     executableName: 'Carnicerias.Pos',

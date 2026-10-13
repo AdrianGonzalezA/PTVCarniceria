@@ -1,9 +1,12 @@
 import { SerialPort } from 'serialport';
+import type { SerialDeviceConfig } from './deployment-config';
 
 const scaleOptions = {
   path: 'COM6', baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none',
   rtscts: false, xon: false, xoff: false, autoOpen: false,
 } as const;
+type ScaleOptions = Omit<typeof scaleOptions, 'path' | 'baudRate'> &
+  { path: string; baudRate: number };
 const maximumFrameBytes = 64;
 const maximumReadingAgeMs = 30000;
 
@@ -33,8 +36,9 @@ export class SerialScale {
   private opening: Promise<void> = Promise.resolve();
   private stopped = false;
 
-  constructor(private readonly createPort: (options: typeof scaleOptions) => ScalePort =
-    (options) => new SerialPort(options)) {}
+  constructor(private readonly createPort: (options: ScaleOptions) => ScalePort =
+    (options) => new SerialPort(options),
+    private readonly device: SerialDeviceConfig = { port: 'COM6', baudRate: 9600 }) {}
 
   start(): void {
     if (this.port || this.stopped) return;
@@ -66,7 +70,8 @@ export class SerialScale {
     this.state = 'starting';
     this.opening = new Promise<void>((resolve) => {
       let port: ScalePort;
-      try { port = this.createPort(scaleOptions); }
+      try { port = this.createPort({ ...scaleOptions, path: this.device.port,
+        baudRate: this.device.baudRate }); }
       catch { this.state = 'unavailable'; this.scheduleRetry(); resolve(); return; }
       this.port = port;
       port.on('data', (chunk: Buffer) => this.accept(chunk));

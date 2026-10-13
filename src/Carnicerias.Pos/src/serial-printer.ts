@@ -1,22 +1,27 @@
 import { SerialPort } from 'serialport';
 import type { ReceiptRequest } from './receipt-pdf';
+import type { SerialDeviceConfig } from './deployment-config';
 import { formatSerialReceipt } from './serial-receipt';
 
 const printerOptions = {
   path: 'COM1', baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none',
   rtscts: false, xon: false, xoff: false, autoOpen: false,
 } as const;
+type PrinterOptions = Omit<typeof printerOptions, 'path' | 'baudRate'> &
+  { path: string; baudRate: number };
 
 type SerialWritable = Pick<SerialPort, 'open' | 'write' | 'drain' | 'close' | 'on' | 'off' | 'isOpen'>;
 
 export async function sendSerialReceipt(
   receipt: ReceiptRequest,
-  createPort: (options: typeof printerOptions) => SerialWritable = (options) => new SerialPort(options),
+  createPort: (options: PrinterOptions) => SerialWritable = (options) => new SerialPort(options),
+  device: SerialDeviceConfig = { port: 'COM1', baudRate: 9600 },
 ): Promise<{ readonly port: string; readonly bytesWritten: number;
   readonly confirmation: 'drained' | 'write-only' }> {
   const bytes = Buffer.from(formatSerialReceipt(receipt), 'utf8');
-  const transmissionMs = Math.ceil(bytes.length * 10 / printerOptions.baudRate * 1000) + 150;
-  const port = createPort(printerOptions);
+  const options = { ...printerOptions, path: device.port, baudRate: device.baudRate };
+  const transmissionMs = Math.ceil(bytes.length * 10 / options.baudRate * 1000) + 150;
+  const port = createPort(options);
   let confirmation: 'drained' | 'write-only' = 'drained';
   let rejectActive: (error: Error) => void = () => {};
   const onError = (error: Error) => rejectActive(error);
@@ -64,7 +69,7 @@ export async function sendSerialReceipt(
         });
       });
     });
-    return { port: printerOptions.path, bytesWritten: bytes.length, confirmation };
+    return { port: options.path, bytesWritten: bytes.length, confirmation };
   } finally {
     clearTimeout(timeout);
     try {

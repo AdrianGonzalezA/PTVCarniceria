@@ -1,7 +1,6 @@
 import path from 'node:path';
 
 const applicationOrigin = 'app://bundle';
-const backendOrigin = 'http://localhost:5197';
 const angularRoutes = new Set([
   '', '/', '/pos', '/users', '/admin', '/admin/configuracion',
   '/admin/categories', '/admin/products', '/admin/taxes', '/admin/price-lists', '/admin/organization',
@@ -35,7 +34,7 @@ export function resolveAppAsset(webRoot: string, candidate: string): string {
   return resolvedAsset;
 }
 
-export function toBackendUrl(candidate: string): string | undefined {
+export function toBackendUrl(candidate: string, backendOrigin: string): string | undefined {
   const url = new URL(candidate);
   if (url.protocol !== 'app:' || url.hostname !== 'bundle' || !url.pathname.startsWith('/api/')) {
     return undefined;
@@ -44,14 +43,17 @@ export function toBackendUrl(candidate: string): string | undefined {
   return new URL(`${url.pathname}${url.search}`, backendOrigin).toString();
 }
 
-export function toBackendRequest(request: Request, terminalCredential?: string): Request {
-  const backendUrl = toBackendUrl(request.url);
+export function toBackendRequest(
+  request: Request,
+  options: { readonly backendOrigin: string; readonly terminalCredential?: string },
+): Request {
+  const backendUrl = toBackendUrl(request.url, options.backendOrigin);
   if (!backendUrl) throw new Error('Invalid backend request');
 
   const forwarded = new Request(backendUrl, request);
   forwarded.headers.delete('X-Pos-Terminal-Credential');
-  if (terminalCredential) {
-    forwarded.headers.set('X-Pos-Terminal-Credential', terminalCredential);
+  if (options.terminalCredential) {
+    forwarded.headers.set('X-Pos-Terminal-Credential', options.terminalCredential);
   }
   return forwarded;
 }

@@ -5,6 +5,21 @@ import { SerialScale, parseScaleFrame } from '../src/serial-scale';
 afterEach(() => SerialPortMock.binding.reset());
 
 describe('serial scale', () => {
+  it('opens the port and baud rate configured for this terminal', async () => {
+    SerialPortMock.binding.createPort('COM7', { record: true });
+    let opened = false;
+    const scale = new SerialScale((options) => {
+      opened = true;
+      expect(options).toMatchObject({ path: 'COM7', baudRate: 4800, dataBits: 8,
+        stopBits: 1, parity: 'none' });
+      return new SerialPortMock(options);
+    }, { port: 'COM7', baudRate: 4800 });
+    scale.start();
+    await scale.whenOpen();
+    expect(opened).toBe(true);
+    await scale.stop();
+  });
+
   it('parses stable and unstable kilogram frames, rejecting malformed weights', () => {
     expect(parseScaleFrame('ST,0.750,kg')).toEqual({ weightKg: 0.75, stable: true });
     expect(parseScaleFrame('US,1.250,kg')).toEqual({ weightKg: 1.25, stable: false });

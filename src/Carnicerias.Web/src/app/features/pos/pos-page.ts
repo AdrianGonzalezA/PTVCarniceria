@@ -772,10 +772,10 @@ export class PosPage implements OnInit {
     void this.posDeviceClient.readScale().then((weightKg) => {
       if (this.selectedProduct()?.id !== productId || this.scaleRequestRevision !== revision) return;
       this.quantityDraft.set(String(weightKg));
-      this.scaleNotice.set(`Balanza COM6: ${weightKg.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`);
+      this.scaleNotice.set(`Balanza: ${weightKg.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`);
     }).catch(() => {
       if (this.selectedProduct()?.id === productId && this.scaleRequestRevision === revision)
-        this.scaleError.set('No hay una lectura estable y reciente en COM6. Enviá ST,peso,kg desde COM5 o ingresá el peso manualmente.');
+        this.scaleError.set('No hay una lectura estable y reciente en la balanza configurada. Ingresá el peso manualmente o revisá la conexión.');
     }).finally(() => this.scaleBusy.set(false));
   }
 
@@ -1569,7 +1569,7 @@ export class PosPage implements OnInit {
     const print = fiscal ? this.posDeviceClient.print(sale, branch, terminal, cashier, fiscal)
       : this.posDeviceClient.print(sale, branch, terminal, cashier);
     void print.then((result) => this.serialPrintResult.set(result)).catch(() => {
-      this.serialPrintError.set('No se pudo completar el envío por COM1. La venta sigue confirmada; revisá PuTTY y el puerto antes de reintentar para evitar duplicados.');
+      this.serialPrintError.set('No se pudo completar el envío a la impresora configurada. La venta sigue confirmada; revisá el dispositivo antes de reintentar para evitar duplicados.');
     }).finally(() => this.serialPrintBusy.set(false));
   }
 

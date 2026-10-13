@@ -8,6 +8,8 @@
 
 **Disponibilidad por caja (13/10/2026):** `GET /api/pos/payment-gateways` consulta sesión, caja y turno abiertos y ofrece solo los modos QR/Point de Mercado Pago configurados para esa caja, sin secretos ni IDs externos. En **Cobrar venta**, una caja no configurada no ofrece iniciar Mercado Pago; un cobro previo pendiente permanece visible y bloquea cambiar de medio aunque se haya retirado la configuración. Si falla la consulta, los medios manuales siguen disponibles, pero no se habilita un cobro integrado nuevo. Clover sigue excluido hasta verificar terminal y pagos. Pasan 43 pruebas .NET, 119 Angular y 53 Electron; build web/API y lint. Se revisaron visualmente ambos perfiles en Electron: Caja 1 con `cajero1` mostró QR y Point; Caja 2 con `visual-cashier` no ofreció Mercado Pago. No se inició ningún cobro. Los borradores de Gaseosa usados en ambas pruebas se cancelaron y las reservas volvieron al stock; el turno de prueba de Caja 2 se cerró con $0 y la sesión se cerró. No se ejecutó la integración automatizada que crea otra base.
 
+**Inventario Clover sin Dev Kit (13/10/2026):** el administrador consulta mediante POST la lista oficial de dispositivos provisionados del comercio sandbox. El backend usa OAuth, valida el comercio y solo devuelve ID/nombre/modelo; no expone serial ni credenciales. Clover respondió `devices: []` en una consulta real, también comprobada visualmente en Administración dentro de Electron. Esto no prueba la instalación ni ejecución de Cloud Pay Display. Pasan 46 pruebas .NET, 120 Angular y 53 Electron; build Release de API, build web y lint. Sin equipo no se puede probar el cobro presencial de punta a punta.
+
 ## Corte 1 — Selección segura sin alterar Mercado Pago
 
 ### 1. Disponibilidad integrada por caja

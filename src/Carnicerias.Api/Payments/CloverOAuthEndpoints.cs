@@ -16,6 +16,7 @@ public static class CloverOAuthEndpoints
         group.MapPut("", SaveAsync);
         group.MapPost("/authorization", AuthorizeAsync);
         group.MapPost("/connection", ProbeConnectionAsync);
+        group.MapPost("/devices", ListDevicesAsync);
         return endpoints;
     }
 
@@ -131,6 +132,32 @@ public static class CloverOAuthEndpoints
             CloverMerchantProbeOutcome.MerchantMismatch => ProbeError(409, "CLOVER_MERCHANT_MISMATCH"),
             _ => ProbeError(502, "CLOVER_UNAVAILABLE"),
         };
+    }
+
+    private static async Task<IResult> ListDevicesAsync(PlatformAccessDbContext db,
+        OperationalContextAccessor accessor, CloverAccessTokenResolver resolver,
+        CloverDeviceInventoryClient client, HttpContext context, CancellationToken cancellationToken)
+    {
+        if (!AllowedOrigin(context)) return ProbeError(403, "CSRF_REJECTED");
+        var access = await resolver.ResolveAsync(accessor.Context.CompanyId,
+            accessor.Context.UserId, cancellationToken);
+        if (access.ErrorCode is { } code)
+            return ProbeError(code is "CLOVER_REFRESH_UNCERTAIN" or "CLOVER_CREDENTIAL_UNAVAILABLE"
+                ? 503 : 409, code);
+
+        CloverDeviceInventoryResult inventory;
+        try { inventory = await client.ListAsync(access.MerchantId!, access.Token!, cancellationToken); }
+        catch (HttpRequestException) { return ProbeError(502, "CLOVER_UNAVAILABLE"); }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        { return ProbeError(502, "CLOVER_UNAVAILABLE"); }
+
+        var stillCurrent = await db.CloverGatewaySettings.AsNoTracking().AnyAsync(item =>
+            item.CompanyId == accessor.Context.CompanyId &&
+            item.UpdatedAtUtc == access.UpdatedAtUtc, cancellationToken);
+        if (!stillCurrent) return ProbeError(409, "CLOVER_CONFIGURATION_CHANGED");
+        if (inventory.ErrorCode is { } error)
+            return ProbeError(error == "CLOVER_TOKEN_REJECTED" ? 409 : 502, error);
+        return Results.Ok(new { environment = "sandbox", devices = inventory.Devices });
     }
 
     private static async Task<IResult> LaunchAsync(HttpContext context,

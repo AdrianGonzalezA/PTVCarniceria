@@ -84,4 +84,25 @@ describe('PaymentGatewaysPage Clover sandbox', () => {
       .find((button) => button.textContent?.includes('Probar') && button.textContent?.includes('Clover'))!;
     expect(check.disabled).toBe(false);
   });
+
+  it('shows only sanitized device inventory and does not imply a payment terminal is ready', () => {
+    const { fixture, http, page } = load(true);
+    const check = Array.from(page.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Consultar dispositivos Clover'))!;
+    check.click();
+    const request = http.expectOne('/api/admin/payment-gateways/clover/devices');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toBeNull();
+    expect(request.request.withCredentials).toBe(true);
+    request.flush({ environment: 'sandbox', devices: [{ id: 'DEV_1', name: 'Mini prueba', model: 'Mini' }] });
+    http.expectOne('/api/admin/payment-gateways/clover').flush({
+      provider: 'clover', environment: 'sandbox', clientId: 'APP_123', merchantId: 'MERCHANT_123',
+      hasClientSecret: true, isConnected: true, requiresReauthorization: false,
+      accessTokenExpiresAtUtc: '2026-10-14T01:00:00Z',
+      refreshTokenExpiresAtUtc: '2026-11-14T00:00:00Z',
+    });
+    fixture.detectChanges();
+    expect(page.textContent).toContain('Mini prueba');
+    expect(page.textContent).toContain('no confirma Cloud Pay Display');
+  });
 });

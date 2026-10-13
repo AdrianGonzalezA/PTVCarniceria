@@ -18,6 +18,12 @@ export interface CloverAuthorization {
   readonly expiresAtUtc: string;
 }
 
+export interface CloverDevice {
+  readonly id: string;
+  readonly name: string;
+  readonly model: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AdminCloverClient {
   private readonly http = inject(HttpClient);
@@ -41,5 +47,10 @@ export class AdminCloverClient {
   checkConnection() {
     return this.http.post<{ readonly status: 'verified'; readonly environment: 'sandbox' }>(
       `${this.endpoint}/connection`, null, { withCredentials: true });
+  }
+
+  listDevices() {
+    return this.http.post<{ readonly environment: 'sandbox'; readonly devices: readonly CloverDevice[] }>(
+      `${this.endpoint}/devices`, null, { withCredentials: true });
   }
 }

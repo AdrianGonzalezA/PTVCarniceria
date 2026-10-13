@@ -3,7 +3,7 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AdminPaymentGatewayClient, MercadoPagoRegister, MercadoPagoSettings } from '../../core/admin/admin-payment-gateway-client';
-import { AdminCloverClient, CloverAuthorization, CloverSettings } from '../../core/admin/admin-clover-client';
+import { AdminCloverClient, CloverAuthorization, CloverDevice, CloverSettings } from '../../core/admin/admin-clover-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { AdminAreaTabs } from './admin-area-tabs';
 
@@ -29,6 +29,9 @@ export class PaymentGatewaysPage implements OnInit {
   protected readonly cloverAuthorizing = signal(false);
   protected readonly cloverProbing = signal(false);
   protected readonly cloverProbeResult = signal<string | null>(null);
+  protected readonly cloverDevices = signal<readonly CloverDevice[] | null>(null);
+  protected readonly cloverDevicesLoading = signal(false);
+  protected readonly cloverDeviceError = signal<string | null>(null);
   protected readonly cloverNotice = signal<string | null>(null);
   protected readonly cloverError = signal<string | null>(null);
   protected readonly loading = signal(true);
@@ -71,6 +74,7 @@ export class PaymentGatewaysPage implements OnInit {
   protected reloadClover(): void {
     this.cloverLoading.set(true);
     this.cloverProbeResult.set(null);
+    this.cloverDevices.set(null);
     this.cloverClient.get().subscribe({
       next: (settings) => {
         this.cloverSettings.set(settings);
@@ -158,6 +162,33 @@ export class PaymentGatewaysPage implements OnInit {
           : code === 'CLOVER_MERCHANT_MISMATCH'
             ? 'Clover devolvió otro comercio. Revisá el Merchant ID antes de cobrar.'
             : 'No se pudo verificar el comercio en Clover sandbox. Reintentá más tarde.');
+      },
+    });
+  }
+
+  protected listCloverDevices(): void {
+    if (this.cloverDevicesLoading() || !this.cloverSettings()?.isConnected || this.cloverForm.dirty) return;
+    this.cloverDevicesLoading.set(true);
+    this.cloverDevices.set(null);
+    this.cloverDeviceError.set(null);
+    this.cloverClient.listDevices().subscribe({
+      next: ({ devices }) => {
+        this.cloverDevicesLoading.set(false);
+        this.cloverDevices.set(devices);
+        this.cloverClient.get().subscribe({ next: (settings) => this.cloverSettings.set(settings) });
+      },
+      error: (response: HttpErrorResponse) => {
+        this.cloverDevicesLoading.set(false);
+        const code = response.error?.error?.code;
+        if (code === 'CLOVER_REFRESH_UNCERTAIN' || code === 'CLOVER_REFRESH_EXPIRED') {
+          this.cloverSettings.update((settings) => settings &&
+            { ...settings, isConnected: false, requiresReauthorization: true });
+        }
+        this.cloverDeviceError.set(code === 'CLOVER_REFRESH_UNCERTAIN' || code === 'CLOVER_REFRESH_EXPIRED'
+          ? 'La credencial Clover requiere una nueva autorización OAuth; no se puede repetir la renovación.'
+          : code === 'CLOVER_TOKEN_REJECTED'
+            ? 'Clover rechazó la consulta de dispositivos. Revisá el permiso del comercio y la vinculación OAuth.'
+            : 'No se pudo consultar los dispositivos del comercio en Clover sandbox.');
       },
     });
   }

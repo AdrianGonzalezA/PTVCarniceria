@@ -4,6 +4,8 @@
 
 **Corte verificable sin Dev Kit (13/10/2026):** Clover OAuth se renovó y el comercio sandbox respondió `verified` mediante una consulta real, sin pago. `GET /api/pos/payment-gateways` usa empresa, sucursal, caja, cajero y turno de la sesión; responde `{ gateways: [{ provider: "mercadoPago", modes: ["qr", "point"] }] }` con solo los modos configurados, o `gateways: []`. No entrega tokens ni identificadores de dispositivos. El POS oculta Mercado Pago para nuevas órdenes si no está disponible, pero conserva y bloquea una orden previa mientras se consulta/cancela; Clover no se ofrece aún como cobro. Las pruebas de Cloud Pay Display siguen requiriendo Dev Kit físico.
 
+`POST /api/admin/payment-gateways/clover/devices` es una acción administrativa con validación de origen (puede renovar OAuth) que consulta la lista de dispositivos provisionados del comercio en Clover sandbox. Devuelve únicamente ID, nombre y modelo, no serial, token ni datos de tarjeta. La consulta real del 13/10/2026 respondió `devices: []`. No se equipara “dispositivo provisionado” con “Cloud Pay Display instalado y activo”, ni se habilita Clover en el POS por esta consulta.
+
 ## Objetivo
 
 Permitir que un comercio configure más de una pasarela por empresa y caja, y que el cajero seleccione o deseleccione en **Cobrar venta** cuál usar. Incorporar Clover como segunda pasarela presencial integrada, manteniendo Mercado Pago QR/Point. **Clover será el postnet físico:** el POS envía importe y referencia al dispositivo; el cliente presenta la tarjeta en el postnet. Ni Angular ni Electron capturan datos de tarjeta ni muestran un checkout web de Clover. Ningún proveedor debe figurar como pago recibido por el solo hecho de estar seleccionado o de haber enviado una solicitud.

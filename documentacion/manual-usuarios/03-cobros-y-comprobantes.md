@@ -15,6 +15,8 @@ Débito, crédito, transferencia y cheque son hoy **registros manuales del medio
 
 Si la orden sigue **Pendiente**, no vuelvas a cobrar por otro medio ni generes otra orden para el mismo ticket sin aclarar su estado. **Cancelar orden** se usa únicamente para una orden no acreditada; un resultado incierto requiere nueva consulta. Si se cierra la ventana de cobro, la consulta automática se detiene; al volver a abrir el ticket se recupera la orden y se consulta nuevamente.
 
+Mercado Pago aparece solo si la caja y el turno actuales tienen QR o Point configurado; el selector muestra únicamente esos modos. Si falla la consulta de pasarelas, podés seguir con medios manuales, pero no iniciar un cobro integrado nuevo. Una orden previa permanece visible para consultar o cancelar aunque la configuración de la caja haya cambiado; no se puede quitar mientras esté activa o incierta. Clover sandbox puede probarse desde Administración, pero aún no se ofrece para cobrar en el POS sin terminal y confirmación del pago.
+
 ## Cuenta corriente y saldo a favor
 
 Cuando el cajero tiene permiso y el cliente está activo con **cuenta corriente habilitada**, puede buscarlo en la ventana de cobro. Allí puede dejar **todo o parte** del ticket a cuenta y/o aplicar parcial o totalmente un saldo a favor existente. El importe cargado a cuenta **no entra a caja**; el saldo a favor aplicado **no ingresa por segunda vez**. El resto debe cubrirse con los medios de pago elegidos.

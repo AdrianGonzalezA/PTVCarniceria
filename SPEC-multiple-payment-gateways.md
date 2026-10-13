@@ -2,6 +2,8 @@
 
 **Estado:** regla de negocio aprobada el 13/10/2026: una pasarela integrada por ticket, combinable con efectivo, y Cloud Pay Display como primera modalidad Clover. La vinculación OAuth sandbox se implementó y se autorizó un comercio de prueba en `carnicerias_test_visual`; la asignación de dispositivo, la selección y el cobro Clover siguen pendientes. Complementa `SPEC-mercado-pago.md`, `SPEC-pos-checkout.md` y `SPEC-fiscal-payments.md`.
 
+**Corte verificable sin Dev Kit (13/10/2026):** Clover OAuth se renovó y el comercio sandbox respondió `verified` mediante una consulta real, sin pago. `GET /api/pos/payment-gateways` usa empresa, sucursal, caja, cajero y turno de la sesión; responde `{ gateways: [{ provider: "mercadoPago", modes: ["qr", "point"] }] }` con solo los modos configurados, o `gateways: []`. No entrega tokens ni identificadores de dispositivos. El POS oculta Mercado Pago para nuevas órdenes si no está disponible, pero conserva y bloquea una orden previa mientras se consulta/cancela; Clover no se ofrece aún como cobro. Las pruebas de Cloud Pay Display siguen requiriendo Dev Kit físico.
+
 ## Objetivo
 
 Permitir que un comercio configure más de una pasarela por empresa y caja, y que el cajero seleccione o deseleccione en **Cobrar venta** cuál usar. Incorporar Clover como segunda pasarela presencial integrada, manteniendo Mercado Pago QR/Point. **Clover será el postnet físico:** el POS envía importe y referencia al dispositivo; el cliente presenta la tarjeta en el postnet. Ni Angular ni Electron capturan datos de tarjeta ni muestran un checkout web de Clover. Ningún proveedor debe figurar como pago recibido por el solo hecho de estar seleccionado o de haber enviado una solicitud.

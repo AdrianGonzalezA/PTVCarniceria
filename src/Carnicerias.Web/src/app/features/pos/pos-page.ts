@@ -18,6 +18,7 @@ import { CreditCustomerAccount, CreditCustomerClient, CreditCustomerOption } fro
 import { AccountCollectionDialog } from './account-collection-dialog';
 import QRCode from 'qrcode';
 import { MercadoPagoClient, MercadoPagoIntent, MercadoPagoMode } from '../../core/sales/mercado-pago-client';
+import { IntegratedGatewayClient } from '../../core/sales/integrated-gateway-client';
 
 type SaleMode = 'weight' | 'unit';
 
@@ -86,6 +87,7 @@ export class PosPage implements OnInit {
   private readonly catalogClient = inject(CatalogClient);
   private readonly saleDraftClient = inject(SaleDraftClient);
   private readonly mercadoPagoClient = inject(MercadoPagoClient);
+  private readonly integratedGatewayClient = inject(IntegratedGatewayClient);
   private readonly receiptPdfClient = inject(ReceiptPdfClient);
   private readonly fiscalDocumentClient = inject(FiscalDocumentClient);
   private readonly posDeviceClient = inject(PosDeviceClient);
@@ -111,6 +113,7 @@ export class PosPage implements OnInit {
   private scannedCode = '';
   private lastScanKeyAt = 0;
   private mercadoPagoPollTimer: ReturnType<typeof setTimeout> | null = null;
+  private gatewayRequestId = 0;
 
   protected readonly session = signal<CurrentSession | null>(null);
   protected readonly terminal = signal<PosTerminal | null>(null);
@@ -190,6 +193,8 @@ export class PosPage implements OnInit {
   protected readonly checkoutError = signal<string | null>(null);
   protected readonly mercadoPagoIntent = signal<MercadoPagoIntent | null>(null);
   protected readonly mercadoPagoMode = signal<MercadoPagoMode>('qr');
+  protected readonly availableMercadoPagoModes = signal<readonly MercadoPagoMode[]>([]);
+  protected readonly gatewayLoadState = signal<'idle' | 'loading' | 'ready' | 'error'>('idle');
   protected readonly mercadoPagoBusy = signal(false);
   protected readonly mercadoPagoLoadState = signal<'idle' | 'loading' | 'ready' | 'error'>('idle');
   protected readonly mercadoPagoOrderActive = computed(() => !!this.mercadoPagoIntent() &&
@@ -258,6 +263,13 @@ export class PosPage implements OnInit {
     { id: 'credit', label: 'Crédito' }, { id: 'transfer', label: 'Transferencia' },
     { id: 'mercadoPago', label: 'Mercado Pago' }, { id: 'cheque', label: 'Cheque' },
   ];
+  protected readonly visiblePaymentMethods = computed(() => this.paymentMethods.filter((method) =>
+    method.id !== 'mercadoPago' || this.availableMercadoPagoModes().length > 0 || !!this.mercadoPagoIntent()));
+  protected readonly visibleMercadoPagoModes = computed(() => {
+    const modes = this.availableMercadoPagoModes();
+    const intentMode = this.mercadoPagoIntent()?.mode;
+    return intentMode && !modes.includes(intentMode) ? [...modes, intentMode] : modes;
+  });
   protected readonly changePreview = computed(() => {
     const selected = this.selectedPayments();
     const cash = selected.find((payment) => payment.method === 'cash')?.amount ?? 0;
@@ -1055,6 +1067,23 @@ export class PosPage implements OnInit {
     this.mercadoPagoQrImage.set(null);
     this.mercadoPagoMessage.set(null);
     this.mercadoPagoLoadState.set('loading');
+    this.gatewayLoadState.set('loading');
+    this.availableMercadoPagoModes.set([]);
+    const gatewayRequestId = ++this.gatewayRequestId;
+    this.integratedGatewayClient.available().subscribe({
+      next: ({ gateways }) => {
+        if (!this.checkoutNotice() || gatewayRequestId !== this.gatewayRequestId) return;
+        const modes = gateways.find((gateway) => gateway.provider === 'mercadoPago')?.modes ?? [];
+        this.availableMercadoPagoModes.set(modes);
+        if (!this.mercadoPagoIntent() && !modes.includes(this.mercadoPagoMode()) && modes.length > 0)
+          this.mercadoPagoMode.set(modes[0]);
+        this.gatewayLoadState.set('ready');
+      },
+      error: () => {
+        if (!this.checkoutNotice() || gatewayRequestId !== this.gatewayRequestId) return;
+        this.gatewayLoadState.set('error');
+      },
+    });
     this.mercadoPagoClient.get(this.draftId()).subscribe({
       next: (intent) => {
         this.mercadoPagoLoadState.set('ready');
@@ -1160,6 +1189,11 @@ export class PosPage implements OnInit {
 
   protected togglePayment(method: SalePaymentMethod, event: Event): void {
     const checked = (event.target as HTMLInputElement).checked;
+    if (method === 'mercadoPago' && (this.mercadoPagoOrderActive() ||
+        checked && this.availableMercadoPagoModes().length === 0)) {
+      (event.target as HTMLInputElement).checked = this.hasPayment(method);
+      return;
+    }
     this.selectedPayments.update((payments) => checked
       ? [...payments, { method, amount: method === 'cash' ? this.dueNow() :
         Math.max(0, this.dueNow() - payments.reduce((sum, item) => sum + item.amount, 0)) }]
@@ -1174,12 +1208,14 @@ export class PosPage implements OnInit {
   }
 
   protected selectMercadoPagoMode(event: Event): void {
-    this.mercadoPagoMode.set((event.target as HTMLSelectElement).value as MercadoPagoMode);
+    const mode = (event.target as HTMLSelectElement).value as MercadoPagoMode;
+    if (this.availableMercadoPagoModes().includes(mode)) this.mercadoPagoMode.set(mode);
   }
 
   protected startMercadoPago(): void {
     const amount = this.paymentAmount('mercadoPago');
-    if (!this.draftId() || !Number.isFinite(amount) || amount <= 0 || this.mercadoPagoBusy()) return;
+    if (!this.draftId() || !Number.isFinite(amount) || amount <= 0 || this.mercadoPagoBusy() ||
+        !this.availableMercadoPagoModes().includes(this.mercadoPagoMode())) return;
     this.mercadoPagoBusy.set(true);
     this.mercadoPagoMessage.set(null);
     this.mercadoPagoClient.start(this.draftId(), this.mercadoPagoMode(), amount).subscribe({

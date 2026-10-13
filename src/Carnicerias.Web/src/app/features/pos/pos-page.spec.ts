@@ -12,12 +12,71 @@ import { InventoryPieceClient } from '../../core/inventory/inventory-piece-clien
 import { CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { SaleDraftClient } from '../../core/sales/sale-draft-client';
 import { MercadoPagoClient } from '../../core/sales/mercado-pago-client';
+import type { MercadoPagoIntent } from '../../core/sales/mercado-pago-client';
+import { IntegratedGatewayClient } from '../../core/sales/integrated-gateway-client';
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { FiscalDocumentClient } from '../../core/sales/fiscal-document-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { PosPage } from './pos-page';
 
 describe('PosPage', () => {
+  async function checkoutWithGateways(intent: MercadoPagoIntent | null, unavailable = false) {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-14T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: { priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
+        categories: () => of([]) } },
+      { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of({
+        id: 'draft-id', ticketSlot: 'A', priceListId: 'list-id', updatedAtUtc: '2026-10-13T15:00:00Z',
+        lines: [{ id: 'line-id', productId: 'product-id', productCode: '1001', productName: 'Asado',
+          unit: 'kg', saleMode: 'weight', quantity: 1, unitPrice: 2500 }],
+      }) } },
+      { provide: MercadoPagoClient, useValue: { get: () => of(intent),
+        start: () => NEVER, check: () => NEVER, cancel: () => NEVER } },
+      { provide: IntegratedGatewayClient, useValue: { available: () => unavailable
+        ? throwError(() => new HttpErrorResponse({ status: 503 })) : of({ gateways: [] }) } },
+      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('does not offer a new integrated payment on an unconfigured register', async () => {
+    const fixture = await checkoutWithGateways(null);
+    const options = fixture.nativeElement.querySelector('.payment-methods').textContent as string;
+    expect(options).toContain('Efectivo');
+    expect(options).not.toContain('Mercado Pago');
+  });
+
+  it('keeps manual methods but fails closed for new integrated payments if availability fails', async () => {
+    const fixture = await checkoutWithGateways(null, true);
+    const dialog = fixture.nativeElement.querySelector('.checkout-dialog') as HTMLElement;
+    expect(dialog.textContent).toContain('Efectivo');
+    expect(dialog.textContent).toContain('No se pudieron consultar las pasarelas');
+    expect(dialog.querySelector('.payment-methods')?.textContent).not.toContain('Mercado Pago');
+  });
+
+  it('keeps an existing provider order visible and locked after register configuration changes', async () => {
+    const fixture = await checkoutWithGateways({
+      id: 'intent-id', mode: 'point', amount: 2500, status: 'Pending',
+      providerOrderId: 'order-id', qrData: null, approved: false,
+      createdAtUtc: '2026-10-13T15:00:00Z',
+    });
+    const option = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.payment-option'))
+      .find((element) => element.textContent?.includes('Mercado Pago'))!;
+    expect(option.querySelector('input[type="checkbox"]')?.hasAttribute('disabled')).toBe(true);
+    expect(fixture.nativeElement.querySelector('#mercado-pago-mode')).not.toBeNull();
+  });
+
   beforeEach(() => {
     window.localStorage.clear();
     TestBed.configureTestingModule({ providers: [
@@ -31,6 +90,9 @@ describe('PosPage', () => {
       { provide: FiscalDocumentClient, useValue: { issue: () => NEVER } },
       { provide: MercadoPagoClient, useValue: { get: () => of(null),
         start: () => NEVER, check: () => NEVER, cancel: () => NEVER } },
+      { provide: IntegratedGatewayClient, useValue: { available: () => of({ gateways: [
+        { provider: 'mercadoPago', modes: ['qr', 'point'] },
+      ] }) } },
     ] });
   });
 

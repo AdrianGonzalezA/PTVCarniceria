@@ -8,7 +8,7 @@ La lista real permite guardar hasta cuatro tickets A–D independientes por caja
 
 El estado detallado y los pendientes están en `tasks/pos-todo.md`. El contrato de cobro está en `SPEC-pos-checkout.md`; la evidencia de prueba en Electron y sus límites están en `tasks/pos-checkout-plan.md`.
 
-Mercado Pago admite QR dinámico y Point por caja desde el cierre de venta. Una orden pendiente no cierra el ticket: mientras el cierre está abierto, el POS consulta automáticamente su estado cada 5 segundos; el cajero también puede consultar o solicitar cancelación. Solo la acreditación verificada por la API permite registrar el pago, y el cajero aún debe confirmar la venta. La configuración de prueba se carga en **Configuración → Pasarelas de cobro** y sus requisitos están en `SPEC-mercado-pago.md`. Point virtual se probó de punta a punta en Electron con acreditación simulada en sandbox, venta y stock persistidos; no hubo dinero real. La sucursal/caja QR de prueba ya está vinculada a Caja 1 y se verificó desde el móvil una orden acreditada; falta configurar un webhook HTTPS público y conciliar en segundo plano.
+Mercado Pago admite QR dinámico y Point por caja desde el cierre de venta. El POS consulta qué modos están disponibles para la caja, cajero y turno actuales y solo ofrece los configurados; si esa consulta falla, no habilita una orden nueva, aunque mantiene visible una orden previa para conciliarla. Una orden pendiente no cierra el ticket: mientras el cierre está abierto, el POS consulta automáticamente su estado cada 5 segundos; el cajero también puede consultar o solicitar cancelación. Solo la acreditación verificada por la API permite registrar el pago, y el cajero aún debe confirmar la venta. La configuración de prueba se carga en **Configuración → Pasarelas de cobro** y sus requisitos están en `SPEC-mercado-pago.md`. Point virtual se probó de punta a punta en Electron con acreditación simulada en sandbox, venta y stock persistidos; no hubo dinero real. La sucursal/caja QR de prueba ya está vinculada a Caja 1 y se verificó desde el móvil una orden acreditada; falta configurar un webhook HTTPS público y conciliar en segundo plano.
 
 ## Administración
 
@@ -47,6 +47,8 @@ Para simular la balanza, abrir PuTTY en COM5 a 9600/8N1 y escribir `ST,0.750,kg`
 Para comprobar el puerto sin vender ni tocar stock: `npm run serial:smoke --prefix src/Carnicerias.Pos`. PuTTY en COM2 debe mostrar el identificador `SERIAL-SMOKE`.
 
 Para repetir la prueba visual de tickets A/B en esta instalación de desarrollo, iniciar Caja 1 con `--remote-debugging-port=9224` solo en la máquina local y ejecutar `node src/Carnicerias.Pos/tests/ticket-slots-smoke.cjs --prepare` con A y B vacíos. El script agrega una Gaseosa a A y un Pan rallado a B, dejando reservas ficticias. Reiniciar el proceso de Electron y ejecutar `node src/Carnicerias.Pos/tests/ticket-slots-smoke.cjs --verify`: comprueba que ambos detalles vuelven separados. No usar la depuración remota en un despliegue ni apuntar esta prueba a datos reales.
+
+Para inspeccionar visualmente el POS en ese mismo Electron de desarrollo, `node src/Carnicerias.Pos/tests/inspect-electron.mjs --screenshot <ruta-local.png>` captura su ventana; el mismo helper acepta una expresión DOM para diagnósticos puntuales. Borrar las capturas después de revisarlas y nunca dejar habilitado el puerto de depuración en una caja desplegada.
 
 ```powershell
 dotnet test tests/Carnicerias.ArchitectureTests/Carnicerias.ArchitectureTests.csproj --configuration Debug --no-restore

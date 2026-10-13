@@ -118,6 +118,7 @@ app.MapAdminAccountEndpoints();
 app.MapSaleDraftEndpoints();
 app.MapSaleConfirmationEndpoints();
 app.MapMercadoPagoPaymentEndpoints();
+app.MapIntegratedGatewayAvailabilityEndpoints();
 app.MapMercadoPagoWebhookEndpoints();
 app.MapFiscalDocumentEndpoints();
 app.MapInventoryEndpoints();

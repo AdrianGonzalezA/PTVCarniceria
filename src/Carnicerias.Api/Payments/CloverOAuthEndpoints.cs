@@ -15,7 +15,7 @@ public static class CloverOAuthEndpoints
         group.MapGet("", GetAsync);
         group.MapPut("", SaveAsync);
         group.MapPost("/authorization", AuthorizeAsync);
-        group.MapGet("/connection", ProbeConnectionAsync);
+        group.MapPost("/connection", ProbeConnectionAsync);
         return endpoints;
     }
 
@@ -37,7 +37,10 @@ public static class CloverOAuthEndpoints
             clientId = settings?.ClientId ?? "", merchantId = settings?.MerchantId ?? "",
             hasClientSecret = settings?.HasClientSecret ?? false,
             isConnected = settings?.IsConnected == true &&
-                settings.AccessTokenExpiresAtUtc > clock.GetUtcNow(),
+                settings.RefreshTokenExpiresAtUtc > clock.GetUtcNow() &&
+                settings.RefreshAttemptId is null,
+            requiresReauthorization = settings?.RefreshAttemptId is not null ||
+                settings?.IsConnected == true && settings.RefreshTokenExpiresAtUtc <= clock.GetUtcNow(),
             accessTokenExpiresAtUtc = settings?.AccessTokenExpiresAtUtc,
             refreshTokenExpiresAtUtc = settings?.RefreshTokenExpiresAtUtc });
     }
@@ -98,27 +101,29 @@ public static class CloverOAuthEndpoints
     }
 
     private static async Task<IResult> ProbeConnectionAsync(PlatformAccessDbContext db,
-        OperationalContextAccessor accessor, CloverSettingsProtector protector,
-        CloverMerchantProbeClient client, TimeProvider clock, CancellationToken cancellationToken)
+        OperationalContextAccessor accessor, CloverAccessTokenResolver resolver,
+        CloverMerchantProbeClient client, HttpContext context, CancellationToken cancellationToken)
     {
-        var settings = await db.CloverGatewaySettings.AsNoTracking().SingleOrDefaultAsync(
-            item => item.CompanyId == accessor.Context.CompanyId, cancellationToken);
-        if (settings?.ProtectedAccessToken is not { Length: > 0 })
-            return ProbeError(409, "CLOVER_NOT_CONNECTED");
-        if (settings.AccessTokenExpiresAtUtc is not { } expiresAt || expiresAt <= clock.GetUtcNow())
-            return ProbeError(409, "CLOVER_TOKEN_EXPIRED");
+        if (!AllowedOrigin(context)) return ProbeError(403, "CSRF_REJECTED");
+        var access = await resolver.ResolveAsync(accessor.Context.CompanyId,
+            accessor.Context.UserId, cancellationToken);
+        if (access.ErrorCode is { } code)
+            return ProbeError(code is "CLOVER_REFRESH_UNCERTAIN" or "CLOVER_CREDENTIAL_UNAVAILABLE"
+                ? 503 : 409, code);
 
         CloverMerchantProbeOutcome outcome;
         try
         {
-            outcome = await client.ProbeAsync(settings.MerchantId,
-                protector.Unprotect(settings.ProtectedAccessToken), cancellationToken);
+            outcome = await client.ProbeAsync(access.MerchantId!, access.Token!, cancellationToken);
         }
-        catch (CryptographicException) { return ProbeError(503, "CLOVER_CREDENTIAL_UNAVAILABLE"); }
         catch (HttpRequestException) { return ProbeError(502, "CLOVER_UNAVAILABLE"); }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         { return ProbeError(502, "CLOVER_UNAVAILABLE"); }
 
+        var stillCurrent = await db.CloverGatewaySettings.AsNoTracking().AnyAsync(item =>
+            item.CompanyId == accessor.Context.CompanyId &&
+            item.UpdatedAtUtc == access.UpdatedAtUtc, cancellationToken);
+        if (!stillCurrent) return ProbeError(409, "CLOVER_CONFIGURATION_CHANGED");
         return outcome switch
         {
             CloverMerchantProbeOutcome.Verified => Results.Ok(new { status = "verified", environment = "sandbox" }),
@@ -188,17 +193,23 @@ public static class CloverOAuthEndpoints
         { return PublicError(502); }
         if (tokens is null) return PublicError(502);
 
-        var current = await db.CloverGatewaySettings.SingleOrDefaultAsync(item =>
-            item.CompanyId == attempt.CompanyId, cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var currentRows = await db.CloverGatewaySettings.FromSqlInterpolated(
+            $"SELECT * FROM payments_cash.clover_gateway_settings WHERE \"CompanyId\" = {attempt.CompanyId} FOR UPDATE")
+            .ToListAsync(cancellationToken);
+        var current = currentRows.SingleOrDefault();
         if (current is null || current.ClientId != settings.ClientId ||
             current.MerchantId != settings.MerchantId ||
-            current.UpdatedAtUtc != settings.UpdatedAtUtc) return PublicError(409);
+            current.ProtectedClientSecret is null ||
+            !current.ProtectedClientSecret.AsSpan().SequenceEqual(settings.ProtectedClientSecret!))
+            return PublicError(409);
         try
         {
             current.ReplaceTokens(protector.Protect(tokens.AccessToken),
                 protector.Protect(tokens.RefreshToken), tokens.AccessExpiresAtUtc,
                 tokens.RefreshExpiresAtUtc, attempt.UserId, clock.GetUtcNow());
             await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException) { return PublicError(409); }
         return Results.Content("<!doctype html><html lang=\"es\"><meta charset=\"utf-8\">" +

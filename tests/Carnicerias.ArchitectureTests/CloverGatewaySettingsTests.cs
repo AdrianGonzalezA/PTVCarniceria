@@ -50,4 +50,22 @@ public sealed class CloverGatewaySettingsTests
         Assert.Throws<ArgumentException>(() =>
             settings.ReplaceTokens([1], [2], now.AddMinutes(-1), now.AddDays(30), actor, now));
     }
+
+    [Fact]
+    public void RefreshAttemptBlocksReuseUntilNewPairOrAuthorizationSupersedesIt()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var actor = Guid.NewGuid();
+        var settings = new CloverGatewaySettings(Guid.NewGuid(), "APP_123", "MERCHANT_123", actor, now);
+        settings.ReplaceTokens([1], [2], now.AddMinutes(1), now.AddDays(1), actor, now);
+        var attempt = Guid.NewGuid();
+
+        settings.BeginRefresh(attempt, actor, now.AddMinutes(2));
+
+        Assert.Equal(attempt, settings.RefreshAttemptId);
+        Assert.Throws<InvalidOperationException>(() =>
+            settings.BeginRefresh(Guid.NewGuid(), actor, now.AddMinutes(3)));
+        settings.ReplaceTokens([3], [4], now.AddMinutes(35), now.AddDays(2), actor, now.AddMinutes(4));
+        Assert.Null(settings.RefreshAttemptId);
+    }
 }

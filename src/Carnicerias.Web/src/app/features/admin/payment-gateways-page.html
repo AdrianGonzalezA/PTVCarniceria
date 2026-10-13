@@ -90,7 +90,7 @@
           }
           <div class="gateway-state" aria-live="polite">
             <span>App Secret: <strong>{{ cloverSettings()?.hasClientSecret ? 'Cargado' : 'Pendiente' }}</strong></span>
-            <span>OAuth: <strong>{{ cloverSettings()?.isConnected ? 'Conectado' : 'Pendiente' }}</strong></span>
+            <span>OAuth: <strong>{{ cloverSettings()?.requiresReauthorization ? 'Reconexión necesaria' : cloverSettings()?.isConnected ? 'Conectado' : 'Pendiente' }}</strong></span>
           </div>
           @if (cloverSettings()?.accessTokenExpiresAtUtc; as expiry) {
             <p>Access Token vigente hasta {{ expiry }}</p>

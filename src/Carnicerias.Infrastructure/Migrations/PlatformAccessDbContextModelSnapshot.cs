@@ -430,6 +430,9 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<byte[]>("ProtectedRefreshToken")
                         .HasColumnType("bytea");
 
+                    b.Property<Guid?>("RefreshAttemptId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset?>("RefreshTokenExpiresAtUtc")
                         .HasColumnType("timestamp with time zone");
 

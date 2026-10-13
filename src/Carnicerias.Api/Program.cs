@@ -50,6 +50,7 @@ builder.Services.AddSingleton<ArcaHomologationTicketProvider>();
 builder.Services.AddScoped<ArcaSettingsResolver>();
 builder.Services.AddScoped<MercadoPagoSettingsResolver>();
 builder.Services.AddScoped<CloverSettingsProtector>();
+builder.Services.AddScoped<CloverAccessTokenResolver>();
 builder.Services.AddScoped<SessionAuthenticationService>();
 builder.Services.AddScoped<PosTerminalAuthenticationService>();
 builder.Services.AddScoped<PosTerminalProvisioningService>();

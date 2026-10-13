@@ -11,7 +11,7 @@ describe('PaymentGatewaysPage Clover sandbox', () => {
   }));
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
-  function load(cloverConnected = false) {
+  function load(cloverConnected = false, accessExpiry = '2026-10-14T00:00:00Z') {
     const fixture = TestBed.createComponent(PaymentGatewaysPage);
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
@@ -27,8 +27,8 @@ describe('PaymentGatewaysPage Clover sandbox', () => {
     });
     http.expectOne('/api/admin/payment-gateways/clover').flush({
       provider: 'clover', environment: 'sandbox', clientId: 'APP_123', merchantId: 'MERCHANT_123',
-      hasClientSecret: true, isConnected: cloverConnected,
-      accessTokenExpiresAtUtc: cloverConnected ? '2026-10-14T00:00:00Z' : null,
+      hasClientSecret: true, isConnected: cloverConnected, requiresReauthorization: false,
+      accessTokenExpiresAtUtc: cloverConnected ? accessExpiry : null,
       refreshTokenExpiresAtUtc: cloverConnected ? '2026-11-14T00:00:00Z' : null,
     });
     fixture.detectChanges();
@@ -64,11 +64,24 @@ describe('PaymentGatewaysPage Clover sandbox', () => {
       .find((button) => button.textContent?.includes('Probar conexión Clover'))!;
     check.click();
     const request = http.expectOne('/api/admin/payment-gateways/clover/connection');
-    expect(request.request.method).toBe('GET');
+    expect(request.request.method).toBe('POST');
     expect(request.request.withCredentials).toBe(true);
     expect(request.request.body).toBeNull();
     request.flush({ status: 'verified', environment: 'sandbox' });
+    http.expectOne('/api/admin/payment-gateways/clover').flush({
+      provider: 'clover', environment: 'sandbox', clientId: 'APP_123', merchantId: 'MERCHANT_123',
+      hasClientSecret: true, isConnected: true, requiresReauthorization: false,
+      accessTokenExpiresAtUtc: '2026-10-14T01:00:00Z',
+      refreshTokenExpiresAtUtc: '2026-11-14T00:00:00Z',
+    });
     fixture.detectChanges();
     expect(page.textContent).toContain('Comercio verificado contra Clover sandbox');
+  });
+
+  it('allows a deliberate probe after access expiry so the server can refresh', () => {
+    const { page } = load(true, '2026-10-12T00:00:00Z');
+    const check = Array.from(page.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Probar') && button.textContent?.includes('Clover'))!;
+    expect(check.disabled).toBe(false);
   });
 });

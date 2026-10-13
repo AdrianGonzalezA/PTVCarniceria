@@ -142,11 +142,18 @@ export class PaymentGatewaysPage implements OnInit {
       next: () => {
         this.cloverProbing.set(false);
         this.cloverProbeResult.set('Comercio verificado contra Clover sandbox. Esto no prueba un cobro.');
+        this.cloverClient.get().subscribe({ next: (settings) => this.cloverSettings.set(settings) });
       },
       error: (response: HttpErrorResponse) => {
         this.cloverProbing.set(false);
         const code = response.error?.error?.code;
-        this.cloverError.set(code === 'CLOVER_TOKEN_EXPIRED' || code === 'CLOVER_TOKEN_REJECTED'
+        if (code === 'CLOVER_REFRESH_UNCERTAIN' || code === 'CLOVER_REFRESH_EXPIRED') {
+          this.cloverSettings.update((settings) => settings &&
+            { ...settings, isConnected: false, requiresReauthorization: true });
+        }
+        this.cloverError.set(code === 'CLOVER_REFRESH_UNCERTAIN' || code === 'CLOVER_REFRESH_EXPIRED'
+          ? 'La renovación de Clover no es segura para reintentar. Volvé a conectar el comercio desde OAuth.'
+          : code === 'CLOVER_TOKEN_EXPIRED' || code === 'CLOVER_TOKEN_REJECTED'
           ? 'El token ya no permite consultar Clover. Volvé a conectar el comercio.'
           : code === 'CLOVER_MERCHANT_MISMATCH'
             ? 'Clover devolvió otro comercio. Revisá el Merchant ID antes de cobrar.'

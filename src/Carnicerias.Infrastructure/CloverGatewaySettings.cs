@@ -21,6 +21,8 @@ public sealed class CloverGatewaySettings
     public byte[]? ProtectedRefreshToken { get; private set; }
     public DateTimeOffset? AccessTokenExpiresAtUtc { get; private set; }
     public DateTimeOffset? RefreshTokenExpiresAtUtc { get; private set; }
+    /// <summary>A durable, single-use refresh reservation. Never retry while this is set.</summary>
+    public Guid? RefreshAttemptId { get; private set; }
     public Guid UpdatedByUserId { get; private set; }
     public DateTimeOffset UpdatedAtUtc { get; private set; }
     public bool HasClientSecret => ProtectedClientSecret is { Length: > 0 };
@@ -62,6 +64,15 @@ public sealed class CloverGatewaySettings
         ProtectedRefreshToken = protectedRefreshToken.ToArray();
         AccessTokenExpiresAtUtc = accessExpiresAtUtc.ToUniversalTime();
         RefreshTokenExpiresAtUtc = refreshExpiresAtUtc.ToUniversalTime();
+        RefreshAttemptId = null;
+        Touch(actorId, now);
+    }
+
+    public void BeginRefresh(Guid attemptId, Guid actorId, DateTimeOffset now)
+    {
+        if (attemptId == Guid.Empty || !IsConnected || RefreshAttemptId is not null)
+            throw new InvalidOperationException("Clover refresh is unavailable or already reserved.");
+        RefreshAttemptId = attemptId;
         Touch(actorId, now);
     }
 
@@ -74,6 +85,7 @@ public sealed class CloverGatewaySettings
         ProtectedRefreshToken = null;
         AccessTokenExpiresAtUtc = null;
         RefreshTokenExpiresAtUtc = null;
+        RefreshAttemptId = null;
     }
 
     private void Touch(Guid actorId, DateTimeOffset now)

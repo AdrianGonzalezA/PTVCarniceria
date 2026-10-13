@@ -31,7 +31,7 @@ Un artículo cuyo código principal ya existe se marca **No importado** y no se 
 
 - **Lectura de etiquetas:** definir una fórmula de campos y longitudes, probar un código escrito y guardar una nueva revisión del perfil. El ejemplo EAN-13 es solo una plantilla de prueba; guardar el perfil no recibe stock por sí mismo.
 - **ARCA:** mantener datos del emisor, punto de venta de homologación y certificado PFX; se informa el estado/vencimiento del certificado. Esta configuración no convierte el entorno en producción.
-- **Pasarelas de cobro:** configurar la cuenta vendedora de prueba de Mercado Pago y vincular a cada caja el identificador QR y/o terminal Point. Para Clover sandbox, cargar App ID, Merchant ID y App Secret, conectar el comercio mediante OAuth y usar **Probar conexión Clover** para consultar su identidad en Clover. Esta prueba no cobra ni habilita todavía Clover en el POS. Las credenciales no se muestran de vuelta como texto.
+- **Pasarelas de cobro:** configurar la cuenta vendedora de prueba de Mercado Pago y vincular a cada caja el identificador QR y/o terminal Point. Para Clover sandbox, cargar App ID, Merchant ID y App Secret, conectar el comercio mediante OAuth y usar **Probar conexión Clover** para consultar su identidad en Clover. El sistema renueva un token de acceso vencido; si la renovación queda incierta, indica **Reconexión necesaria** y exige repetir OAuth. Esta prueba no cobra ni habilita todavía Clover en el POS. Las credenciales no se muestran de vuelta como texto.
 
 La configuración de puertos de balanza e impresora **todavía no se administra desde esta sección**; está pendiente su parametrización. No documentes COM1/COM6 como garantía para una instalación distinta de la actual.
 

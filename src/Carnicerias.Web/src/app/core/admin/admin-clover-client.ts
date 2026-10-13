@@ -8,6 +8,7 @@ export interface CloverSettings {
   readonly merchantId: string;
   readonly hasClientSecret: boolean;
   readonly isConnected: boolean;
+  readonly requiresReauthorization: boolean;
   readonly accessTokenExpiresAtUtc: string | null;
   readonly refreshTokenExpiresAtUtc: string | null;
 }
@@ -38,7 +39,7 @@ export class AdminCloverClient {
   }
 
   checkConnection() {
-    return this.http.get<{ readonly status: 'verified'; readonly environment: 'sandbox' }>(
-      `${this.endpoint}/connection`, { withCredentials: true });
+    return this.http.post<{ readonly status: 'verified'; readonly environment: 'sandbox' }>(
+      `${this.endpoint}/connection`, null, { withCredentials: true });
   }
 }

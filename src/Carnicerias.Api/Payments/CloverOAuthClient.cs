@@ -42,6 +42,7 @@ public sealed record CloverOAuthTokenResponse(string AccessToken, string Refresh
 public sealed class CloverOAuthClient(HttpClient httpClient)
 {
     private static readonly Uri TokenEndpoint = new("https://apisandbox.dev.clover.com/oauth/v2/token");
+    private static readonly Uri RefreshEndpoint = new("https://apisandbox.dev.clover.com/oauth/v2/refresh");
 
     public async Task<CloverOAuthTokenResponse?> ExchangeAsync(string clientId,
         string clientSecret, string code, DateTimeOffset now, CancellationToken cancellationToken)
@@ -52,5 +53,16 @@ public sealed class CloverOAuthClient(HttpClient httpClient)
         await response.Content.LoadIntoBufferAsync(65_536, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         return CloverOAuthTokenResponse.Parse(body, now);
+    }
+
+    public async Task<CloverOAuthTokenResponse?> RefreshAsync(string clientId,
+        string refreshToken, CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.PostAsJsonAsync(RefreshEndpoint,
+            new { client_id = clientId, refresh_token = refreshToken }, cancellationToken);
+        if (!response.IsSuccessStatusCode) return null;
+        await response.Content.LoadIntoBufferAsync(65_536, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        return CloverOAuthTokenResponse.Parse(body, DateTimeOffset.UtcNow);
     }
 }

@@ -12,7 +12,7 @@
     <a class="back-link" routerLink="/admin/configuracion">← Volver a configuración</a>
     <p class="eyebrow">Configuración de cobro</p>
     <h1>Pasarelas de cobro</h1>
-    <p class="intro">Mercado Pago es la primera pasarela. QR dinámico y Point se asignan por caja; otras pasarelas podrán incorporarse aquí.</p>
+    <p class="intro">Mercado Pago opera con QR y Point por caja. Clover sandbox se vincula mediante OAuth para preparar su terminal física.</p>
 
     @if (session()?.context; as context) {
       <section class="context-bar" aria-label="Empresa configurada">
@@ -68,6 +68,55 @@
         } @else { <p class="gateway-hint">No hay cajas creadas en esta empresa. Crealas en Organización.</p> }
       </section>
     }
+
+    <section class="category-panel" aria-labelledby="clover-title">
+      <header class="panel-heading"><div><h2 id="clover-title">Clover · Sandbox</h2>
+        <p>Vinculá el comercio de prueba mediante OAuth v2. El App Secret y los tokens quedan cifrados y no vuelven al navegador.</p></div></header>
+      @if (cloverLoading()) {
+        <p class="gateway-hint" role="status">Cargando Clover…</p>
+      } @else {
+        <form class="arca-form" [formGroup]="cloverForm" (ngSubmit)="saveClover()">
+          <label>App ID / Client ID
+            <input formControlName="clientId" maxlength="100" autocomplete="off" required />
+          </label>
+          <label>Merchant ID del comercio de prueba
+            <input formControlName="merchantId" maxlength="100" autocomplete="off" required />
+          </label>
+          <label>App Secret (dejá vacío para conservar el actual)
+            <input formControlName="clientSecret" type="password" maxlength="4096" autocomplete="new-password" />
+          </label>
+          @if (cloverForm.touched && cloverForm.invalid) {
+            <p class="field-error" role="alert">Ingresá identificadores de hasta 100 caracteres, sin espacios.</p>
+          }
+          <div class="gateway-state" aria-live="polite">
+            <span>App Secret: <strong>{{ cloverSettings()?.hasClientSecret ? 'Cargado' : 'Pendiente' }}</strong></span>
+            <span>OAuth: <strong>{{ cloverSettings()?.isConnected ? 'Conectado' : 'Pendiente' }}</strong></span>
+          </div>
+          @if (cloverSettings()?.accessTokenExpiresAtUtc; as expiry) {
+            <p>Access Token vigente hasta {{ expiry }}</p>
+          }
+          <div class="arca-actions"><button type="submit" [disabled]="cloverSaving()">
+            {{ cloverSaving() ? 'Guardando…' : 'Guardar Clover' }}</button></div>
+        </form>
+        <div class="gateway-clover-actions">
+          <button type="button" (click)="authorizeClover()"
+            [disabled]="!cloverSettings()?.hasClientSecret || cloverForm.dirty || cloverAuthorizing()">
+            {{ cloverAuthorizing() ? 'Preparando enlace…' : 'Conectar comercio sandbox' }}
+          </button>
+          <button type="button" (click)="reloadClover()" [disabled]="cloverAuthorizing()">Actualizar estado</button>
+        </div>
+        @if (cloverAuthorization(); as authorization) {
+          <div class="gateway-oauth-link" role="status">
+            <p>Enlace de un solo uso, válido por 10 minutos. Si administrás desde Electron, copiá la URL y abrila en el navegador.</p>
+            <input type="text" readonly [value]="authorization.authorizeUrl" aria-label="URL de autorización de Clover" />
+            <a [href]="authorization.authorizeUrl" target="_blank" rel="noopener noreferrer">Abrir autorización de Clover</a>
+          </div>
+        }
+        @if (cloverNotice(); as message) { <p class="arca-notice" role="status">{{ message }}</p> }
+        @if (cloverError(); as problem) { <p class="arca-error" role="alert">{{ problem }}</p> }
+        <p class="gateway-hint">Conectar el comercio aún no habilita cobros Clover en el POS; la terminal se configurará en el siguiente paso.</p>
+      }
+    </section>
   </div>
 </main>
 

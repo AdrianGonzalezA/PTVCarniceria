@@ -3,6 +3,7 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AdminPaymentGatewayClient, MercadoPagoRegister, MercadoPagoSettings } from '../../core/admin/admin-payment-gateway-client';
+import { AdminCloverClient, CloverAuthorization, CloverSettings } from '../../core/admin/admin-clover-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { AdminAreaTabs } from './admin-area-tabs';
 
@@ -15,11 +16,19 @@ import { AdminAreaTabs } from './admin-area-tabs';
 export class PaymentGatewaysPage implements OnInit {
   private readonly sessions = inject(SessionClient);
   private readonly client = inject(AdminPaymentGatewayClient);
+  private readonly cloverClient = inject(AdminCloverClient);
   private readonly router = inject(Router);
   private readonly formBuilder = inject(FormBuilder);
 
   protected readonly session = signal<CurrentSession | null>(null);
   protected readonly settings = signal<MercadoPagoSettings | null>(null);
+  protected readonly cloverSettings = signal<CloverSettings | null>(null);
+  protected readonly cloverAuthorization = signal<CloverAuthorization | null>(null);
+  protected readonly cloverLoading = signal(true);
+  protected readonly cloverSaving = signal(false);
+  protected readonly cloverAuthorizing = signal(false);
+  protected readonly cloverNotice = signal<string | null>(null);
+  protected readonly cloverError = signal<string | null>(null);
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
   protected readonly registerSaving = signal(false);
@@ -36,6 +45,11 @@ export class PaymentGatewaysPage implements OnInit {
     qrExternalPosId: ['', Validators.pattern(/^[A-Za-z0-9_-]{0,40}$/)],
     pointTerminalId: ['', Validators.pattern(/^[A-Za-z0-9_-]{0,100}$/)],
   });
+  protected readonly cloverForm = this.formBuilder.nonNullable.group({
+    clientId: ['', [Validators.required, Validators.pattern(/^[A-Za-z0-9_-]{1,100}$/)]],
+    merchantId: ['', [Validators.required, Validators.pattern(/^[A-Za-z0-9_-]{1,100}$/)]],
+    clientSecret: ['', Validators.maxLength(4096)],
+  });
 
   ngOnInit(): void {
     this.sessions.current().subscribe({
@@ -46,8 +60,73 @@ export class PaymentGatewaysPage implements OnInit {
         }
         this.session.set(session);
         this.reload();
+        this.reloadClover();
       },
       error: () => void this.router.navigateByUrl('/'),
+    });
+  }
+
+  protected reloadClover(): void {
+    this.cloverLoading.set(true);
+    this.cloverClient.get().subscribe({
+      next: (settings) => {
+        this.cloverSettings.set(settings);
+        this.cloverForm.patchValue({ clientId: settings.clientId, merchantId: settings.merchantId });
+        this.cloverForm.markAsPristine();
+        if (settings.isConnected) this.cloverAuthorization.set(null);
+        this.cloverError.set(null);
+        this.cloverLoading.set(false);
+      },
+      error: () => {
+        this.cloverLoading.set(false);
+        this.cloverError.set('No se pudo cargar Clover.');
+      },
+    });
+  }
+
+  protected saveClover(): void {
+    if (this.cloverForm.invalid || this.cloverSaving()) {
+      this.cloverForm.markAllAsTouched();
+      return;
+    }
+    this.cloverSaving.set(true);
+    this.cloverError.set(null);
+    this.cloverNotice.set(null);
+    const value = this.cloverForm.getRawValue();
+    this.cloverClient.save(value.clientId, value.merchantId, value.clientSecret).subscribe({
+      next: (saved) => {
+        this.cloverSettings.update((current) => current && { ...current, ...saved });
+        this.cloverForm.patchValue({ clientSecret: '' });
+        this.cloverForm.markAsPristine();
+        this.cloverAuthorization.set(null);
+        this.cloverSaving.set(false);
+        this.cloverNotice.set('Configuración sandbox guardada. El secreto no se vuelve a mostrar.');
+      },
+      error: (response: HttpErrorResponse) => {
+        this.cloverSaving.set(false);
+        this.cloverError.set(response.error?.error?.code === 'MERCHANT_CONFLICT'
+          ? 'Ese comercio ya está asignado a otra empresa.'
+          : 'No se pudo guardar Clover. Revisá App ID, Merchant ID y App Secret.');
+      },
+    });
+  }
+
+  protected authorizeClover(): void {
+    if (this.cloverAuthorizing()) return;
+    this.cloverAuthorizing.set(true);
+    this.cloverError.set(null);
+    this.cloverNotice.set(null);
+    this.cloverAuthorization.set(null);
+    this.cloverClient.authorize().subscribe({
+      next: (authorization) => {
+        this.cloverAuthorization.set(authorization);
+        this.cloverAuthorizing.set(false);
+        this.cloverNotice.set('Abrí el enlace en tu navegador e iniciá sesión con el comercio de prueba.');
+      },
+      error: () => {
+        this.cloverAuthorizing.set(false);
+        this.cloverError.set('No se pudo iniciar OAuth. Guardá primero el App ID, Merchant ID y App Secret.');
+      },
     });
   }
 

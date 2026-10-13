@@ -58,6 +58,14 @@ npm run electron:test --prefix src/Carnicerias.Pos
 
 Las pruebas de integración PostgreSQL actualmente requieren `CARNICERIAS_TEST_CONNECTION_STRING` apuntando a una base desechable cuyo nombre comience con `carnicerias_test_`. **No ejecutarlas bajo la regla de base única vigente**: podrían crear o limpiar otra base, y nunca deben apuntarse a `carnicerias_test_visual`. Hasta que el usuario autorice una estrategia compatible, ejecutar solo las pruebas que no necesitan esa base y dejar explícita la cobertura de integración pendiente.
 
+### Clover sandbox (vinculación OAuth)
+
+La administración → **Pasarelas de cobro** permite cargar App ID, Merchant ID y App Secret, y generar un enlace OAuth v2 de diez minutos. El secreto y el par access/refresh token se protegen en la API y no se devuelven al navegador. La autorización **no habilita todavía cobros Clover en el POS**: faltan la asignación del dispositivo por caja y Cloud Pay Display.
+
+El retorno público usa `https://clover-sandbox.nuestromundo.ar/clover/callback`. Cloudflare Tunnel entrega únicamente las rutas GET `/clover`, `/clover/status`, `/clover/launch` y `/clover/callback` al proceso separado `http://127.0.0.1:5198`; `/api/*` responde 404 en ese proceso. Para ejecutarlo, configurar la **misma** `CARNICERIAS_CONNECTION_STRING` de la API local, apuntando solo a `carnicerias_test_visual`, y usar `dotnet run --project src/Carnicerias.Api --launch-profile clover-tunnel`. El túnel y la API deben ejecutarse bajo el mismo usuario de Windows para compartir las claves locales de Data Protection. En un servidor, configurar un repositorio de claves compartido y persistente antes de usar OAuth; no copiar secretos ni claves al repositorio.
+
+Antes de autorizar el comercio, aplicar la migración aditiva `20261013124143_AddCloverOAuth` a la base existente. Si Docker/WSL no responde, no crear otra base ni utilizar un callback simulado como prueba de vinculación. Referencias: [OAuth v2 de Clover](https://docs.clover.com/dev/docs/oauth-flows-in-clover) y [generación de tokens con vencimiento](https://docs.clover.com/dev/docs/generate-expiring-tokens-using-v2-oauth-flow).
+
 ## Documentación
 
 - [Base del manual de usuarios](documentacion/manual-usuarios/README.md): acceso, POS, cobros, negocio, configuración y límites vigentes.

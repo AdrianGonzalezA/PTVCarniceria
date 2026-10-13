@@ -1,6 +1,8 @@
 # Tareas propuestas: Clover y selección de pasarelas
 
-**Estado:** borrador para aprobar junto con `tasks/clover-multi-gateway-plan.md`. Referencia funcional: `SPEC-multiple-payment-gateways.md`. No sustituye `tasks/todo.md` ni `tasks/pos-todo.md`.
+**Estado:** aprobado. Referencia funcional: `SPEC-multiple-payment-gateways.md`. No sustituye `tasks/todo.md` ni `tasks/pos-todo.md`.
+
+**Avance del 13/10/2026:** se implementaron el modelo y migración aditiva de configuración OAuth por empresa, `state` persistido y de un solo uso, intercambio de token con Clover sandbox, validación de comercio/permiso, cifrado y panel administrativo para conectar el comercio. Pasan 31 pruebas .NET de arquitectura y 114 de Angular; build .NET/Angular y lint sin errores. El proceso público en `127.0.0.1:5198` vuelve a responder `/clover/status` (200), rechaza un callback incompleto (400) y oculta `/api/health` (404). **No se aplicó la migración ni se probó un callback real**: Docker Desktop no inicia, WSL `docker-desktop` devuelve `RPC_S_CALL_FAILED` y `LxssManager` no pudo iniciarse desde esta sesión. No se creó otra base. Falta recuperar Docker, aplicar la migración a `carnicerias_test_visual`, configurar App ID/Merchant ID/App Secret en la UI y autorizar el comercio. La asignación de Dev Kit por caja, refresh token y los cobros Clover siguen pendientes; por eso los casilleros 3–5 no se dan aún por terminados.
 
 ## Corte 1 — Selección segura sin alterar Mercado Pago
 

@@ -16,8 +16,16 @@ using Carnicerias.Api.Payments;
 using Carnicerias.Domain.PlatformAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
+if (builder.Configuration.GetValue<bool>("Clover:TunnelOnly"))
+{
+    // The tunnel is a separate process; Windows EventLog is not writable by the dev account.
+    builder.Logging.ClearProviders();
+    builder.Logging.AddConsole();
+}
 builder.Services.AddDbContext<PlatformAccessDbContext>((services, options) =>
 {
     var configuration = services.GetRequiredService<IConfiguration>();
@@ -34,9 +42,12 @@ builder.Services.AddHttpClient<ArcaWsfeClient>(client => client.Timeout = TimeSp
 builder.Services.AddHttpClient<MercadoPagoPointClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddHttpClient<MercadoPagoQrClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddHttpClient<MercadoPagoOrderLookupClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHttpClient<CloverOAuthClient>(client => client.Timeout = TimeSpan.FromSeconds(20))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<ArcaHomologationTicketProvider>();
 builder.Services.AddScoped<ArcaSettingsResolver>();
 builder.Services.AddScoped<MercadoPagoSettingsResolver>();
+builder.Services.AddScoped<CloverSettingsProtector>();
 builder.Services.AddScoped<SessionAuthenticationService>();
 builder.Services.AddScoped<PosTerminalAuthenticationService>();
 builder.Services.AddScoped<PosTerminalProvisioningService>();
@@ -44,11 +55,24 @@ builder.Services.AddScoped<OperationalContextAccessService>();
 builder.Services.AddScoped<OperationalContextAccessor>();
 builder.Services.AddScoped<OperationalContextChangeGuard>();
 builder.Services.AddScoped<IOperationalContextChangeBlocker, CashierShiftContextChangeBlocker>();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter("clover-public", limiter =>
+    {
+        limiter.PermitLimit = 30;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+        limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+    });
+});
 
 var app = builder.Build();
 
 if (app.Configuration.GetValue<bool>("Clover:TunnelOnly"))
 {
+    app.UseRouting();
+    app.UseRateLimiter();
     app.Use(async (context, next) =>
     {
         if (!CloverTunnelBoundary.Allows(context.Request.Method, context.Request.Path.Value))
@@ -61,10 +85,7 @@ if (app.Configuration.GetValue<bool>("Clover:TunnelOnly"))
         await next(context);
     });
 
-    app.MapGet("/clover/status", () => Results.Ok(new { status = "ready", oauth = "not_configured" }));
-    app.MapGet("/clover", () => Results.Ok(new { status = "ready", oauth = "not_configured" }));
-    app.MapGet("/clover/launch", () => Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
-    app.MapGet("/clover/callback", () => Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
+    app.MapPublicCloverOAuthEndpoints();
 }
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
@@ -82,6 +103,7 @@ app.MapAdminProductPriceEndpoints();
 app.MapAdminOrganizationEndpoints();
 app.MapAdminArcaSettingsEndpoints();
 app.MapAdminMercadoPagoSettingsEndpoints();
+app.MapAdminCloverOAuthEndpoints();
 app.MapAdminTerminalEndpoints();
 app.MapAdminHistoryEndpoints();
 app.MapAdminCustomerEndpoints();

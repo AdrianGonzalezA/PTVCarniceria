@@ -25,6 +25,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
     public DbSet<ArcaCompanySettings> ArcaCompanySettings => Set<ArcaCompanySettings>();
     public DbSet<MercadoPagoGatewaySettings> MercadoPagoGatewaySettings => Set<MercadoPagoGatewaySettings>();
     public DbSet<MercadoPagoRegisterSettings> MercadoPagoRegisterSettings => Set<MercadoPagoRegisterSettings>();
+    public DbSet<CloverGatewaySettings> CloverGatewaySettings => Set<CloverGatewaySettings>();
+    public DbSet<CloverOAuthAttempt> CloverOAuthAttempts => Set<CloverOAuthAttempt>();
 
     public DbSet<UserSession> Sessions => Set<UserSession>();
 
@@ -220,6 +222,38 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .IsUnique().HasFilter("\"QrExternalPosId\" IS NOT NULL");
             entity.HasIndex(settings => new { settings.CompanyId, settings.PointTerminalId })
                 .IsUnique().HasFilter("\"PointTerminalId\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<CloverGatewaySettings>(entity =>
+        {
+            entity.ToTable("clover_gateway_settings", "payments_cash");
+            entity.HasKey(settings => settings.CompanyId);
+            entity.Property(settings => settings.ClientId).HasMaxLength(100).IsRequired();
+            entity.Property(settings => settings.MerchantId).HasMaxLength(100).IsRequired();
+            entity.Property(settings => settings.UpdatedAtUtc).IsConcurrencyToken();
+            entity.Ignore(settings => settings.HasClientSecret);
+            entity.Ignore(settings => settings.IsConnected);
+            entity.HasIndex(settings => settings.MerchantId).IsUnique();
+            entity.HasOne<Company>().WithOne()
+                .HasForeignKey<CloverGatewaySettings>(settings => settings.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(settings => settings.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CloverOAuthAttempt>(entity =>
+        {
+            entity.ToTable("clover_oauth_attempts", "payments_cash");
+            entity.HasKey(attempt => attempt.StateHash);
+            entity.Property(attempt => attempt.StateHash).HasMaxLength(64).IsRequired();
+            entity.HasOne<Company>().WithMany()
+                .HasForeignKey(attempt => attempt.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(attempt => attempt.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(attempt => new { attempt.CompanyId, attempt.ExpiresAtUtc });
         });
 
         modelBuilder.Entity<UserAssignment>(entity =>

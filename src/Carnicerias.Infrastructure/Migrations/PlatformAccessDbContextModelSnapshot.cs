@@ -403,6 +403,83 @@ namespace Carnicerias.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Carnicerias.Infrastructure.CloverGatewaySettings", b =>
+                {
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("AccessTokenExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ClientId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("MerchantId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<byte[]>("ProtectedAccessToken")
+                        .HasColumnType("bytea");
+
+                    b.Property<byte[]>("ProtectedClientSecret")
+                        .HasColumnType("bytea");
+
+                    b.Property<byte[]>("ProtectedRefreshToken")
+                        .HasColumnType("bytea");
+
+                    b.Property<DateTimeOffset?>("RefreshTokenExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("CompanyId");
+
+                    b.HasIndex("MerchantId")
+                        .IsUnique();
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("clover_gateway_settings", "payments_cash");
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.CloverOAuthAttempt", b =>
+                {
+                    b.Property<string>("StateHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ConsumedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("StateHash");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("CompanyId", "ExpiresAtUtc");
+
+                    b.ToTable("clover_oauth_attempts", "payments_cash");
+                });
+
             modelBuilder.Entity("Carnicerias.Infrastructure.ConfirmedSale", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2316,6 +2393,36 @@ namespace Carnicerias.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("CompanyId", "CategoryId")
                         .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.CloverGatewaySettings", b =>
+                {
+                    b.HasOne("Carnicerias.PlatformAccess.Company", null)
+                        .WithOne()
+                        .HasForeignKey("Carnicerias.Infrastructure.CloverGatewaySettings", "CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.CloverOAuthAttempt", b =>
+                {
+                    b.HasOne("Carnicerias.PlatformAccess.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

@@ -13,3 +13,8 @@
 .gateway-dialog form { gap: 1rem; }
 .gateway-dialog input { min-height: 2.75rem; padding: .5rem .7rem; font: inherit; }
 .gateway-actions { display: flex; justify-content: flex-end; gap: .6rem; }
+.gateway-clover-actions { display: flex; flex-wrap: wrap; gap: .6rem; padding: 0 1.25rem 1.25rem; }
+.gateway-oauth-link { display: grid; gap: .6rem; margin: 0 1.25rem 1.25rem; padding: 1rem; border: 1px solid #b8c6c2; border-radius: .4rem; background: #fff; }
+.gateway-oauth-link p { margin: 0; }
+.gateway-oauth-link input { width: 100%; min-width: 0; padding: .55rem; font: inherit; }
+.gateway-oauth-link a { overflow-wrap: anywhere; }

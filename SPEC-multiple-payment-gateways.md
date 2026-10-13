@@ -1,6 +1,6 @@
 # Especificación propuesta: selección de pasarela y Clover en el POS
 
-**Estado:** regla de negocio aprobada el 13/10/2026: una pasarela integrada por ticket, combinable con efectivo, y Cloud Pay Display como primera modalidad Clover. Pendientes la implementación y la validación del terminal/comercio de prueba. Complementa `SPEC-mercado-pago.md`, `SPEC-pos-checkout.md` y `SPEC-fiscal-payments.md`.
+**Estado:** regla de negocio aprobada el 13/10/2026: una pasarela integrada por ticket, combinable con efectivo, y Cloud Pay Display como primera modalidad Clover. La vinculación OAuth sandbox está implementada en código, pero su migración y autorización real están pendientes por Docker/WSL; la selección y el cobro Clover siguen sin implementar. Complementa `SPEC-mercado-pago.md`, `SPEC-pos-checkout.md` y `SPEC-fiscal-payments.md`.
 
 ## Objetivo
 

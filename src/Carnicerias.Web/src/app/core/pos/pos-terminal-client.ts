@@ -5,7 +5,9 @@ export interface PosTerminal {
   readonly id: string;
   readonly name: string;
   readonly companyId: string;
+  readonly companyName: string;
   readonly branchId: string;
+  readonly branchName: string;
 }
 
 @Injectable({ providedIn: 'root' })

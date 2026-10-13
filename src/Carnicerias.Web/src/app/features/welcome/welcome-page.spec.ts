@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
-import { WelcomePage } from './welcome-page';
+import { POS_ELECTRON_MODE, WelcomePage } from './welcome-page';
 
 describe('WelcomePage', () => {
   beforeEach(() => {
@@ -49,6 +49,64 @@ describe('WelcomePage', () => {
     expect(page.querySelector('[role="status"]')?.textContent).toContain(
       'Sistema temporalmente no disponible',
     );
+  });
+
+  it('identifies the provisioned company and register before Electron sign-in', () => {
+    TestBed.overrideProvider(POS_ELECTRON_MODE, { useValue: true });
+    const fixture = TestBed.createComponent(WelcomePage);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/health').flush({ status: 'healthy' });
+    http.expectOne('/api/sessions/current').flush(null, { status: 401, statusText: 'Unauthorized' });
+    const terminalRequest = http.expectOne('/api/pos-terminals/current');
+    expect(terminalRequest.request.method).toBe('GET');
+    terminalRequest.flush({
+      id: 'terminal-id', name: 'Caja 1', companyId: 'company-id', companyName: 'Empresa Visual',
+      branchId: 'branch-id', branchName: 'Sucursal Centro',
+    });
+    fixture.detectChanges();
+
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('.terminal-company')?.textContent).toContain('Empresa Visual');
+    expect(page.querySelector('.terminal-location')?.textContent).toContain('Sucursal Centro');
+    expect(page.querySelector('.terminal-location')?.textContent).toContain('Caja 1');
+    expect(page.querySelector('#company-code')).toBeNull();
+    for (const [id, value] of [['credential', 'cajero1'], ['password', 'password']]) {
+      const input = page.querySelector<HTMLInputElement>(`#${id}`)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+    }
+    fixture.detectChanges();
+    expect(page.querySelector<HTMLButtonElement>('form button[type="submit"]')?.disabled).toBe(false);
+  });
+
+  it('blocks Electron sign-in when its terminal credential is unavailable', () => {
+    TestBed.overrideProvider(POS_ELECTRON_MODE, { useValue: true });
+    const fixture = TestBed.createComponent(WelcomePage);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/health').flush({ status: 'healthy' });
+    http.expectOne('/api/sessions/current').flush(null, { status: 401, statusText: 'Unauthorized' });
+    http.expectOne('/api/pos-terminals/current').flush(
+      { error: { code: 'POS_TERMINAL_REQUIRED' } },
+      { status: 401, statusText: 'Unauthorized' },
+    );
+    fixture.detectChanges();
+
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('.terminal-identity[role="alert"]')?.textContent).toContain('Caja no vinculada');
+    for (const [id, value] of [['credential', 'cajero1'], ['password', 'password']]) {
+      const input = page.querySelector<HTMLInputElement>(`#${id}`)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+    }
+    fixture.detectChanges();
+    expect(page.querySelector<HTMLButtonElement>('form button[type="submit"]')?.disabled).toBe(true);
+    expect(page.querySelector('.terminal-company')).toBeNull();
+    page.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit'));
+    http.expectNone('/api/sessions');
   });
 
   it('takes an administrator with a confirmed context to the admin area', () => {

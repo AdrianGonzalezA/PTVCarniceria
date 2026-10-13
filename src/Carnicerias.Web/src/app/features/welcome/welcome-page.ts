@@ -1,9 +1,15 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, InjectionToken, OnInit, signal } from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { HealthClient } from '../../core/health/health-client';
+import { PosTerminal, PosTerminalClient } from '../../core/pos/pos-terminal-client';
 import { CurrentSession, OperationalCompanyOption, SessionClient } from '../../core/session/session-client';
+
+export const POS_ELECTRON_MODE = new InjectionToken<boolean>('POS Electron mode', {
+  providedIn: 'root',
+  factory: () => window.location.protocol === 'app:',
+});
 
 @Component({
   selector: 'app-welcome-page',
@@ -13,12 +19,15 @@ import { CurrentSession, OperationalCompanyOption, SessionClient } from '../../c
 })
 export class WelcomePage implements OnInit {
   private readonly healthClient = inject(HealthClient);
+  private readonly posTerminalClient = inject(PosTerminalClient);
   private readonly sessionClient = inject(SessionClient);
   private readonly router = inject(Router);
   private readonly formBuilder = inject(FormBuilder);
-  protected readonly isPosElectron = window.location.protocol === 'app:';
+  protected readonly isPosElectron = inject(POS_ELECTRON_MODE);
 
   protected readonly apiStatus = signal<'checking' | 'available' | 'unavailable'>('checking');
+  protected readonly terminalStatus = signal<'checking' | 'ready' | 'unavailable'>('checking');
+  protected readonly terminal = signal<PosTerminal | null>(null);
   protected readonly currentSession = signal<CurrentSession | null>(null);
   protected readonly sessionChecked = signal(false);
   protected readonly isSubmitting = signal(false);
@@ -44,6 +53,16 @@ export class WelcomePage implements OnInit {
   });
 
   ngOnInit(): void {
+    if (this.isPosElectron) {
+      this.posTerminalClient.current().subscribe({
+        next: (terminal) => {
+          this.terminal.set(terminal);
+          this.terminalStatus.set('ready');
+        },
+        error: () => this.terminalStatus.set('unavailable'),
+      });
+    }
+
     this.healthClient.check().subscribe({
       next: () => this.apiStatus.set('available'),
       error: () => this.apiStatus.set('unavailable'),
@@ -114,7 +133,8 @@ export class WelcomePage implements OnInit {
   }
 
   protected signIn(): void {
-    if (this.credentialsForm.invalid || this.isSubmitting()) return;
+    if (this.credentialsForm.invalid || this.isSubmitting() ||
+        (this.isPosElectron && this.terminalStatus() !== 'ready')) return;
 
     this.sessionError.set(null);
     this.isSubmitting.set(true);

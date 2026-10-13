@@ -1,12 +1,12 @@
 # 01 · Acceso, sucursal y turno de caja
 
-> **Cambio en preparación (13/10/2026):** después de migrar la única base, el ingreso web pedirá también el **código de empresa**. La caja Electron obtendrá la empresa de su credencial y no pedirá ese código. La activación está pendiente de resolver una asignación histórica multicompañía; mientras tanto, la API que sigue levantada conserva el ingreso anterior.
+En el navegador, el ingreso pide el **código de empresa** además del usuario y la contraseña. En la caja Electron, antes de ingresar se ven **empresa, sucursal y caja** vinculadas a esa terminal; no se pide código de empresa. Revisá esos datos antes de operar. Si aparece **Caja no vinculada**, no podrás iniciar sesión hasta que administración vincule o renueve la credencial de esa caja.
 
 ## Ingresar
 
-1. En **Iniciar sesión**, escribí tu usuario o correo y contraseña.
-2. Elegí la **empresa** y la **sucursal** habilitadas y pulsá **Confirmar sucursal**, incluso si solo aparece una opción.
-3. Desde la pantalla de contexto, abrí **Punto de venta** o **Administración**, según tus permisos. También podés usar **Cambiar empresa o sucursal** y **Cerrar sesión**.
+1. En **Iniciar sesión**, escribí el código de empresa si estás en el navegador, luego tu usuario o correo y contraseña.
+2. Elegí la **sucursal** habilitada y pulsá **Confirmar sucursal**, incluso si solo aparece una opción. En Electron, la empresa ya está determinada por la caja.
+3. Desde la pantalla de contexto, abrí **Punto de venta** o **Administración**, según tus permisos. También podés usar **Cambiar sucursal** y **Cerrar sesión**.
 
 El POS requiere una caja activa y una credencial de esa caja guardada en el perfil local de Electron. Que la caja figure activa en Administración no reemplaza esa credencial. Si aparece **Caja no disponible**, un administrador debe revisar o renovar la vinculación de la terminal; el cajero no debe intentar cobrar desde otra caja por su cuenta.
 

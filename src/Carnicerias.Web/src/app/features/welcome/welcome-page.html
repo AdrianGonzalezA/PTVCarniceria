@@ -33,6 +33,22 @@
           }
         </p>
 
+        @if (isPosElectron) {
+          <section class="terminal-identity" [attr.role]="terminalStatus() === 'unavailable' ? 'alert' : 'status'"
+            aria-live="polite">
+            @if (terminal(); as register) {
+              <p class="terminal-label eyebrow">Empresa de esta caja</p>
+              <p class="terminal-company">{{ register.companyName }}</p>
+              <p class="terminal-location context-branch">{{ register.branchName }} · {{ register.name }}</p>
+            } @else if (terminalStatus() === 'unavailable') {
+              <p class="terminal-unavailable form-error">Caja no vinculada</p>
+              <p>La credencial de esta terminal falta o no está vigente. Pedí a administración que la vincule o renueve.</p>
+            } @else {
+              <p>Identificando la empresa de esta caja…</p>
+            }
+          </section>
+        }
+
         @if (sessionError(); as error) {
           <p class="form-error" role="alert">{{ error }}</p>
         }
@@ -160,7 +176,7 @@
               required
             />
 
-            <button type="submit" [disabled]="credentialsForm.invalid || isSubmitting()">
+            <button type="submit" [disabled]="credentialsForm.invalid || isSubmitting() || (isPosElectron && terminalStatus() !== 'ready')">
               {{ isSubmitting() ? 'Ingresando…' : 'Ingresar' }}
             </button>
           </form>

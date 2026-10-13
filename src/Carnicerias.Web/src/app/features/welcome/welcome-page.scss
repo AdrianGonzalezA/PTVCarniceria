@@ -126,6 +126,28 @@ h2 {
   border-radius: 50%;
 }
 
+.terminal-identity {
+  margin-top: 1.25rem;
+  padding: 1rem 1.25rem;
+  background: var(--color-panel);
+  border-left: 0.35rem solid var(--color-teal);
+  line-height: 1.4;
+}
+
+.terminal-identity[role='alert'] {
+  border-left-color: var(--color-danger);
+}
+
+.terminal-identity p {
+  margin: 0;
+}
+
+.terminal-company,
+.terminal-unavailable {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
 .login-form,
 .context-picker,
 .context-summary {

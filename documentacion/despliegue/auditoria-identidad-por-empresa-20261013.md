@@ -36,3 +36,7 @@ Las contraseñas se ingresaron ocultas en la consola y no se guardaron en Git. T
 El POS se abrió en Electron con el perfil real de Caja 1. `cajero1` inició sesión, seleccionó Empresa Visual y Sucursal Visual y llegó a la pantalla que bloquea ventas hasta abrir turno; la captura y el estado se inspeccionaron desde el renderer de Electron, no desde una pestaña del navegador. No se abrió un turno ni se registró una venta en esta verificación.
 
 Quedan pendientes el ensayo de dos cajeros homónimos, el flujo completo de venta de varias cajas y las pruebas de integración que provisionan otra base (prohibidas por la regla de base única). No interpretar el respaldo local como respaldo productivo: contiene datos y configuraciones del laboratorio y debe permanecer fuera del repositorio.
+
+## Nombre de acceso actual del SuperAdmin
+
+Por pedido posterior del usuario, el acceso visible pasó a `/superadmin` y la cuenta local inicialmente creada como `fabricante-admin` se renombró a `superadmin` (`superadmin@local.test`). Se conservan el mismo `UserId`, hash de contraseña, rol y sesiones; no se creó otra cuenta ni otra base. Los nombres anteriores en esta auditoría describen el estado verificado antes del cambio. La guía de instalación nueva usa `superadmin` desde el inicio.

@@ -1,6 +1,6 @@
 <main class="admin-shell">
   <header class="app-header">
-    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Carnicerías <small>· Fabricante</small></div>
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Carnicerías <small>· SuperAdmin</small></div>
     @if (session(); as current) {
       <div class="account-bar">
         <span>{{ current.username }}</span>
@@ -10,8 +10,8 @@
   </header>
 
   <div class="workspace manufacturer-workspace">
-    <p class="eyebrow">Administración del fabricante</p>
-    <h1>Instalación local</h1>
+    <p class="eyebrow">Administración SuperAdmin</p>
+    <h1>Empresas de la instalación</h1>
     <p class="intro">Creá y administrá empresas de esta instalación. Esta cuenta no abre cajas ni consulta ventas.</p>
 
     @if (error(); as text) { <p class="error-message" role="alert">{{ text }}</p> }
@@ -21,7 +21,7 @@
       <p role="status">Verificando sesión…</p>
     } @else if (!session()) {
       <section class="category-panel manufacturer-login" aria-labelledby="manufacturer-login-title">
-        <h2 id="manufacturer-login-title">Ingresar como superadmin</h2>
+        <h2 id="manufacturer-login-title">Ingresar como SuperAdmin</h2>
         <form [formGroup]="loginForm" (ngSubmit)="login()">
           <label for="manufacturer-credential">Usuario o correo</label>
           <input id="manufacturer-credential" formControlName="credential" autocomplete="username" maxlength="320" required />
@@ -52,10 +52,10 @@
                   <td><code>{{ company.code }}</code></td>
                   <td>{{ company.name }}</td>
                   <td>{{ company.activeBranchCount }}</td>
-                  <td>{{ company.isActive ? 'Activa' : 'Inactiva' }}</td>
+                  <td><span class="manufacturer-status" [class.manufacturer-status--active]="company.isActive">{{ company.isActive ? 'Activa' : 'Inactiva' }}</span></td>
                   <td class="manufacturer-actions">
-                    <button type="button" class="secondary-button" [disabled]="busy()" (click)="startEdit(company)">Editar</button>
-                    <button type="button" class="secondary-button" [disabled]="busy()" (click)="confirmStatus(company)">{{ company.isActive ? 'Inactivar' : 'Activar' }}</button>
+                    <button type="button" class="secondary-button" [attr.aria-label]="'Editar ' + company.name" [disabled]="busy()" (click)="startEdit(company)">Editar</button>
+                    <button type="button" class="secondary-button" [attr.aria-label]="(company.isActive ? 'Inactivar ' : 'Activar ') + company.name" [disabled]="busy()" (click)="confirmStatus(company)">{{ company.isActive ? 'Inactivar' : 'Activar' }}</button>
                   </td>
                 </tr>
               }
@@ -67,7 +67,7 @@
   </div>
 
   @if (createOpen()) {
-    <app-admin-detail-dialog labelledBy="manufacturer-create-title" [canClose]="!busy()" (closed)="closeCreate()">
+    <app-admin-detail-dialog labelledBy="manufacturer-create-title" [compact]="true" [canClose]="!busy()" (closed)="closeCreate()">
       <form class="manufacturer-form" [formGroup]="createForm" (ngSubmit)="createCompany()">
         <h2 id="manufacturer-create-title">Nueva empresa</h2>
         <p>La primera sucursal y su administrador se crean en la misma operación.</p>

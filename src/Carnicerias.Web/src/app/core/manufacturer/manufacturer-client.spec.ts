@@ -11,11 +11,11 @@ describe('ManufacturerClient', () => {
 
   it('uses a separate cookie session and sends no client company context', () => {
     const client = TestBed.inject(ManufacturerClient);
-    client.login('fabricante', 'password').subscribe();
+    client.login('superadmin', 'password').subscribe();
     const request = TestBed.inject(HttpTestingController).expectOne('/api/manufacturer/sessions');
     expect(request.request.withCredentials).toBe(true);
-    expect(request.request.body).toEqual({ credential: 'fabricante', password: 'password' });
-    request.flush({ userId: 'id', username: 'fabricante', expiresAtUtc: '2026-10-13T22:00:00Z' });
+    expect(request.request.body).toEqual({ credential: 'superadmin', password: 'password' });
+    request.flush({ userId: 'id', username: 'superadmin', expiresAtUtc: '2026-10-13T22:00:00Z' });
     expect(localStorage.length).toBe(0);
   });
 

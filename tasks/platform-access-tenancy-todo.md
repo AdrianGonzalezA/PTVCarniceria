@@ -37,7 +37,7 @@
 
 ## T5. Separar superadmin del fabricante
 
-- [x] Procedimiento privilegiado ejecutado para crear `fabricante-admin` nuevo, sin contraseña en argumentos, logs o Git y sin nueva base.
+- [x] Procedimiento privilegiado ejecutado para crear el SuperAdmin nuevo, sin contraseña en argumentos, logs o Git y sin nueva base. La cuenta local se renombró después a `superadmin` sin recrearla.
 - [x] La sesión de fabricante no adquiere contexto operativo ni permisos POS, y una sesión cliente no accede a rutas de fabricante por diseño de cookies y filtros. **Pendiente prueba HTTP negativa.**
 - **Verificar:** pruebas de permisos y bootstrap, build .NET, revisión de amenazas.
 - **Depende de:** T2. **Archivos probables:** Bootstrap, autenticación de fabricante, autorización, pruebas.

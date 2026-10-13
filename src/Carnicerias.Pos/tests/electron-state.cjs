@@ -36,7 +36,11 @@ async function main() {
   const downloadPath = process.argv.find((item) => item.startsWith('--download-path='))?.slice(16);
   if (downloadPath) await send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath });
   for (const field of ['credential', 'password']) {
-    const value = process.argv.find((item) => item.startsWith(`--fill-${field}=`))?.slice(field.length + 8);
+    const value = field === 'password' && process.argv.includes('--fill-password-from-env')
+      ? process.env.CARNICERIAS_VISUAL_PASSWORD
+      : process.argv.find((item) => item.startsWith(`--fill-${field}=`))?.slice(field.length + 8);
+    if (field === 'password' && process.argv.includes('--fill-password-from-env') && !value)
+      throw new Error('CARNICERIAS_VISUAL_PASSWORD no está configurada.');
     if (value === undefined) continue;
     const selector = `[formControlName="${field}"]`;
     const filled = await send('Runtime.evaluate', {
@@ -48,14 +52,17 @@ async function main() {
     if (!filled.result.value) throw new Error(`No se encontrÃ³ el campo: ${selector}`);
   }
   if (process.argv.includes('--select-context')) {
-    const selected = await send('Runtime.evaluate', {
-      expression: `(() => { for (const id of ['company', 'branch']) {
-        const input = document.getElementById(id); const option = input?.querySelector('option[value]:not([value=""])');
-        if (!option) return false; input.value = option.value;
-        input.dispatchEvent(new Event('change', { bubbles: true })); } return true; })()`,
-      returnByValue: true,
-    });
-    if (!selected.result.value) throw new Error('No se pudo seleccionar la empresa y sucursal.');
+    for (const id of ['company', 'branch']) {
+      const selected = await send('Runtime.evaluate', {
+        expression: `(() => { const input = document.getElementById(${JSON.stringify(id)});
+          const option = input?.querySelector('option[value]:not([value=""])');
+          if (!option) return false; input.value = option.value;
+          input.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`,
+        returnByValue: true,
+      });
+      if (!selected.result.value) throw new Error(`No se pudo seleccionar ${id}.`);
+      await new Promise((done) => setTimeout(done, 300));
+    }
   }
   const paymentMode = process.argv.find((item) => item.startsWith('--select-payment-mode='))?.slice(22);
   if (paymentMode) {

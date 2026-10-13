@@ -2279,7 +2279,7 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.ToTable("sessions", "platform_access", t =>
                         {
-                            t.HasCheckConstraint("CK_sessions_context_pair", "(\"CompanyId\" IS NULL AND \"BranchId\" IS NULL) OR (\"CompanyId\" IS NOT NULL AND \"BranchId\" IS NOT NULL)");
+                            t.HasCheckConstraint("CK_sessions_context_pair", "\"BranchId\" IS NULL OR \"CompanyId\" IS NOT NULL");
                         });
                 });
 

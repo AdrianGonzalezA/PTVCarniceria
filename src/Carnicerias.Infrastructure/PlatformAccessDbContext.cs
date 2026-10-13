@@ -293,7 +293,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
         {
             entity.ToTable("sessions", table => table.HasCheckConstraint(
                 "CK_sessions_context_pair",
-                "(\"CompanyId\" IS NULL AND \"BranchId\" IS NULL) OR (\"CompanyId\" IS NOT NULL AND \"BranchId\" IS NOT NULL)"));
+                "\"BranchId\" IS NULL OR \"CompanyId\" IS NOT NULL"));
             entity.HasKey(session => session.Id);
             entity.Property(session => session.TokenHash).HasMaxLength(64).IsRequired();
             entity.HasIndex(session => session.TokenHash).IsUnique();

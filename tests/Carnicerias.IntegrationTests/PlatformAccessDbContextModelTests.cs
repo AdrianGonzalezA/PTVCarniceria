@@ -1,6 +1,8 @@
 using Carnicerias.Infrastructure;
 using Carnicerias.PlatformAccess;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace Carnicerias.IntegrationTests;
 
@@ -46,6 +48,21 @@ public sealed class PlatformAccessDbContextModelTests
         Assert.Equal("sessions", session.GetTableName());
         Assert.Contains(session.GetIndexes(), index =>
             index.IsUnique && index.Properties.Select(property => property.Name).SequenceEqual([nameof(UserSession.TokenHash)]));
+    }
+
+    [Fact]
+    public void SessionMayBeBoundToCompanyBeforeBranchSelection()
+    {
+        var options = new DbContextOptionsBuilder<PlatformAccessDbContext>()
+            .UseNpgsql("Host=localhost;Database=model_only;Username=postgres")
+            .Options;
+        using var db = new PlatformAccessDbContext(options);
+        var session = db.GetService<IDesignTimeModel>().Model.FindEntityType(typeof(UserSession));
+
+        Assert.NotNull(session);
+        Assert.Contains(session.GetCheckConstraints(), constraint =>
+            constraint.Name == "CK_sessions_context_pair" &&
+            constraint.Sql == "\"BranchId\" IS NULL OR \"CompanyId\" IS NOT NULL");
     }
 
     [Fact]

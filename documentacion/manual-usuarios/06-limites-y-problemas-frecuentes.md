@@ -18,7 +18,7 @@
 - **Mercado Pago:** el POS consulta automáticamente órdenes pendientes mientras la ventana de cobro está abierta. Falta un webhook HTTPS público y conciliación de fondo cuando la ventana está cerrada. No hay flujo de reintegro integrado.
 - **Otros medios:** débito, crédito, transferencia y cheque se anotan como medios declarados; no se liquidan automáticamente con adquirentes o bancos. No hay cartera de cheques, depósito, rechazo ni ECHEQ.
 - **Inventario trazable:** se puede recibir manualmente una pieza y venderla en un renglón propio; el saldo se controla por artículo. Falta importación en lote/interfaz con ERP y un ciclo de estados físicos completo por pieza.
-- **Hardware:** en la instalación local de prueba se usan puertos seriales para balanza e impresora, pero su parametrización administrativa por caja está pendiente. Un puerto virtual o dispositivo distinto requiere validación técnica.
+- **Hardware:** en la instalación local de prueba se usan puertos seriales para balanza e impresora. El laboratorio permite configurar COM y velocidad en cada PC, pero la parametrización desde Administración por caja sigue pendiente. Un puerto virtual o dispositivo distinto requiere validación técnica.
 - **Caja:** el saldo registrado no sustituye el conteo físico. Aún no existe un arqueo obligatorio ni una gestión de diferencias al cerrar turno.
 - **Histórico:** la base local contiene datos ficticios de desarrollo y no constituye un histórico comercial real.
 

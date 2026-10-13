@@ -1,0 +1,5 @@
+{
+  "apiOrigin": "http://localhost:5197",
+  "scale": { "port": "COM6", "baudRate": 9600 },
+  "printer": { "port": "COM1", "baudRate": 9600 }
+}

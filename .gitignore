@@ -2,6 +2,7 @@ bin/
 obj/
 .vs/
 TestResults/
+.local-backups/
 *.user
 *.suo
 **/node_modules/

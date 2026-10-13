@@ -6,6 +6,7 @@ return args.FirstOrDefault() switch
     "seed-pos-visual" => await VisualPosSeedCommand.RunAsync(args),
     "reset-visual-passwords" => await VisualPasswordResetCommand.RunAsync(args),
     "create-superadmin" => await ManufacturerBootstrapCommand.RunAsync(args),
+    "create-company-admin" => await CompanyAdminBootstrapCommand.RunAsync(args),
     _ => await UnsupportedCommandAsync()
 };
 

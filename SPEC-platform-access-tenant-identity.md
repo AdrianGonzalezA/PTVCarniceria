@@ -1,7 +1,7 @@
 # Cambio propuesto: identidad por empresa y superadministración del fabricante
 
 **Módulo:** `platform-access` (complementa y reemplaza las reglas incompatibles de `SPEC-platform-access.md` y `SPEC-admin.md`).
-**Estado:** reglas aprobadas; código y migración preparados, activación pendiente de resolver la asignación multicompañía de `visual-admin` y verificar en la única base.
+**Estado:** reglas aprobadas y migraciones activadas en `carnicerias_test_visual` el 13/10/2026; quedan pruebas de dos usuarios homónimos, varias cajas y recorrido visual completo.
 **Fecha:** 13 de octubre de 2026.
 
 ## Objetivo y motivo
@@ -48,12 +48,12 @@ Hoy `platform_access.users` tiene índices únicos globales sobre `UsernameNorma
 - UI: ingreso Angular y administración; el POS se revisa visualmente **solo en Electron**.
 - Mantener tipos explícitos y errores estructurados. Ejemplo de regla de consulta: `user.CompanyId == authenticatedCompanyId && user.UsernameNormalized == normalizedUsername`; nunca buscar `UsernameNormalized` globalmente para login cliente.
 - Pruebas unitarias, de arquitectura y frontend: dos `cajero1` en empresas distintas; rechazo de duplicado dentro de una empresa; login POS con terminal de empresa incorrecta; administrador de A crea otro administrador de A pero no de B ni un superadmin; último administrador activo protegido; superadmin sin permisos de venta; preservación de usuarios existentes en la migración. Ejecutar `dotnet build Carnicerias.sln --configuration Release`, `dotnet test tests/Carnicerias.ArchitectureTests/Carnicerias.ArchitectureTests.csproj`, `npm test --prefix src/Carnicerias.Web -- --watch=false`, `npm run lint --prefix src/Carnicerias.Web` y `npm run electron:test --prefix src/Carnicerias.Pos`.
-- No ejecutar pruebas de integración que creen o reinicien otra base. La verificación de migración e integración en PostgreSQL queda pendiente de un procedimiento controlado sobre la **misma** base autorizada y de resguardar sus datos ficticios.
+- No ejecutar pruebas de integración que creen o reinicien otra base. La migración y los logins de los administradores se verificaron en la **misma** base autorizada con respaldo previo. Quedan pendientes las pruebas de dos `cajero1` homónimos y el flujo completo de varias cajas.
 
 ## Límites de autorización para implementar
 
 - Hacer: preservar el único PostgreSQL de desarrollo, mantener claves fuera de Git, migrar sin perder IDs ni historial y comprobar el aislamiento en servidor.
-- El cambio de esquema/autenticación fue aprobado el 13/10/2026. Pedir una regla específica si la auditoría encuentra identidades con asignaciones en varias empresas; no dar acceso operativo implícito al fabricante.
+- El cambio de esquema/autenticación fue aprobado el 13/10/2026. La regla posterior aprobada mantiene `visual-admin` solo en Empresa Visual y crea cuentas independientes para las otras dos empresas; no dar acceso operativo implícito al fabricante.
 - No hacer: crear otra base, dar permisos globales al administrador de una empresa o usar el nombre visible de empresa como identificador de seguridad.
 
 ## Decisiones y supuestos visibles

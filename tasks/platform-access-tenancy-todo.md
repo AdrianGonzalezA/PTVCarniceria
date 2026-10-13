@@ -1,6 +1,6 @@
 # Tareas: identidad por empresa
 
-**Estado:** aprobado; implementación en curso. Seguir [el plan](platform-access-tenancy-plan.md). No ejecutar pruebas que creen otra base.
+**Estado:** aprobado; migraciones y cuentas independientes activadas en la única base local. Seguir [el plan](platform-access-tenancy-plan.md). No ejecutar pruebas que creen otra base.
 
 ## T1. Auditar datos y validar conversión
 
@@ -12,14 +12,14 @@
 ## T2. Persistir empresa y ámbito de cuenta
 
 - [x] Código de empresa estable y único; usuario cliente con empresa; cuenta de fabricante sin empresa cliente en modelo y migración.
-- [x] La migración conserva IDs/hashes y falla si hay una identidad con empresa ambigua; índices por empresa sustituyen los globales solo después de validar. **SQL generado e inspeccionado; no aplicado.**
+- [x] La migración conserva IDs/hashes y falla si hay una identidad con empresa ambigua; índices por empresa sustituyen los globales solo después de validar. Aplicada con respaldo y corrección explícita de dos asignaciones.
 - **Verificar:** build .NET, pruebas de modelo/migración no destructivas; inspección del SQL generado. Integración PostgreSQL pendiente bajo la regla de base única.
 - **Depende de:** T1. **Archivos probables:** entidades Company/UserIdentity, DbContext, migración EF, pruebas.
 
 ## T3. Autenticar clientes con ámbito inequívoco
 
-- [x] Login web resuelve `companyCode` y usuario/correo dentro de esa empresa; fallos no enumeran cuentas (código preparado; pendiente prueba en PostgreSQL).
-- [x] Login POS usa empresa de la credencial de caja y rechaza una empresa explícita diferente; sesión queda ligada a la empresa (código preparado; pendiente prueba en Electron).
+- [x] Login web resuelve `companyCode` y usuario/correo dentro de esa empresa; `rustica-admin` y `visual-admin` entraron por HTTP, y los cruces de empresa se rechazaron con 401.
+- [x] Login POS usa empresa de la credencial de caja y rechaza una empresa explícita diferente; sesión queda ligada a la empresa (pendiente prueba en Electron).
 - **Verificar:** pruebas de servicio y endpoint para dos `cajero1`, terminal de otra empresa, sesión antigua y credencial inválida; build API.
 - **Depende de:** T2. **Archivos probables:** SessionAuthenticationService, SessionEndpoints, UserSession, pruebas.
 
@@ -37,7 +37,7 @@
 
 ## T5. Separar superadmin del fabricante
 
-- [x] Procedimiento privilegiado preparado para crear el superadmin sin contraseña en argumentos, logs o Git; no requiere nueva base. **No ejecutado antes de migrar.**
+- [x] Procedimiento privilegiado ejecutado para crear `fabricante-admin` nuevo, sin contraseña en argumentos, logs o Git y sin nueva base.
 - [x] La sesión de fabricante no adquiere contexto operativo ni permisos POS, y una sesión cliente no accede a rutas de fabricante por diseño de cookies y filtros. **Pendiente prueba HTTP negativa.**
 - **Verificar:** pruebas de permisos y bootstrap, build .NET, revisión de amenazas.
 - **Depende de:** T2. **Archivos probables:** Bootstrap, autenticación de fabricante, autorización, pruebas.
@@ -71,7 +71,7 @@
 ## T9. Cerrar seguridad, migración y documentación
 
 - [ ] Auditoría horizontal de endpoints con `CompanyId`, sesiones, reseteo de contraseñas y roles; actualizar specs, manual y despliegue.
-- [ ] Respaldar y migrar solo `carnicerias_test_visual`; comprobar datos existentes y el flujo de dos empresas sin crear otra base.
+- [x] Respaldar y migrar solo `carnicerias_test_visual`; comprobar datos existentes y login aislado de dos empresas sin crear otra base. Pendientes dos cajeros homónimos y varias cajas.
 - **Verificar:** `dotnet build Carnicerias.sln --configuration Release`; ArchitectureTests; Angular test/build/lint; Electron test y visual; `git diff --check`; registrar integración no ejecutada.
 - **Depende de:** T1–T8. **Archivos probables:** pruebas de seguridad, documentación y checklist de migración.
 

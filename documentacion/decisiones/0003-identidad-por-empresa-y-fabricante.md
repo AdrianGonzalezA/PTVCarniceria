@@ -1,6 +1,6 @@
 # 0003 — Identidad por empresa y superadmin del fabricante
 
-**Estado:** aceptada el 13/10/2026; implementación de código en curso, migración de la base pendiente por una asignación multicompañía existente.
+**Estado:** aceptada y activada en la base local el 13/10/2026; falta verificar el workshop de varias cajas y usuarios homónimos.
 
 ## Contexto
 
@@ -16,12 +16,12 @@ La instalación puede alojar varias empresas en su única base local. El índice
 
 ## Migración y límite actual
 
-La migración solo puede aplicarse a `carnicerias_test_visual`, con respaldo previo en archivo fuera de Git. Audita que cada usuario existente tenga exactamente una empresa antes de cambiar índices; una ambigüedad aborta toda la transacción. El preflight detectó que `visual-admin` está asignado a tres empresas. Hace falta una regla explícita del usuario para separar o retirar las asignaciones adicionales sin reasignar referencias históricas; por eso **no se aplicó** la migración ni se arrancó la API modificada sobre la base actual.
+La migración se aplicó solo a `carnicerias_test_visual`, con respaldo previo verificado fuera de Git. El preflight detectó a `visual-admin` en tres empresas; el usuario aprobó conservarlo solo en Empresa Visual y crear administradores independientes para Rústica y Empresa admin prueba. El script guardado `tools/sql/20261013_deduplicate_visual_admin_assignments.sql` retiró únicamente las dos asignaciones ajenas, sin borrar usuarios ni referencias históricas. Después se aplicaron `ScopeUsersByCompany` y `AllowCompanyBoundSessionWithoutBranch`: esta segunda migración permite fijar empresa en el login y sucursal después, sin permitir una sucursal sin empresa. Las sesiones antiguas quedaron revocadas. La reversión del cambio de identidad exige restaurar el respaldo de la misma base, no bajar índices y fusionar cuentas nuevas.
 
 El superadmin inicial se crea por consola interactiva después de migrar, sin contraseña en argumentos, logs ni Git. Este superadmin es local a cada instalación autónoma por sucursal; un portal central del fabricante queda fuera del alcance actual.
 
 ## Alternativas y consecuencias
 
-Mantener nombres de usuario globales forzaría identificadores artificiales (`empresa-a-cajero1`) y no resolvería el aislamiento de permisos. Permitir que una identidad pertenezca a varias empresas repetiría el problema de atribuir sesiones y acciones a un ámbito mutable. Se eligen cuentas separadas por empresa. El fabricante no usa el rol `administrator` de cliente para administrar otras empresas: su sesión y rutas son distintas, con pruebas negativas pendientes sobre PostgreSQL una vez resuelta la migración.
+Mantener nombres de usuario globales forzaría identificadores artificiales (`empresa-a-cajero1`) y no resolvería el aislamiento de permisos. Permitir que una identidad pertenezca a varias empresas repetiría el problema de atribuir sesiones y acciones a un ámbito mutable. Se eligen cuentas separadas por empresa. El fabricante no usa el rol `administrator` de cliente para administrar otras empresas: su sesión y rutas son distintas. Se probaron por HTTP el login de fabricante, el de administradores cliente, el rechazo cruzado entre empresas y el rechazo de la empresa inactiva.
 
 Véanse [la especificación](../../SPEC-platform-access-tenant-identity.md), [el plan](../../tasks/platform-access-tenancy-plan.md) y [la auditoría de datos](../despliegue/auditoria-identidad-por-empresa-20261013.md).

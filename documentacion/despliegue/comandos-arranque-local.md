@@ -2,7 +2,7 @@
 
 Estos comandos son para **PowerShell**: primero en este equipo y, al final, en otras PC de caja. Los comandos de desarrollo parten de `C:\Proyectos\Carnicerias`. Abrir una consola distinta para cada proceso. Usar únicamente la base de desarrollo existente `carnicerias_test_visual` en PostgreSQL Docker (`127.0.0.1:55433`); estos pasos no crean ni reinician bases.
 
-> **Pausa de versión (13/10/2026):** no arrancar aún la API ni Electron compilados desde el cambio de identidad por empresa. La base conserva la asignación triple de `visual-admin`; la nueva migración aborta deliberadamente hasta resolverla y respaldar la misma base. La API anterior puede quedar encendida para pruebas del flujo existente.
+> **Identidad por empresa (13/10/2026):** las migraciones ya están aplicadas en la única base local. `visual-admin` pertenece solo a Empresa Visual; `rustica-admin` y `prueba-admin` son cuentas separadas. La empresa de prueba continúa inactiva, por lo que su login se rechaza. Para el navegador usar el código de empresa indicado en la [auditoría](auditoria-identidad-por-empresa-20261013.md); el POS Electron obtiene la empresa de la credencial de caja.
 
 ## 1. API (consola 1)
 

@@ -8,6 +8,8 @@
 **Mapa de origen:** `CAPABILITY_MAP.md`  
 **Module id:** `platform-access`
 
+**Regla vigente desde 13/10/2026:** [identidad por empresa y superadmin](SPEC-platform-access-tenant-identity.md) reemplaza aquí los supuestos de usuario multicompañía, cambio de empresa durante una sesión y alta de empresas por el administrador cliente. Este documento conserva el contexto histórico y las reglas de sucursal/permisos que no contradicen esa decisión.
+
 ## Supuestos del borrador
 
 1. Cada cliente tendrá una instalación aislada y una base PostgreSQL propia.

@@ -41,7 +41,7 @@ Copiar `servidor` e `inicializacion` al servidor local. No copiar contraseñas, 
 
 ## 4. Elegir la ruta de datos
 
-**Workshop con el entorno de desarrollo actual:** utilizar exclusivamente `carnicerias_test_visual` en `127.0.0.1:55433`. Ya contiene usuarios, empresas, sucursales y datos ficticios; **no ejecutar** `create-admin` ni `seed-pos-visual` y no crear otra base. La migración de identidad por empresa permanece detenida por la asignación triple de `visual-admin`: resolverla, respaldar y migrar antes de arrancar los binarios nuevos. Véase [auditoría de identidad](auditoria-identidad-por-empresa-20261013.md).
+**Workshop con el entorno de desarrollo actual:** utilizar exclusivamente `carnicerias_test_visual` en `127.0.0.1:55433`. Ya contiene usuarios, empresas, sucursales y datos ficticios; **no ejecutar** `create-admin` ni `seed-pos-visual` y no crear otra base. La migración de identidad por empresa y el alta de cuentas independientes ya se aplicaron con respaldo fuera de Git. Véase [auditoría de identidad](auditoria-identidad-por-empresa-20261013.md).
 
 **Primera instalación nueva de una sucursal, más adelante:** requiere autorización explícita antes de crear su única base de aplicación en el servidor de esa sucursal. El operador de PostgreSQL crea el usuario y la base con permisos mínimos y registra sus credenciales fuera de Git. Configurar `CARNICERIAS_CONNECTION_STRING` en la consola de inicialización y luego en el proceso API, nunca en las cajas. Aplicar las migraciones de la versión desde el repositorio sobre esa base ya existente y después de verificar la cadena de conexión. El comando `create-superadmin` **no aplica migraciones automáticamente**. Con la base migrada, ejecutar una sola vez desde una consola interactiva del servidor:
 
@@ -50,6 +50,8 @@ dotnet .\inicializacion\Carnicerias.Bootstrap.dll create-superadmin --username f
 ```
 
 La herramienta pide la contraseña sin mostrarla y rechaza un segundo superadmin inicial. En una instalación nueva exige al menos 12 caracteres; la excepción de seis caracteres solo existe para la base visual local. Abrir `/fabricante` en un navegador de esa instalación y crear empresa, código de acceso, primera sucursal y administrador inicial. El antiguo `create-admin` quedó deshabilitado. No usar el seed visual como datos comerciales ni transportar ventas de desarrollo. Si cambió la versión, respaldar antes de migrar. No ejecutar pruebas de integración que creen o reinicien otra base de aplicación en este entorno.
+
+Para recuperar **una empresa existente sin administrador** después de una migración controlada, el operador del servidor puede ejecutar `dotnet .\inicializacion\Carnicerias.Bootstrap.dll create-company-admin --company-id <uuid> --username <usuario> --email <correo>` con la misma variable de conexión. El comando solicita la contraseña oculta y se niega si la empresa ya tiene una asignación administradora. No es el alta normal de empresas ni debe entregarse a una caja o a un administrador cliente. La empresa inactiva puede recibir administrador, pero solo podrá iniciar sesión después de que el fabricante la active.
 
 ## 5. Configurar y levantar la API local
 

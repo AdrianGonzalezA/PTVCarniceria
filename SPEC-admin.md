@@ -1,5 +1,7 @@
 # Especificación: administrador del POS
 
+**Regla vigente desde 13/10/2026:** [identidad por empresa y superadmin](SPEC-platform-access-tenant-identity.md) reemplaza las secciones históricas que permiten crear empresas desde el administrador cliente, limitan el sitio a un solo administrador o prohíben crear otros administradores de la misma empresa. El fabricante crea empresas; cada administrador cliente queda restringido a la propia. El sitio administrativo puede usarse en navegador común; solo la revisión visual del POS debe hacerse en Electron.
+
 ## Objetivo
 
 Dar al administrador una interfaz web para mantener los maestros que alimentan al punto de venta, dentro de la misma instalación PostgreSQL. El administrador inicial es `visual-admin`, con el rol `administrator`; los cajeros existentes conservan su acceso al POS, pero no al administrador. La UI administrativa puede abrirse en Angular web y su revisión visual durante el desarrollo se hace en Electron.

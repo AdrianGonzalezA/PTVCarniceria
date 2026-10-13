@@ -104,7 +104,12 @@
             {{ cloverAuthorizing() ? 'Preparando enlace…' : 'Conectar comercio sandbox' }}
           </button>
           <button type="button" (click)="reloadClover()" [disabled]="cloverAuthorizing()">Actualizar estado</button>
+          <button type="button" (click)="probeClover()"
+            [disabled]="!cloverSettings()?.isConnected || cloverForm.dirty || cloverProbing()">
+            {{ cloverProbing() ? 'Verificando…' : 'Probar conexión Clover' }}
+          </button>
         </div>
+        @if (cloverProbeResult(); as result) { <p class="gateway-hint" role="status">{{ result }}</p> }
         @if (cloverAuthorization(); as authorization) {
           <div class="gateway-oauth-link" role="status">
             <p>Enlace de un solo uso, válido por 10 minutos. Si administrás desde Electron, copiá la URL y abrila en el navegador.</p>

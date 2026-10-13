@@ -15,6 +15,7 @@ public static class CloverOAuthEndpoints
         group.MapGet("", GetAsync);
         group.MapPut("", SaveAsync);
         group.MapPost("/authorization", AuthorizeAsync);
+        group.MapGet("/connection", ProbeConnectionAsync);
         return endpoints;
     }
 
@@ -94,6 +95,37 @@ public static class CloverOAuthEndpoints
         context.Response.Headers.CacheControl = "no-store";
         return Results.Ok(new { authorizeUrl = CloverOAuthFlow.AuthorizeUrl(settings.ClientId, state),
             expiresAtUtc = now.AddMinutes(10) });
+    }
+
+    private static async Task<IResult> ProbeConnectionAsync(PlatformAccessDbContext db,
+        OperationalContextAccessor accessor, CloverSettingsProtector protector,
+        CloverMerchantProbeClient client, TimeProvider clock, CancellationToken cancellationToken)
+    {
+        var settings = await db.CloverGatewaySettings.AsNoTracking().SingleOrDefaultAsync(
+            item => item.CompanyId == accessor.Context.CompanyId, cancellationToken);
+        if (settings?.ProtectedAccessToken is not { Length: > 0 })
+            return ProbeError(409, "CLOVER_NOT_CONNECTED");
+        if (settings.AccessTokenExpiresAtUtc is not { } expiresAt || expiresAt <= clock.GetUtcNow())
+            return ProbeError(409, "CLOVER_TOKEN_EXPIRED");
+
+        CloverMerchantProbeOutcome outcome;
+        try
+        {
+            outcome = await client.ProbeAsync(settings.MerchantId,
+                protector.Unprotect(settings.ProtectedAccessToken), cancellationToken);
+        }
+        catch (CryptographicException) { return ProbeError(503, "CLOVER_CREDENTIAL_UNAVAILABLE"); }
+        catch (HttpRequestException) { return ProbeError(502, "CLOVER_UNAVAILABLE"); }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        { return ProbeError(502, "CLOVER_UNAVAILABLE"); }
+
+        return outcome switch
+        {
+            CloverMerchantProbeOutcome.Verified => Results.Ok(new { status = "verified", environment = "sandbox" }),
+            CloverMerchantProbeOutcome.Unauthorized => ProbeError(409, "CLOVER_TOKEN_REJECTED"),
+            CloverMerchantProbeOutcome.MerchantMismatch => ProbeError(409, "CLOVER_MERCHANT_MISMATCH"),
+            _ => ProbeError(502, "CLOVER_UNAVAILABLE"),
+        };
     }
 
     private static async Task<IResult> LaunchAsync(HttpContext context,
@@ -197,6 +229,11 @@ public static class CloverOAuthEndpoints
     private static IResult Error(int status, string code) => Results.Json(new
     {
         error = new { code, message = "No se pudo configurar Clover" }
+    }, statusCode: status);
+
+    private static IResult ProbeError(int status, string code) => Results.Json(new
+    {
+        error = new { code, message = "No se pudo verificar Clover" }
     }, statusCode: status);
 
     private static IResult PublicError(int status) => Results.Text(

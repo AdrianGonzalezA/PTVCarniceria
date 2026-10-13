@@ -44,6 +44,8 @@ builder.Services.AddHttpClient<MercadoPagoQrClient>(client => client.Timeout = T
 builder.Services.AddHttpClient<MercadoPagoOrderLookupClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddHttpClient<CloverOAuthClient>(client => client.Timeout = TimeSpan.FromSeconds(20))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHttpClient<CloverMerchantProbeClient>(client => client.Timeout = TimeSpan.FromSeconds(15))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<ArcaHomologationTicketProvider>();
 builder.Services.AddScoped<ArcaSettingsResolver>();
 builder.Services.AddScoped<MercadoPagoSettingsResolver>();

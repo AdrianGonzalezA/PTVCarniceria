@@ -36,4 +36,9 @@ export class AdminCloverClient {
     return this.http.post<CloverAuthorization>(`${this.endpoint}/authorization`, null,
       { withCredentials: true });
   }
+
+  checkConnection() {
+    return this.http.get<{ readonly status: 'verified'; readonly environment: 'sandbox' }>(
+      `${this.endpoint}/connection`, { withCredentials: true });
+  }
 }

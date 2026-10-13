@@ -27,6 +27,8 @@ export class PaymentGatewaysPage implements OnInit {
   protected readonly cloverLoading = signal(true);
   protected readonly cloverSaving = signal(false);
   protected readonly cloverAuthorizing = signal(false);
+  protected readonly cloverProbing = signal(false);
+  protected readonly cloverProbeResult = signal<string | null>(null);
   protected readonly cloverNotice = signal<string | null>(null);
   protected readonly cloverError = signal<string | null>(null);
   protected readonly loading = signal(true);
@@ -68,6 +70,7 @@ export class PaymentGatewaysPage implements OnInit {
 
   protected reloadClover(): void {
     this.cloverLoading.set(true);
+    this.cloverProbeResult.set(null);
     this.cloverClient.get().subscribe({
       next: (settings) => {
         this.cloverSettings.set(settings);
@@ -126,6 +129,28 @@ export class PaymentGatewaysPage implements OnInit {
       error: () => {
         this.cloverAuthorizing.set(false);
         this.cloverError.set('No se pudo iniciar OAuth. Guardá primero el App ID, Merchant ID y App Secret.');
+      },
+    });
+  }
+
+  protected probeClover(): void {
+    if (this.cloverProbing() || !this.cloverSettings()?.isConnected || this.cloverForm.dirty) return;
+    this.cloverProbing.set(true);
+    this.cloverProbeResult.set(null);
+    this.cloverError.set(null);
+    this.cloverClient.checkConnection().subscribe({
+      next: () => {
+        this.cloverProbing.set(false);
+        this.cloverProbeResult.set('Comercio verificado contra Clover sandbox. Esto no prueba un cobro.');
+      },
+      error: (response: HttpErrorResponse) => {
+        this.cloverProbing.set(false);
+        const code = response.error?.error?.code;
+        this.cloverError.set(code === 'CLOVER_TOKEN_EXPIRED' || code === 'CLOVER_TOKEN_REJECTED'
+          ? 'El token ya no permite consultar Clover. Volvé a conectar el comercio.'
+          : code === 'CLOVER_MERCHANT_MISMATCH'
+            ? 'Clover devolvió otro comercio. Revisá el Merchant ID antes de cobrar.'
+            : 'No se pudo verificar el comercio en Clover sandbox. Reintentá más tarde.');
       },
     });
   }

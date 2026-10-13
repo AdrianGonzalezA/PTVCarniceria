@@ -37,7 +37,7 @@ describe('UsersPage', () => {
     return { fixture, http, page: fixture.nativeElement as HTMLElement };
   }
 
-  it('creates a cashier scoped to selected branches, never another administrator', () => {
+  it('creates a cashier scoped to selected branches', () => {
     const { fixture, http, page } = load();
     page.querySelector<HTMLButtonElement>('.create-user-button')!.click();
     fixture.detectChanges();
@@ -57,7 +57,7 @@ describe('UsersPage', () => {
     page.querySelector<HTMLFormElement>('.user-editor')!.dispatchEvent(new Event('submit'));
     const request = http.expectOne('/api/users');
     expect(request.request.body).toEqual({ username: 'nuevo-cajero', email: 'nuevo@example.test',
-      password: 'segura-de-prueba-2026', branchIds: ['branch-1'] });
+      password: 'segura-de-prueba-2026', role: 'cashier', branchIds: ['branch-1'] });
     request.flush({ ...cashier, userId: 'new-id', username: 'nuevo-cajero' });
     http.expectOne((candidate) => candidate.url === '/api/users').flush({
       items: [admin, cashier], page: 1, pageSize: 20, totalItems: 2, totalPages: 1,
@@ -66,15 +66,42 @@ describe('UsersPage', () => {
     expect(page.querySelector('#create-password')).toBeNull();
   });
 
+  it('creates another administrator for the current company without branch selection', () => {
+    const { fixture, http, page } = load();
+    page.querySelector<HTMLButtonElement>('.create-user-button')!.click();
+    fixture.detectChanges();
+    for (const [id, value] of Object.entries({
+      'create-username': 'admin-dos', 'create-email': 'admin-dos@example.test',
+      'create-password': 'segura-de-prueba-2026',
+    })) {
+      const input = page.querySelector<HTMLInputElement>(`#${id}`)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+    }
+    const role = page.querySelector<HTMLSelectElement>('#create-role')!;
+    role.value = 'administrator';
+    role.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    expect(page.querySelector('.user-editor input[type="checkbox"]')).toBeNull();
+    page.querySelector<HTMLFormElement>('.user-editor')!.dispatchEvent(new Event('submit'));
+    const request = http.expectOne('/api/users');
+    expect(request.request.body).toEqual({ username: 'admin-dos', email: 'admin-dos@example.test',
+      password: 'segura-de-prueba-2026', role: 'administrator', branchIds: [] });
+    request.flush({ ...admin, userId: 'second-admin-id', username: 'admin-dos' });
+    http.expectOne((candidate) => candidate.url === '/api/users').flush({
+      items: [admin, cashier], page: 1, pageSize: 20, totalItems: 2, totalPages: 1,
+    });
+  });
+
   it('loads and updates cashier branch assignments', () => {
     const { fixture, http, page } = load();
     const button = Array.from(page.querySelectorAll<HTMLButtonElement>('.row-actions button'))
-      .find((item) => item.textContent?.includes('Sucursales'))!;
+      .find((item) => item.textContent?.includes('Rol y sucursales'))!;
     button.click();
     http.expectOne('/api/users/admin-id/assignments').flush({ role: 'administrator', branchIds: [] });
     fixture.detectChanges();
     expect(page.querySelector('dialog[aria-labelledby="user-assignments-title"]')).not.toBeNull();
-    expect(page.textContent).toContain('administrador único');
+    expect(page.textContent).toContain('Tu propio rol no se modifica');
     page.querySelector<HTMLButtonElement>('.user-editor .secondary-button')!.click();
     fixture.detectChanges();
     const cashierButton = Array.from(page.querySelectorAll<HTMLButtonElement>('.row-actions'))[1]
@@ -87,13 +114,13 @@ describe('UsersPage', () => {
     north.dispatchEvent(new Event('change'));
     fixture.detectChanges();
     const save = Array.from(page.querySelectorAll<HTMLButtonElement>('.user-editor button'))
-      .find((item) => item.textContent?.includes('Guardar asignaciones'))!;
+      .find((item) => item.textContent?.includes('Guardar accesos'))!;
     save.click();
     const request = http.expectOne('/api/users/cashier-id/assignments');
-    expect(request.request.body).toEqual({ branchIds: ['branch-1', 'branch-2'] });
+    expect(request.request.body).toEqual({ role: 'cashier', branchIds: ['branch-1', 'branch-2'] });
     request.flush({ role: 'cashier', branchIds: ['branch-1', 'branch-2'] });
     fixture.detectChanges();
-    expect(page.textContent).toContain('Asignaciones actualizadas');
+    expect(page.textContent).toContain('Accesos actualizados');
   });
 
   it('resets a cashier password without exposing it in the user list', () => {

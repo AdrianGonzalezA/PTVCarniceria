@@ -7,6 +7,32 @@ namespace Carnicerias.IntegrationTests;
 public sealed class PlatformAccessDbContextModelTests
 {
     [Fact]
+    public void CompanyAccessCodeIsUniqueAndUserCredentialsAreScoped()
+    {
+        var options = new DbContextOptionsBuilder<PlatformAccessDbContext>()
+            .UseNpgsql("Host=localhost;Database=model_only;Username=postgres")
+            .Options;
+        using var db = new PlatformAccessDbContext(options);
+
+        var company = db.Model.FindEntityType(typeof(Company));
+        var user = db.Model.FindEntityType(typeof(UserIdentity));
+
+        Assert.NotNull(company);
+        Assert.NotNull(user);
+        Assert.Contains(company.GetIndexes(), index => index.IsUnique &&
+            index.Properties.Select(property => property.Name).SequenceEqual([nameof(Company.Code)]));
+        Assert.Contains(user.GetIndexes(), index => index.IsUnique &&
+            index.Properties.Select(property => property.Name).SequenceEqual([
+                nameof(UserIdentity.CompanyId), nameof(UserIdentity.UsernameNormalized)]));
+        Assert.Contains(user.GetIndexes(), index => index.IsUnique &&
+            index.Properties.Select(property => property.Name).SequenceEqual([
+                nameof(UserIdentity.CompanyId), nameof(UserIdentity.EmailNormalized)]));
+        Assert.Contains(user.GetForeignKeys(), key =>
+            key.Properties.Select(property => property.Name).SequenceEqual([nameof(UserIdentity.CompanyId)]) &&
+            key.PrincipalEntityType.ClrType == typeof(Company));
+    }
+
+    [Fact]
     public void SessionTokensAreStoredAsUniqueHashes()
     {
         var options = new DbContextOptionsBuilder<PlatformAccessDbContext>()

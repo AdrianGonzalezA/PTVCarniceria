@@ -22,8 +22,15 @@ public sealed class OperationalContextAccessService(PlatformAccessDbContext db)
         Guid userId,
         CancellationToken cancellationToken = default)
     {
+        var companyId = await db.Users
+            .Where(user => user.Id == userId && user.IsActive && !user.IsManufacturer)
+            .Select(user => user.CompanyId)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (companyId is null)
+            return [];
+
         var assignments = await db.UserAssignments
-            .Where(assignment => assignment.UserId == userId)
+            .Where(assignment => assignment.UserId == userId && assignment.CompanyId == companyId)
             .Select(assignment => new { assignment.CompanyId, assignment.BranchId })
             .Distinct()
             .ToListAsync(cancellationToken);
@@ -66,6 +73,12 @@ public sealed class OperationalContextAccessService(PlatformAccessDbContext db)
         Guid branchId,
         CancellationToken cancellationToken = default)
     {
+        var userBelongsToCompany = await db.Users.AnyAsync(
+            user => user.Id == userId && user.CompanyId == companyId &&
+                    user.IsActive && !user.IsManufacturer, cancellationToken);
+        if (!userBelongsToCompany)
+            return null;
+
         var company = await db.Companies
             .Where(candidate => candidate.Id == companyId && candidate.IsActive)
             .Select(candidate => candidate.Name)
@@ -144,6 +157,9 @@ public sealed class OperationalContextAccessService(PlatformAccessDbContext db)
         Guid branchId,
         CancellationToken cancellationToken = default)
     {
+        if (session.CompanyId != companyId)
+            return null;
+
         var context = await ResolveAsync(
             session.UserId,
             session.Id,

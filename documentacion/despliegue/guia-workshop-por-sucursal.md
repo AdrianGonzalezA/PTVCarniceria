@@ -35,21 +35,21 @@ En una máquina de compilación con .NET 10 SDK, Node compatible, npm 11.19.0 y 
 .\tools\Publish-BranchLab.ps1 -OutputDirectory 'C:\Entregas\Carnicerias-Workshop-001'
 ```
 
-La carpeta de salida debe estar vacía; el script no pisa una entrega anterior. Genera `servidor` (API y Angular), `inicializacion` (alta del primer administrador) y `cajas` (carpeta completa del Electron Windows x64, `Start-PosTerminal.ps1` y ejemplo de configuración). **Copiar la carpeta completa de Electron**, no solo el `.exe`. El paquete sigue siendo portable; aún no hay instalador MSI ni actualización automática. Electron Forge distingue el paquete de un instalador, según su [documentación de distribución](https://www.electronjs.org/docs/latest/tutorial/tutorial-packaging).
+La carpeta de salida debe estar vacía; el script no pisa una entrega anterior. Genera `servidor` (API y Angular), `inicializacion` (alta del superadmin del fabricante) y `cajas` (carpeta completa del Electron Windows x64, `Start-PosTerminal.ps1` y ejemplo de configuración). **Copiar la carpeta completa de Electron**, no solo el `.exe`. El paquete sigue siendo portable; aún no hay instalador MSI ni actualización automática. Electron Forge distingue el paquete de un instalador, según su [documentación de distribución](https://www.electronjs.org/docs/latest/tutorial/tutorial-packaging).
 
 Copiar `servidor` e `inicializacion` al servidor local. No copiar contraseñas, PFX, claves, perfiles de Electron ni la base ficticia dentro del paquete. Conservar el código, migraciones y herramientas de bootstrap del repositorio para reconstruir la misma versión.
 
 ## 4. Elegir la ruta de datos
 
-**Workshop con el entorno de desarrollo actual:** utilizar exclusivamente `carnicerias_test_visual` en `127.0.0.1:55433`. Ya contiene usuarios, empresa, sucursal y datos ficticios; **no ejecutar** `create-admin` ni `seed-pos-visual` sobre ella y no crear otra base. Revisar stock, cajas y usuarios desde Administración antes de comenzar.
+**Workshop con el entorno de desarrollo actual:** utilizar exclusivamente `carnicerias_test_visual` en `127.0.0.1:55433`. Ya contiene usuarios, empresas, sucursales y datos ficticios; **no ejecutar** `create-admin` ni `seed-pos-visual` y no crear otra base. La migración de identidad por empresa permanece detenida por la asignación triple de `visual-admin`: resolverla, respaldar y migrar antes de arrancar los binarios nuevos. Véase [auditoría de identidad](auditoria-identidad-por-empresa-20261013.md).
 
-**Primera instalación nueva de una sucursal, más adelante:** requiere autorización explícita antes de crear su única base de aplicación en el servidor de esa sucursal. El operador de PostgreSQL crea el usuario y la base con permisos mínimos y registra sus credenciales fuera de Git. Configurar `CARNICERIAS_CONNECTION_STRING` en la consola de inicialización y luego en el proceso API, nunca en las cajas. Con una base vacía, ejecutar una sola vez desde una consola interactiva del servidor:
+**Primera instalación nueva de una sucursal, más adelante:** requiere autorización explícita antes de crear su única base de aplicación en el servidor de esa sucursal. El operador de PostgreSQL crea el usuario y la base con permisos mínimos y registra sus credenciales fuera de Git. Configurar `CARNICERIAS_CONNECTION_STRING` en la consola de inicialización y luego en el proceso API, nunca en las cajas. Aplicar las migraciones de la versión desde el repositorio sobre esa base ya existente y después de verificar la cadena de conexión. El comando `create-superadmin` **no aplica migraciones automáticamente**. Con la base migrada, ejecutar una sola vez desde una consola interactiva del servidor:
 
 ```powershell
-dotnet .\inicializacion\Carnicerias.Bootstrap.dll create-admin --username administrador --email admin@Sucursal.local --company 'Empresa' --branch 'Sucursal'
+dotnet .\inicializacion\Carnicerias.Bootstrap.dll create-superadmin --username fabricante --email fabricante@instalacion.local
 ```
 
-La herramienta aplica las migraciones y pide una contraseña inicial de al menos 12 caracteres sin mostrarla. Si la base ya tiene usuarios, rechaza el alta inicial. No usar el seed visual como datos comerciales ni transportar ventas de desarrollo. Si cambió la versión, respaldar antes de migrar. No ejecutar pruebas de integración que creen o reinicien otra base de aplicación en este entorno.
+La herramienta pide la contraseña sin mostrarla y rechaza un segundo superadmin inicial. En una instalación nueva exige al menos 12 caracteres; la excepción de seis caracteres solo existe para la base visual local. Abrir `/fabricante` en un navegador de esa instalación y crear empresa, código de acceso, primera sucursal y administrador inicial. El antiguo `create-admin` quedó deshabilitado. No usar el seed visual como datos comerciales ni transportar ventas de desarrollo. Si cambió la versión, respaldar antes de migrar. No ejecutar pruebas de integración que creen o reinicien otra base de aplicación en este entorno.
 
 ## 5. Configurar y levantar la API local
 
@@ -71,10 +71,10 @@ Desde el servidor y **cada caja**, verificar `http://192.168.10.20:5197/api/heal
 
 ## 6. Configurar el negocio desde Administración
 
-1. Iniciar sesión con el administrador y confirmar la empresa/sucursal correcta.
+1. En el navegador, ingresar código de empresa, usuario y contraseña del administrador inicial; confirmar la sucursal. En Electron, la credencial de terminal determina la empresa y el cajero no escribe el código.
 2. En **Configuración → Organización**, revisar o crear la sucursal y una caja activa por PC. Generar/vincular la credencial de cada terminal de forma individual; se entrega una sola vez por canal seguro. Registrar en la hoja de instalación qué PC corresponde a cada caja, sin anotar la credencial.
    La interfaz actual aún permite crear otras sucursales en la misma base; en este workshop **no hacerlo**. La restricción técnica por instalación está pendiente.
-3. En **Usuarios**, crear los cajeros y asignarles la sucursal. Cada persona usa su propio usuario y abre/cierra su turno; no compartir una sesión entre responsables.
+3. En **Usuarios**, crear cajeros para las sucursales o administradores adicionales de esa empresa. Cada persona usa su propio usuario y abre/cierra su turno; no compartir una sesión entre responsables.
 4. Cargar categorías, artículos (con unidad de venta, impuestos y códigos), listas de precios habilitadas en la sucursal y clientes. Las plantillas Excel de la administración sirven para esos maestros. Revisar precios e IVA antes de vender.
 5. Contar e ingresar stock inicial mediante las operaciones disponibles. Para piezas ciclo 2, configurar el perfil de lectura y registrar piezas; no asumir que ya existe importación masiva del frigorífico. Una venta sin stock no debe completarse.
 6. Configurar ARCA/pasarelas solo si el laboratorio las incluye. Las credenciales actuales son de homologación/sandbox. Clover no está habilitado aún para cobros POS sin dispositivo/protocolo verificados.

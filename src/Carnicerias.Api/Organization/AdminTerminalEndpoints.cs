@@ -162,6 +162,8 @@ public static class AdminTerminalEndpoints
         PlatformAccessDbContext db, Guid userId, Guid companyId, Guid branchId,
         CancellationToken cancellationToken) =>
         db.Branches.AnyAsync(branch => branch.CompanyId == companyId && branch.Id == branchId &&
+            db.Users.Any(user => user.Id == userId && user.CompanyId == companyId &&
+                user.IsActive && !user.IsManufacturer) &&
             db.UserAssignments.Any(assignment => assignment.UserId == userId &&
                 assignment.CompanyId == companyId && db.Roles.Any(role =>
                     role.Id == assignment.RoleId && role.Code == "administrator")), cancellationToken);

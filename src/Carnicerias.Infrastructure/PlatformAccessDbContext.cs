@@ -94,15 +94,27 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
         modelBuilder.Entity<UserIdentity>(entity =>
         {
-            entity.ToTable("users");
+            entity.ToTable("users", table => table.HasCheckConstraint(
+                "CK_users_account_scope",
+                "(\"IsManufacturer\" = TRUE AND \"CompanyId\" IS NULL) OR (\"IsManufacturer\" = FALSE AND \"CompanyId\" IS NOT NULL)"));
             entity.HasKey(user => user.Id);
             entity.Property(user => user.Username).HasMaxLength(100).IsRequired();
             entity.Property(user => user.UsernameNormalized).HasMaxLength(100).IsRequired();
             entity.Property(user => user.Email).HasMaxLength(320).IsRequired();
             entity.Property(user => user.EmailNormalized).HasMaxLength(320).IsRequired();
             entity.Property(user => user.PasswordHash).HasMaxLength(512).IsRequired();
-            entity.HasIndex(user => user.UsernameNormalized).IsUnique();
-            entity.HasIndex(user => user.EmailNormalized).IsUnique();
+            entity.HasOne<Company>().WithMany().HasForeignKey(user => user.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(user => new { user.CompanyId, user.UsernameNormalized }).IsUnique()
+                .HasFilter("\"IsManufacturer\" = FALSE");
+            entity.HasIndex(user => new { user.CompanyId, user.EmailNormalized }).IsUnique()
+                .HasFilter("\"IsManufacturer\" = FALSE");
+            entity.HasIndex(user => user.UsernameNormalized).IsUnique()
+                .HasDatabaseName("IX_users_manufacturer_username")
+                .HasFilter("\"IsManufacturer\" = TRUE");
+            entity.HasIndex(user => user.EmailNormalized).IsUnique()
+                .HasDatabaseName("IX_users_manufacturer_email")
+                .HasFilter("\"IsManufacturer\" = TRUE");
         });
 
         modelBuilder.Entity<Role>(entity =>
@@ -136,7 +148,9 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.ToTable("companies");
             entity.HasKey(company => company.Id);
             entity.Property(company => company.Name).HasMaxLength(200).IsRequired();
+            entity.Property(company => company.Code).HasMaxLength(40).IsRequired();
             entity.HasIndex(company => company.Name).IsUnique();
+            entity.HasIndex(company => company.Code).IsUnique();
         });
 
         modelBuilder.Entity<Branch>(entity =>

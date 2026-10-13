@@ -1,0 +1,51 @@
+.manufacturer-workspace {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.manufacturer-login {
+  max-width: 440px;
+}
+
+.manufacturer-login form,
+.manufacturer-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.manufacturer-login input,
+.manufacturer-form input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.manufacturer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.manufacturer-form {
+  width: min(100%, 560px);
+}
+
+.manufacturer-form .field-help {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.manufacturer-workspace .table-wrap {
+  overflow-x: auto;
+}
+
+.manufacturer-workspace table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.manufacturer-workspace th,
+.manufacturer-workspace td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-color, #d8d8d8);
+  text-align: left;
+}

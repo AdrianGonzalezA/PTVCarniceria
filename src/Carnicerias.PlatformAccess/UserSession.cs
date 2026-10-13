@@ -48,6 +48,16 @@ public sealed class UserSession
 
     public Guid? PosTerminalId { get; private set; }
 
+    public void BindToCompany(Guid companyId)
+    {
+        if (companyId == Guid.Empty)
+            throw new ArgumentException("Company id is required.", nameof(companyId));
+        if (CompanyId is not null && CompanyId != companyId)
+            throw new InvalidOperationException("A session cannot move to another company.");
+
+        CompanyId = companyId;
+    }
+
     public void BindToTerminal(Guid terminalId)
     {
         if (terminalId == Guid.Empty)
@@ -65,13 +75,14 @@ public sealed class UserSession
             throw new ArgumentException("A valid company and branch are required.");
         }
 
-        CompanyId = companyId;
+        if (CompanyId != companyId)
+            throw new InvalidOperationException("A session cannot select another company.");
+
         BranchId = branchId;
     }
 
     public void ClearOperationalContext()
     {
-        CompanyId = null;
         BranchId = null;
     }
 

@@ -50,14 +50,14 @@
                 <a class="admin-link" routerLink="/admin">Abrir administración</a>
               }
               <button type="button" class="secondary-button" [disabled]="isSubmitting()" (click)="startContextChange()">
-                Cambiar empresa o sucursal
+                Cambiar sucursal
               </button>
             </section>
           } @else {
             <section class="context-picker" aria-labelledby="context-title" [attr.aria-busy]="isLoadingContexts()">
               <h2 id="context-title">¿Dónde vas a trabajar?</h2>
               <p class="context-help">
-                Elegí una empresa y una sucursal. Confirmá la selección aunque tengas una sola opción.
+                Tu empresa quedó fijada al ingresar. Elegí una sucursal y confirmá la selección.
               </p>
 
               @if (isLoadingContexts()) {
@@ -126,6 +126,18 @@
         } @else {
           <form class="login-form" [formGroup]="credentialsForm" (ngSubmit)="signIn()" novalidate>
             <h2>Iniciar sesión</h2>
+            @if (!isPosElectron) {
+              <label for="company-code">Código de empresa</label>
+              <input
+                id="company-code"
+                name="company-code"
+                type="text"
+                formControlName="companyCode"
+                autocomplete="organization"
+                maxlength="40"
+                required
+              />
+            }
             <label for="credential">Usuario o correo</label>
             <input
               id="credential"

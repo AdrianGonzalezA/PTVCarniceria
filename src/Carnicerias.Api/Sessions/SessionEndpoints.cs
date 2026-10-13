@@ -1,6 +1,7 @@
 using Carnicerias.Api.Contracts;
 using Carnicerias.Api.Security;
 using Carnicerias.Infrastructure;
+using Microsoft.EntityFrameworkCore;
 
 namespace Carnicerias.Api.Sessions;
 
@@ -23,6 +24,7 @@ public static class SessionEndpoints
         LoginRequest? request,
         SessionAuthenticationService sessions,
         PosTerminalAuthenticationService terminals,
+        PlatformAccessDbContext db,
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
@@ -30,10 +32,15 @@ public static class SessionEndpoints
             string.IsNullOrWhiteSpace(request.Credential) ||
             string.IsNullOrWhiteSpace(request.Password) ||
             request.Credential.Length > 320 ||
+            (request.CompanyCode?.Length ?? 0) > 40 ||
             System.Text.Encoding.UTF8.GetByteCount(request.Password) > 1024)
         {
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
         }
+
+        var origin = httpContext.Request.Headers.Origin.ToString();
+        if (!string.IsNullOrEmpty(origin) && !RequestOriginValidator.IsAllowed(origin, httpContext.Request))
+            return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
 
         var terminalCredentialPresent = httpContext.Request.Headers.ContainsKey(Pos.PosTerminalEndpoints.CredentialHeader);
         var terminal = terminalCredentialPresent
@@ -43,8 +50,21 @@ public static class SessionEndpoints
         if (terminalCredentialPresent && terminal is null)
             return Error(StatusCodes.Status401Unauthorized, "POS_TERMINAL_REQUIRED");
 
+        if (terminal is null && string.IsNullOrWhiteSpace(request.CompanyCode))
+            return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+
+        var normalizedCompanyCode = request.CompanyCode?.Trim().ToUpperInvariant();
+        var companyId = terminal?.CompanyId ?? await db.Companies
+            .Where(company => company.Code == normalizedCompanyCode && company.IsActive)
+            .Select(company => company.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (terminal is not null && normalizedCompanyCode is not null &&
+            !await db.Companies.AnyAsync(company => company.Id == terminal.CompanyId &&
+                                                company.Code == normalizedCompanyCode, cancellationToken))
+            companyId = Guid.Empty;
+
         var created = await sessions.CreateAsync(
-            request.Credential, request.Password, terminal?.Id, cancellationToken);
+            companyId, request.Credential, request.Password, terminal?.Id, cancellationToken);
         if (created is null)
         {
             return Error(StatusCodes.Status401Unauthorized, "AUTHENTICATION_FAILED");
@@ -258,7 +278,7 @@ public static class SessionEndpoints
         new ErrorResponse(new ApiError(code, "No se pudo completar la solicitud", details ?? [])),
         statusCode: statusCode);
 
-    private sealed record LoginRequest(string? Credential, string? Password);
+    private sealed record LoginRequest(string? CompanyCode, string? Credential, string? Password);
 
     private sealed record SelectOperationalContextRequest(Guid CompanyId, Guid BranchId);
 }

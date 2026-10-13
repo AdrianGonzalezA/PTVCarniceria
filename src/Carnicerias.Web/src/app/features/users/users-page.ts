@@ -27,11 +27,13 @@ export class UsersPage implements OnInit {
   protected readonly createUsername = signal('');
   protected readonly createEmail = signal('');
   protected readonly createPassword = signal('');
+  protected readonly createRole = signal<UserAssignments['role']>('cashier');
   protected readonly createBranchIds = signal<readonly string[]>([]);
   protected readonly creating = signal(false);
   protected readonly assignmentUserId = signal<string | null>(null);
   protected readonly assignmentData = signal<UserAssignments | null>(null);
   protected readonly assignmentBranchIds = signal<readonly string[]>([]);
+  protected readonly assignmentRole = signal<UserAssignments['role']>('cashier');
   protected readonly assignmentLoading = signal(false);
   protected readonly assignmentSaving = signal(false);
   protected readonly assignmentUsername = computed(() => this.pageData()?.items.find((user) =>
@@ -95,6 +97,7 @@ export class UsersPage implements OnInit {
     this.createUsername.set('');
     this.createEmail.set('');
     this.createPassword.set('');
+    this.createRole.set('cashier');
     this.createBranchIds.set([]);
     this.actionError.set(null);
   }
@@ -118,29 +121,38 @@ export class UsersPage implements OnInit {
       ? [...ids, branchId] : ids.filter((id) => id !== branchId));
   }
 
-  protected createCashier(): void {
+  protected updateCreateRole(event: Event): void {
+    this.createRole.set((event.target as HTMLSelectElement).value as UserAssignments['role']);
+    this.createBranchIds.set([]);
+  }
+
+  protected createUser(): void {
     const username = this.createUsername().trim();
     const email = this.createEmail().trim();
     const password = this.createPassword();
     const branchIds = this.createBranchIds();
-    if (!username || !email || password.length < this.minimumPasswordLength() || branchIds.length === 0 || this.creating()) {
-      this.actionError.set(`Completá usuario, correo, contraseña de al menos ${this.minimumPasswordLength()} caracteres y una sucursal.`);
+    const role = this.createRole();
+    if (!username || !email || password.length < this.minimumPasswordLength() ||
+        (role === 'cashier' && branchIds.length === 0) || this.creating()) {
+      this.actionError.set(`Completá usuario, correo, contraseña de al menos ${this.minimumPasswordLength()} caracteres${role === 'cashier' ? ' y una sucursal' : ''}.`);
       return;
     }
     this.creating.set(true);
     this.actionError.set(null);
-    this.usersClient.createCashier(username, email, password, branchIds).subscribe({
+    this.usersClient.createUser(username, email, password, role, role === 'cashier' ? branchIds : []).subscribe({
       next: () => {
         this.creating.set(false);
         this.closeCreate();
-        this.actionMessage.set('Cajero creado y asignado a las sucursales seleccionadas.');
+        this.actionMessage.set(role === 'administrator'
+          ? 'Administrador creado para esta empresa.'
+          : 'Cajero creado y asignado a las sucursales seleccionadas.');
         this.loadUsers(1);
       },
       error: (error: HttpErrorResponse) => {
         this.creating.set(false);
         this.actionError.set(error.status === 409 ? 'Ya existe ese usuario o correo.' :
           error.status === 400 ? 'Revisá los datos y las sucursales.' :
-            'No se pudo crear el cajero. Intentá de nuevo.');
+            'No se pudo crear el usuario. Intentá de nuevo.');
       },
     });
   }
@@ -156,6 +168,7 @@ export class UsersPage implements OnInit {
         if (this.assignmentUserId() !== userId) return;
         this.assignmentData.set(assignments);
         this.assignmentBranchIds.set(assignments.branchIds);
+        this.assignmentRole.set(assignments.role);
         this.assignmentLoading.set(false);
       },
       error: () => {
@@ -177,26 +190,36 @@ export class UsersPage implements OnInit {
       ? [...ids, branchId] : ids.filter((id) => id !== branchId));
   }
 
+  protected updateAssignmentRole(event: Event): void {
+    this.assignmentRole.set((event.target as HTMLSelectElement).value as UserAssignments['role']);
+    this.assignmentBranchIds.set([]);
+  }
+
   protected saveAssignments(): void {
     const userId = this.assignmentUserId();
-    if (!userId || this.assignmentData()?.role !== 'cashier' || this.assignmentSaving()) return;
-    if (this.assignmentBranchIds().length === 0) {
+    if (!userId || userId === this.currentUserId() || this.assignmentSaving()) return;
+    const role = this.assignmentRole();
+    if (role === 'cashier' && this.assignmentBranchIds().length === 0) {
       this.actionError.set('El cajero debe conservar al menos una sucursal.');
       return;
     }
     this.assignmentSaving.set(true);
     this.actionError.set(null);
-    this.usersClient.replaceAssignments(userId, this.assignmentBranchIds()).subscribe({
+    this.usersClient.replaceAssignments(userId, role,
+      role === 'cashier' ? this.assignmentBranchIds() : []).subscribe({
       next: () => {
         this.assignmentSaving.set(false);
         this.closeAssignments();
-        this.actionMessage.set('Asignaciones actualizadas. Las sesiones anteriores del cajero se cerraron.');
+        this.actionMessage.set('Accesos actualizados. Las sesiones anteriores del usuario se cerraron.');
       },
       error: (error: HttpErrorResponse) => {
         this.assignmentSaving.set(false);
-        this.actionError.set(error.error?.error?.code === 'USER_HAS_OPEN_OPERATIONS'
-          ? 'El cajero tiene turno o ticket abierto en una sucursal que querés quitar.'
-          : 'No se pudieron guardar las asignaciones.');
+        const code = error.error?.error?.code;
+        this.actionError.set(code === 'USER_HAS_OPEN_OPERATIONS'
+          ? 'El usuario tiene un turno o ticket abierto que impide cambiar sus accesos.'
+          : code === 'LAST_ADMINISTRATOR_REQUIRED'
+            ? 'La empresa debe conservar al menos un administrador activo.'
+            : 'No se pudieron guardar los accesos.');
       },
     });
   }
@@ -328,7 +351,9 @@ export class UsersPage implements OnInit {
       error: (error: HttpErrorResponse) => {
         this.actionError.set(
           error.status === 409
-            ? 'No podés inactivar tu propia cuenta desde esta pantalla.'
+            ? error.error?.error?.code === 'LAST_ADMINISTRATOR_REQUIRED'
+              ? 'La empresa debe conservar al menos un administrador activo.'
+              : 'No podés inactivar tu propia cuenta desde esta pantalla.'
             : error.status === 403
               ? 'No tenés permiso para modificar usuarios.'
             : 'No se pudo actualizar el usuario. Revisá la conexión e intentá de nuevo.',

@@ -21,11 +21,11 @@ public static class UserEndpoints
                 Results.Ok(new PasswordPolicyResponse(
                     VisualDevelopmentPasswordPolicy.MinimumLength(db.Database.GetConnectionString()))))
             .RequireOperationalPermission(PlatformPermissionCatalog.UsersManage);
-        endpoints.MapPost("/api/users", CreateCashierAsync)
+        endpoints.MapPost("/api/users", CreateUserAsync)
             .RequireOperationalPermission(PlatformPermissionCatalog.UsersManage);
         endpoints.MapGet("/api/users/{userId:guid}/assignments", ListAssignmentsAsync)
             .RequireOperationalPermission(PlatformPermissionCatalog.UsersManage);
-        endpoints.MapPut("/api/users/{userId:guid}/assignments", ReplaceCashierAssignmentsAsync)
+        endpoints.MapPut("/api/users/{userId:guid}/assignments", ReplaceAssignmentsAsync)
             .RequireOperationalPermission(PlatformPermissionCatalog.UsersManage);
         endpoints.MapPut("/api/users/{userId:guid}/password", ResetUserPasswordAsync)
             .RequireOperationalPermission(PlatformPermissionCatalog.UsersManage);
@@ -57,8 +57,7 @@ public static class UserEndpoints
         }
 
         var companyId = operationalContext.Context.CompanyId;
-        var users = db.Users.AsNoTracking().Where(user => db.UserAssignments.Any(assignment =>
-            assignment.UserId == user.Id && assignment.CompanyId == companyId));
+        var users = db.Users.AsNoTracking().Where(user => user.CompanyId == companyId && !user.IsManufacturer);
         var normalizedSearch = search?.Trim().Normalize(NormalizationForm.FormKC);
         if (!string.IsNullOrEmpty(normalizedSearch))
         {
@@ -95,8 +94,8 @@ public static class UserEndpoints
             .Replace("%", "\\%", StringComparison.Ordinal)
             .Replace("_", "\\_", StringComparison.Ordinal);
 
-    private static async Task<IResult> CreateCashierAsync(
-        CreateCashierRequest? request,
+    private static async Task<IResult> CreateUserAsync(
+        CreateUserRequest? request,
         PlatformAccessDbContext db,
         IPasswordHasher passwordHasher,
         OperationalContextAccessor operationalContext,
@@ -104,22 +103,28 @@ public static class UserEndpoints
         CancellationToken cancellationToken)
     {
         if (!AllowedOrigin(httpContext)) return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
+        var roleCode = request?.Role ?? "cashier";
+        var branchIds = request?.BranchIds ?? [];
         if (request is null || !ValidUsername(request.Username) || !IsValidEmail(request.Email) ||
             !VisualDevelopmentPasswordPolicy.IsValid(request.Password, db.Database.GetConnectionString()) ||
-            !ValidBranchIds(request.BranchIds))
+            roleCode is not ("cashier" or "administrator") ||
+            (roleCode == "cashier" && !ValidBranchIds(branchIds)) ||
+            (roleCode == "administrator" && branchIds.Length != 0))
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var companyId = operationalContext.Context.CompanyId;
-        if (!await AllBranchesActiveAsync(db, companyId, request.BranchIds, cancellationToken))
+        if (roleCode == "cashier" && !await AllBranchesActiveAsync(db, companyId, branchIds, cancellationToken))
             return Error(StatusCodes.Status400BadRequest, "BRANCH_NOT_AVAILABLE");
-        var roleId = await db.Roles.AsNoTracking().Where(role => role.Code == "cashier")
+        var roleId = await db.Roles.AsNoTracking().Where(role => role.Code == roleCode)
             .Select(role => (Guid?)role.Id).SingleOrDefaultAsync(cancellationToken);
-        if (roleId is null) return Error(StatusCodes.Status503ServiceUnavailable, "CASHIER_ROLE_UNAVAILABLE");
+        if (roleId is null) return Error(StatusCodes.Status503ServiceUnavailable, "ROLE_UNAVAILABLE");
 
-        var user = UserIdentity.Create(request.Username, request.Email, passwordHasher.Hash(request.Password));
+        var user = UserIdentity.CreateForCompany(companyId, request.Username, request.Email,
+            passwordHasher.Hash(request.Password));
         db.Users.Add(user);
-        db.UserAssignments.AddRange(request.BranchIds.Select(branchId =>
-            new UserAssignment(user.Id, roleId.Value, companyId, branchId)));
+        db.UserAssignments.AddRange(roleCode == "administrator"
+            ? [new UserAssignment(user.Id, roleId.Value, companyId)]
+            : branchIds.Select(branchId => new UserAssignment(user.Id, roleId.Value, companyId, branchId)));
         try
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -152,7 +157,7 @@ public static class UserEndpoints
                 .Select(assignment => assignment.BranchId!.Value).Order().ToArray()));
     }
 
-    private static async Task<IResult> ReplaceCashierAssignmentsAsync(
+    private static async Task<IResult> ReplaceAssignmentsAsync(
         Guid userId,
         ReplaceAssignmentsRequest? request,
         PlatformAccessDbContext db,
@@ -162,7 +167,11 @@ public static class UserEndpoints
         CancellationToken cancellationToken)
     {
         if (!AllowedOrigin(httpContext)) return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
-        if (userId == Guid.Empty || request is null || !ValidBranchIds(request.BranchIds))
+        var roleCode = request?.Role ?? "cashier";
+        var branchIds = request?.BranchIds ?? [];
+        if (userId == Guid.Empty || request is null || roleCode is not ("cashier" or "administrator") ||
+            (roleCode == "cashier" && !ValidBranchIds(branchIds)) ||
+            (roleCode == "administrator" && branchIds.Length != 0))
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
         if (userId == operationalContext.Context.UserId)
             return Error(StatusCodes.Status409Conflict, "SELF_ACCESS_CHANGE_REJECTED");
@@ -170,40 +179,56 @@ public static class UserEndpoints
         var companyId = operationalContext.Context.CompanyId;
         if (!await IsAssignedToCompanyAsync(db, userId, companyId, cancellationToken))
             return Error(StatusCodes.Status404NotFound, "USER_NOT_FOUND");
-        if (!await AllBranchesActiveAsync(db, companyId, request.BranchIds, cancellationToken))
+        if (roleCode == "cashier" && !await AllBranchesActiveAsync(db, companyId, branchIds, cancellationToken))
             return Error(StatusCodes.Status400BadRequest, "BRANCH_NOT_AVAILABLE");
 
-        var role = await db.Roles.AsNoTracking().SingleOrDefaultAsync(item => item.Code == "cashier",
+        var role = await db.Roles.AsNoTracking().SingleOrDefaultAsync(item => item.Code == roleCode,
             cancellationToken);
-        if (role is null) return Error(StatusCodes.Status503ServiceUnavailable, "CASHIER_ROLE_UNAVAILABLE");
+        if (role is null) return Error(StatusCodes.Status503ServiceUnavailable, "ROLE_UNAVAILABLE");
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await LockCompanyAsync(db, companyId, cancellationToken);
         var assignments = await db.UserAssignments.Where(item => item.CompanyId == companyId &&
             item.UserId == userId).ToArrayAsync(cancellationToken);
-        if (assignments.Any(assignment => assignment.RoleId != role.Id || !assignment.BranchId.HasValue))
-            return Error(StatusCodes.Status409Conflict, "ADMIN_ASSIGNMENT_IMMUTABLE");
+        var adminRoleId = await db.Roles.AsNoTracking().Where(item => item.Code == "administrator")
+            .Select(item => (Guid?)item.Id).SingleOrDefaultAsync(cancellationToken);
+        if (adminRoleId is null) return Error(StatusCodes.Status503ServiceUnavailable, "ROLE_UNAVAILABLE");
+        var wasAdministrator = assignments.Any(assignment => assignment.RoleId == adminRoleId);
+        if (wasAdministrator && roleCode != "administrator" &&
+            !await HasAnotherActiveAdministratorAsync(db, companyId, userId, adminRoleId.Value, cancellationToken))
+            return Error(StatusCodes.Status409Conflict, "LAST_ADMINISTRATOR_REQUIRED");
 
-        var requested = request.BranchIds.ToHashSet();
-        var removed = assignments.Where(assignment => !requested.Contains(assignment.BranchId!.Value)).ToArray();
-        foreach (var assignment in removed)
-            if (await HasOpenOperationsAsync(db, userId, companyId, assignment.BranchId, cancellationToken))
+        var requested = branchIds.ToHashSet();
+        var unchanged = assignments.Length == (roleCode == "administrator" ? 1 : requested.Count) &&
+            assignments.All(assignment => assignment.RoleId == role.Id &&
+                (roleCode == "administrator" ? assignment.BranchId is null :
+                    assignment.BranchId is Guid branchId && requested.Contains(branchId)));
+        if (!unchanged)
+        {
+            foreach (var assignment in assignments)
+                if (assignment.BranchId is Guid existingBranchId &&
+                    (roleCode != "cashier" || !requested.Contains(existingBranchId)) &&
+                    await HasOpenOperationsAsync(db, userId, companyId, existingBranchId, cancellationToken))
+                    return Error(StatusCodes.Status409Conflict, "USER_HAS_OPEN_OPERATIONS");
+            if (wasAdministrator && roleCode != "administrator" &&
+                await HasOpenOperationsAsync(db, userId, companyId, null, cancellationToken))
                 return Error(StatusCodes.Status409Conflict, "USER_HAS_OPEN_OPERATIONS");
 
-        var current = assignments.Select(assignment => assignment.BranchId!.Value).ToHashSet();
-        var added = requested.Except(current).ToArray();
-        if (removed.Length > 0 || added.Length > 0)
-        {
-            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-            db.UserAssignments.RemoveRange(removed);
-            db.UserAssignments.AddRange(added.Select(branchId =>
-                new UserAssignment(userId, role.Id, companyId, branchId)));
+            db.UserAssignments.RemoveRange(assignments);
+            await db.SaveChangesAsync(cancellationToken);
+            db.UserAssignments.AddRange(roleCode == "administrator"
+                ? [new UserAssignment(userId, role.Id, companyId)]
+                : branchIds.Select(branchId => new UserAssignment(userId, role.Id, companyId, branchId)));
             var now = timeProvider.GetUtcNow();
             var sessions = await db.Sessions.Where(session => session.UserId == userId &&
                 session.CompanyId == companyId && session.RevokedAtUtc == null &&
                 session.ExpiresAtUtc > now).ToArrayAsync(cancellationToken);
             foreach (var session in sessions) session.Revoke(now);
             await db.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
         }
-        return Results.Ok(new UserAssignmentsResponse("cashier", requested.Order().ToArray()));
+        await transaction.CommitAsync(cancellationToken);
+        return Results.Ok(new UserAssignmentsResponse(roleCode,
+            roleCode == "cashier" ? requested.Order().ToArray() : []));
     }
 
     private static async Task<IResult> ResetUserPasswordAsync(
@@ -223,8 +248,7 @@ public static class UserEndpoints
 
         var companyId = operationalContext.Context.CompanyId;
         var user = await db.Users.SingleOrDefaultAsync(item => item.Id == userId &&
-            db.UserAssignments.Any(assignment => assignment.UserId == item.Id &&
-                assignment.CompanyId == companyId), cancellationToken);
+            item.CompanyId == companyId && !item.IsManufacturer, cancellationToken);
         if (user is null) return Error(StatusCodes.Status404NotFound, "USER_NOT_FOUND");
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -256,9 +280,7 @@ public static class UserEndpoints
 
         if (userId == Guid.Empty || request is null ||
             (request.Username is null && request.Email is null && request.IsActive is null) ||
-            (request.Username is not null &&
-             (string.IsNullOrWhiteSpace(request.Username) ||
-              request.Username.Trim().Normalize(NormalizationForm.FormKC).Length > 100)) ||
+            (request.Username is not null && !ValidUsername(request.Username)) ||
             (request.Email is not null && !IsValidEmail(request.Email)))
         {
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
@@ -270,11 +292,24 @@ public static class UserEndpoints
         }
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var user = await db.Users.SingleOrDefaultAsync(candidate => candidate.Id == userId, cancellationToken);
-        if (user is null || !await IsAssignedToCompanyAsync(db, userId,
-                operationalContext.Context.CompanyId, cancellationToken))
+        var companyId = operationalContext.Context.CompanyId;
+        var user = await db.Users.SingleOrDefaultAsync(candidate => candidate.Id == userId &&
+            candidate.CompanyId == companyId && !candidate.IsManufacturer, cancellationToken);
+        if (user is null)
         {
             return Error(StatusCodes.Status404NotFound, "USER_NOT_FOUND");
+        }
+
+        if (request.IsActive == false && user.IsActive)
+        {
+            await LockCompanyAsync(db, companyId, cancellationToken);
+            var administratorRoleId = await db.Roles.AsNoTracking().Where(role => role.Code == "administrator")
+                .Select(role => (Guid?)role.Id).SingleOrDefaultAsync(cancellationToken);
+            if (administratorRoleId is Guid roleId &&
+                await db.UserAssignments.AnyAsync(assignment => assignment.UserId == userId &&
+                    assignment.CompanyId == companyId && assignment.RoleId == roleId, cancellationToken) &&
+                !await HasAnotherActiveAdministratorAsync(db, companyId, userId, roleId, cancellationToken))
+                return Error(StatusCodes.Status409Conflict, "LAST_ADMINISTRATOR_REQUIRED");
         }
 
         if (request.IsActive == false && user.IsActive &&
@@ -381,7 +416,8 @@ public static class UserEndpoints
 
     private static bool ValidUsername(string? username) =>
         !string.IsNullOrWhiteSpace(username) &&
-        username.Trim().Normalize(NormalizationForm.FormKC).Length <= 100;
+        username.Trim().Normalize(NormalizationForm.FormKC).Length <= 100 &&
+        !username.Trim().Normalize(NormalizationForm.FormKC).Contains('@');
 
     private static bool ValidBranchIds(Guid[]? branchIds) =>
         branchIds is { Length: > 0 and <= 100 } &&
@@ -389,8 +425,27 @@ public static class UserEndpoints
 
     private static Task<bool> IsAssignedToCompanyAsync(
         PlatformAccessDbContext db, Guid userId, Guid companyId, CancellationToken cancellationToken) =>
-        db.UserAssignments.AnyAsync(assignment => assignment.UserId == userId &&
-            assignment.CompanyId == companyId, cancellationToken);
+        db.Users.AnyAsync(user => user.Id == userId && user.CompanyId == companyId &&
+            !user.IsManufacturer && db.UserAssignments.Any(assignment => assignment.UserId == user.Id &&
+                assignment.CompanyId == companyId), cancellationToken);
+
+    private static Task<bool> HasAnotherActiveAdministratorAsync(
+        PlatformAccessDbContext db, Guid companyId, Guid excludedUserId, Guid roleId,
+        CancellationToken cancellationToken) =>
+        db.Users.AnyAsync(user => user.Id != excludedUserId && user.CompanyId == companyId &&
+            user.IsActive && !user.IsManufacturer && db.UserAssignments.Any(assignment =>
+                assignment.UserId == user.Id && assignment.CompanyId == companyId &&
+                assignment.RoleId == roleId && assignment.BranchId == null), cancellationToken);
+
+    private static Task<int> LockCompanyAsync(
+        PlatformAccessDbContext db, Guid companyId, CancellationToken cancellationToken)
+    {
+        var bytes = companyId.ToByteArray();
+        var first = BitConverter.ToInt32(bytes, 0);
+        var second = BitConverter.ToInt32(bytes, 4);
+        return db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock({first}, {second})", cancellationToken);
+    }
 
     private static async Task<bool> AllBranchesActiveAsync(
         PlatformAccessDbContext db, Guid companyId, Guid[] branchIds,
@@ -422,8 +477,9 @@ public static class UserEndpoints
         statusCode: statusCode);
 
     private sealed record UpdateUserRequest(string? Username, string? Email, bool? IsActive);
-    private sealed record CreateCashierRequest(string Username, string Email, string Password, Guid[] BranchIds);
-    private sealed record ReplaceAssignmentsRequest(Guid[] BranchIds);
+    private sealed record CreateUserRequest(string Username, string Email, string Password, Guid[]? BranchIds,
+        string? Role);
+    private sealed record ReplaceAssignmentsRequest(Guid[]? BranchIds, string? Role);
     private sealed record ResetPasswordRequest(string Password);
     private sealed record PasswordPolicyResponse(int MinimumLength);
     private sealed record UserAssignmentsResponse(string Role, Guid[] BranchIds);

@@ -18,7 +18,7 @@
     <a class="back-link" routerLink="/admin/configuracion">← Volver a configuración</a>
     <p class="eyebrow">Administración</p>
     <h1>Usuarios</h1>
-    <p class="intro">Administrá las cuentas asignadas a {{ currentCompanyName() }}. En esta etapa sólo se pueden dar de alta cajeros; el administrador existente permanece único.</p>
+    <p class="intro">Administrá las cuentas de {{ currentCompanyName() }}. Podés crear cajeros y otros administradores para esta empresa.</p>
 
     <section class="users-panel" aria-labelledby="users-heading" [attr.aria-busy]="isLoading()">
       <header class="panel-heading">
@@ -26,13 +26,13 @@
           <h2 id="users-heading">Usuarios de {{ currentCompanyName() }}</h2>
           <p>La búsqueda incluye nombre de usuario y correo electrónico.</p>
         </div>
-        <button type="button" class="create-user-button" [disabled]="creating() || branches().length === 0" (click)="openCreate()">Nuevo cajero</button>
+        <button type="button" class="create-user-button" [disabled]="creating()" (click)="openCreate()">Nuevo usuario</button>
       </header>
 
       @if (createOpen()) {
         <app-admin-detail-dialog labelledBy="user-create-title" [compact]="true" [canClose]="!creating()" (closed)="closeCreate()">
-        <form class="user-editor" (submit)="$event.preventDefault(); createCashier()">
-          <h3 id="user-create-title">Nuevo cajero</h3>
+        <form class="user-editor" (submit)="$event.preventDefault(); createUser()">
+          <h3 id="user-create-title">Nuevo usuario</h3>
           <label for="create-username">Usuario</label>
           <input id="create-username" name="username" autocomplete="off" maxlength="100" required [value]="createUsername()" (input)="updateCreateField('username', $event)" />
           <label for="create-email">Correo electrónico</label>
@@ -40,18 +40,25 @@
           <label for="create-password">Contraseña inicial</label>
           <input id="create-password" name="password" type="password" autocomplete="new-password" [attr.minlength]="minimumPasswordLength()" required [value]="createPassword()" (input)="updateCreateField('password', $event)" />
           <p class="form-help">Mínimo {{ minimumPasswordLength() }} caracteres. Se guarda como hash; no se vuelve a mostrar.</p>
-          <fieldset>
-            <legend>Sucursales habilitadas</legend>
-            @for (branch of branches(); track branch.branchId) {
-              <label class="branch-choice">
-                <input type="checkbox" [checked]="createBranchIds().includes(branch.branchId)" (change)="toggleCreateBranch(branch.branchId, $event)" />
-                {{ branch.branchName }}
-              </label>
-            }
-          </fieldset>
+          <label for="create-role">Rol</label>
+          <select id="create-role" name="role" [value]="createRole()" (change)="updateCreateRole($event)">
+            <option value="cashier">Cajero</option>
+            <option value="administrator">Administrador de esta empresa</option>
+          </select>
+          @if (createRole() === 'cashier') {
+            <fieldset>
+              <legend>Sucursales habilitadas</legend>
+              @for (branch of branches(); track branch.branchId) {
+                <label class="branch-choice">
+                  <input type="checkbox" [checked]="createBranchIds().includes(branch.branchId)" (change)="toggleCreateBranch(branch.branchId, $event)" />
+                  {{ branch.branchName }}
+                </label>
+              }
+            </fieldset>
+          }
           @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
           <div class="row-actions">
-            <button type="submit" [disabled]="creating()">{{ creating() ? 'Creando…' : 'Crear cajero' }}</button>
+            <button type="submit" [disabled]="creating()">{{ creating() ? 'Creando…' : 'Crear usuario' }}</button>
             <button type="button" class="secondary-button" [disabled]="creating()" (click)="closeCreate()">Cancelar</button>
           </div>
         </form>
@@ -65,10 +72,13 @@
           @if (assignmentLoading()) {
             <p role="status">Cargando asignaciones…</p>
           } @else if (assignmentData(); as assignments) {
-            @if (assignments.role === 'administrator') {
-              <p>La asignación del administrador único no se modifica aquí.</p>
-            } @else {
-              <p>Seleccioná las sucursales del cajero. Cambiarlas cerrará sus sesiones anteriores.</p>
+            <label for="assignment-role">Rol</label>
+            <select id="assignment-role" [value]="assignmentRole()" [disabled]="userId === currentUserId()" (change)="updateAssignmentRole($event)">
+              <option value="cashier">Cajero</option>
+              <option value="administrator">Administrador de esta empresa</option>
+            </select>
+            @if (assignmentRole() === 'cashier') {
+              <p>Seleccioná las sucursales del cajero. Los cambios cerrarán sus sesiones anteriores.</p>
               <fieldset>
                 <legend>Sucursales habilitadas</legend>
                 @for (branch of branches(); track branch.branchId) {
@@ -78,7 +88,11 @@
                   </label>
                 }
               </fieldset>
-              <button type="button" [disabled]="assignmentSaving()" (click)="saveAssignments()">{{ assignmentSaving() ? 'Guardando…' : 'Guardar asignaciones' }}</button>
+            }
+            @if (userId === currentUserId()) {
+              <p>Tu propio rol no se modifica desde esta pantalla.</p>
+            } @else {
+              <button type="button" [disabled]="assignmentSaving()" (click)="saveAssignments()">{{ assignmentSaving() ? 'Guardando…' : 'Guardar accesos' }}</button>
             }
           }
           @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
@@ -180,7 +194,7 @@
                       >
                         Cerrar sesiones
                       </button>
-                      <button type="button" class="secondary-button" [disabled]="actionUserId() !== null" (click)="openAssignments(user.userId)">Sucursales</button>
+                      <button type="button" class="secondary-button" [disabled]="actionUserId() !== null" (click)="openAssignments(user.userId)">Rol y sucursales</button>
                       <button type="button" class="secondary-button" [disabled]="actionUserId() !== null" (click)="openPasswordReset(user.userId)">Contraseña</button>
                       </div>
                     </td>

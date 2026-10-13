@@ -33,10 +33,10 @@ export interface OperationalBranchOption {
 export class SessionClient {
   private readonly http = inject(HttpClient);
 
-  login(credential: string, password: string) {
+  login(companyCode: string | null, credential: string, password: string) {
     return this.http.post<CurrentSession>(
       '/api/sessions',
-      { credential, password },
+      { ...(companyCode === null ? {} : { companyCode }), credential, password },
       { withCredentials: true },
     );
   }

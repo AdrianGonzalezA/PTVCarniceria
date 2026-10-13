@@ -16,6 +16,7 @@ export class WelcomePage implements OnInit {
   private readonly sessionClient = inject(SessionClient);
   private readonly router = inject(Router);
   private readonly formBuilder = inject(FormBuilder);
+  protected readonly isPosElectron = window.location.protocol === 'app:';
 
   protected readonly apiStatus = signal<'checking' | 'available' | 'unavailable'>('checking');
   protected readonly currentSession = signal<CurrentSession | null>(null);
@@ -37,6 +38,7 @@ export class WelcomePage implements OnInit {
       !this.isLoadingContexts(),
   );
   protected readonly credentialsForm = this.formBuilder.nonNullable.group({
+    companyCode: ['', this.isPosElectron ? [Validators.maxLength(40)] : [Validators.required, Validators.maxLength(40)]],
     credential: ['', [Validators.required, Validators.maxLength(320)]],
     password: ['', [Validators.required, Validators.maxLength(1024)]],
   });
@@ -116,8 +118,8 @@ export class WelcomePage implements OnInit {
 
     this.sessionError.set(null);
     this.isSubmitting.set(true);
-    const { credential, password } = this.credentialsForm.getRawValue();
-    this.sessionClient.login(credential, password).subscribe({
+    const { companyCode, credential, password } = this.credentialsForm.getRawValue();
+    this.sessionClient.login(this.isPosElectron ? null : companyCode, credential, password).subscribe({
       next: (session) => {
         this.currentSession.set(session);
         this.sessionChecked.set(true);
@@ -128,7 +130,7 @@ export class WelcomePage implements OnInit {
       error: (error: HttpErrorResponse) => {
         this.sessionError.set(
           error.status === 401
-            ? 'Usuario o contraseña incorrectos.'
+            ? 'Empresa, usuario o contraseña incorrectos.'
             : 'No se pudo iniciar sesión. Revisá la conexión e intentá de nuevo.',
         );
         this.isSubmitting.set(false);

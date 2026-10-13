@@ -31,6 +31,7 @@ describe('WelcomePage', () => {
     expect(page.querySelector('[role="status"]')?.textContent).toContain('Sistema disponible');
     expect(page.querySelector('form h2')?.textContent).toContain('Iniciar sesión');
     expect(page.querySelector('label[for="credential"]')?.textContent).toContain('Usuario o correo');
+    expect(page.querySelector('label[for="company-code"]')?.textContent).toContain('Código de empresa');
   });
 
   it('reports when the API is unavailable', () => {
@@ -86,7 +87,10 @@ describe('WelcomePage', () => {
 
     const page = fixture.nativeElement as HTMLElement;
     const credential = page.querySelector<HTMLInputElement>('#credential')!;
+    const companyCode = page.querySelector<HTMLInputElement>('#company-code')!;
     const password = page.querySelector<HTMLInputElement>('#password')!;
+    companyCode.value = 'VISUAL';
+    companyCode.dispatchEvent(new Event('input'));
     credential.value = 'unknown';
     credential.dispatchEvent(new Event('input'));
     password.value = 'incorrect password';
@@ -95,13 +99,13 @@ describe('WelcomePage', () => {
 
     page.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit'));
     const loginRequest = http.expectOne('/api/sessions');
-    expect(loginRequest.request.body).toEqual({ credential: 'unknown', password: 'incorrect password' });
+    expect(loginRequest.request.body).toEqual({ companyCode: 'VISUAL', credential: 'unknown', password: 'incorrect password' });
     loginRequest.flush(
       { error: { code: 'AUTHENTICATION_FAILED' } },
       { status: 401, statusText: 'Unauthorized' },
     );
     fixture.detectChanges();
 
-    expect(page.querySelector('[role="alert"]')?.textContent).toContain('Usuario o contraseña incorrectos.');
+    expect(page.querySelector('[role="alert"]')?.textContent).toContain('Empresa, usuario o contraseña incorrectos.');
   });
 });

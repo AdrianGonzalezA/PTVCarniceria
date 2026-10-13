@@ -14,8 +14,6 @@ public static class AdminOrganizationEndpoints
         var companies = endpoints.MapGroup("/api/admin/companies")
             .RequireOperationalPermission(PlatformPermissionCatalog.OrganizationManage);
         companies.MapGet("", ListCompaniesAsync);
-        companies.MapPost("", CreateCompanyAsync);
-        companies.MapPatch("/{companyId:guid}", UpdateCompanyAsync);
         companies.MapGet("/{companyId:guid}/branches", ListBranchesAsync);
         companies.MapPost("/{companyId:guid}/branches", CreateBranchAsync);
         companies.MapPatch("/{companyId:guid}/branches/{branchId:guid}", UpdateBranchAsync);
@@ -27,96 +25,14 @@ public static class AdminOrganizationEndpoints
         OperationalContextAccessor contextAccessor,
         CancellationToken cancellationToken)
     {
-        var userId = contextAccessor.Context.UserId;
+        var companyId = contextAccessor.Context.CompanyId;
         var companies = await db.Companies.AsNoTracking()
-            .Where(company => db.UserAssignments.Any(assignment =>
-                assignment.UserId == userId && assignment.CompanyId == company.Id &&
-                db.Roles.Any(role => role.Id == assignment.RoleId && role.Code == "administrator")))
+            .Where(company => company.Id == companyId)
             .OrderBy(company => company.Name).ThenBy(company => company.Id)
             .Select(company => new CompanyResponse(company.Id, company.Name, company.IsActive,
                 db.Branches.Count(branch => branch.CompanyId == company.Id && branch.IsActive)))
             .ToArrayAsync(cancellationToken);
         return Results.Ok(companies);
-    }
-
-    private static async Task<IResult> CreateCompanyAsync(
-        CompanyCreateRequest? request,
-        PlatformAccessDbContext db,
-        OperationalContextAccessor contextAccessor,
-        HttpContext httpContext,
-        CancellationToken cancellationToken)
-    {
-        if (!AllowedOrigin(httpContext)) return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
-        if (request is null || !ValidName(request.Name) || !ValidName(request.InitialBranchName))
-            return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
-
-        var roleId = await db.Roles.AsNoTracking()
-            .Where(role => role.Code == "administrator")
-            .Select(role => (Guid?)role.Id).SingleOrDefaultAsync(cancellationToken);
-        if (roleId is null) return Error(StatusCodes.Status503ServiceUnavailable, "ADMIN_ROLE_UNAVAILABLE");
-
-        var company = new Company(request.Name);
-        var branch = new Branch(company.Id, request.InitialBranchName);
-        var assignment = new UserAssignment(contextAccessor.Context.UserId, roleId.Value, company.Id);
-        db.Companies.Add(company);
-        db.Branches.Add(branch);
-        db.UserAssignments.Add(assignment);
-        try
-        {
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException exception) when (IsUniqueConstraintViolation(exception))
-        {
-            return Error(StatusCodes.Status409Conflict, "ORGANIZATION_NAME_ALREADY_EXISTS");
-        }
-        return Results.Created($"/api/admin/companies/{company.Id}",
-            new CompanyCreatedResponse(company.Id, company.Name, branch.Id, branch.Name));
-    }
-
-    private static async Task<IResult> UpdateCompanyAsync(
-        Guid companyId,
-        CompanyUpdateRequest? request,
-        PlatformAccessDbContext db,
-        OperationalContextAccessor contextAccessor,
-        HttpContext httpContext,
-        CancellationToken cancellationToken)
-    {
-        if (!AllowedOrigin(httpContext)) return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
-        if (request is null || (request.Name is null && request.IsActive is null) ||
-            (request.Name is not null && !ValidName(request.Name)))
-            return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
-        var context = contextAccessor.Context;
-        if (!await IsAssignedAdministratorAsync(db, context.UserId, companyId, cancellationToken))
-            return Error(StatusCodes.Status404NotFound, "COMPANY_NOT_FOUND");
-        var company = await db.Companies.SingleOrDefaultAsync(item => item.Id == companyId,
-            cancellationToken);
-        if (company is null) return Error(StatusCodes.Status404NotFound, "COMPANY_NOT_FOUND");
-        if (request.IsActive == false && company.IsActive)
-        {
-            if (context.CompanyId == companyId)
-                return Error(StatusCodes.Status409Conflict, "CURRENT_COMPANY_CANNOT_BE_INACTIVATED");
-            if (await HasOpenOperationsAsync(db, companyId, null, cancellationToken))
-                return Error(StatusCodes.Status409Conflict, "COMPANY_HAS_OPEN_OPERATIONS");
-        }
-
-        if (request.Name is not null) company.Rename(request.Name);
-        if (request.IsActive is bool isActive)
-        {
-            if (isActive) company.Activate();
-            else company.Deactivate();
-        }
-        try
-        {
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException exception) when (IsUniqueConstraintViolation(exception))
-        {
-            return Error(StatusCodes.Status409Conflict, "ORGANIZATION_NAME_ALREADY_EXISTS");
-        }
-        var activeBranchCount = await db.Branches.CountAsync(branch => branch.CompanyId == companyId &&
-            branch.IsActive, cancellationToken);
-        return Results.Ok(new CompanyResponse(company.Id, company.Name, company.IsActive,
-            activeBranchCount));
     }
 
     private static async Task<IResult> ListBranchesAsync(
@@ -125,7 +41,8 @@ public static class AdminOrganizationEndpoints
         OperationalContextAccessor contextAccessor,
         CancellationToken cancellationToken)
     {
-        if (!await IsAssignedAdministratorAsync(db, contextAccessor.Context.UserId, companyId,
+        if (contextAccessor.Context.CompanyId != companyId ||
+            !await IsAssignedAdministratorAsync(db, contextAccessor.Context.UserId, companyId,
                 cancellationToken))
             return Error(StatusCodes.Status404NotFound, "COMPANY_NOT_FOUND");
         var branches = await db.Branches.AsNoTracking().Where(branch => branch.CompanyId == companyId)
@@ -148,7 +65,8 @@ public static class AdminOrganizationEndpoints
         if (!AllowedOrigin(httpContext)) return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
         if (request is null || !ValidName(request.Name))
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
-        if (!await IsAssignedAdministratorAsync(db, contextAccessor.Context.UserId, companyId,
+        if (contextAccessor.Context.CompanyId != companyId ||
+            !await IsAssignedAdministratorAsync(db, contextAccessor.Context.UserId, companyId,
                 cancellationToken))
             return Error(StatusCodes.Status404NotFound, "COMPANY_NOT_FOUND");
         if (!await db.Companies.AnyAsync(company => company.Id == companyId && company.IsActive,
@@ -183,7 +101,8 @@ public static class AdminOrganizationEndpoints
             (request.Name is not null && !ValidName(request.Name)))
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
         var context = contextAccessor.Context;
-        if (!await IsAssignedAdministratorAsync(db, context.UserId, companyId, cancellationToken))
+        if (context.CompanyId != companyId ||
+            !await IsAssignedAdministratorAsync(db, context.UserId, companyId, cancellationToken))
             return Error(StatusCodes.Status404NotFound, "COMPANY_NOT_FOUND");
         var branch = await db.Branches.SingleOrDefaultAsync(item => item.CompanyId == companyId &&
             item.Id == branchId, cancellationToken);
@@ -221,9 +140,11 @@ public static class AdminOrganizationEndpoints
 
     private static Task<bool> IsAssignedAdministratorAsync(
         PlatformAccessDbContext db, Guid userId, Guid companyId, CancellationToken cancellationToken) =>
-        db.UserAssignments.AnyAsync(assignment => assignment.UserId == userId &&
-            assignment.CompanyId == companyId && db.Roles.Any(role => role.Id == assignment.RoleId &&
-                role.Code == "administrator"), cancellationToken);
+        db.Users.AnyAsync(user => user.Id == userId && user.CompanyId == companyId &&
+            user.IsActive && !user.IsManufacturer && db.UserAssignments.Any(assignment =>
+                assignment.UserId == user.Id && assignment.CompanyId == companyId &&
+                db.Roles.Any(role => role.Id == assignment.RoleId && role.Code == "administrator")),
+            cancellationToken);
 
     private static async Task<bool> HasOpenOperationsAsync(
         PlatformAccessDbContext db, Guid companyId, Guid? branchId, CancellationToken cancellationToken) =>
@@ -250,11 +171,8 @@ public static class AdminOrganizationEndpoints
         new ErrorResponse(new ApiError(code, "No se pudo completar la solicitud", [])),
         statusCode: statusCode);
 
-    private sealed record CompanyCreateRequest(string Name, string InitialBranchName);
-    private sealed record CompanyUpdateRequest(string? Name, bool? IsActive);
     private sealed record BranchCreateRequest(string Name);
     private sealed record BranchUpdateRequest(string? Name, bool? IsActive);
-    private sealed record CompanyCreatedResponse(Guid Id, string Name, Guid InitialBranchId, string InitialBranchName);
     private sealed record CompanyResponse(Guid Id, string Name, bool IsActive, int ActiveBranchCount);
     private sealed record BranchResponse(Guid Id, string Name, bool IsActive, int ActiveTerminalCount);
 }

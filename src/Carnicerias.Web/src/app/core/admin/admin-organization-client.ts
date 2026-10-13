@@ -8,13 +8,6 @@ export interface AdminCompany {
   readonly activeBranchCount: number;
 }
 
-export interface AdminCompanyCreated {
-  readonly id: string;
-  readonly name: string;
-  readonly initialBranchId: string;
-  readonly initialBranchName: string;
-}
-
 export interface AdminBranch {
   readonly id: string;
   readonly name: string;
@@ -29,15 +22,6 @@ export class AdminOrganizationClient {
 
   companies() {
     return this.http.get<readonly AdminCompany[]>(this.endpoint, { withCredentials: true });
-  }
-
-  createCompany(name: string, initialBranchName: string) {
-    return this.http.post<AdminCompanyCreated>(this.endpoint,
-      { name, initialBranchName }, { withCredentials: true });
-  }
-
-  updateCompany(id: string, changes: { readonly name?: string; readonly isActive?: boolean }) {
-    return this.http.patch<AdminCompany>(`${this.endpoint}/${id}`, changes, { withCredentials: true });
   }
 
   branches(companyId: string) {

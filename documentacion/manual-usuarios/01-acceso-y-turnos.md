@@ -1,5 +1,7 @@
 # 01 · Acceso, sucursal y turno de caja
 
+> **Cambio en preparación (13/10/2026):** después de migrar la única base, el ingreso web pedirá también el **código de empresa**. La caja Electron obtendrá la empresa de su credencial y no pedirá ese código. La activación está pendiente de resolver una asignación histórica multicompañía; mientras tanto, la API que sigue levantada conserva el ingreso anterior.
+
 ## Ingresar
 
 1. En **Iniciar sesión**, escribí tu usuario o correo y contraseña.

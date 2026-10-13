@@ -2040,6 +2040,11 @@ namespace Carnicerias.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -2049,6 +2054,9 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasColumnType("character varying(200)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
 
                     b.HasIndex("Name")
                         .IsUnique();
@@ -2160,6 +2168,9 @@ namespace Carnicerias.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("CompanyId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -2174,6 +2185,9 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasColumnType("character varying(320)");
 
                     b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsManufacturer")
                         .HasColumnType("boolean");
 
                     b.Property<string>("PasswordHash")
@@ -2194,12 +2208,27 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("EmailNormalized")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("IX_users_manufacturer_email")
+                        .HasFilter("\"IsManufacturer\" = TRUE");
 
                     b.HasIndex("UsernameNormalized")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("IX_users_manufacturer_username")
+                        .HasFilter("\"IsManufacturer\" = TRUE");
 
-                    b.ToTable("users", "platform_access");
+                    b.HasIndex("CompanyId", "EmailNormalized")
+                        .IsUnique()
+                        .HasFilter("\"IsManufacturer\" = FALSE");
+
+                    b.HasIndex("CompanyId", "UsernameNormalized")
+                        .IsUnique()
+                        .HasFilter("\"IsManufacturer\" = FALSE");
+
+                    b.ToTable("users", "platform_access", t =>
+                        {
+                            t.HasCheckConstraint("CK_users_account_scope", "(\"IsManufacturer\" = TRUE AND \"CompanyId\" IS NULL) OR (\"IsManufacturer\" = FALSE AND \"CompanyId\" IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Carnicerias.PlatformAccess.UserSession", b =>
@@ -3070,6 +3099,14 @@ namespace Carnicerias.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("CompanyId", "BranchId")
                         .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Carnicerias.PlatformAccess.UserIdentity", b =>
+                {
+                    b.HasOne("Carnicerias.PlatformAccess.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 

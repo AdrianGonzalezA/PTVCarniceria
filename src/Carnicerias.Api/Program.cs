@@ -104,6 +104,7 @@ if (app.Configuration.GetValue<bool>("Clover:TunnelOnly"))
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
 app.MapSessionEndpoints();
+app.MapManufacturerEndpoints();
 app.MapUserEndpoints();
 app.MapCatalogEndpoints();
 app.MapAdminCategoryEndpoints();

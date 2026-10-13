@@ -43,28 +43,11 @@ describe('OrganizationPage', () => {
     expect(page.querySelector<HTMLButtonElement>('.branch-row .toggle-button')?.disabled).toBe(true);
   });
 
-  it('creates a company with its first branch', () => {
-    const { fixture, http, page } = load();
-    page.querySelector<HTMLButtonElement>('.create-company-button')!.click();
-    fixture.detectChanges();
-    expect(page.querySelector('dialog[aria-labelledby="company-editor-title"]')).not.toBeNull();
-    for (const [id, value] of Object.entries({
-      'company-name': 'Nueva empresa', 'initial-branch-name': 'Principal',
-    })) {
-      const input = page.querySelector<HTMLInputElement>(`#${id}`)!;
-      input.value = value;
-      input.dispatchEvent(new Event('input'));
-    }
-    fixture.detectChanges();
-    page.querySelector<HTMLFormElement>('.company-form')!.dispatchEvent(new Event('submit'));
-    const create = http.expectOne('/api/admin/companies');
-    expect(create.request.body).toEqual({ name: 'Nueva empresa', initialBranchName: 'Principal' });
-    create.flush({ id: 'company-2', name: 'Nueva empresa',
-      initialBranchId: 'branch-2', initialBranchName: 'Principal' });
-    http.expectOne('/api/admin/companies').flush([company,
-      { id: 'company-2', name: 'Nueva empresa', isActive: true, activeBranchCount: 1 }]);
-    fixture.detectChanges();
-    expect(page.textContent).toContain('Nueva empresa');
+  it('does not offer company creation or editing to a client administrator', () => {
+    const { page } = load();
+    expect(page.querySelector('.create-company-button')).toBeNull();
+    expect(page.querySelector('.company-row .toggle-button')).toBeNull();
+    expect(page.textContent).toContain('El alta y el estado de las empresas los administra el fabricante');
   });
 
   it('adds a branch under the selected company', () => {
@@ -118,21 +101,6 @@ describe('OrganizationPage', () => {
     page.querySelector<HTMLButtonElement>('.terminals-panel .header-actions .secondary-button')!.click();
     fixture.detectChanges();
     expect(page.querySelector('dialog[open] .branches-panel')).not.toBeNull();
-  });
-
-  it('confirms company inactivation in a dialog before updating', () => {
-    const other = { id: 'company-2', name: 'Otra empresa', isActive: true, activeBranchCount: 0 };
-    const { fixture, http, page } = load([company, other]);
-    page.querySelector<HTMLButtonElement>('.company-row:last-child .toggle-button')!.click();
-    fixture.detectChanges();
-    expect(page.querySelector('dialog[aria-labelledby="organization-action-title"]')).not.toBeNull();
-    http.expectNone('/api/admin/companies/company-2');
-    page.querySelector<HTMLButtonElement>('.confirm-organization-action')!.click();
-    const update = http.expectOne('/api/admin/companies/company-2');
-    expect(update.request.body).toEqual({ isActive: false });
-    update.flush({ ...other, isActive: false });
-    fixture.detectChanges();
-    expect(page.querySelector('dialog')).toBeNull();
   });
 
   it('confirms a branch status change without leaving two dialogs open', () => {

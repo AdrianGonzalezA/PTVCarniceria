@@ -12,7 +12,7 @@
     <a class="back-link" routerLink="/admin/configuracion">← Volver a configuración</a>
     <p class="eyebrow">Configuración</p>
     <h1>Organización</h1>
-    <p class="intro">Administrá empresas y sucursales sin borrar movimientos ni tickets.</p>
+    <p class="intro">Administrá las sucursales y cajas de tu empresa sin borrar movimientos ni tickets.</p>
 
     @if (session()?.context; as context) {
       <section class="context-bar" aria-label="Contexto de trabajo">
@@ -27,39 +27,16 @@
     <section class="category-panel" aria-labelledby="companies-title" [attr.aria-busy]="companiesLoading()">
       <header class="panel-heading">
         <div>
-          <h2 id="companies-title">Empresas asignadas</h2>
-          <p>Una empresa nueva se crea con su primera sucursal y tu rol administrador existente.</p>
+          <h2 id="companies-title">Tu empresa</h2>
+          <p>El alta y el estado de las empresas los administra el fabricante del POS.</p>
         </div>
-        <button type="button" class="create-company-button" (click)="startCreateCompany()">Nueva empresa</button>
       </header>
-
-      @if (companyEditorOpen()) {
-        <app-admin-detail-dialog labelledBy="company-editor-title" [compact]="true" [canClose]="!companySaving()" (closed)="cancelCompany()">
-        <form class="editor-form company-form" [formGroup]="companyForm" (ngSubmit)="saveCompany()">
-          <h3 id="company-editor-title">{{ editingCompany() ? 'Editar empresa' : 'Nueva empresa' }}</h3>
-          <label for="company-name">Nombre de la empresa</label>
-          <input id="company-name" formControlName="name" maxlength="200" required />
-          @if (!editingCompany()) {
-            <label for="initial-branch-name">Primera sucursal</label>
-            <input id="initial-branch-name" formControlName="initialBranchName" maxlength="200" required />
-          }
-          @if (companyForm.touched && companyForm.invalid) {
-            <p class="field-error" role="alert">Ingresá nombres de hasta 200 caracteres.</p>
-          }
-          @if (actionError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
-          <div class="editor-actions">
-            <button type="submit" [disabled]="companySaving()">{{ companySaving() ? 'Guardando…' : 'Guardar' }}</button>
-            <button type="button" class="secondary-button" [disabled]="companySaving()" (click)="cancelCompany()">Cancelar</button>
-          </div>
-        </form>
-        </app-admin-detail-dialog>
-      }
 
       @if (companiesError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
       @if (companiesLoading()) {
         <p class="state-message" role="status">Cargando empresas…</p>
       } @else if (companies().length === 0) {
-        <p class="state-message">No tenés empresas asignadas.</p>
+        <p class="state-message">Tu empresa no está disponible.</p>
       } @else {
         <div class="table-wrap"><table>
           <thead><tr><th scope="col">Empresa</th><th scope="col">Sucursales activas</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr></thead>
@@ -71,10 +48,6 @@
                 <td><span class="status" [class.status-active]="company.isActive">{{ company.isActive ? 'Activa' : 'Inactiva' }}</span></td>
                 <td class="row-actions">
                   <button type="button" class="secondary-button" (click)="selectCompany(company)">Sucursales</button>
-                  <button type="button" class="secondary-button" (click)="startEditCompany(company)">Editar</button>
-                  <button type="button" class="secondary-button toggle-button" [disabled]="companyActionId() !== null || (company.isActive && session()?.context?.companyId === company.id)" (click)="toggleCompany(company)">
-                    {{ companyActionId() === company.id ? 'Guardando…' : company.isActive ? 'Inactivar' : 'Activar' }}
-                  </button>
                 </td>
               </tr>
             }
@@ -219,17 +192,17 @@
     }
     @if (pendingAction(); as action) {
       <app-admin-detail-dialog labelledBy="organization-action-title" [compact]="true"
-        [canClose]="!companyActionId() && !branchActionId() && !terminalActionId()" (closed)="closeAction()">
+        [canClose]="!branchActionId() && !terminalActionId()" (closed)="closeAction()">
         <section class="editor-form" aria-labelledby="organization-action-title">
           <h3 id="organization-action-title">{{ actionTitle(action) }}</h3>
           <p><strong>{{ actionName(action) }}</strong></p>
           <p>{{ actionWarning(action) }}</p>
           <div class="editor-actions">
             <button type="button" class="confirm-organization-action"
-              [disabled]="!!companyActionId() || !!branchActionId() || !!terminalActionId()"
+              [disabled]="!!branchActionId() || !!terminalActionId()"
               (click)="confirmAction()">Confirmar</button>
             <button type="button" class="secondary-button"
-              [disabled]="!!companyActionId() || !!branchActionId() || !!terminalActionId()"
+              [disabled]="!!branchActionId() || !!terminalActionId()"
               (click)="closeAction()">Cancelar</button>
           </div>
         </section>

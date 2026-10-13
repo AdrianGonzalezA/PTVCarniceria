@@ -2,9 +2,12 @@
 // --remote-debugging-port=9224. Never run against a production register.
 import { writeFile } from 'node:fs/promises';
 
-const targets = await fetch('http://127.0.0.1:9224/json/list').then((response) => response.json());
+const port = Number(process.env.CARNICERIAS_ELECTRON_CDP_PORT ?? 9224);
+if (!Number.isInteger(port) || port < 1024 || port > 65535)
+  throw new Error('Invalid local Electron CDP port.');
+const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.json());
 const page = targets.find((target) => target.type === 'page' && target.url.startsWith('app://bundle/'));
-if (!page) throw new Error('No POS Electron page on local CDP port 9224.');
+if (!page) throw new Error(`No POS Electron page on local CDP port ${port}.`);
 
 const socket = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise((resolve, reject) => {

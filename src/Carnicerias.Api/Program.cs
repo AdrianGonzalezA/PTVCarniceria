@@ -47,6 +47,26 @@ builder.Services.AddScoped<IOperationalContextChangeBlocker, CashierShiftContext
 
 var app = builder.Build();
 
+if (app.Configuration.GetValue<bool>("Clover:TunnelOnly"))
+{
+    app.Use(async (context, next) =>
+    {
+        if (!CloverTunnelBoundary.Allows(context.Request.Method, context.Request.Path.Value))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        context.Response.Headers.CacheControl = "no-store";
+        await next(context);
+    });
+
+    app.MapGet("/clover/status", () => Results.Ok(new { status = "ready", oauth = "not_configured" }));
+    app.MapGet("/clover", () => Results.Ok(new { status = "ready", oauth = "not_configured" }));
+    app.MapGet("/clover/launch", () => Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
+    app.MapGet("/clover/callback", () => Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
+}
+
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
 app.MapSessionEndpoints();
 app.MapUserEndpoints();

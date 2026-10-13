@@ -32,6 +32,18 @@ export interface CreatedManufacturerCompany {
   readonly initialAdministratorId: string;
 }
 
+export interface NewCompanyAdministrator {
+  readonly username: string;
+  readonly email: string;
+  readonly password: string;
+}
+
+export interface CreatedCompanyAdministrator {
+  readonly id: string;
+  readonly username: string;
+  readonly email: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ManufacturerClient {
   private readonly http = inject(HttpClient);
@@ -64,6 +76,12 @@ export class ManufacturerClient {
   updateCompany(companyId: string, changes: { readonly name?: string; readonly isActive?: boolean }) {
     return this.http.patch<ManufacturerCompany>(
       `${this.baseUrl}/companies/${encodeURIComponent(companyId)}`, changes,
+      { withCredentials: true });
+  }
+
+  createAdministrator(companyId: string, input: NewCompanyAdministrator) {
+    return this.http.post<CreatedCompanyAdministrator>(
+      `${this.baseUrl}/companies/${encodeURIComponent(companyId)}/administrators`, input,
       { withCredentials: true });
   }
 }

@@ -159,8 +159,15 @@ button:disabled {
   font-size: 0.875rem;
 }
 
-.manufacturer-form .manufacturer-actions {
-  margin-top: 0.75rem;
+.manufacturer-admin-form {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--manufacturer-border);
+}
+
+.manufacturer-admin-form h3 {
+  margin: 0;
 }
 
 .manufacturer-workspace .table-wrap {

@@ -29,4 +29,16 @@ describe('ManufacturerClient', () => {
     request.flush({ id: 'company-id', code: 'EMPRESA-B', name: 'Empresa B',
       initialBranchId: 'branch-id', initialAdministratorId: 'admin-id' });
   });
+
+  it('creates an administrator under the selected company using the manufacturer session', () => {
+    const client = TestBed.inject(ManufacturerClient);
+    const input = { username: 'nuevo-admin', email: 'nuevo@empresa.test', password: 'password' };
+    client.createAdministrator('company-id', input).subscribe();
+    const request = TestBed.inject(HttpTestingController)
+      .expectOne('/api/manufacturer/companies/company-id/administrators');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.withCredentials).toBe(true);
+    expect(request.request.body).toEqual(input);
+    request.flush({ id: 'admin-id', username: input.username, email: input.email });
+  });
 });

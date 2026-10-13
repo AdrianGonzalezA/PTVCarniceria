@@ -46,6 +46,7 @@
 
 - [x] Solo superadmin crea empresa con código, primera sucursal y primer administrador; las operaciones son atómicas en el código preparado.
 - [x] UI del fabricante permite ver/crear empresas sin exponer contraseñas o datos comerciales.
+- [x] Desde Editar empresa, SuperAdmin puede agregar una cuenta administradora independiente, limitada a esa empresa, sin modificar a los administradores existentes. Formulario y contrato HTTP probados; la ruta devuelve 401 sin sesión de fabricante. No se creó una cuenta real para esta verificación.
 - **Verificar:** pruebas API/UI de autorización y fallo parcial, build/lint.
 - **Depende de:** T5. **Archivos probables:** endpoints Organization, servicio de alta, UI fabricante, pruebas.
 

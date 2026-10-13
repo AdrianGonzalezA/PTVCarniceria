@@ -25,7 +25,7 @@ En la misma instalación y base, Empresa A y Empresa B pueden tener cada una un 
 
 **Checkpoint A:** dos usuarios `cajero1` de empresas distintas no se confunden; uno de la empresa equivocada no entra por la otra caja. Build y pruebas unitarias/frontend pasan sin crear otra base.
 
-4. **Fabricante:** alta segura de superadmin existente/nuevo sin secretos en Git; sesión y permisos separados; API y UI para crear empresa con primera sucursal y administrador inicial.
+4. **Fabricante:** alta segura de superadmin existente/nuevo sin secretos en Git; sesión y permisos separados; API y UI para crear empresa con primera sucursal y administrador inicial, y para agregar administradores a una empresa existente desde su edición.
 5. **Administrador de empresa:** crear administradores y cajeros de la propia empresa; cambiar accesos con revocación de sesiones y protección del último administrador; impedir rol fabricante.
 6. **Organización acotada:** retirar alta/lista global de empresas de la administración cliente, conservar sucursales/cajas propias y exigir alcance en todas las acciones.
 

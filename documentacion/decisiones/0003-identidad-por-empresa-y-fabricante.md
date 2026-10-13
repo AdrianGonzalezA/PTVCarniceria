@@ -9,7 +9,7 @@ La instalación puede alojar varias empresas en su única base local. El índice
 ## Decisión
 
 - Cada cuenta cliente pertenece a una empresa persistida. Usuario y correo son únicos dentro de esa empresa; una cuenta nunca cambia de empresa durante una sesión. El ingreso web pide código de empresa, usuario/correo y contraseña. En el POS Electron, la credencial de terminal fija la empresa y el código no se solicita.
-- El fabricante usa una cuenta `superadmin` sin empresa cliente, cookie y rutas `/api/manufacturer/*` separadas. Puede crear una empresa, su primera sucursal y administrador inicial en una transacción; no recibe contexto operativo, caja ni ventas.
+- El fabricante usa una cuenta `superadmin` sin empresa cliente, cookie y rutas `/api/manufacturer/*` separadas. Puede crear una empresa, su primera sucursal y administrador inicial en una transacción. Al editarla puede agregar otras cuentas administradoras propias de esa empresa; no recibe contexto operativo, caja ni ventas.
 - El administrador cliente puede crear otros administradores y cajeros solo en su propia empresa, pero no crear, renombrar ni inactivar empresas. La última cuenta administradora activa de una empresa está protegida.
 - Las empresas existentes reciben un código estable `C-` seguido por su UUID sin guiones. Es menos cómodo que un código elegido por el fabricante, pero evita adivinar códigos durante la migración y garantiza unicidad sin cambiar nombres o IDs. Las empresas nuevas reciben un código legible elegido por el superadmin. Los códigos no se modifican al renombrar.
 - Las sesiones anteriores se revocan al migrar. Sus registros históricos y los IDs/hashes de usuarios permanecen.

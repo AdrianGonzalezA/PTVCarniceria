@@ -106,6 +106,22 @@
           <button type="button" [disabled]="busy() || !editName().trim()" (click)="saveEdit()">Guardar</button>
           <button type="button" class="secondary-button" [disabled]="busy()" (click)="closeEdit()">Cancelar</button>
         </div>
+        <form class="manufacturer-admin-form" data-testid="create-company-admin" [formGroup]="administratorForm" (ngSubmit)="createAdministrator()">
+          <h3>Agregar administrador a {{ company.name }}</h3>
+          <p>La nueva cuenta administrará solo esta empresa. Las cuentas existentes no cambian.</p>
+          <label for="company-admin-username">Usuario</label>
+          <input id="company-admin-username" formControlName="username" maxlength="100" autocomplete="off" required />
+          <label for="company-admin-email">Correo</label>
+          <input id="company-admin-email" type="email" formControlName="email" maxlength="320" autocomplete="off" required />
+          <label for="company-admin-password">Contraseña inicial</label>
+          <input id="company-admin-password" type="password" formControlName="password" autocomplete="new-password" required />
+          @if (administratorForm.touched && administratorForm.invalid) { <p class="error-message" role="alert">Revisá usuario, correo y contraseña.</p> }
+          @if (administratorError(); as text) { <p class="error-message" role="alert">{{ text }}</p> }
+          @if (administratorCreated(); as text) { <p class="success-message" role="status">{{ text }}</p> }
+          <div class="manufacturer-actions">
+            <button type="submit" [disabled]="busy()">{{ busy() ? 'Creando…' : 'Crear administrador' }}</button>
+          </div>
+        </form>
       </section>
     </app-admin-detail-dialog>
   }

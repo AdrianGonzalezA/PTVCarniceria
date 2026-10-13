@@ -23,6 +23,7 @@ public static class ManufacturerEndpoints
         manufacturer.MapGet("/companies", ListCompaniesAsync);
         manufacturer.MapPost("/companies", CreateCompanyAsync);
         manufacturer.MapPatch("/companies/{companyId:guid}", UpdateCompanyAsync);
+        manufacturer.MapPost("/companies/{companyId:guid}/administrators", CreateAdministratorAsync);
         return endpoints;
     }
 
@@ -159,6 +160,35 @@ public static class ManufacturerEndpoints
             company.IsActive, activeBranchCount));
     }
 
+    private static async Task<IResult> CreateAdministratorAsync(
+        Guid companyId, CreateAdministratorRequest? request, PlatformAccessDbContext db,
+        IPasswordHasher passwordHasher, HttpContext httpContext, CancellationToken cancellationToken)
+    {
+        if (!AllowedOrigin(httpContext)) return Error(403, "CSRF_REJECTED");
+        if (companyId == Guid.Empty || request is null || !ValidUsername(request.Username) ||
+            !ValidEmail(request.Email) ||
+            !VisualDevelopmentPasswordPolicy.IsValid(request.Password, db.Database.GetConnectionString()))
+            return Error(400, "VALIDATION_ERROR");
+
+        if (!await db.Companies.AsNoTracking().AnyAsync(company => company.Id == companyId,
+                cancellationToken))
+            return Error(404, "COMPANY_NOT_FOUND");
+        var roleId = await db.Roles.AsNoTracking().Where(role => role.Code == "administrator")
+            .Select(role => (Guid?)role.Id).SingleOrDefaultAsync(cancellationToken);
+        if (roleId is null) return Error(503, "ADMIN_ROLE_UNAVAILABLE");
+
+        var admin = UserIdentity.CreateForCompany(companyId, request.Username, request.Email,
+            passwordHasher.Hash(request.Password));
+        db.Users.Add(admin);
+        db.UserAssignments.Add(new UserAssignment(admin.Id, roleId.Value, companyId));
+        try { await db.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateException exception) when (IsUniqueConstraintViolation(exception))
+        { return Error(409, "USER_ALREADY_EXISTS"); }
+
+        return Results.Json(new CreatedAdministratorResponse(admin.Id, admin.Username, admin.Email),
+            statusCode: StatusCodes.Status201Created);
+    }
+
     private static bool ValidName(string? value) =>
         !string.IsNullOrWhiteSpace(value) && value.Trim().Length <= 200;
 
@@ -191,8 +221,10 @@ public static class ManufacturerEndpoints
     private sealed record CreateCompanyRequest(string Name, string Code, string InitialBranchName,
         string AdminUsername, string AdminEmail, string AdminPassword);
     private sealed record UpdateCompanyRequest(string? Name, bool? IsActive);
+    private sealed record CreateAdministratorRequest(string Username, string Email, string Password);
     private sealed record ManufacturerCompanyResponse(Guid Id, string Code, string Name,
         bool IsActive, int ActiveBranchCount);
     private sealed record CreatedCompanyResponse(Guid Id, string Code, string Name,
         Guid InitialBranchId, Guid InitialAdministratorId);
+    private sealed record CreatedAdministratorResponse(Guid Id, string Username, string Email);
 }

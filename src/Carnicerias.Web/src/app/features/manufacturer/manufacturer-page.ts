@@ -22,6 +22,8 @@ export class ManufacturerPage implements OnInit {
   protected readonly createOpen = signal(false);
   protected readonly editingCompany = signal<ManufacturerCompany | null>(null);
   protected readonly editName = signal('');
+  protected readonly administratorCreated = signal<string | null>(null);
+  protected readonly administratorError = signal<string | null>(null);
   protected readonly statusCompany = signal<ManufacturerCompany | null>(null);
   protected readonly error = signal<string | null>(null);
   protected readonly message = signal<string | null>(null);
@@ -37,6 +39,11 @@ export class ManufacturerPage implements OnInit {
     adminUsername: ['', [Validators.required, Validators.maxLength(100), Validators.pattern(/^[^@]+$/)]],
     adminEmail: ['', [Validators.required, Validators.email, Validators.maxLength(320)]],
     adminPassword: ['', Validators.required],
+  });
+  protected readonly administratorForm = this.formBuilder.nonNullable.group({
+    username: ['', [Validators.required, Validators.maxLength(100), Validators.pattern(/^[^@]+$/)]],
+    email: ['', [Validators.required, Validators.email, Validators.maxLength(320)]],
+    password: ['', Validators.required],
   });
 
   ngOnInit(): void {
@@ -129,11 +136,19 @@ export class ManufacturerPage implements OnInit {
   protected startEdit(company: ManufacturerCompany): void {
     this.editingCompany.set(company);
     this.editName.set(company.name);
+    this.administratorForm.reset();
+    this.administratorCreated.set(null);
+    this.administratorError.set(null);
     this.error.set(null);
   }
 
   protected closeEdit(): void {
-    if (!this.busy()) this.editingCompany.set(null);
+    if (!this.busy()) {
+      this.editingCompany.set(null);
+      this.administratorForm.reset();
+      this.administratorCreated.set(null);
+      this.administratorError.set(null);
+    }
   }
 
   protected changeEditName(event: Event): void {
@@ -155,6 +170,34 @@ export class ManufacturerPage implements OnInit {
       error: () => {
         this.error.set('No se pudo actualizar la empresa.');
         this.busy.set(false);
+      },
+    });
+  }
+
+  protected createAdministrator(): void {
+    const company = this.editingCompany();
+    if (this.administratorForm.invalid || !company || this.busy()) {
+      this.administratorForm.markAllAsTouched();
+      return;
+    }
+    this.busy.set(true);
+    this.administratorError.set(null);
+    this.administratorCreated.set(null);
+    const value = this.administratorForm.getRawValue();
+    this.client.createAdministrator(company.id, {
+      username: value.username.trim(), email: value.email.trim(), password: value.password,
+    }).subscribe({
+      next: (created) => {
+        this.busy.set(false);
+        this.administratorForm.reset();
+        this.administratorCreated.set(`Administrador ${created.username} creado para ${company.name}.`);
+      },
+      error: (response: HttpErrorResponse) => {
+        this.busy.set(false);
+        this.administratorError.set(response.status === 409 ? 'El usuario o correo ya existe en esta empresa.' :
+          response.status === 400 ? 'Revisá usuario, correo y contraseña.' :
+            response.status === 404 ? 'La empresa ya no existe. Actualizá la lista.' :
+              'No se pudo crear el administrador.');
       },
     });
   }

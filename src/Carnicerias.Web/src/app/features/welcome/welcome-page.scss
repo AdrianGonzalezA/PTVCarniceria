@@ -201,7 +201,7 @@ h2 {
 
 .context-form {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 1rem;
   margin-top: 0.25rem;
 }
@@ -291,9 +291,5 @@ button:focus-visible {
   .account-bar {
     width: 100%;
     justify-content: space-between;
-  }
-
-  .context-form {
-    grid-template-columns: 1fr;
   }
 }

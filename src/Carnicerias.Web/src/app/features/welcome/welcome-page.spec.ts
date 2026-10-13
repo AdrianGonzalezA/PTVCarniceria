@@ -109,6 +109,61 @@ describe('WelcomePage', () => {
     http.expectNone('/api/sessions');
   });
 
+  it('uses the company fixed to Electron and asks only for its branch', () => {
+    TestBed.overrideProvider(POS_ELECTRON_MODE, { useValue: true });
+    const fixture = TestBed.createComponent(WelcomePage);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/health').flush({ status: 'healthy' });
+    http.expectOne('/api/pos-terminals/current').flush({
+      id: 'terminal-id', name: 'Caja 1', companyId: 'company-id', companyName: 'Empresa Visual',
+      branchId: 'branch-id', branchName: 'Sucursal Visual',
+    });
+    http.expectOne('/api/sessions/current').flush({
+      userId: 'cashier-id', username: 'cajero1', expiresAtUtc: '2026-10-14T20:00:00Z', context: null,
+    });
+    http.expectOne('/api/operational-contexts').flush([{
+      companyId: 'company-id', companyName: 'Empresa Visual',
+      branches: [{ branchId: 'branch-id', branchName: 'Sucursal Visual' }],
+    }]);
+    fixture.detectChanges();
+
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('#company')).toBeNull();
+    expect(page.querySelector('.context-picker .context-company')?.textContent).toContain('Empresa Visual');
+    expect(page.querySelector<HTMLSelectElement>('#branch')?.options[1]?.textContent).toContain('Sucursal Visual');
+    const branch = page.querySelector<HTMLSelectElement>('#branch')!;
+    branch.value = 'branch-id';
+    branch.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    page.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+    expect(http.expectOne('/api/sessions/current/context').request.body).toEqual({
+      companyId: 'company-id', branchId: 'branch-id',
+    });
+  });
+
+  it('does not ask for a company again after browser login', () => {
+    const fixture = TestBed.createComponent(WelcomePage);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/health').flush({ status: 'healthy' });
+    http.expectOne('/api/sessions/current').flush({
+      userId: 'admin-id', username: 'visual-admin', expiresAtUtc: '2026-10-14T20:00:00Z', context: null,
+    });
+    http.expectOne('/api/operational-contexts').flush([{
+      companyId: 'company-id', companyName: 'Empresa Visual',
+      branches: [{ branchId: 'branch-id', branchName: 'Sucursal Visual' }],
+    }]);
+    fixture.detectChanges();
+
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('#company')).toBeNull();
+    expect(page.querySelector('.context-picker .context-company')?.textContent).toContain('Empresa Visual');
+    expect(page.querySelector('#branch')).not.toBeNull();
+  });
+
   it('takes an administrator with a confirmed context to the admin area', () => {
     const navigation = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
     const fixture = TestBed.createComponent(WelcomePage);

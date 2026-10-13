@@ -86,24 +86,9 @@
                     Tu usuario todavía no tiene empresas y sucursales habilitadas.
                   }
                 </p>
-              } @else {
+              } @else if (selectedCompany(); as company) {
+                <p class="context-company">{{ company.companyName }}</p>
                 <form class="context-form" (ngSubmit)="confirmContext()" novalidate>
-                  <div class="field-group">
-                    <label for="company">Empresa</label>
-                    <select
-                      id="company"
-                      name="company"
-                      [value]="selectedCompanyId()"
-                      (change)="onCompanyChange($event)"
-                      required
-                    >
-                      <option value="">Seleccioná una empresa</option>
-                      @for (company of contextOptions(); track company.companyId) {
-                        <option [value]="company.companyId">{{ company.companyName }}</option>
-                      }
-                    </select>
-                  </div>
-
                   <div class="field-group">
                     <label for="branch">Sucursal</label>
                     <select
@@ -136,6 +121,10 @@
                     </button>
                   </div>
                 </form>
+              } @else {
+                <p class="empty-message" role="alert">
+                  No se pudo determinar la empresa de esta sesión. Cerrá sesión y volvé a ingresar.
+                </p>
               }
             </section>
           }

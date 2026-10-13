@@ -36,13 +36,17 @@ export class WelcomePage implements OnInit {
   protected readonly isLoadingContexts = signal(false);
   protected readonly isChangingContext = signal(false);
   protected readonly contextOptions = signal<readonly OperationalCompanyOption[]>([]);
-  protected readonly selectedCompanyId = signal('');
   protected readonly selectedBranchId = signal('');
+  protected readonly selectedCompany = computed(() => {
+    const options = this.contextOptions();
+    return options.length === 1 ? options[0] : null;
+  });
   protected readonly availableBranches = computed(
-    () => this.contextOptions().find((company) => company.companyId === this.selectedCompanyId())?.branches ?? [],
+    () => this.selectedCompany()?.branches ?? [],
   );
   protected readonly canConfirmContext = computed(
     () =>
+      this.selectedCompany() !== null &&
       this.availableBranches().some((branch) => branch.branchId === this.selectedBranchId()) &&
       !this.isLoadingContexts(),
   );
@@ -82,24 +86,19 @@ export class WelcomePage implements OnInit {
     });
   }
 
-  protected onCompanyChange(event: Event): void {
-    this.selectedCompanyId.set((event.target as HTMLSelectElement).value);
-    this.selectedBranchId.set('');
-    this.contextError.set(null);
-  }
-
   protected onBranchChange(event: Event): void {
     this.selectedBranchId.set((event.target as HTMLSelectElement).value);
     this.contextError.set(null);
   }
 
   protected confirmContext(): void {
-    if (!this.canConfirmContext() || this.isSubmitting()) return;
+    const company = this.selectedCompany();
+    if (!company || !this.canConfirmContext() || this.isSubmitting()) return;
 
     this.contextError.set(null);
     this.isSubmitting.set(true);
     this.sessionClient
-      .selectOperationalContext(this.selectedCompanyId(), this.selectedBranchId())
+      .selectOperationalContext(company.companyId, this.selectedBranchId())
       .subscribe({
         next: (session) => {
           this.currentSession.set(session);
@@ -128,7 +127,6 @@ export class WelcomePage implements OnInit {
   protected cancelContextChange(): void {
     this.isChangingContext.set(false);
     this.contextError.set(null);
-    this.selectedCompanyId.set('');
     this.selectedBranchId.set('');
   }
 
@@ -180,8 +178,8 @@ export class WelcomePage implements OnInit {
   private loadOperationalContexts(): void {
     this.isLoadingContexts.set(true);
     this.contextError.set(null);
-    this.selectedCompanyId.set('');
     this.selectedBranchId.set('');
+    this.contextOptions.set([]);
     this.sessionClient.operationalContexts().subscribe({
       next: (options) => {
         this.contextOptions.set(options);

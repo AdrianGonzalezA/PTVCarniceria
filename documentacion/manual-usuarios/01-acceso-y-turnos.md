@@ -5,7 +5,7 @@ En el navegador, el ingreso pide el **código de empresa** además del usuario y
 ## Ingresar
 
 1. En **Iniciar sesión**, escribí el código de empresa si estás en el navegador, luego tu usuario o correo y contraseña.
-2. Elegí la **sucursal** habilitada y pulsá **Confirmar sucursal**, incluso si solo aparece una opción. En Electron, la empresa ya está determinada por la caja.
+2. Comprobá la empresa que se muestra como dato fijo. Elegí la **sucursal** habilitada y pulsá **Confirmar sucursal**, incluso si solo aparece una opción. No hay un selector de empresa en este paso; en Electron ya está determinada por la caja y en el navegador por el código ingresado.
 3. Desde la pantalla de contexto, abrí **Punto de venta** o **Administración**, según tus permisos. También podés usar **Cambiar sucursal** y **Cerrar sesión**.
 
 El POS requiere una caja activa y una credencial de esa caja guardada en el perfil local de Electron. Que la caja figure activa en Administración no reemplaza esa credencial. Si aparece **Caja no disponible**, un administrador debe revisar o renovar la vinculación de la terminal; el cajero no debe intentar cobrar desde otra caja por su cuenta.

@@ -1,6 +1,6 @@
 # 0001 — Estado OAuth de Clover en la base existente
 
-**Estado:** aceptada para el desarrollo sandbox (13/10/2026). La migración y la prueba real de autorización siguen pendientes mientras Docker/WSL no esté disponible.
+**Estado:** aceptada para el desarrollo sandbox (13/10/2026). La migración se aplicó a `carnicerias_test_visual`; la autorización real del comercio sigue pendiente.
 
 ## Contexto
 

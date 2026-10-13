@@ -1,6 +1,6 @@
 # 0001 — Estado OAuth de Clover en la base existente
 
-**Estado:** aceptada para el desarrollo sandbox (13/10/2026). La migración se aplicó a `carnicerias_test_visual`; la autorización real del comercio sigue pendiente.
+**Estado:** aceptada para el desarrollo sandbox (13/10/2026). La migración se aplicó a `carnicerias_test_visual` y se completó la autorización OAuth real de un comercio de prueba. El par de tokens cifrado quedó vigente; no se verificó todavía un cobro.
 
 ## Contexto
 

@@ -5,7 +5,14 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSingleton<ICentralPasswordHasher, CentralPasswordHasher>();
+builder.Services.AddSingleton<ICentralPasswordHasher>(services =>
+{
+    var configuration = services.GetRequiredService<IConfiguration>();
+    var connectionString = configuration.GetConnectionString("CentralAccess")
+        ?? Environment.GetEnvironmentVariable("CARNICERIAS_CENTRAL_CONNECTION_STRING");
+    return new CentralPasswordHasher(CentralPasswordPolicy.MinimumLength(connectionString));
+});
+builder.Services.AddScoped<ICentralCompanyManagementService, CentralCompanyManagementService>();
 builder.Services.AddScoped<ICentralSessionStore, EfCentralSessionStore>();
 builder.Services.AddScoped<ICentralManufacturerSessionStore, EfCentralManufacturerSessionStore>();
 builder.Services.AddScoped<CentralManufacturerSessionService>();
@@ -92,6 +99,7 @@ app.UseRateLimiter();
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
 app.MapCentralSessionEndpoints();
 app.MapCentralManufacturerSessionEndpoints();
+app.MapCentralManufacturerCompanyEndpoints();
 app.MapCentralInstallationEndpoints();
 app.MapCentralBusinessSummaryEndpoints();
 

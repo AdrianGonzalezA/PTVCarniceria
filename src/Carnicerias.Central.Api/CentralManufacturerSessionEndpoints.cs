@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json;
 using Carnicerias.Central.Infrastructure;
 
 namespace Carnicerias.Central.Api;
@@ -25,7 +24,8 @@ public static class CentralManufacturerSessionEndpoints
         if (!CentralRequestSecurity.HasSameOriginAndCsrfHeader(context))
             return Error(403, "ORIGIN_REJECTED", "Origen no autorizado.");
 
-        var request = await ReadLoginAsync(context.Request, cancellationToken);
+        var request = await CentralJsonRequest.ReadAsync<LoginRequest>(context.Request,
+            MaximumRequestBytes, cancellationToken);
         if (request is null || !Valid(request))
             return Error(400, "INVALID_LOGIN_REQUEST", "Datos de acceso inválidos.");
         if (!accountLimiter.TryAcquire("CENTRAL_MANUFACTURER", request.Credential!))
@@ -87,25 +87,6 @@ public static class CentralManufacturerSessionEndpoints
         && !request.Credential.Any(char.IsControl)
         && request.Password is { Length: >= 1 }
         && Encoding.UTF8.GetByteCount(request.Password) <= 1024;
-
-    private static async Task<LoginRequest?> ReadLoginAsync(HttpRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (!request.HasJsonContentType() || request.ContentLength > MaximumRequestBytes)
-            return null;
-        var bytes = new byte[MaximumRequestBytes + 1];
-        var count = 0;
-        while (count < bytes.Length)
-        {
-            var read = await request.Body.ReadAsync(bytes.AsMemory(count), cancellationToken);
-            if (read == 0) break;
-            count += read;
-        }
-        if (count is 0 or > MaximumRequestBytes) return null;
-        try { return JsonSerializer.Deserialize<LoginRequest>(bytes.AsSpan(0, count),
-            JsonSerializerOptions.Web); }
-        catch (JsonException) { return null; }
-    }
 
     private static IResult Error(int status, string code, string message) => Results.Json(
         new { error = new { code, message, details = (object?)null } }, statusCode: status);

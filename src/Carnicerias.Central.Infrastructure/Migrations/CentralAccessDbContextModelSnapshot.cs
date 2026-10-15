@@ -153,6 +153,71 @@ namespace Carnicerias.Central.Infrastructure.Migrations
                     b.ToTable("installations", "central_access");
                 });
 
+            modelBuilder.Entity("Carnicerias.Central.Infrastructure.CentralManufacturer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("UsernameNormalized")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsernameNormalized")
+                        .IsUnique();
+
+                    b.ToTable("manufacturers", "central_access");
+                });
+
+            modelBuilder.Entity("Carnicerias.Central.Infrastructure.CentralManufacturerSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ManufacturerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("RevokedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("ManufacturerId", "ExpiresAtUtc");
+
+                    b.ToTable("manufacturer_sessions", "central_access");
+                });
+
             modelBuilder.Entity("Carnicerias.Central.Infrastructure.CentralSession", b =>
                 {
                     b.Property<Guid>("Id")
@@ -203,6 +268,15 @@ namespace Carnicerias.Central.Infrastructure.Migrations
                     b.HasOne("Carnicerias.Central.Infrastructure.CentralCompany", null)
                         .WithMany()
                         .HasForeignKey("CentralCompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Carnicerias.Central.Infrastructure.CentralManufacturerSession", b =>
+                {
+                    b.HasOne("Carnicerias.Central.Infrastructure.CentralManufacturer", null)
+                        .WithMany()
+                        .HasForeignKey("ManufacturerId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

@@ -9,6 +9,8 @@ public sealed class CentralAccessDbContext(DbContextOptions<CentralAccessDbConte
     public DbSet<CentralSession> Sessions => Set<CentralSession>();
     public DbSet<CentralAuditEvent> AuditEvents => Set<CentralAuditEvent>();
     public DbSet<CentralInstallation> Installations => Set<CentralInstallation>();
+    public DbSet<CentralManufacturer> Manufacturers => Set<CentralManufacturer>();
+    public DbSet<CentralManufacturerSession> ManufacturerSessions => Set<CentralManufacturerSession>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -72,6 +74,28 @@ public sealed class CentralAccessDbContext(DbContextOptions<CentralAccessDbConte
                 installation.IsActive, installation.Label });
             entity.HasOne<CentralCompany>().WithMany()
                 .HasForeignKey(installation => installation.CentralCompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CentralManufacturer>(entity =>
+        {
+            entity.ToTable("manufacturers");
+            entity.HasKey(manufacturer => manufacturer.Id);
+            entity.Property(manufacturer => manufacturer.Username).HasMaxLength(100).IsRequired();
+            entity.Property(manufacturer => manufacturer.UsernameNormalized).HasMaxLength(100).IsRequired();
+            entity.Property(manufacturer => manufacturer.PasswordHash).HasMaxLength(256).IsRequired();
+            entity.HasIndex(manufacturer => manufacturer.UsernameNormalized).IsUnique();
+        });
+
+        modelBuilder.Entity<CentralManufacturerSession>(entity =>
+        {
+            entity.ToTable("manufacturer_sessions");
+            entity.HasKey(session => session.Id);
+            entity.Property(session => session.TokenHash).HasMaxLength(64).IsRequired();
+            entity.HasIndex(session => session.TokenHash).IsUnique();
+            entity.HasIndex(session => new { session.ManufacturerId, session.ExpiresAtUtc });
+            entity.HasOne<CentralManufacturer>().WithMany()
+                .HasForeignKey(session => session.ManufacturerId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }

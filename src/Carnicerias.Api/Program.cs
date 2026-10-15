@@ -38,6 +38,8 @@ builder.Services.AddDbContext<PlatformAccessDbContext>((services, options) =>
 });
 builder.Services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(services => BranchServiceSettings.FromConfiguration(
+    services.GetRequiredService<IConfiguration>()));
 builder.Services.AddDataProtection().SetApplicationName("Carnicerias.Fiscal");
 builder.Services.AddHttpClient<ArcaWsaaClient>(client => client.Timeout = TimeSpan.FromSeconds(45));
 builder.Services.AddHttpClient<ArcaWsfeClient>(client => client.Timeout = TimeSpan.FromSeconds(45));
@@ -99,7 +101,7 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
-var branchServiceSettings = BranchServiceSettings.FromConfiguration(app.Configuration);
+var branchServiceSettings = app.Services.GetRequiredService<BranchServiceSettings>();
 if (branchServiceSettings.IsRequested && !branchServiceSettings.IsEnabled)
     BranchServiceEndpoints.LogConfigurationIncomplete(app.Logger);
 var serveWeb = !app.Configuration.GetValue<bool>("Clover:TunnelOnly") &&

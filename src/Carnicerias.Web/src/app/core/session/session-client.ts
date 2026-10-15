@@ -6,6 +6,7 @@ export interface CurrentSession {
   readonly username: string;
   readonly expiresAtUtc: string;
   readonly context: OperationalContext | null;
+  readonly branchBound?: boolean;
 }
 
 export interface OperationalContext {

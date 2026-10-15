@@ -1,6 +1,6 @@
 # 04 · Administración: Negocio
 
-Ingresá en **Administración → Negocio** con un usuario autorizado. Esta sección reúne consultas y operaciones comerciales; las opciones visibles dependen de los permisos. El contexto de empresa y sucursal aparece arriba y puede cambiarse desde el inicio.
+Ingresá en **Administración → Negocio** con un usuario autorizado. Esta sección reúne consultas y operaciones comerciales; las opciones visibles dependen de los permisos. El contexto de empresa y sucursal aparece arriba. Solo en un servidor compartido puede cambiarse la sucursal desde el inicio; la instalación de una sucursal queda vinculada a ella.
 
 ## Resumen de hoy
 

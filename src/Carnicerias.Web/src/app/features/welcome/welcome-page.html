@@ -65,7 +65,7 @@
               @if (session.context.permissions.includes('platform.users.manage')) {
                 <a class="admin-link" routerLink="/admin">Abrir administración</a>
               }
-              @if (!isPosElectron) {
+              @if (!isPosElectron && !session.branchBound) {
                 <button type="button" class="secondary-button" [disabled]="isSubmitting()" (click)="startContextChange()">
                   Cambiar sucursal
                 </button>
@@ -81,6 +81,16 @@
                 <p class="empty-message">Esta caja debe estar vinculada para continuar.</p>
               } @else {
                 <p class="loading-message" role="status">Verificando el acceso a la sucursal de esta caja…</p>
+              }
+            </section>
+          } @else if (session.branchBound) {
+            <section class="context-picker" aria-labelledby="context-title" [attr.aria-busy]="isLoadingContexts() || isSubmitting()">
+              <h2 id="context-title">Ingresando a esta sucursal</h2>
+              @if (contextError(); as error) {
+                <p class="form-error" role="alert">{{ error }}</p>
+                <button type="button" class="secondary-button" [disabled]="isLoadingContexts() || isSubmitting()" (click)="retryBoundBranch()">Reintentar acceso</button>
+              } @else {
+                <p class="loading-message" role="status">Verificando el acceso a la sucursal de esta instalación…</p>
               }
             </section>
           } @else {

@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Check', 'Start', 'Verify')]
+    [ValidateSet('Check', 'Start', 'StartBranch', 'Verify')]
     [string]$Action
 )
 
@@ -13,7 +13,7 @@ $branchCompanyId = '102ee262-53e1-48ed-9756-7c2c84bccb44'
 $branchId = '0d5723bb-ac42-4f69-ab3a-4a23591abdf2'
 $centralCompanyId = '11613dd2-0fb6-44cc-873d-804933aca921'
 $vaultPath = Join-Path $root '.local-backups\visual-central-lab.dpapi'
-$branchExecutable = Join-Path $root '.local-backups\runtime\branch-managed-alta\Carnicerias.Api.exe'
+$branchExecutable = Join-Path $root '.local-backups\runtime\branch-managed-alta-v2\Carnicerias.Api.exe'
 $centralExecutable = Join-Path $root '.local-backups\runtime\central\Carnicerias.Central.Api.exe'
 $webDirectory = Join-Path $root 'src\Carnicerias.Central.Web'
 $proxyPath = Join-Path $root 'tools\rustica-managed-proxy.conf.json'
@@ -82,10 +82,31 @@ function Start-WithEnvironment($executable, $port, $settings, $name) {
     }
 }
 
+function New-BranchSettings($vaultData) {
+    return @{
+        CARNICERIAS_CONNECTION_STRING = $vaultData.ConnectionString
+        ConnectionStrings__PlatformAccess = $vaultData.ConnectionString
+        AllowedHosts = '127.0.0.1;localhost'
+        Federation__Enabled = 'true'
+        Federation__Mode = 'managed'
+        Federation__CompanyId = $branchCompanyId
+        Federation__BranchId = $branchId
+        Federation__AllowLabLoopback = 'true'
+    }
+}
+
 Assert-Lab
 $vault = Read-Vault
 if ($Action -eq 'Check') {
     Write-Output 'Base unica, sucursal Alta Cordoba, binarios y almacen DPAPI verificados.'
+    return
+}
+if ($Action -eq 'StartBranch') {
+    if (Get-NetTCPConnection -LocalPort 5249 -State Listen -ErrorAction SilentlyContinue) {
+        throw 'El puerto 5249 ya esta ocupado; no se reemplaza su proceso.'
+    }
+    $process = Start-WithEnvironment $branchExecutable 5249 (New-BranchSettings $vault) 'rustica-alta-branch'
+    Write-Output "Sucursal Alta Cordoba 5249 PID $($process.Id)."
     return
 }
 if ($Action -eq 'Start') {
@@ -101,16 +122,7 @@ if ($Action -eq 'Start') {
     }) -Compress -Depth 4
     $started = @()
     try {
-        $started += Start-WithEnvironment $branchExecutable 5249 @{
-            CARNICERIAS_CONNECTION_STRING = $vault.ConnectionString
-            ConnectionStrings__PlatformAccess = $vault.ConnectionString
-            AllowedHosts = '127.0.0.1;localhost'
-            Federation__Enabled = 'true'
-            Federation__Mode = 'managed'
-            Federation__CompanyId = $branchCompanyId
-            Federation__BranchId = $branchId
-            Federation__AllowLabLoopback = 'true'
-        } 'rustica-alta-branch'
+        $started += Start-WithEnvironment $branchExecutable 5249 (New-BranchSettings $vault) 'rustica-alta-branch'
         $started += Start-WithEnvironment $centralExecutable 5251 @{
             CARNICERIAS_CENTRAL_CONNECTION_STRING = $vault.ConnectionString
             ConnectionStrings__CentralAccess = $vault.ConnectionString

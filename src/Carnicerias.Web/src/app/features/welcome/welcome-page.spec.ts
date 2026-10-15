@@ -266,6 +266,63 @@ describe('WelcomePage', () => {
     expect(page.querySelector('#branch')).not.toBeNull();
   });
 
+  it('enters the branch-bound administrator without asking for a branch', () => {
+    const navigation = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    const fixture = TestBed.createComponent(WelcomePage);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/health').flush({ status: 'healthy' });
+    http.expectOne('/api/sessions/current').flush({
+      userId: 'admin-id', username: 'rustica-admin', expiresAtUtc: '2026-10-15T20:00:00Z',
+      branchBound: true, context: null,
+    });
+    http.expectOne('/api/operational-contexts').flush([{
+      companyId: 'rustica-company', companyName: 'La Rústica',
+      branches: [{ branchId: 'alta-branch', branchName: 'Alta Córdoba' }],
+    }]);
+
+    const selection = http.expectOne('/api/sessions/current/context');
+    expect(selection.request.body).toEqual({ companyId: 'rustica-company', branchId: 'alta-branch' });
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('#branch')).toBeNull();
+    selection.flush({
+      userId: 'admin-id', username: 'rustica-admin', expiresAtUtc: '2026-10-15T20:00:00Z',
+      branchBound: true,
+      context: {
+        userId: 'admin-id', companyId: 'rustica-company', companyName: 'La Rústica',
+        branchId: 'alta-branch', branchName: 'Alta Córdoba',
+        permissions: ['platform.users.manage'], sessionId: 'session-id',
+      },
+    });
+    fixture.detectChanges();
+    expect(navigation).toHaveBeenCalledWith('/admin');
+    expect(page.textContent).not.toContain('Cambiar sucursal');
+  });
+
+  it('does not offer another branch when a bound administrator has no branch access', () => {
+    const fixture = TestBed.createComponent(WelcomePage);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/health').flush({ status: 'healthy' });
+    http.expectOne('/api/sessions/current').flush({
+      userId: 'admin-id', username: 'rustica-admin', expiresAtUtc: '2026-10-15T20:00:00Z',
+      branchBound: true, context: null,
+    });
+    http.expectOne('/api/operational-contexts').flush([]);
+    fixture.detectChanges();
+
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('#branch')).toBeNull();
+    expect(page.textContent).toContain('no tiene acceso a la sucursal');
+    expect(page.textContent).toContain('Reintentar acceso');
+
+    (page.querySelector('.context-picker button') as HTMLButtonElement).click();
+    http.expectOne('/api/operational-contexts').flush([]);
+  });
+
   it('takes an administrator with a confirmed context to the admin area', () => {
     const navigation = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
     const fixture = TestBed.createComponent(WelcomePage);

@@ -168,3 +168,17 @@ Tras reiniciar ambas APIs se verificó: conexión persistente de Alta Córdoba (
 El 15/10/2026, `:4300`/`:4301` rechazaban el paquete de Alta Córdoba antes de contactar a la sucursal: esas APIs centrales solo tenían los destinos Visual en su lista aprobada. La API aislada `:5251` sí admitía `:5249`. Se agregó a la configuración compartida de arranque la URL exacta de Alta Córdoba, con IP loopback y `centralCompanyId` de `LARUSTICA`; se reiniciaron **solo** las APIs centrales `5245`/`5250`, sin modificar ventas ni crear otra base. `-Action StartCentral` permite repetir ese reinicio después de detener y verificar únicamente esos dos procesos; `-Action Verify` confirma salud y conexiones Visual. La prueba `tests/PowerShell/Start-VisualCentralLab.Tests.ps1` controla que las siete entradas de destinos permanezcan y que Alta Córdoba no quede habilitada para otra empresa.
 
 La conexión de Alta Córdoba estaba inactiva y su credencial local fue regenerada durante los intentos; la central todavía conserva la anterior. Por eso el operador debe **editar la conexión existente con el paquete vigente** y recién entonces reactivarla. Este arreglo elimina el rechazo por destino, pero no puede validar el paquete vigente sin que el operador lo presente en el portal; si vuelve a fallar, revisar allí el destino exacto `http://127.0.0.1:5249/`, los IDs y la vigencia del paquete antes de rotar otra vez.
+
+### Acceso al administrador local de Alta Córdoba
+
+El proceso `:5249` está vinculado a La Rústica / Alta Córdoba. Después de ingresar con el código de empresa y una cuenta asignada a esa sucursal, confirma el contexto automáticamente y abre Administración; no muestra **Confirmar sucursal** ni permite cambiarla. La API limita tanto el listado de contextos como la selección y las rutas operativas a esa sucursal. Si la cuenta carece de asignación, se informa el problema sin ofrecer otra sucursal. El servidor compartido conserva su selector.
+
+El ejecutable actualizado se publica en `.local-backups/runtime/branch-managed-alta-v2/`. Para arrancar **solo** esa API, con el puerto `5249` libre y usando la misma cuenta Windows del almacén DPAPI:
+
+```powershell
+.\tools\Start-RusticaManagedLab.ps1 -Action Check
+.\tools\Start-RusticaManagedLab.ps1 -Action StartBranch
+.\tools\Start-RusticaManagedLab.ps1 -Action Verify
+```
+
+En el laboratorio se comprobaron inicio de sesión, un único contexto, rechazo `403` al seleccionar otra sucursal y acceso `200` a la configuración de central con contexto Alta Córdoba. No se creó otra base ni se reinicializaron datos. La inspección visual autenticada de esta transición sigue pendiente; la prueba de componente Angular cubre la navegación automática.

@@ -126,7 +126,7 @@ export class WelcomePage implements OnInit {
   }
 
   protected startContextChange(): void {
-    if (this.isPosElectron) return;
+    if (this.isPosElectron || this.currentSession()?.branchBound) return;
     this.isChangingContext.set(true);
     this.loadOperationalContexts();
   }
@@ -135,6 +135,12 @@ export class WelcomePage implements OnInit {
     this.isChangingContext.set(false);
     this.contextError.set(null);
     this.selectedBranchId.set('');
+  }
+
+  protected retryBoundBranch(): void {
+    if (this.currentSession()?.branchBound && !this.isLoadingContexts() && !this.isSubmitting()) {
+      this.loadOperationalContexts();
+    }
   }
 
   protected signIn(): void {
@@ -192,6 +198,15 @@ export class WelcomePage implements OnInit {
       next: (options) => {
         this.contextOptions.set(options);
         this.isLoadingContexts.set(false);
+        if (this.currentSession()?.branchBound && options.length === 1 &&
+            options[0].branches.length === 1) {
+          const company = options[0];
+          const branch = company.branches[0];
+          this.selectedBranchId.set(branch.branchId);
+          this.selectContext(company.companyId, branch.branchId);
+        } else if (this.currentSession()?.branchBound) {
+          this.contextError.set('Tu usuario no tiene acceso a la sucursal de esta instalación. Pedí a administración que revise tus permisos.');
+        }
       },
       error: () => {
         this.contextOptions.set([]);
@@ -208,7 +223,9 @@ export class WelcomePage implements OnInit {
   private contextSelectionError(error: HttpErrorResponse): string {
     if (error.status === 403) return this.isPosElectron
       ? 'Tu usuario no tiene acceso a la sucursal de esta caja. Pedí a administración que revise tus permisos.'
-      : 'Esa combinación ya no está habilitada para tu usuario. Volvé a elegir una opción.';
+      : this.currentSession()?.branchBound
+        ? 'Tu usuario no tiene acceso a la sucursal de esta instalación.'
+        : 'Esa combinación ya no está habilitada para tu usuario. Volvé a elegir una opción.';
     if (error.status === 409) return this.contextChangeBlockedMessage(error);
     return this.isPosElectron
       ? 'No se pudo abrir esta caja. Revisá la conexión e intentá de nuevo.'

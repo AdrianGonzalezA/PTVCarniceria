@@ -4,7 +4,8 @@ public sealed record SessionResponse(
     Guid UserId,
     string Username,
     DateTimeOffset ExpiresAtUtc,
-    OperationalContextResponse? Context);
+    OperationalContextResponse? Context,
+    bool BranchBound = false);
 
 public sealed record OperationalContextResponse(
     Guid UserId,

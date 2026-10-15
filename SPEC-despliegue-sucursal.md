@@ -15,7 +15,7 @@ Administración (navegador) ─────────────────�
 ```
 
 - Cada despliegue real tendrá su propia base de datos en su servidor. Esto no autoriza crear otra base de desarrollo o laboratorio ahora: `carnicerias_test_visual` sigue siendo la única base de aplicación en este entorno hasta nueva autorización.
-- El modelo y la administración actuales aún permiten definir más de una sucursal dentro de una instalación. El workshop configura solo una; una restricción técnica de “exactamente una sucursal por instancia” queda pendiente antes de distribuir instalaciones reales.
+- El modelo y la administración aún permiten definir más de una sucursal en una base. Si la API se vincula a una empresa/sucursal, las sesiones y rutas operativas quedan limitadas a esa identidad y el administrador web no elige sucursal. Una restricción de “exactamente una sucursal almacenada por instancia” sigue pendiente antes de distribuir instalaciones reales.
 - La API es el único cliente de PostgreSQL; las cajas no acceden a la base directamente.
 - Una caja se identifica con su credencial de terminal y el cajero abre su turno. Varios puestos de la sucursal pueden operar simultáneamente.
 - Datos y configuración de una sucursal no se mezclan con los de otra. La futura publicación/consolidación empresarial requerirá un contrato de integración, identificadores de origen e idempotencia; no se presume replicación directa de tablas ni se implementa ahora.

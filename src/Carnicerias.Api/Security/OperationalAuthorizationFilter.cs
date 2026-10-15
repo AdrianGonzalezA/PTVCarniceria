@@ -1,4 +1,5 @@
 using Carnicerias.Api.Contracts;
+using Carnicerias.Api.Federation;
 using Carnicerias.Api.Sessions;
 using Carnicerias.Infrastructure;
 
@@ -16,6 +17,7 @@ public sealed class OperationalAuthorizationFilter(string? requiredPermission) :
         var contexts = services.GetRequiredService<OperationalContextAccessService>();
         var terminals = services.GetRequiredService<PosTerminalAuthenticationService>();
         var accessor = services.GetRequiredService<OperationalContextAccessor>();
+        var branchBinding = services.GetRequiredService<BranchServiceSettings>();
         var current = await sessions.FindActiveAsync(
             httpContext.Request.Cookies[SessionEndpoints.CookieName],
             httpContext.RequestAborted);
@@ -29,6 +31,11 @@ public sealed class OperationalAuthorizationFilter(string? requiredPermission) :
             current.Session, httpContext, terminals, httpContext.RequestAborted);
         if (!terminalCheck.IsValid)
             return Error(StatusCodes.Status401Unauthorized, "POS_TERMINAL_REQUIRED");
+
+        if (current.Session.CompanyId is not Guid companyId ||
+            current.Session.BranchId is not Guid branchId ||
+            !BranchOperationalScope.AllowsContext(branchBinding, companyId, branchId))
+            return Error(StatusCodes.Status403Forbidden, "OPERATIONAL_CONTEXT_REQUIRED");
 
         var authorized = await contexts.ResolveSessionAsync(current.Session, httpContext.RequestAborted);
         if (authorized is null)

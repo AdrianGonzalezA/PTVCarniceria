@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Provision', 'Check', 'Start', 'Verify')]
+    [ValidateSet('Provision', 'Check', 'Start', 'StartCentral', 'Verify')]
     [string]$Action
 )
 
@@ -9,6 +9,7 @@ Add-Type -AssemblyName System.Security
 $containerName = 'carnicerias-pos-test-20261007'
 $databaseName = 'carnicerias_test_visual'
 $centralCompanyId = '802dcfdf-c653-443e-bb73-7d34cdb42d46'
+$rusticaCentralCompanyId = '11613dd2-0fb6-44cc-873d-804933aca921'
 $remoteCompanyId = 'a07b1e5e-9ef3-4e7c-9540-177ebed5084c'
 $branches = @(
     @{ Port = 5246; InstallationId = 'bc852f7f-2eb4-4416-b3a2-71ed00b7de91'; BranchId = '0fa444b7-de6a-4477-968a-03eb068add00'; SecretReference = 'VISUAL_BRANCH' },
@@ -104,6 +105,30 @@ function Start-WithEnvironment($executable, $port, $settings) {
     }
 }
 
+function New-CentralSettings($vaultData) {
+    $approved = @()
+    foreach ($branch in $branches) {
+        $endpoint = @{ url = "http://127.0.0.1:$($branch.Port)/"; addresses = @('127.0.0.1') }
+        $approved += $endpoint
+        $approved += @{ url = $endpoint.url; addresses = @('127.0.0.1'); centralCompanyId = $centralCompanyId }
+    }
+    # The managed Alta Cordoba branch is available only to La Rustica's central company.
+    $approved += @{ url = 'http://127.0.0.1:5249/'; addresses = @('127.0.0.1'); centralCompanyId = $rusticaCentralCompanyId }
+    $settings = @{
+        CARNICERIAS_CENTRAL_CONNECTION_STRING = $vaultData.ConnectionString
+        ConnectionStrings__CentralAccess = $vaultData.ConnectionString
+        CARNICERIAS_CENTRAL_APPROVED_BRANCHES = ($approved | ConvertTo-Json -Compress -Depth 4)
+        CARNICERIAS_CENTRAL_ALLOW_LOOPBACK_HTTP = 'true'
+        CARNICERIAS_CENTRAL_CREDENTIAL_ACTIVE_KEY_VERSION = '1'
+        CARNICERIAS_CENTRAL_CREDENTIAL_KEY_V1 = $vaultData.Key
+        AllowedHosts = '127.0.0.1;localhost'
+    }
+    foreach ($branch in $branches) {
+        $settings["CARNICERIAS_CENTRAL_BRANCH_SECRET_$($branch.SecretReference)"] = $vaultData.Tokens.($branch.SecretReference)
+    }
+    return $settings
+}
+
 $inspection = Assert-LabDatabase
 if ($Action -eq 'Provision') {
     if (Test-Path -LiteralPath $vaultPath) {
@@ -146,6 +171,31 @@ if ($Action -eq 'Check') {
     return
 }
 
+if ($Action -eq 'StartCentral') {
+    foreach ($port in @(5245, 5250)) {
+        if (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) {
+            throw "El puerto $port ya esta ocupado; no se reemplaza su proceso."
+        }
+    }
+    if (-not (Test-Path -LiteralPath $centralExecutable -PathType Leaf)) {
+        throw "Falta publicar: $centralExecutable"
+    }
+    $centralSettings = New-CentralSettings $vault
+    $started = @()
+    try {
+        foreach ($port in @(5245, 5250)) {
+            $started += Start-WithEnvironment $centralExecutable $port $centralSettings
+            Write-Output "Central $port`: PID $($started[-1].Id)"
+        }
+    }
+    catch {
+        foreach ($process in $started) { Stop-Process -Id $process.Id -ErrorAction SilentlyContinue }
+        throw
+    }
+    Write-Output 'Central Visual y La Rustica iniciada; verificar en el portal habitual.'
+    return
+}
+
 if ($Action -eq 'Start') {
     foreach ($port in @(5245, 5246, 5247, 5248, 5250)) {
         if (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) {
@@ -154,12 +204,6 @@ if ($Action -eq 'Start') {
     }
     foreach ($path in @($branchExecutable, $centralExecutable)) {
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Falta publicar: $path" }
-    }
-    $approved = @()
-    foreach ($branch in $branches) {
-        $endpoint = @{ url = "http://127.0.0.1:$($branch.Port)/"; addresses = @('127.0.0.1') }
-        $approved += $endpoint
-        $approved += @{ url = $endpoint.url; addresses = @('127.0.0.1'); centralCompanyId = $centralCompanyId }
     }
     $connection = $vault.ConnectionString
     $started = @()
@@ -185,18 +229,7 @@ if ($Action -eq 'Start') {
             $started += Start-WithEnvironment $branchExecutable $branch.Port $settings
             Write-Output "Sucursal Visual $($branch.Port): PID $($started[-1].Id)"
         }
-        $centralSettings = @{
-            CARNICERIAS_CENTRAL_CONNECTION_STRING = $connection
-            ConnectionStrings__CentralAccess = $connection
-            CARNICERIAS_CENTRAL_APPROVED_BRANCHES = ($approved | ConvertTo-Json -Compress -Depth 4)
-            CARNICERIAS_CENTRAL_ALLOW_LOOPBACK_HTTP = 'true'
-            CARNICERIAS_CENTRAL_CREDENTIAL_ACTIVE_KEY_VERSION = '1'
-            CARNICERIAS_CENTRAL_CREDENTIAL_KEY_V1 = $vault.Key
-            AllowedHosts = '127.0.0.1;localhost'
-        }
-        foreach ($branch in $branches) {
-            $centralSettings["CARNICERIAS_CENTRAL_BRANCH_SECRET_$($branch.SecretReference)"] = $vault.Tokens.($branch.SecretReference)
-        }
+        $centralSettings = New-CentralSettings $vault
         foreach ($port in @(5245, 5250)) {
             $started += Start-WithEnvironment $centralExecutable $port $centralSettings
             Write-Output "Central $port`: PID $($started[-1].Id)"

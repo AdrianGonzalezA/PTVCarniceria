@@ -1,6 +1,6 @@
 # Información de conexión a central desde el administrador de sucursal
 
-**Estado:** propuesta para validar con el usuario, 15/10/2026. Complementa [el contrato de lectura de sucursal](SPEC-branch-service-contract.md) y [el alta desde el administrador central](SPEC-central-branch-connections.md). La presente especificación sustituye **solo el aprovisionamiento manual de los datos que se copian a la central**; no amplía el acceso remoto a escritura ni cambia la fuente de verdad de ventas.
+**Estado:** aprobada e implementada funcionalmente el 15/10/2026; revisión visual autenticada pendiente por falta de una superficie de navegador en esta sesión. Complementa [el contrato de lectura de sucursal](SPEC-branch-service-contract.md) y [el alta desde el administrador central](SPEC-central-branch-connections.md). La presente especificación sustituye **solo el aprovisionamiento manual de los datos que se copian a la central**; no amplía el acceso remoto a escritura ni cambia la fuente de verdad de ventas. Decisión: [ADR 0008](documentacion/decisiones/0008-credencial-de-central-desde-sucursal.md).
 
 ## Objetivo y autoridad
 
@@ -63,3 +63,7 @@ Pruebas: primer aprovisionamiento y relectura sin secreto, generación concurren
 - El paquete copiable se puede pegar de una vez en la central, además de permitir copiar campos individualmente. La credencial no se recupera después; si se perdió, se rota.
 
 Estos supuestos forman parte de la aprobación de esta especificación; no hay otra regla de negocio pendiente para empezar a implementarla.
+
+## Evidencia de implementación del laboratorio
+
+La única base `carnicerias_test_visual` fue respaldada antes de aplicar las dos migraciones locales; conservó 56 ventas ficticias. El admin local de Alta Córdoba guardó la URL, emitió el paquete una sola vez y la central `LARUSTICA` registró la conexión. Después de reiniciar ambas APIs, la central comprobó `available` y obtuvo resumen `complete`; un token incorrecto dio `401`, la central sin sesión `401`, la emisión local sin CSRF `403` y el admin de otra empresa recibió `409` por vínculo distinto. La lectura posterior de configuración no expuso token. Pasaron 88 pruebas de arquitectura, 102 centrales, 155 del admin local y 30 del portal central, además de sus builds. No se ejecutaron las pruebas de integración que crean otra base. La inspección visual autenticada queda pendiente porque esta sesión no ofreció superficie de navegador; ver [recorrido de demo](documentacion/despliegue/administracion-central.md).

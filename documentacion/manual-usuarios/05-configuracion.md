@@ -35,4 +35,15 @@ Un artículo cuyo código principal ya existe se marca **No importado** y no se 
 
 En **Organización → Cajas → Dispositivos**, asigná por caja una balanza serial y/o una impresora serial de texto o Hasar SMH/P-441F, indicando puerto COM y velocidad. Cada dispositivo puede quedar en **Sin balanza** o **Sin impresora**. Sin asignación, Electron no abre la balanza ni intenta imprimir al cerrar la venta; el peso manual, la venta y el PDF siguen disponibles. La Hasar usa 9600 baudios y no puede compartir puerto con la balanza. Recargá la caja Electron después de cambiar la asignación para actualizar los controles visibles. El archivo local `pos-config.json` conserva únicamente el destino de la API: los campos de puertos de versiones anteriores se ignoran. Ver la [guía de despliegue](../despliegue/guia-workshop-por-sucursal.md).
 
+## Conexión con central
+
+En una instalación de sucursal preparada en **modo administrado**, abrí **Configuración → Conexión con central** con un usuario que tenga el permiso `organization.manage`. La pantalla muestra la empresa, sucursal y sus identificadores desde la API local: no hay que buscarlos en la base. Si indica que la API no está vinculada a esa sucursal, pedí a implementación que revise la instalación; no generes un paquete para otra sucursal.
+
+1. Ingresá y guardá la **URL raíz de esta sucursal** por la que el servidor central podrá alcanzarla. Guardar una URL no prueba la conexión. En instalaciones reales se usa HTTPS; HTTP `127.0.0.1` solo está habilitado en el laboratorio.
+2. Pulsá **Generar datos de conexión** y copiá el paquete completo. Incluye nombre, URL, tres IDs y una credencial de lectura para identidad y resumen de ventas/cajas. **Se muestra una sola vez**; tratala como secreta y no la incluyas en capturas, chat ni tickets.
+3. Entregá el paquete al administrador central de **la misma empresa** para pegarlo en **Conexiones a sucursales**. Allí deberá verificarse antes de quedar activo. Si el servidor central no permite aún esa URL/IP, implementación debe aprobarla en la configuración protegida del servidor central.
+4. Si se pierde la credencial, pulsá **Rotar credencial**, actualizá la conexión existente en la central con el paquete nuevo y, tras comprobarla, pulsá **Finalizar rotación**. La anterior funciona durante una hora como máximo o hasta finalizar. **Desactivar conexión** revoca la lectura remota, pero no detiene el POS ni borra ventas.
+
+El token no reaparece al recargar la página. La pantalla local muestra *configurada* o *credencial activa*; para saber si la central llega a la sucursal usá **Comprobar** en el portal central. Ver [guía técnica](../despliegue/integracion-central-sucursal.md).
+
 Base técnica: [administración](../../SPEC-admin.md), [impuestos](../../SPEC-tax-catalog.md), [ARCA](../../SPEC-admin-arca-settings.md) y [Mercado Pago](../../SPEC-mercado-pago.md).

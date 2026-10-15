@@ -85,7 +85,7 @@ app.Use(async (context, next) =>
     context.Response.Headers["Content-Security-Policy"] =
         "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'";
     if (context.Request.Path.StartsWithSegments("/api/v1/sessions")
-        || context.Request.Path.StartsWithSegments("/api/v1/manufacturer")
+        || context.Request.Path.StartsWithSegments("/api/v1/superadmin")
         || context.Request.Path.StartsWithSegments("/api/v1/installations")
         || context.Request.Path.StartsWithSegments("/api/v1/business"))
     {

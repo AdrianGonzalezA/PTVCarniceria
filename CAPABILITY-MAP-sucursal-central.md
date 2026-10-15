@@ -34,5 +34,6 @@ Cada módulo tendrá su propia especificación y pruebas antes de implementar su
 ## Respuestas del usuario
 
 1. Acceso a la central: «usuario admin empresa». El 14/10/2026 el usuario confirmó que la cuenta y contraseña de la central serán **independientes** de las cuentas locales. No se copian usuarios, hashes, contraseñas ni sesiones entre instalaciones; el alcance empresarial y el alta inicial se detallan en [la especificación de `central-access`](SPEC-central-access.md).
+   El 15/10/2026 aprobó además un **SuperAdmin propio del portal central** para crear empresas centrales y sus administradores; no es el SuperAdmin de una instalación POS. Las conexiones a sucursales permanecen bajo alta protegida fuera del navegador ([ADR 0006](documentacion/decisiones/0006-superadmin-propio-del-portal-central.md)).
 2. Primer corte de administración remota: «solo lectura». Las ediciones quedan fuera de esa entrega y requieren contratos y permisos posteriores.
 3. Conectividad privada/VPN y HTTPS: «Sí». El laboratorio puede simularla localmente sin abrir la API de sucursal a Internet.

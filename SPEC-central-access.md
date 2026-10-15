@@ -1,6 +1,6 @@
 # Acceso independiente a la administración central (`central-access`)
 
-**Estado:** aprobada por el usuario el 14/10/2026, incluido el alcance inicial de altas protegidas y sin ABM web central. **Módulo:** `central-access` del [mapa aprobado](CAPABILITY-MAP-sucursal-central.md). Depende del [contrato de lectura de sucursal](SPEC-branch-service-contract.md). No especifica aún el dashboard `central-business-view` ni la administración remota.
+**Estado:** aprobada por el usuario el 14/10/2026; ampliada el 15/10/2026 para incluir un SuperAdmin **propio del portal central** que administra empresas y cuentas centrales desde la web. La decisión inicial de altas de empresas exclusivamente por CLI queda sustituida; el registro de conexiones de sucursal continúa protegido por CLI. **Módulo:** `central-access` del [mapa aprobado](CAPABILITY-MAP-sucursal-central.md). Depende del [contrato de lectura de sucursal](SPEC-branch-service-contract.md). El dashboard se describe por separado en `central-business-view`.
 
 ## Objetivo
 
@@ -13,7 +13,7 @@ La cuenta central no comparte identidad, hash ni sesiones con la cuenta local: u
 - En desarrollo se usa **solo** `carnicerias_test_visual` de PostgreSQL Docker (`127.0.0.1:55433`). Las identidades, sesiones y el registro central se guardarán en tablas de un esquema `central_access` y un contexto de persistencia propios, sin crear ni clonar otra base. Las migraciones de este esquema se conservarán en Git y se aplicarán únicamente a esa misma base con preflight y respaldo. Una base exclusiva para la central en un despliegue futuro requiere una decisión y autorización separadas.
 - `centralCompanyId` identifica a la empresa en la central. Cada registro de instalación relaciona ese ID con `installationId`, `companyId` y `branchId` declarados por la sucursal. **No se supone que los UUID locales de empresa coincidan** entre sucursales físicas. El administrador no envía IDs remotos para elegir el alcance de una consulta.
 - La central conserva identidad de administradores, sesiones y metadatos mínimos de conexión. No copia usuarios locales, clientes, tickets, stock, pagos ni agregados comerciales. La sucursal sigue siendo la fuente de verdad.
-- En este primer corte, un procedimiento interactivo y protegido del equipo de implementación dará de alta la empresa central, su primer administrador y cada instalación. No habrá un endpoint público ni un formulario web para cargar destinos o tokens. El administrador de empresa inicia sesión y lista instalaciones; el ABM de administradores centrales y de conexiones queda para una ampliación explícita.
+- El CLI interactivo crea **solo la primera identidad SuperAdmin central** y conserva la recuperación operativa y el registro de instalaciones. Autenticado con esa identidad independiente, el SuperAdmin central crea empresas con su primer administrador y agrega administradores adicionales desde `/superadmin`. Ningún formulario web acepta destinos ni tokens de sucursales. Las cuentas de empresa no pueden administrar otras empresas.
 - El nombre de sucursal guardado en el registro es una etiqueta configurada; **no prueba** que la sucursal esté en línea. El estado vivo y los resúmenes pertenecen a `central-business-view`.
 
 ## Identidad y modelo propuesto
@@ -23,6 +23,7 @@ La cuenta central no comparte identidad, hash ni sesiones con la cuenta local: u
 | Empresa central | `id`, código único normalizado e inmutable, nombre, estado activo. |
 | Administrador central | `id`, `centralCompanyId` inmutable, usuario normalizado único dentro de la empresa, hash Argon2id, estado activo. Sin contraseña en texto ni reutilización de `platform_access.users`. |
 | Sesión central | `id`, administrador, empresa fijada al login, hash de token aleatorio de 256 bits, creación, expiración absoluta y revocación. Nunca reutiliza `platform_access.sessions`. |
+| SuperAdmin central | Identidad y sesión propias de `central_access`, sin empresa local ni rol POS. Una cookie y endpoints distintos de los de administradores de empresa central. |
 | Instalación registrada | `installationId` globalmente único, `centralCompanyId`, `remoteCompanyId`, `remoteBranchId`, etiqueta, destino HTTPS previamente aprobado, referencia a secreto y estado activo. No contiene el token en claro. |
 
 El procedimiento de alta recibe contraseña de manera interactiva, sin argumentos de comando ni archivos del repositorio. Los secretos de conexión de cada sucursal se guardan fuera de Git y de la base, en configuración protegida del servidor central; el registro guarda solo una referencia. Antes de activar una instalación, el procedimiento consulta `GET /api/central/v1/installation` con su credencial por VPN/HTTPS y exige coincidencia exacta de los tres IDs remotos. Si falta el secreto, falla TLS, hay redirección o la identidad difiere, no la registra como activa. Para el laboratorio se podrá habilitar explícitamente `http://127.0.0.1` sin convertirlo en valor predeterminado ni aceptar otros destinos HTTP.
@@ -37,6 +38,8 @@ La API central vive en **otro proceso y origen** que la API de sucursal. Sus res
 | `GET /api/v1/sessions/current` | Cookie central. | `200` con identidad y empresa fijada; `401` si no es válida. |
 | `DELETE /api/v1/sessions/current` | Cookie central y origen válido. | `204`, revoca servidor y borra cookie; `401` sin sesión, `403` por origen rechazado. |
 | `GET /api/v1/installations?page=1&pageSize=20` | Cookie central; `page >= 1`, `1 <= pageSize <= 100`. | `200` con `data` y `pagination`, filtrados por `centralCompanyId` de la sesión. Devuelve IDs y etiqueta, no destino, referencia ni token. `400` por parámetros inválidos, `401` sin sesión. |
+
+La ampliación agrega, en el **mismo origen central**, rutas `/api/v1/superadmin/*` autenticadas exclusivamente por `carnicerias.central.superadmin` (`HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api/v1/superadmin`). `POST /sessions`, `GET/DELETE /sessions/current` inician, consultan y revocan esa sesión; `GET/POST /companies` listan o crean empresa con su primer administrador en una sola operación; `GET/POST /companies/{companyId}/administrators` listan o agregan administradores de la empresa seleccionada. Los listados son paginados. Los cambios requieren origen coincidente y encabezado CSRF. Un administrador de empresa central no puede usar esas rutas con su cookie habitual; un SuperAdmin central no se convierte en usuario de una empresa ni del POS. El alta de instalaciones permanece fuera de HTTP.
 
 No se expone `companyId`, `branchId`, URL o token como selector de alcance en esos endpoints. Un administrador central de A no puede listar instalaciones de B aunque conozca sus UUID. Las respuestas no contienen hashes, secretos ni datos personales de sucursales. Las rutas de sucursal `/api/central/v1/*` continúan autorizadas **solo** por su credencial de servicio, no por esta cookie.
 
@@ -84,5 +87,5 @@ Las pruebas de contrato, autenticación, aislamiento y registro usarán dobles d
 
 ## Decisiones confirmadas para el plan
 
-1. El equipo de implementación hará el **alta inicial de empresas, administradores y conexiones mediante un procedimiento interactivo**. El primer portal mostrará login y sucursales registradas, sin ABM web de estas entidades.
-2. La administración de otros usuarios centrales y el reseteo de sus contraseñas serán una etapa posterior de `central-access`, sin reutilizar el ABM local. La recuperación operativa inicial deberá quedar documentada sin introducir contraseñas predeterminadas.
+1. Decisión original (14/10): el equipo de implementación hacía altas iniciales por CLI; **sustituida el 15/10 para empresas y administradores**. El primer SuperAdmin sigue naciendo por procedimiento interactivo, sin contraseña predeterminada.
+2. El SuperAdmin del **portal central**, no el SuperAdmin de una instalación POS, da de alta empresas y administradores centrales. Registro de sucursales y reseteo de contraseñas de administradores de empresa siguen siendo operaciones de implementación por CLI. No se comparte identidad ni sesión con `platform_access`.

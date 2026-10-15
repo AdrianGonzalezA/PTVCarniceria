@@ -10,11 +10,11 @@ public static class CentralManufacturerCompanyEndpoints
 
     public static void MapCentralManufacturerCompanyEndpoints(this IEndpointRouteBuilder routes)
     {
-        routes.MapGet("/api/v1/manufacturer/companies", ListAsync);
-        routes.MapPost("/api/v1/manufacturer/companies", CreateAsync);
-        routes.MapGet("/api/v1/manufacturer/companies/{companyId:guid}/administrators",
+        routes.MapGet("/api/v1/superadmin/companies", ListAsync);
+        routes.MapPost("/api/v1/superadmin/companies", CreateAsync);
+        routes.MapGet("/api/v1/superadmin/companies/{companyId:guid}/administrators",
             ListAdministratorsAsync);
-        routes.MapPost("/api/v1/manufacturer/companies/{companyId:guid}/administrators",
+        routes.MapPost("/api/v1/superadmin/companies/{companyId:guid}/administrators",
             AddAdministratorAsync);
     }
 
@@ -50,7 +50,7 @@ public static class CentralManufacturerCompanyEndpoints
             var created = await management.CreateCompanyAsync(request.Code!, request.Name!,
                 request.InitialAdministratorUsername!, request.InitialAdministratorPassword!,
                 actor.Manufacturer.Id, cancellationToken);
-            return Results.Created($"/api/v1/manufacturer/companies/{created.Id}", created);
+            return Results.Created($"/api/v1/superadmin/companies/{created.Id}", created);
         }
         catch (ArgumentException)
         { return Error(400, "INVALID_COMPANY_REQUEST", "Datos de empresa inválidos."); }
@@ -92,7 +92,7 @@ public static class CentralManufacturerCompanyEndpoints
                 request.Password!, actor.Manufacturer.Id, cancellationToken);
             return created is null
                 ? Error(404, "COMPANY_NOT_FOUND", "Empresa central no encontrada.")
-                : Results.Created($"/api/v1/manufacturer/companies/{companyId}/administrators/{created.Id}",
+                : Results.Created($"/api/v1/superadmin/companies/{companyId}/administrators/{created.Id}",
                     created);
         }
         catch (ArgumentException)

@@ -41,6 +41,18 @@ internal static class Program
                 return 0;
             }
 
+            if (args is ["manufacturer-password-reset", "--username", var recoveryUsername])
+            {
+                await using var context = await CentralBootstrapCommand.OpenVerifiedContextAsync(
+                    connectionString, CancellationToken.None);
+                var password = CentralBootstrapCommand.ReadConfirmedPassword();
+                await CentralManufacturerBootstrapService.ResetPasswordAsync(context,
+                    recoveryUsername, password, new CentralPasswordHasher(6),
+                    CancellationToken.None);
+                Console.WriteLine("Central SuperAdmin password reset; previous sessions revoked.");
+                return 0;
+            }
+
             if (args is ["password-reset", "--code", var resetCode,
                 "--username", var resetUsername])
             {
@@ -72,6 +84,7 @@ internal static class Program
             Console.Error.WriteLine("Usage: migrate --backup-file <absolute .dump path> --backup-sha256 <SHA256> --apply");
             Console.Error.WriteLine("   or: company-create --code <code> --name <name> --username <username>");
             Console.Error.WriteLine("   or: manufacturer-create --username <username>");
+            Console.Error.WriteLine("   or: manufacturer-password-reset --username <username>");
             Console.Error.WriteLine("   or: password-reset --code <code> --username <username>");
             Console.Error.WriteLine("   or: installation-register --company-code <code> --installation-id <uuid> --remote-company-id <uuid> --remote-branch-id <uuid> --label <name> --url <approved-url> --secret-ref <reference> [--allow-loopback-http]");
             return 2;

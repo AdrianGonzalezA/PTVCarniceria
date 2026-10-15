@@ -9,6 +9,7 @@ TestResults/
 **/.angular/
 src/Carnicerias.Web/dist/
 src/Carnicerias.Central.Web/dist/
+src/Carnicerias.Central.Web/proxy.*.local.json
 src/Carnicerias.Pos/dist/
 src/Carnicerias.Pos/out/
 src/Carnicerias.Pos/web/

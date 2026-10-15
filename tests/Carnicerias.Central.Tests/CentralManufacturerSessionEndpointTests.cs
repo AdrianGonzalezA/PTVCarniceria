@@ -21,7 +21,7 @@ public sealed class CentralManufacturerSessionEndpointTests
         });
 
         using var tenantCookie = new HttpRequestMessage(HttpMethod.Get,
-            "/api/v1/manufacturer/sessions/current");
+            "/api/v1/superadmin/sessions/current");
         tenantCookie.Headers.Add("Cookie", "carnicerias.central.session=tenant-token");
         using var tenantResponse = await client.SendAsync(tenantCookie);
         Assert.Equal(HttpStatusCode.Unauthorized, tenantResponse.StatusCode);
@@ -35,15 +35,15 @@ public sealed class CentralManufacturerSessionEndpointTests
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
         Assert.Equal("no-store", login.Headers.CacheControl?.ToString());
         var cookieHeader = Assert.Single(login.Headers.GetValues("Set-Cookie"));
-        Assert.Contains("carnicerias.central.manufacturer=", cookieHeader, StringComparison.Ordinal);
+        Assert.Contains("carnicerias.central.superadmin=", cookieHeader, StringComparison.Ordinal);
         Assert.Contains("httponly", cookieHeader, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("secure", cookieHeader, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("samesite=strict", cookieHeader, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("path=/api/v1/manufacturer", cookieHeader, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("path=/api/v1/superadmin", cookieHeader, StringComparison.OrdinalIgnoreCase);
         var cookie = cookieHeader.Split(';')[0];
 
         using var currentRequest = new HttpRequestMessage(HttpMethod.Get,
-            "/api/v1/manufacturer/sessions/current");
+            "/api/v1/superadmin/sessions/current");
         currentRequest.Headers.Add("Cookie", cookie);
         using var current = await client.SendAsync(currentRequest);
         Assert.Equal(HttpStatusCode.OK, current.StatusCode);
@@ -56,7 +56,7 @@ public sealed class CentralManufacturerSessionEndpointTests
         Assert.Equal(HttpStatusCode.Unauthorized, tenant.StatusCode);
 
         using var logoutRequest = new HttpRequestMessage(HttpMethod.Delete,
-            "/api/v1/manufacturer/sessions/current");
+            "/api/v1/superadmin/sessions/current");
         logoutRequest.Headers.Add("Cookie", cookie);
         logoutRequest.Headers.Add("Origin", "https://localhost");
         logoutRequest.Headers.Add("X-Carnicerias-CSRF", "1");
@@ -67,7 +67,7 @@ public sealed class CentralManufacturerSessionEndpointTests
     private static HttpRequestMessage LoginRequest(string origin)
     {
         var request = new HttpRequestMessage(HttpMethod.Post,
-            "/api/v1/manufacturer/sessions")
+            "/api/v1/superadmin/sessions")
         {
             Content = JsonContent.Create(new
             {

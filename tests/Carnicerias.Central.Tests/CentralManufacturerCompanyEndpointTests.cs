@@ -20,11 +20,17 @@ public sealed class CentralManufacturerCompanyEndpointTests
             BaseAddress = new Uri("https://localhost"), HandleCookies = false
         });
 
-        using var denied = await client.GetAsync("/api/v1/manufacturer/companies");
+        using var denied = await client.GetAsync("/api/v1/superadmin/companies");
         Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
 
+        using var tenantCookie = new HttpRequestMessage(HttpMethod.Get,
+            "/api/v1/superadmin/companies");
+        tenantCookie.Headers.Add("Cookie", "carnicerias.central.session=tenant-only-token");
+        using var tenantDenied = await client.SendAsync(tenantCookie);
+        Assert.Equal(HttpStatusCode.Unauthorized, tenantDenied.StatusCode);
+
         using var login = new HttpRequestMessage(HttpMethod.Post,
-            "/api/v1/manufacturer/sessions")
+            "/api/v1/superadmin/sessions")
         {
             Content = JsonContent.Create(new
             {
@@ -37,14 +43,14 @@ public sealed class CentralManufacturerCompanyEndpointTests
         var cookie = Assert.Single(loggedIn.Headers.GetValues("Set-Cookie")).Split(';')[0];
 
         using var listRequest = new HttpRequestMessage(HttpMethod.Get,
-            "/api/v1/manufacturer/companies?page=1&pageSize=20");
+            "/api/v1/superadmin/companies?page=1&pageSize=20");
         listRequest.Headers.Add("Cookie", cookie);
         using var listed = await client.SendAsync(listRequest);
         Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
         Assert.Contains("RUSTICA-CENTRAL", await listed.Content.ReadAsStringAsync());
 
         using var invalidPage = new HttpRequestMessage(HttpMethod.Get,
-            "/api/v1/manufacturer/companies?pageSize=101");
+            "/api/v1/superadmin/companies?pageSize=101");
         invalidPage.Headers.Add("Cookie", cookie);
         using var invalid = await client.SendAsync(invalidPage);
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
@@ -61,13 +67,13 @@ public sealed class CentralManufacturerCompanyEndpointTests
         Assert.DoesNotContain("a new tenant password", await created.Content.ReadAsStringAsync());
 
         using var adminsRequest = new HttpRequestMessage(HttpMethod.Get,
-            $"/api/v1/manufacturer/companies/{fixture.Management.CompanyId}/administrators");
+            $"/api/v1/superadmin/companies/{fixture.Management.CompanyId}/administrators");
         adminsRequest.Headers.Add("Cookie", cookie);
         using var admins = await client.SendAsync(adminsRequest);
         Assert.Equal(HttpStatusCode.OK, admins.StatusCode);
 
         using var add = new HttpRequestMessage(HttpMethod.Post,
-            $"/api/v1/manufacturer/companies/{fixture.Management.CompanyId}/administrators")
+            $"/api/v1/superadmin/companies/{fixture.Management.CompanyId}/administrators")
         {
             Content = JsonContent.Create(new
             {
@@ -84,7 +90,7 @@ public sealed class CentralManufacturerCompanyEndpointTests
     private static HttpRequestMessage CreateCompanyRequest(string cookie)
     {
         var request = new HttpRequestMessage(HttpMethod.Post,
-            "/api/v1/manufacturer/companies")
+            "/api/v1/superadmin/companies")
         {
             Content = JsonContent.Create(new
             {

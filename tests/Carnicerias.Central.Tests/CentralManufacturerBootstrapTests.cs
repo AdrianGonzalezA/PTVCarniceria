@@ -20,4 +20,25 @@ public sealed class CentralManufacturerBootstrapTests
         Assert.Null(plan.Audit.CentralCompanyId);
         Assert.Equal(plan.Manufacturer.Id, plan.Audit.ActorId);
     }
+
+    [Fact]
+    public void PasswordRecoveryReplacesHashAndRevokesExistingSessions()
+    {
+        var hasher = new CentralPasswordHasher();
+        var manufacturer = CentralManufacturer.Create("superadmin-central",
+            hasher.Hash("original distinct central password"));
+        var issuedAt = new DateTimeOffset(2026, 10, 15, 12, 0, 0, TimeSpan.Zero);
+        var session = CentralManufacturerSession.Create(manufacturer.Id, new string('A', 64), issuedAt);
+        var recoveredAt = issuedAt.AddMinutes(30);
+
+        var audit = CentralManufacturerBootstrapService.PreparePasswordReset(manufacturer,
+            [session], "replacement distinct central password", hasher, recoveredAt);
+
+        Assert.True(hasher.Verify("replacement distinct central password", manufacturer.PasswordHash));
+        Assert.False(hasher.Verify("original distinct central password", manufacturer.PasswordHash));
+        Assert.False(session.IsActiveAt(recoveredAt));
+        Assert.Equal(CentralAuditAction.ManufacturerPasswordReset, audit.Action);
+        Assert.Equal(manufacturer.Id, audit.ActorId);
+        Assert.Null(audit.CentralCompanyId);
+    }
 }

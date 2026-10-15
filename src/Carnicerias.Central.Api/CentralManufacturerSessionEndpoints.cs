@@ -5,16 +5,16 @@ namespace Carnicerias.Central.Api;
 
 public static class CentralManufacturerSessionEndpoints
 {
-    public const string CookieName = "carnicerias.central.manufacturer";
-    private const string CookiePath = "/api/v1/manufacturer";
+    public const string CookieName = "carnicerias.central.superadmin";
+    private const string CookiePath = "/api/v1/superadmin";
     private const int MaximumRequestBytes = 4096;
 
     public static void MapCentralManufacturerSessionEndpoints(this IEndpointRouteBuilder routes)
     {
-        routes.MapPost("/api/v1/manufacturer/sessions", LoginAsync)
+        routes.MapPost("/api/v1/superadmin/sessions", LoginAsync)
             .RequireRateLimiting("central-login");
-        routes.MapGet("/api/v1/manufacturer/sessions/current", CurrentAsync);
-        routes.MapDelete("/api/v1/manufacturer/sessions/current", LogoutAsync);
+        routes.MapGet("/api/v1/superadmin/sessions/current", CurrentAsync);
+        routes.MapDelete("/api/v1/superadmin/sessions/current", LogoutAsync);
     }
 
     private static async Task<IResult> LoginAsync(HttpContext context,

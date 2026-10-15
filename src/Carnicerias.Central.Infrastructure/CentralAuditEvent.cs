@@ -13,7 +13,8 @@ public enum CentralAuditAction
     ManufacturerCreated = 8,
     ManufacturerSessionIssued = 9,
     ManufacturerSessionRevoked = 10,
-    ManufacturerSessionDenied = 11
+    ManufacturerSessionDenied = 11,
+    ManufacturerPasswordReset = 12
 }
 
 public enum CentralAuditResult

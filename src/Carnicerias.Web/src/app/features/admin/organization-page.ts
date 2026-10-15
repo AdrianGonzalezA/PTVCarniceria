@@ -5,7 +5,7 @@ import { Router, RouterLink } from '@angular/router';
 import { AdminAreaTabs } from './admin-area-tabs';
 import { Observable } from 'rxjs';
 import { AdminBranch, AdminCompany, AdminOrganizationClient } from '../../core/admin/admin-organization-client';
-import { AdminTerminal, AdminTerminalClient, AdminTerminalUpdate, ProvisionedTerminal } from '../../core/admin/admin-terminal-client';
+import { AdminTerminal, AdminTerminalClient, AdminTerminalUpdate, ProvisionedTerminal, TerminalDevices } from '../../core/admin/admin-terminal-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { AdminDetailDialog } from './admin-detail-dialog';
 
@@ -32,6 +32,10 @@ export class OrganizationPage implements OnInit {
   protected readonly terminalForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(120)]],
   });
+  protected readonly devicesForm = this.formBuilder.nonNullable.group({
+    scaleMode: 'none', scalePort: '', scaleBaudRate: 9600,
+    printerKind: 'none', printerPort: '', printerBaudRate: 9600,
+  });
   protected readonly session = signal<CurrentSession | null>(null);
   protected readonly companies = signal<readonly AdminCompany[]>([]);
   protected readonly companiesLoading = signal(true);
@@ -54,6 +58,9 @@ export class OrganizationPage implements OnInit {
   protected readonly editingTerminal = signal<AdminTerminal | null>(null);
   protected readonly terminalSaving = signal(false);
   protected readonly terminalActionId = signal<string | null>(null);
+  protected readonly deviceEditorTerminal = signal<AdminTerminal | null>(null);
+  protected readonly devicesSaving = signal(false);
+  protected readonly devicesError = signal<string | null>(null);
   protected readonly shownCredential = signal<string | null>(null);
   protected readonly pendingAction = signal<OrganizationAction | null>(null);
 
@@ -170,12 +177,14 @@ export class OrganizationPage implements OnInit {
     if (!company) return;
     this.selectedTerminalBranch.set(branch);
     this.terminalEditorOpen.set(false);
+    this.deviceEditorTerminal.set(null);
     this.clearCredential();
     this.loadTerminals(company.id, branch.id);
   }
 
   protected closeTerminals(): void {
-    if (this.terminalSaving() || this.terminalActionId() || this.shownCredential()) return;
+    if (this.terminalSaving() || this.terminalActionId() || this.shownCredential() ||
+        this.deviceEditorTerminal()) return;
     this.selectedTerminalBranch.set(null);
     this.terminals.set([]);
     this.terminalEditorOpen.set(false);
@@ -204,6 +213,70 @@ export class OrganizationPage implements OnInit {
     if (!this.terminalSaving()) this.terminalEditorOpen.set(false);
   }
 
+  protected startDeviceEditor(terminal: AdminTerminal): void {
+    const devices = terminal.devices ?? { scale: null, printer: null };
+    this.devicesForm.reset({
+      scaleMode: devices.scale ? 'serial' : 'none',
+      scalePort: devices.scale?.port ?? '', scaleBaudRate: devices.scale?.baudRate ?? 9600,
+      printerKind: devices.printer?.kind ?? 'none',
+      printerPort: devices.printer?.port ?? '', printerBaudRate: devices.printer?.baudRate ?? 9600,
+    });
+    this.devicesError.set(null);
+    this.deviceEditorTerminal.set(terminal);
+  }
+
+  protected cancelDeviceEditor(): void {
+    if (!this.devicesSaving()) this.deviceEditorTerminal.set(null);
+  }
+
+  protected saveDevices(): void {
+    const company = this.selectedCompany();
+    const branch = this.selectedTerminalBranch();
+    const terminal = this.deviceEditorTerminal();
+    if (!company || !branch || !terminal || this.devicesSaving()) return;
+    const value = this.devicesForm.getRawValue();
+    const scalePort = value.scalePort.trim().toUpperCase();
+    const printerPort = value.printerPort.trim().toUpperCase();
+    const scale = value.scaleMode === 'serial'
+      ? { port: scalePort, baudRate: value.scaleBaudRate } : null;
+    const printerKind = value.printerKind === 'text' ? 'text'
+      : value.printerKind === 'hasar' ? 'hasar' : null;
+    const printer: TerminalDevices['printer'] = printerKind
+      ? { kind: printerKind, port: printerPort,
+        baudRate: printerKind === 'hasar' ? 9600 : value.printerBaudRate } : null;
+    if ((scale && !/^COM[1-9][0-9]{0,2}$/.test(scale.port)) ||
+        (printer && !/^COM[1-9][0-9]{0,2}$/.test(printer.port)) ||
+        (scale && printer && scale.port === printer.port)) {
+      this.devicesError.set('Revisá los puertos COM: deben ser válidos y distintos.');
+      return;
+    }
+    const devices: TerminalDevices = { scale, printer };
+    this.devicesSaving.set(true);
+    this.devicesError.set(null);
+    this.terminalsClient.configureDevices(company.id, branch.id, terminal.id, devices).subscribe({
+      next: (updated) => {
+        this.replaceTerminal(updated);
+        this.devicesSaving.set(false);
+        this.deviceEditorTerminal.set(null);
+        this.actionMessage.set('Dispositivos actualizados. Recargá la caja Electron para ver el cambio.');
+      },
+      error: () => {
+        this.devicesSaving.set(false);
+        this.devicesError.set('No se pudo guardar la asignación. Revisá los puertos e intentá de nuevo.');
+      },
+    });
+  }
+
+  protected scaleDescription(terminal: AdminTerminal): string {
+    return terminal.devices?.scale ? `Balanza ${terminal.devices.scale.port}` : 'Sin balanza';
+  }
+
+  protected printerDescription(terminal: AdminTerminal): string {
+    return terminal.devices?.printer
+      ? `${terminal.devices.printer.kind === 'hasar' ? 'Hasar' : 'Texto'} ${terminal.devices.printer.port}`
+      : 'Sin impresora';
+  }
+
   protected saveTerminal(): void {
     const company = this.selectedCompany();
     const branch = this.selectedTerminalBranch();
@@ -222,7 +295,8 @@ export class OrganizationPage implements OnInit {
       next: (result) => {
         if ('credential' in result) {
           this.terminals.set([...this.terminals(), { id: result.id, name: result.name,
-            isActive: true, isHistorical: false, hasCredential: true }]);
+            isActive: true, isHistorical: false, hasCredential: true,
+            devices: { scale: null, printer: null } }]);
           this.shownCredential.set(result.credential);
           this.updateBranchTerminalCount(branch.id, 1);
         } else {

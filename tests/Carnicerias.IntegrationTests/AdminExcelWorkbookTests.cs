@@ -10,6 +10,7 @@ public sealed class AdminExcelWorkbookTests
     [InlineData("products", "Articulos")]
     [InlineData("price-lists", "Listas")]
     [InlineData("customers", "Clientes")]
+    [InlineData("stock", "Existencias")]
     public void TemplateKeepsExamplesOutsideLoadSheet(string kind, string loadSheet)
     {
         var bytes = AdminExcelWorkbook.CreateTemplate(kind);
@@ -83,5 +84,26 @@ public sealed class AdminExcelWorkbookTests
 
         Assert.Contains(parsed.Issues, issue => issue.Code == "INVALID_CELL_TYPE" &&
             issue.Column == "Codigo" && issue.Row == 2);
+    }
+
+    [Fact]
+    public void StockTemplateKeepsArticleCodeAsTextAndVariationAsNumber()
+    {
+        var bytes = AdminExcelWorkbook.CreateTemplate("stock");
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var sheet = workbook.Worksheet("Existencias");
+        Assert.Equal(-1.250, workbook.Worksheet("Ejemplos").Cell(6, 2).GetDouble());
+        sheet.Cell(2, 1).Value = "002546";
+        sheet.Cell(2, 2).Value = 5.125;
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+
+        var parsed = AdminExcelWorkbook.Read("stock", stream.ToArray());
+
+        Assert.Empty(parsed.Issues);
+        var row = Assert.Single(parsed.Rows);
+        Assert.Equal("002546", row.Text("CodigoArticulo"));
+        Assert.Equal(5.125m, row.NumberValue("Variacion"));
+        Assert.Null(row.Text("Descripcion"));
     }
 }

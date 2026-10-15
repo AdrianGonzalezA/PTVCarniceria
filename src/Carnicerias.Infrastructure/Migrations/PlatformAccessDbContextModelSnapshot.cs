@@ -1502,7 +1502,7 @@ namespace Carnicerias.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_point_payment_intents_amount_positive", "\"Amount\" > 0");
 
-                            t.HasCheckConstraint("CK_point_payment_intents_mode", "\"Mode\" BETWEEN 0 AND 1");
+                            t.HasCheckConstraint("CK_point_payment_intents_mode", "\"Mode\" BETWEEN 0 AND 2");
 
                             t.HasCheckConstraint("CK_point_payment_intents_status", "\"Status\" BETWEEN 0 AND 7");
                         });
@@ -1534,6 +1534,24 @@ namespace Carnicerias.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
+
+                    b.Property<int?>("PrinterBaudRate")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PrinterKind")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<string>("PrinterPort")
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)");
+
+                    b.Property<int?>("ScaleBaudRate")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ScalePort")
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)");
 
                     b.HasKey("Id");
 

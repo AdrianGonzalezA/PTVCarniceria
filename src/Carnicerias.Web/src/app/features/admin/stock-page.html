@@ -12,7 +12,7 @@
     <a class="back-link" routerLink="/admin">← Volver a negocio</a>
     <p class="eyebrow">Inventario</p>
     <h1>Existencias</h1>
-    <p class="intro">Consultá el stock disponible y registrá entradas o salidas con un motivo.</p>
+    <p class="intro">Consultá el stock disponible y registrá entradas o salidas. La descripción del ajuste es opcional.</p>
 
     @if (session()?.context; as context) {
       <section class="context-bar" aria-label="Contexto de trabajo">
@@ -28,28 +28,13 @@
           <h2 id="stock-title">Stock de esta sucursal</h2>
           <p>Disponible = existencia − reservado en tickets abiertos. Cada ajuste deja un movimiento.</p>
         </div>
-        <button type="button" class="secondary-button" [disabled]="loading()" (click)="load()">Actualizar</button>
+        <div class="admin-import-heading-actions">
+          <app-admin-excel-import-actions kind="stock" [disabled]="loading() || saving()" (completed)="load()" />
+          <button type="button" class="secondary-button" [disabled]="loading()" (click)="load()">Actualizar</button>
+        </div>
       </header>
 
       @if (actionMessage(); as message) { <p class="success-message" role="status">{{ message }}</p> }
-      @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
-
-      @if (selected(); as item) {
-        <form class="editor-form stock-form" [formGroup]="adjustmentForm" (ngSubmit)="saveAdjustment()">
-          <h3>Ajustar {{ item.name }}</h3>
-          <p>Actual: {{ item.onHand }} {{ item.unit ?? 'u.' }} · Reservado: {{ item.reserved }} · Disponible: {{ item.available }}</p>
-          <label for="stock-delta">Variación de cantidad (positiva para entrada, negativa para salida)</label>
-          <input id="stock-delta" type="number" formControlName="quantityDelta" [attr.step]="item.saleMode === 'unit' ? '1' : '0.001'" [attr.aria-describedby]="'stock-delta-help'" required />
-          <p id="stock-delta-help" class="field-hint">{{ item.saleMode === 'unit' ? 'Sólo unidades enteras.' : 'Hasta tres decimales.' }}</p>
-          <label for="stock-reason">Motivo</label>
-          <input id="stock-reason" formControlName="reason" maxlength="240" autocomplete="off" required />
-          <div class="editor-actions">
-            <button type="submit" [disabled]="saving()">{{ saving() ? 'Guardando…' : 'Registrar ajuste' }}</button>
-            <button type="button" class="secondary-button" [disabled]="saving()" (click)="cancelAdjustment()">Cancelar</button>
-          </div>
-        </form>
-      }
-
       <div class="search-form">
         <label for="stock-search">Buscar artículo</label>
         <input id="stock-search" type="search" [value]="search()" (input)="updateSearch($event)" placeholder="Nombre o código" />
@@ -80,5 +65,24 @@
         </div>
       }
     </section>
+    @if (selected(); as item) {
+      <app-admin-detail-dialog labelledBy="stock-adjustment-title" [compact]="true"
+        [canClose]="!saving()" (closed)="cancelAdjustment()">
+        <form class="editor-form stock-form" [formGroup]="adjustmentForm" (ngSubmit)="saveAdjustment()">
+          <h2 id="stock-adjustment-title">Ajustar {{ item.name }}</h2>
+          <p>Actual: {{ item.onHand }} {{ item.unit ?? 'u.' }} · Reservado: {{ item.reserved }} · Disponible: {{ item.available }}</p>
+          <label for="stock-delta">Variación de cantidad (positiva para entrada, negativa para salida)</label>
+          <input id="stock-delta" type="number" formControlName="quantityDelta" [attr.step]="item.saleMode === 'unit' ? '1' : '0.001'" aria-describedby="stock-delta-help" required />
+          <p id="stock-delta-help" class="field-hint">{{ item.saleMode === 'unit' ? 'Sólo unidades enteras.' : 'Hasta tres decimales.' }}</p>
+          <label for="stock-reason">Descripción (opcional)</label>
+          <input id="stock-reason" formControlName="reason" maxlength="240" autocomplete="off" />
+          @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+          <div class="editor-actions">
+            <button type="submit" [disabled]="saving()">{{ saving() ? 'Guardando…' : 'Registrar ajuste' }}</button>
+            <button type="button" class="secondary-button" [disabled]="saving()" (click)="cancelAdjustment()">Cancelar</button>
+          </div>
+        </form>
+      </app-admin-detail-dialog>
+    }
   </div>
 </main>

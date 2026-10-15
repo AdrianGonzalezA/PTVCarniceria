@@ -1,0 +1,44 @@
+:host { display: block; margin-bottom: 1.5rem; }
+.business-panel { overflow: hidden; background: #fff; border: 1px solid var(--border); border-radius: 0.35rem; }
+.business-heading, .branch-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.business-heading { padding: 1rem 1.25rem; background: #e5ece9; }
+.business-heading h2 { margin: 0; color: var(--teal); font-size: 1.3rem; }
+.business-heading p { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.875rem; }
+.period-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
+.period-controls > p { flex-basis: 100%; margin: 0; color: var(--muted); font-size: 0.8rem; }
+.period-form { display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem; }
+.period-form > div { display: grid; gap: 0.2rem; }
+label { font-weight: 700; font-size: 0.875rem; }
+input { box-sizing: border-box; min-height: 2.75rem; padding: 0.55rem 0.65rem; color: var(--ink); background: #fff; border: 1px solid #9aaca6; border-radius: 0.25rem; font: inherit; }
+button { min-height: 2.75rem; padding: 0.55rem 0.8rem; color: var(--ink); background: #d3ff00; border: 1px solid #a5c900; border-radius: 0.25rem; font: inherit; font-weight: 700; cursor: pointer; }
+button:hover:not(:disabled), button.selected { background: #c5ee00; }
+button:disabled { cursor: not-allowed; opacity: 0.55; }
+.refresh-button { color: var(--teal); background: #fff; border-color: var(--border); }
+.refresh-button:hover:not(:disabled) { background: #f3f6f4; }
+.business-status, .business-error, .partial-warning { margin: 0; padding: 1rem 1.25rem; }
+.business-error { color: #842525; background: #fbe8e7; }
+.partial-warning { color: #6b4300; background: #fff1d7; border-block: 1px solid #e6c58c; }
+.result-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.25rem 1rem; padding: 0.75rem 1.25rem; color: var(--muted); font-size: 0.875rem; }
+.result-heading p { margin: 0; }
+.aggregate { display: flex; flex-wrap: wrap; gap: 1.5rem; margin: 0 1.25rem 1rem; padding: 1rem; background: #ecf6f1; border-left: 0.25rem solid var(--teal); }
+.aggregate > div { display: grid; gap: 0.15rem; min-width: 11rem; }
+.aggregate span { color: var(--muted); font-size: 0.875rem; }
+.aggregate strong { color: var(--teal); font-size: 1.35rem; }
+.aggregate small { color: var(--muted); }
+.branch-list-title { margin: 0; padding: 0.25rem 1.25rem; color: var(--teal); font-size: 1.05rem; }
+.business-branches { display: grid; gap: 0.75rem; margin: 0; padding: 0.75rem 1.25rem 1.25rem; list-style: none; }
+.business-branch { padding: 1rem; border: 1px solid var(--border); border-radius: 0.3rem; }
+.branch-heading h4 { margin: 0; color: var(--teal); font-size: 1.05rem; }
+.branch-heading span { color: var(--muted); font-size: 0.85rem; font-weight: 700; }
+.generated-at, .unavailable-note { margin: 0.35rem 0 0.75rem; color: var(--muted); font-size: 0.875rem; }
+.branch-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem 1rem; margin: 0; }
+.branch-metrics div { display: grid; gap: 0.15rem; }
+.branch-metrics dt { color: var(--muted); font-size: 0.8rem; }
+.branch-metrics dd { margin: 0; font-weight: 700; }
+.payment-caption { margin: 0.75rem 0 0.2rem; color: var(--muted); font-size: 0.8rem; font-weight: 700; }
+.payment-methods { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin: 0; padding: 0; list-style: none; font-size: 0.875rem; }
+@media (max-width: 40rem) {
+  .business-heading { align-items: flex-start; flex-direction: column; }
+  .period-form, .period-form > div, .period-form button, .period-controls > button { width: 100%; }
+  .branch-metrics { grid-template-columns: 1fr; }
+}

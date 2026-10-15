@@ -92,11 +92,12 @@
 .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); align-content: start; gap: 0.75rem; }
 .product-card { display: grid; min-height: 4.25rem; align-content: center; gap: 0.3rem; padding: 0.55rem; color: #111; background: #fff; border: 0; border-radius: 0.45rem; text-align: center; cursor: pointer; }
 .product-card:hover { outline: 2px solid var(--pos-lime); }
+.product-card:disabled { cursor: not-allowed; opacity: 0.6; }
 .catalog-retry { margin-top: 0.65rem; padding: 0.45rem 0.75rem; color: #222; background: var(--pos-lime); border: 0; border-radius: 0.3rem; font: inherit; font-weight: 700; cursor: pointer; }
 .product-name { font-weight: 700; }
 .product-price { font-size: 0.8rem; }
 .product-price small { color: var(--pos-muted); }
-.product-stock { color: #e4e4e0; font-size: 0.66rem; }
+.product-stock { color: var(--pos-muted); font-size: 0.66rem; }
 .catalog-empty,.ticket-empty { display: grid; flex: 1; align-content: center; justify-items: center; padding: 1rem; color: #fff; text-align: center; }
 .catalog-empty h2,.ticket-empty h3 { margin: 0.5rem 0 0.25rem; font-size: 1rem; }
 .catalog-empty p,.ticket-empty p { margin: 0.1rem 0; color: #f1f1f1; font-size: 0.85rem; }
@@ -106,6 +107,9 @@
 .ticket-toolbar { min-height: 3rem; justify-content: space-between; gap: 0.6rem; padding-bottom: 0.55rem; border-bottom: 2px solid #9e9e9a; }
 .eyebrow { margin: 0 0 0.1rem; color: #006b6b; font-size: 0.67rem; font-weight: 700; text-transform: uppercase; }
 .ticket-toolbar h2 { margin: 0; font-size: 1.1rem; }
+.live-data-notice { margin: 0.5rem 0 0; padding: 0.5rem 0.65rem; color: #4b3200; background: #fff0c2; border-left: 3px solid #bd7900; font-size: 0.76rem; line-height: 1.35; }
+.live-data-notice[role='alert'] { color: #782020; background: #fff1ee; border-color: var(--pos-danger); }
+.live-data-notice button { padding: 0; color: #006b6b; background: transparent; border: 0; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .cancel-sale-button { min-height: 2.2rem; padding: 0.4rem 0.65rem; color: #fff; background: var(--pos-teal); border: 0; border-radius: 0.35rem; font: inherit; font-size: 0.8rem; cursor: pointer; }
 .sale-metadata { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; padding: 0.65rem 0 0.55rem; }
 .sale-metadata label { display: grid; min-width: 0; gap: 0.25rem; color: #555; font-size: 0.68rem; }

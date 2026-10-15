@@ -17,6 +17,7 @@ public static class AdminTerminalEndpoints
         terminals.MapGet("", ListAsync);
         terminals.MapPost("", CreateAsync);
         terminals.MapPatch("/{terminalId:guid}", UpdateAsync);
+        terminals.MapPut("/{terminalId:guid}/devices", ConfigureDevicesAsync);
         terminals.MapPost("/{terminalId:guid}/rotate", RotateAsync);
         return endpoints;
     }
@@ -33,10 +34,10 @@ public static class AdminTerminalEndpoints
         var terminals = await db.PosTerminals.AsNoTracking()
             .Where(terminal => terminal.CompanyId == companyId && terminal.BranchId == branchId)
             .OrderBy(terminal => terminal.Name).ThenBy(terminal => terminal.Id)
-            .Select(terminal => new TerminalResponse(terminal.Id, terminal.Name, terminal.IsActive,
-                terminal.IsHistorical, terminal.CredentialHash != null))
             .ToArrayAsync(cancellationToken);
-        return Results.Ok(terminals);
+        return Results.Ok(terminals.Select(terminal => new TerminalResponse(
+            terminal.Id, terminal.Name, terminal.IsActive, terminal.IsHistorical,
+            terminal.CredentialHash != null, terminal.DeviceAssignments())).ToArray());
     }
 
     private static async Task<IResult> CreateAsync(
@@ -127,7 +128,32 @@ public static class AdminTerminalEndpoints
         }
         httpContext.Response.Headers.CacheControl = "no-store";
         return Results.Ok(new TerminalUpdateResponse(terminal.Id, terminal.Name, terminal.IsActive,
-            terminal.IsHistorical, terminal.CredentialHash != null, newCredential));
+            terminal.IsHistorical, terminal.CredentialHash != null, terminal.DeviceAssignments(), newCredential));
+    }
+
+    private static async Task<IResult> ConfigureDevicesAsync(
+        Guid companyId, Guid branchId, Guid terminalId,
+        PosTerminalDevices? request,
+        PlatformAccessDbContext db,
+        OperationalContextAccessor contextAccessor,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        if (!AllowedOrigin(httpContext)) return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
+        if (request is null) return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+        if (!await IsAuthorizedBranchAsync(db, contextAccessor.Context.UserId, companyId, branchId,
+                cancellationToken))
+            return Error(StatusCodes.Status404NotFound, "BRANCH_NOT_FOUND");
+        var terminal = await db.PosTerminals.SingleOrDefaultAsync(item => item.Id == terminalId &&
+            item.CompanyId == companyId && item.BranchId == branchId, cancellationToken);
+        if (terminal is null) return Error(StatusCodes.Status404NotFound, "TERMINAL_NOT_FOUND");
+        if (terminal.IsHistorical) return Error(StatusCodes.Status409Conflict, "HISTORICAL_TERMINAL");
+        try { terminal.ConfigureDevices(request); }
+        catch (ArgumentException) { return Error(StatusCodes.Status400BadRequest, "DEVICE_CONFIG_INVALID"); }
+        await db.SaveChangesAsync(cancellationToken);
+        httpContext.Response.Headers.CacheControl = "no-store";
+        return Results.Ok(new TerminalResponse(terminal.Id, terminal.Name, terminal.IsActive,
+            terminal.IsHistorical, terminal.CredentialHash != null, terminal.DeviceAssignments()));
     }
 
     private static async Task<IResult> RotateAsync(
@@ -213,8 +239,8 @@ public static class AdminTerminalEndpoints
     private sealed record TerminalCreateRequest(string Name);
     private sealed record TerminalUpdateRequest(string? Name, bool? IsActive);
     private sealed record TerminalResponse(Guid Id, string Name, bool IsActive, bool IsHistorical,
-        bool HasCredential);
+        bool HasCredential, PosTerminalDevices Devices);
     private sealed record TerminalUpdateResponse(Guid Id, string Name, bool IsActive, bool IsHistorical,
-        bool HasCredential, string? NewCredential);
+        bool HasCredential, PosTerminalDevices Devices, string? NewCredential);
     private sealed record ProvisionedTerminalResponse(Guid Id, string Name, string Credential);
 }

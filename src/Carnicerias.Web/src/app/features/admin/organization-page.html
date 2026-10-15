@@ -121,7 +121,7 @@
     }
 
     @if (selectedTerminalBranch(); as terminalBranch) {
-      @if (!terminalEditorOpen() && !pendingAction()) {
+      @if (!terminalEditorOpen() && !deviceEditorTerminal() && !pendingAction()) {
       <app-admin-detail-dialog labelledBy="terminals-title"
         [canClose]="!terminalSaving() && !terminalActionId() && !shownCredential()" (closed)="closeTerminals()">
       <section class="category-panel terminals-panel" aria-labelledby="terminals-title" [attr.aria-busy]="terminalsLoading()">
@@ -152,16 +152,18 @@
           <p class="state-message">Esta sucursal todavía no tiene cajas.</p>
         } @else {
           <div class="table-wrap"><table>
-            <thead><tr><th scope="col">Caja</th><th scope="col">Credencial</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr></thead>
+            <thead><tr><th scope="col">Caja</th><th scope="col">Credencial</th><th scope="col">Dispositivos</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr></thead>
             <tbody>
               @for (terminal of terminals(); track terminal.id) {
                 <tr class="terminal-row">
                   <td><strong>{{ terminal.name }}</strong></td>
                   <td>{{ terminal.hasCredential ? 'Aprovisionada' : 'Sin credencial' }}</td>
+                  <td>{{ scaleDescription(terminal) }} · {{ printerDescription(terminal) }}</td>
                   <td><span class="status" [class.status-active]="terminal.isActive">{{ terminal.isHistorical ? 'Histórica' : terminal.isActive ? 'Activa' : 'Inactiva' }}</span></td>
                   <td class="row-actions">
                     <button type="button" class="secondary-button" [disabled]="terminal.isHistorical || !!shownCredential()" (click)="startEditTerminal(terminal)">Editar</button>
                     <button type="button" class="secondary-button" [disabled]="terminalActionId() !== null || !terminal.isActive || !!shownCredential()" (click)="rotateTerminal(terminal)">Rotar credencial</button>
+                    <button type="button" class="secondary-button devices-button" [disabled]="terminal.isHistorical || !!shownCredential()" (click)="startDeviceEditor(terminal)">Dispositivos</button>
                     <button type="button" class="secondary-button" [disabled]="terminalActionId() !== null || !!shownCredential() || terminal.isHistorical || (!terminal.isActive && (!terminalBranch.isActive || !selectedCompany()?.isActive))" (click)="toggleTerminal(terminal)">{{ terminal.isActive ? 'Inactivar' : 'Reactivar' }}</button>
                   </td>
                 </tr>
@@ -185,6 +187,55 @@
             <div class="editor-actions">
               <button type="submit" [disabled]="terminalSaving()">{{ terminalSaving() ? 'Guardando…' : 'Guardar' }}</button>
               <button type="button" class="secondary-button" [disabled]="terminalSaving()" (click)="cancelTerminal()">Cancelar</button>
+            </div>
+          </form>
+        </app-admin-detail-dialog>
+      }
+      @if (deviceEditorTerminal(); as terminal) {
+        <app-admin-detail-dialog labelledBy="terminal-devices-title" [compact]="true"
+          [canClose]="!devicesSaving()" (closed)="cancelDeviceEditor()">
+          <form class="editor-form terminal-devices-form" [formGroup]="devicesForm" (ngSubmit)="saveDevices()">
+            <h3 id="terminal-devices-title">Dispositivos · {{ terminal.name }}</h3>
+            <p>Solo se abrirán los puertos asignados a esta caja. «Ninguno» desactiva el dispositivo.</p>
+            <label for="device-scale-mode">Balanza</label>
+            <select id="device-scale-mode" formControlName="scaleMode">
+              <option value="none">Sin balanza</option>
+              <option value="serial">Balanza serial</option>
+            </select>
+            @if (devicesForm.controls.scaleMode.value === 'serial') {
+              <label for="device-scale-port">Puerto de balanza</label>
+              <input id="device-scale-port" formControlName="scalePort" maxlength="6" placeholder="COM6" />
+              <label for="device-scale-baud">Velocidad de balanza</label>
+              <select id="device-scale-baud" formControlName="scaleBaudRate">
+                @for (baud of [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]; track baud) {
+                  <option [ngValue]="baud">{{ baud }}</option>
+                }
+              </select>
+            }
+            <label for="device-printer-kind">Impresora</label>
+            <select id="device-printer-kind" formControlName="printerKind">
+              <option value="none">Sin impresora</option>
+              <option value="text">Serial de texto</option>
+              <option value="hasar">Hasar SMH/P-441F</option>
+            </select>
+            @if (devicesForm.controls.printerKind.value !== 'none') {
+              <label for="device-printer-port">Puerto de impresora</label>
+              <input id="device-printer-port" formControlName="printerPort" maxlength="6" placeholder="COM8" />
+              @if (devicesForm.controls.printerKind.value === 'text') {
+                <label for="device-printer-baud">Velocidad de impresora</label>
+                <select id="device-printer-baud" formControlName="printerBaudRate">
+                  @for (baud of [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]; track baud) {
+                    <option [ngValue]="baud">{{ baud }}</option>
+                  }
+                </select>
+              } @else {
+                <p>Hasar usa 9600 baudios.</p>
+              }
+            }
+            @if (devicesError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
+            <div class="editor-actions">
+              <button type="submit" [disabled]="devicesSaving()">{{ devicesSaving() ? 'Guardando…' : 'Guardar dispositivos' }}</button>
+              <button type="button" class="secondary-button" [disabled]="devicesSaving()" (click)="cancelDeviceEditor()">Cancelar</button>
             </div>
           </form>
         </app-admin-detail-dialog>

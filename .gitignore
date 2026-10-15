@@ -6,7 +6,9 @@ TestResults/
 *.user
 *.suo
 **/node_modules/
+**/.angular/
 src/Carnicerias.Web/dist/
+src/Carnicerias.Central.Web/dist/
 src/Carnicerias.Pos/dist/
 src/Carnicerias.Pos/out/
 src/Carnicerias.Pos/web/
@@ -14,7 +16,10 @@ src/Carnicerias.Pos/web/
 **/.env.*
 **/appsettings.Local.json
 **/appsettings.*.Local.json
+**/appsettings.Production.json
 Documentos/Arca/
 Documentos/MP/
+documentacion/info.txt
+documentacion/qrmp.pdf
 INFORME_ROTACION_COLABORADORES_2026.md
 diferencia_desposte_ultimas_20_producciones.csv

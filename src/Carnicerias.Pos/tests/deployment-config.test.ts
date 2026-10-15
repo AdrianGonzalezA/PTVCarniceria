@@ -13,19 +13,15 @@ describe('POS deployment configuration', () => {
     expect(() => parseDeploymentConfig(undefined, true)).toThrow('POS_CONFIG_REQUIRED');
   });
 
-  it('keeps the current loopback devices only for development without a config file', () => {
+  it('does not assign hardware by default, even in development', () => {
     expect(parseDeploymentConfig(undefined, false)).toEqual({
       apiOrigin: 'http://localhost:5197',
-      scale: { port: 'COM6', baudRate: 9600 },
-      printer: { port: 'COM1', baudRate: 9600 },
     });
   });
 
-  it('accepts an opted-in private LAN origin and per-terminal serial ports', () => {
+  it('uses the API origin but ignores legacy local device ports', () => {
     expect(parseDeploymentConfig(labConfig, true)).toEqual({
       apiOrigin: 'http://192.168.10.20:5197',
-      scale: { port: 'COM7', baudRate: 4800 },
-      printer: { port: 'COM3', baudRate: 9600 },
     });
   });
 
@@ -42,13 +38,6 @@ describe('POS deployment configuration', () => {
     }
     expect(() => parseDeploymentConfig({ ...labConfig,
       apiOrigin: 'http://example.com:5197' }, true)).toThrow();
-  });
-
-  it('rejects invalid serial port and baud settings', () => {
-    expect(() => parseDeploymentConfig({ ...labConfig,
-      scale: { port: 'COM0', baudRate: 9600 } }, true)).toThrow();
-    expect(() => parseDeploymentConfig({ ...labConfig,
-      printer: { port: 'COM3', baudRate: 12345 } }, true)).toThrow();
   });
 
   it('requires one absolute config path and does not infer a path from arbitrary arguments', () => {

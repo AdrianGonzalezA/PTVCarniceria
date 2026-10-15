@@ -1,0 +1,109 @@
+:host {
+  --ink: #202322;
+  --muted: #46514f;
+  --teal: #005e60;
+  --border: #c8d4d0;
+
+  display: block;
+  min-height: 100dvh;
+  color: var(--ink);
+  background: #f3f6f4;
+}
+
+.central-shell { min-height: 100dvh; }
+.app-header {
+  display: flex;
+  min-height: 3.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem max(1rem, calc((100vw - 70rem) / 2));
+  color: #fff;
+  background: #3d3d3d;
+}
+.brand, .account-bar { display: flex; align-items: center; gap: 0.75rem; }
+.brand { font-size: 1.125rem; font-weight: 700; }
+.brand small { font-size: 0.875rem; font-weight: 500; }
+.brand-mark {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  color: #24332d;
+  background: #d3ff00;
+  border-radius: 0.2rem;
+  font-size: 1.25rem;
+  place-items: center;
+}
+.workspace { width: min(100% - 2rem, 70rem); margin: 3rem auto 4rem; }
+.eyebrow {
+  margin: 0 0 0.25rem;
+  color: var(--teal);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+h1 { margin: 0; color: var(--teal); font-size: clamp(2rem, 4vw, 2.75rem); }
+.intro { max-width: 43rem; margin: 0.5rem 0 1.75rem; color: var(--muted); line-height: 1.5; }
+.login-panel, .content-panel { overflow: hidden; background: #fff; border: 1px solid var(--border); border-radius: 0.35rem; }
+.login-panel { max-width: 28rem; }
+.login-panel h2, .panel-heading { margin: 0; padding: 1rem 1.25rem; color: var(--teal); background: #e5ece9; }
+.login-panel h2, .panel-heading h2 { font-size: 1.3rem; }
+.login-panel form { display: grid; gap: 0.625rem; padding: 1.25rem; }
+label { font-weight: 700; }
+input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.625rem 0.75rem;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid #9aaca6;
+  border-radius: 0.25rem;
+  font: inherit;
+}
+button {
+  min-height: 2.75rem;
+  padding: 0.625rem 1rem;
+  color: var(--ink);
+  background: #d3ff00;
+  border: 1px solid #a5c900;
+  border-radius: 0.25rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { background: #c5ee00; }
+button:disabled { cursor: not-allowed; opacity: 0.55; }
+.login-panel button { justify-self: start; margin-top: 0.5rem; }
+.header-button { min-height: 2.25rem; color: #fff; background: transparent; border-color: #b6c2be; }
+.header-button:hover:not(:disabled) { background: #59615e; }
+.error-message, .field-error { color: #842525; background: #fbe8e7; }
+.error-message { max-width: 42rem; padding: 0.875rem 1rem; border-radius: 0.25rem; }
+.field-error { margin: 0; padding: 0.625rem; font-size: 0.875rem; }
+.status-message { padding: 1rem 1.25rem; color: var(--muted); }
+.panel-heading h2 { margin: 0; }
+.panel-heading p { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.875rem; }
+.installation-list { display: grid; gap: 1rem; margin: 0; padding: 1.25rem; list-style: none; }
+.installation-item { padding: 1rem; border: 1px solid var(--border); border-radius: 0.3rem; }
+.installation-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.installation-heading h3 { margin: 0; color: var(--teal); font-size: 1.125rem; }
+.registration-state { padding: 0.2rem 0.55rem; color: #194c35; background: #e2f4e8; border-radius: 1rem; font-size: 0.8rem; font-weight: 700; }
+.connection-note { margin: 0.35rem 0 0.75rem; color: var(--muted); font-size: 0.875rem; }
+.installation-item dl { display: grid; gap: 0.35rem; margin: 0; }
+.installation-item dl div { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: 0.5rem; }
+.installation-item dt { color: var(--muted); }
+.installation-item dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; font-size: 0.875rem; }
+.list-error { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; padding: 1rem 1.25rem; color: #842525; background: #fbe8e7; }
+.list-error p { margin: 0; }
+.pagination-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem 1.25rem; border-top: 1px solid var(--border); }
+.pagination-bar p { margin: 0; color: var(--muted); font-size: 0.875rem; }
+.page-actions { display: flex; gap: 0.5rem; }
+
+@media (max-width: 40rem) {
+  .app-header { align-items: flex-start; flex-direction: column; }
+  .workspace { margin-top: 1.5rem; }
+  .login-panel button { width: 100%; }
+  .installation-item dl div { grid-template-columns: 1fr; gap: 0; }
+  .pagination-bar { align-items: stretch; flex-direction: column; }
+}

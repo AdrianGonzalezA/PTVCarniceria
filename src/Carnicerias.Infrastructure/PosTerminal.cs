@@ -1,4 +1,10 @@
+using System.Text.RegularExpressions;
+
 namespace Carnicerias.Infrastructure;
+
+public sealed record SerialDeviceAssignment(string Port, int BaudRate);
+public sealed record PrinterDeviceAssignment(string Kind, string Port, int BaudRate);
+public sealed record PosTerminalDevices(SerialDeviceAssignment? Scale, PrinterDeviceAssignment? Printer);
 
 public sealed class PosTerminal
 {
@@ -27,6 +33,44 @@ public sealed class PosTerminal
     public bool IsHistorical { get; private set; }
 
     public string? CredentialHash { get; private set; }
+    public string? ScalePort { get; private set; }
+    public int? ScaleBaudRate { get; private set; }
+    public string? PrinterKind { get; private set; }
+    public string? PrinterPort { get; private set; }
+    public int? PrinterBaudRate { get; private set; }
+
+    public PosTerminalDevices DeviceAssignments() => new(
+        ScalePort is null ? null : new SerialDeviceAssignment(ScalePort, ScaleBaudRate!.Value),
+        PrinterPort is null ? null : new PrinterDeviceAssignment(
+            PrinterKind!, PrinterPort, PrinterBaudRate!.Value));
+
+    public void ConfigureDevices(PosTerminalDevices devices)
+    {
+        if (IsHistorical) throw new InvalidOperationException("Historical terminals cannot use devices.");
+        ArgumentNullException.ThrowIfNull(devices);
+        var scale = devices.Scale;
+        var printer = devices.Printer;
+        if (scale is not null && !ValidSerial(scale.Port, scale.BaudRate))
+            throw new ArgumentException("Invalid scale serial settings.", nameof(devices));
+        if (printer is not null &&
+            (printer.Kind is not ("text" or "hasar") ||
+             !ValidSerial(printer.Port, printer.BaudRate) ||
+             (printer.Kind == "hasar" && printer.BaudRate != 9600)))
+            throw new ArgumentException("Invalid printer serial settings.", nameof(devices));
+        if (scale is not null && printer is not null &&
+            string.Equals(scale.Port, printer.Port, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Scale and printer cannot use the same port.", nameof(devices));
+
+        ScalePort = scale?.Port.ToUpperInvariant();
+        ScaleBaudRate = scale?.BaudRate;
+        PrinterKind = printer?.Kind;
+        PrinterPort = printer?.Port.ToUpperInvariant();
+        PrinterBaudRate = printer?.BaudRate;
+    }
+
+    private static bool ValidSerial(string? port, int baudRate) =>
+        port is not null && Regex.IsMatch(port, "^COM[1-9][0-9]{0,2}$", RegexOptions.IgnoreCase) &&
+        baudRate is 1200 or 2400 or 4800 or 9600 or 19200 or 38400 or 57600 or 115200;
 
     public void Rename(string name)
     {

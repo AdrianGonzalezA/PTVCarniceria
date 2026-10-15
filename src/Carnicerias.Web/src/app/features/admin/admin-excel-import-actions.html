@@ -11,6 +11,10 @@
       <h2 id="excel-import-title">Importar desde Excel</h2>
       <p>Descargá la plantilla, completá sólo las hojas de carga y revisá el resultado antes de confirmar.
         La hoja <strong>Ejemplos</strong> no se importa.</p>
+      @if (kind() === 'stock') {
+        <p>Las variaciones positivas suman al stock actual y las negativas restan, sólo en la sucursal seleccionada.
+          Cada artículo debe aparecer una vez; no se crean piezas trazables.</p>
+      }
       <label class="import-file">Archivo .xlsx
         <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           [disabled]="busy() !== null" (change)="chooseFile($event)" />

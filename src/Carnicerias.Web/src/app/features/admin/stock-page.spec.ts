@@ -35,6 +35,8 @@ describe('StockPage', () => {
     expect(page.querySelectorAll('.stock-row')).toHaveLength(2);
     page.querySelector<HTMLButtonElement>('.stock-row button')!.click();
     fixture.detectChanges();
+    expect(page.querySelector('dialog.admin-detail-dialog[open]')).not.toBeNull();
+    expect(page.querySelector('.category-panel .stock-form')).toBeNull();
     const quantity = page.querySelector<HTMLInputElement>('#stock-delta')!;
     quantity.value = '1.5';
     quantity.dispatchEvent(new Event('input'));
@@ -52,6 +54,53 @@ describe('StockPage', () => {
       reserved: 2, available: 9.5 });
     fixture.detectChanges();
     expect(page.querySelector('.stock-row')?.textContent).toContain('11.5 kg');
+  });
+
+  it('lets an adjustment omit its description and records a default audit reason', () => {
+    const { fixture, http, page } = load();
+    page.querySelector<HTMLButtonElement>('.stock-row button')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector<HTMLInputElement>('#stock-reason')?.required).toBe(false);
+    const quantity = page.querySelector<HTMLInputElement>('#stock-delta')!;
+    quantity.value = '2';
+    quantity.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    page.querySelector<HTMLFormElement>('.stock-form')!.dispatchEvent(new Event('submit'));
+    const request = http.expectOne('/api/inventory/adjustments');
+    expect(request.request.body).toMatchObject({ productId: 'product-1', quantityDelta: 2,
+      reason: 'Ajuste manual' });
+    request.flush({ operationId: request.request.body.operationId, onHand: 12,
+      reserved: 2, available: 10 });
+    fixture.detectChanges();
+    expect(page.querySelector('dialog.admin-detail-dialog')).toBeNull();
+  });
+
+  it('previews a stock variation workbook before applying and refreshes balances', () => {
+    const { fixture, http, page } = load();
+    expect(page.querySelector<HTMLAnchorElement>('.import-template')?.getAttribute('href'))
+      .toBe('/api/admin/imports/stock/template');
+    page.querySelector<HTMLButtonElement>('.import-open')!.click();
+    fixture.detectChanges();
+    expect(page.textContent).toContain('Las variaciones positivas suman');
+    const file = new File(['xlsx'], 'existencias.xlsx',
+      { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const input = page.querySelector<HTMLInputElement>('input[type=file]')!;
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+    input.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    page.querySelector<HTMLButtonElement>('.import-footer button:nth-child(2)')!.click();
+    http.expectOne('/api/admin/imports/stock/preview').flush({ canApply: true,
+      createCount: 0, updateCount: 1, skippedCount: 0, unchangedCount: 0,
+      rows: [{ sheet: 'Existencias', row: 2, status: 'update', message: 'Asado: 10 → 12 kg.' }],
+      issues: [] });
+    fixture.detectChanges();
+    expect(page.textContent).toContain('Asado: 10 → 12 kg.');
+    page.querySelector<HTMLButtonElement>('.import-footer button:nth-child(3)')!.click();
+    const apply = http.expectOne('/api/admin/imports/stock/apply');
+    expect(apply.request.headers.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/i);
+    apply.flush({ canApply: true, createCount: 0, updateCount: 1,
+      skippedCount: 0, unchangedCount: 0, rows: [], issues: [] });
+    http.expectOne('/api/inventory/stock').flush([]);
   });
 
   it('rejects fractional quantities for unit products before sending a request', () => {

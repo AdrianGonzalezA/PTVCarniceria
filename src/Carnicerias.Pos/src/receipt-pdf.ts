@@ -24,6 +24,7 @@ export interface FiscalReceipt {
 
 export interface ReceiptRequest {
   readonly saleId: string;
+  readonly documentType?: 'nonFiscalTicket' | 'fiscalTicket' | 'electronicInvoice';
   readonly branch: string;
   readonly terminal: string;
   readonly cashier: string;
@@ -43,6 +44,7 @@ export interface ReceiptRequest {
     readonly netAfterDiscount?: number | null;
     readonly taxableBase?: number | null;
     readonly taxAmount?: number | null;
+    readonly taxRatePercent?: number | null;
   }[];
   readonly payments: readonly {
     readonly method: string; readonly tenderedAmount: number; readonly appliedAmount: number;
@@ -93,8 +95,12 @@ export function validateReceiptRequest(value: unknown): ReceiptRequest {
   const customerName = accountChargeAmount + creditAppliedAmount > 0 ? label(data['customerName']) : null;
   const confirmedAtUtc = label(data['confirmedAtUtc'], 40);
   if (Number.isNaN(Date.parse(confirmedAtUtc))) throw new Error('Invalid receipt date');
+  const documentType = data['documentType'] ?? 'nonFiscalTicket';
+  if (!['nonFiscalTicket', 'fiscalTicket', 'electronicInvoice'].includes(String(documentType)))
+    throw new Error('Invalid receipt document type');
   const result: ReceiptRequest = {
     saleId: label(data['saleId'], 80),
+    documentType: documentType as ReceiptRequest['documentType'],
     branch: label(data['branch']),
     terminal: label(data['terminal']),
     cashier: label(data['cashier']),
@@ -118,6 +124,7 @@ export function validateReceiptRequest(value: unknown): ReceiptRequest {
         netAfterDiscount: line['netAfterDiscount'] == null ? null : amount(line['netAfterDiscount']),
         taxableBase: line['taxableBase'] == null ? null : amount(line['taxableBase']),
         taxAmount: line['taxAmount'] == null ? null : amount(line['taxAmount']),
+        taxRatePercent: line['taxRatePercent'] == null ? null : amount(line['taxRatePercent']),
       };
     }),
     payments: payments.map((input: unknown) => {

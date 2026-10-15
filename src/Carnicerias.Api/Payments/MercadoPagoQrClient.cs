@@ -5,31 +5,35 @@ using System.Text.Json;
 
 namespace Carnicerias.Api.Payments;
 
+public enum MercadoPagoQrMode { Dynamic, Static }
+
 public sealed class QrOrderRequest
 {
     public QrOrderRequest(string externalPosId, decimal amount, string externalReference,
-        Guid idempotencyKey)
+        Guid idempotencyKey, MercadoPagoQrMode mode = MercadoPagoQrMode.Dynamic)
     {
         if (string.IsNullOrWhiteSpace(externalPosId) || externalPosId.Length > 40 ||
             !externalPosId.All(character => char.IsAsciiLetterOrDigit(character) || character is '_' or '-') ||
             !Guid.TryParseExact(externalReference, "N", out _) ||
             amount <= 0 || amount > 999_999_999.99m || decimal.Round(amount, 2) != amount ||
-            idempotencyKey == Guid.Empty)
+            idempotencyKey == Guid.Empty || !Enum.IsDefined(mode))
             throw new ArgumentException("QR needs a register, sale reference, exact amount and idempotency key.");
         ExternalPosId = externalPosId;
         Amount = amount;
         ExternalReference = externalReference;
         IdempotencyKey = idempotencyKey;
+        Mode = mode;
     }
 
     public string ExternalPosId { get; }
     public decimal Amount { get; }
     public string ExternalReference { get; }
     public Guid IdempotencyKey { get; }
+    public MercadoPagoQrMode Mode { get; }
 }
 
 public sealed record QrOrderState(string Id, string Status, string PaymentId,
-    string PaymentStatus, string? PaymentStatusDetail, decimal Amount,
+    string? PaymentStatus, string? PaymentStatusDetail, decimal Amount,
     string ExternalReference, string? QrData)
 {
     public bool IsApproved => Status == "processed" && PaymentStatus == "processed" &&
@@ -52,7 +56,8 @@ public sealed class MercadoPagoQrClient(HttpClient httpClient)
             type = "qr",
             total_amount = order.Amount.ToString("0.00", CultureInfo.InvariantCulture),
             external_reference = order.ExternalReference,
-            config = new { qr = new { external_pos_id = order.ExternalPosId, mode = "dynamic" } },
+            config = new { qr = new { external_pos_id = order.ExternalPosId,
+                mode = order.Mode == MercadoPagoQrMode.Static ? "static" : "dynamic" } },
             transactions = new { payments = new[] { new
             {
                 amount = order.Amount.ToString("0.00", CultureInfo.InvariantCulture)
@@ -122,12 +127,20 @@ public sealed class MercadoPagoQrClient(HttpClient httpClient)
             qrData = qrValue.GetString();
         if (qrData?.Length > 4096) throw new InvalidDataException("QR data is too large.");
         return new QrOrderState(id, Text(root, "status"), Text(payment, "id"),
-            Text(payment, "status"), payment.TryGetProperty("status_detail", out var detail)
-                ? detail.GetString() : null, amount, reference, qrData);
+            OptionalText(payment, "status"), OptionalText(payment, "status_detail"),
+            amount, reference, qrData);
     }
 
     private static string Text(JsonElement value, string property) =>
         value.TryGetProperty(property, out var item) && item.ValueKind == JsonValueKind.String &&
         item.GetString() is { Length: > 0 } text
             ? text : throw new InvalidDataException($"QR omitted {property}.");
+
+    private static string? OptionalText(JsonElement value, string property)
+    {
+        if (!value.TryGetProperty(property, out var item) || item.ValueKind == JsonValueKind.Null)
+            return null;
+        return item.ValueKind == JsonValueKind.String && item.GetString() is { Length: > 0 } text
+            ? text : throw new InvalidDataException($"QR returned invalid {property}.");
+    }
 }

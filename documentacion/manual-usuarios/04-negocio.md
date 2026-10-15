@@ -23,7 +23,9 @@ La corrección interna no ejecuta por sí sola un reintegro en un banco, tarjeta
 
 ## Existencias y recepción
 
-**Existencias** consulta por artículo la cantidad física, la reservada por tickets abiertos y la disponible en la sucursal. **Ajustar** registra una variación positiva o negativa con motivo; el sistema no permite dejar la existencia por debajo de lo reservado.
+**Existencias** consulta por artículo la cantidad física, la reservada por tickets abiertos y la disponible en la sucursal. **Ajustar** abre un modal para ese artículo y registra una variación positiva o negativa. La descripción es opcional; si se deja vacía, el movimiento conserva «Ajuste manual» como motivo de auditoría. El sistema no permite dejar la existencia por debajo de lo reservado.
+
+Para cargar varios artículos, usá **Descargar plantilla** e **Importar Excel** en Existencias. Completá `CodigoArticulo` con el código principal y `Variacion` con un número: positivo suma y negativo resta al saldo actual de la sucursal seleccionada. `Descripcion` es opcional. La hoja **Ejemplos** no se importa. Primero pulsá **Previsualizar** para revisar los saldos resultantes; después **Confirmar importación**. Si una fila es inválida o deja el stock por debajo de lo reservado, no se aplica ninguna. Esta carga no crea piezas trazables; ver [reglas de importación](../../SPEC-stock-import.md).
 
 **Recepción de piezas** registra una pieza por vez a partir de un perfil de lectura guardado, artículo vendido por peso, origen y código de barras. La recepción suma kilos al stock de la sucursal y conserva el identificador de la pieza; la lista muestra las últimas recibidas. Para probar o crear un formato de etiqueta se usa **Configuración → Lectura de etiquetas**. La importación masiva desde frigorífico/abastecedor todavía no está disponible.
 

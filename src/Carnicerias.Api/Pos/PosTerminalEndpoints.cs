@@ -42,9 +42,9 @@ public static class PosTerminalEndpoints
 
         return Results.Ok(new TerminalResponse(
             terminal.Id, terminal.Name, terminal.CompanyId, identity.CompanyName,
-            terminal.BranchId, identity.BranchName));
+            terminal.BranchId, identity.BranchName, terminal.DeviceAssignments()));
     }
 
     private sealed record TerminalResponse(Guid Id, string Name, Guid CompanyId,
-        string CompanyName, Guid BranchId, string BranchName);
+        string CompanyName, Guid BranchId, string BranchName, PosTerminalDevices Devices);
 }

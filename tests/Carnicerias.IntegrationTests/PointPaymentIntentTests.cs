@@ -21,6 +21,33 @@ public sealed class PointPaymentIntentTests
     }
 
     [Fact]
+    public void StaticQrPersistsItsPermanentCodeAndCreatedOrderWithoutPaymentStatus()
+    {
+        var intent = new PointPaymentIntent(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "SUC1CAJA1", 125m,
+            DateTimeOffset.UtcNow, MercadoPagoOrderMode.StaticQr);
+        intent.SetQrData("000201STATIC");
+        intent.RecordProviderState("ORD1", "PAY1", "created", null, null,
+            false, DateTimeOffset.UtcNow);
+        Assert.Equal(PointPaymentStatus.Pending, intent.Status);
+        Assert.Equal("000201STATIC", intent.QrData);
+        Assert.Null(intent.ProviderPaymentStatus);
+    }
+
+    [Fact]
+    public void StaticQrPreflightFailureReleasesOnlyAnOrderThatWasNeverSent()
+    {
+        var intent = new PointPaymentIntent(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "SUC1CAJA1", 125m,
+            DateTimeOffset.UtcNow, MercadoPagoOrderMode.StaticQr);
+        intent.RejectBeforeProviderOrder(DateTimeOffset.UtcNow);
+        Assert.Equal(PointPaymentStatus.Rejected, intent.Status);
+        Assert.Null(intent.ProviderOrderId);
+        Assert.Throws<InvalidOperationException>(() =>
+            intent.RejectBeforeProviderOrder(DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
     public void AnHttpFailureDoesNotProveThatTheProviderOrderWasRejected()
     {
         var intent = new PointPaymentIntent(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),

@@ -3,12 +3,12 @@ import { Component, computed, DestroyRef, ElementRef, inject, HostListener, OnIn
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { Observable, of, Subject } from 'rxjs';
-import { catchError, concatMap, map } from 'rxjs/operators';
+import { catchError, concatMap, finalize, map, timeout } from 'rxjs/operators';
 import { CatalogCategory, CatalogClient, PriceListOption } from '../../core/catalog/catalog-client';
 import { InventoryClient, InventoryStockItem } from '../../core/inventory/inventory-client';
 import { InventoryPieceClient, PosPieceLookup } from '../../core/inventory/inventory-piece-client';
 import { PosTerminal, PosTerminalClient } from '../../core/pos/pos-terminal-client';
-import { PosDeviceClient, SerialPrintResult } from '../../core/pos/pos-device-client';
+import { HasarSalePrintResult, PosDeviceAvailability, PosDeviceClient, SerialPrintResult } from '../../core/pos/pos-device-client';
 import { ConfirmedSale, SaleDocumentType, SaleDraft, SaleDraftClient, SaleDraftLine, SalePaymentMethod, SaleRecipientTaxStatus, SaleTicketSlot } from '../../core/sales/sale-draft-client';
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { AuthorizedFiscalDocument, FiscalDocumentClient } from '../../core/sales/fiscal-document-client';
@@ -109,6 +109,10 @@ export class PosPage implements OnInit {
   private ticketSlotsRequestRevision = 0;
   private ticketViewRevision = 0;
   private stockRequestRevision = 0;
+  private liveRefreshTimer: ReturnType<typeof setInterval> | null = null;
+  private priceListRefreshInFlight = false;
+  private stockRefreshInFlight = false;
+  private initialDraftLoadRequested = false;
   private scaleRequestRevision = 0;
   private scannedCode = '';
   private lastScanKeyAt = 0;
@@ -118,18 +122,34 @@ export class PosPage implements OnInit {
   protected readonly session = signal<CurrentSession | null>(null);
   protected readonly terminal = signal<PosTerminal | null>(null);
   protected readonly terminalError = signal<string | null>(null);
+  protected readonly devices = signal<PosDeviceAvailability>({ scale: null, printer: null });
+  protected readonly deviceConfigError = signal(false);
   protected readonly demoPriceLists = demoPriceLists;
   protected readonly realPriceLists = signal<readonly PriceListOption[]>([]);
+  protected readonly unavailablePriceListName = signal('');
+  protected readonly catalogNotice = signal<string | null>(null);
   protected readonly catalogCategories = signal<readonly CatalogCategory[]>([]);
   protected readonly realProducts = signal<readonly PosProduct[]>([]);
   private readonly stockByProduct = signal<ReadonlyMap<string, number>>(new Map());
+  protected readonly stockLoadState = signal<'loading' | 'ready' | 'stale'>('loading');
   protected readonly priceListLoadState = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly catalogLoadState = signal<'idle' | 'loading' | 'ready' | 'error'>('idle');
   protected readonly selectedPriceListId = signal('');
+  protected readonly priceListUnavailable = computed(() => this.priceListLoadState() === 'ready' &&
+    !!this.selectedPriceListId() && !this.selectedPriceListId().startsWith('demo:') &&
+    !this.realPriceLists().some((list) => list.id === this.selectedPriceListId()));
+  protected readonly liveDataProblem = computed(() => {
+    if (this.priceListLoadState() === 'error') return 'No se pudieron verificar las listas de precios. Reintentá la sincronización.';
+    if (this.priceListUnavailable()) return 'Esta lista de precios ya no está habilitada. Conservamos el ticket; cancelá la venta para elegir otra lista.';
+    if (this.stockLoadState() === 'stale') return 'Stock desactualizado. No agregues productos ni cobres hasta recuperar la conexión.';
+    if (this.stockLoadState() === 'loading') return 'Verificando stock de la sucursal…';
+    return null;
+  });
   protected readonly isDemoPriceList = computed(() => this.selectedPriceListId().startsWith('demo:'));
   protected readonly selectedPriceListName = computed(
     () => this.realPriceLists().find((list) => list.id === this.selectedPriceListId())?.name ??
-      this.demoPriceLists.find((list) => list.id === this.selectedPriceListId())?.name ?? '',
+      this.demoPriceLists.find((list) => list.id === this.selectedPriceListId())?.name ??
+      (this.unavailablePriceListName() || (this.selectedPriceListId() ? `Lista ${this.selectedPriceListId()}` : '')),
   );
   protected readonly products = computed<readonly PosProduct[]>(() => {
     const list = this.demoPriceLists.find((item) => item.id === this.selectedPriceListId());
@@ -148,7 +168,8 @@ export class PosPage implements OnInit {
         icon: this.categoryIcon(category.name),
       })));
   protected readonly canSearchCatalog = computed(() =>
-    this.isDemoPriceList() || (this.selectedPriceListId().length > 0 && this.catalogLoadState() === 'ready'),
+    this.isDemoPriceList() || (this.selectedPriceListId().length > 0 && !this.liveDataProblem() &&
+      this.catalogLoadState() === 'ready'),
   );
   protected readonly activeCategory = signal<string>('res');
   protected readonly searchText = signal('');
@@ -164,6 +185,7 @@ export class PosPage implements OnInit {
   protected readonly quantityProblem = computed(() => {
     const product = this.selectedProduct();
     if (!product) return null;
+    if (!this.isDemoPriceList() && this.liveDataProblem()) return this.liveDataProblem();
     const quantity = Number(this.quantityDraft());
     if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 10000 ||
         Math.abs(Math.round(quantity * 1000) - quantity * 1000) > 0.000001)
@@ -228,10 +250,10 @@ export class PosPage implements OnInit {
   protected readonly fiscalBusy = signal(false);
   protected readonly fiscalError = signal<string | null>(null);
   protected readonly receiptPdfBusy = signal(false);
-  protected readonly receiptPdfPath = signal<string | null>(null);
+  protected readonly receiptPdfDownloaded = signal(false);
   protected readonly receiptPdfError = signal<string | null>(null);
   protected readonly serialPrintBusy = signal(false);
-  protected readonly serialPrintResult = signal<SerialPrintResult | null>(null);
+  protected readonly serialPrintResult = signal<SerialPrintResult | HasarSalePrintResult | null>(null);
   protected readonly serialPrintError = signal<string | null>(null);
   protected readonly selectedPayments = signal<readonly { method: SalePaymentMethod; amount: number }[]>([]);
   protected readonly creditCustomerOptions = signal<readonly CreditCustomerOption[]>([]);
@@ -280,6 +302,7 @@ export class PosPage implements OnInit {
   protected readonly paymentBalance = computed(() => Math.max(0, Math.round((this.dueNow() -
     this.selectedPayments().reduce((sum, payment) => sum + payment.amount, 0)) * 100) / 100));
   protected readonly paymentProblem = computed(() => {
+    if (!this.isDemoPriceList() && this.liveDataProblem()) return this.liveDataProblem();
     if (this.mercadoPagoLoadState() === 'loading') return 'Consultando si hay un cobro de Mercado Pago previo.';
     if (this.mercadoPagoLoadState() === 'error') return 'No se pudo verificar el cobro previo. Reabrí la ventana de cobro.';
     const accountCharge = this.accountChargeAmount();
@@ -356,7 +379,10 @@ export class PosPage implements OnInit {
   );
 
   constructor() {
-    this.destroyRef.onDestroy(() => this.clearMercadoPagoPoll());
+    this.destroyRef.onDestroy(() => {
+      this.clearMercadoPagoPoll();
+      if (this.liveRefreshTimer) clearInterval(this.liveRefreshTimer);
+    });
     this.draftOperations.pipe(
       concatMap(({ revision, slot, operation }) => {
         const request: Observable<SaleDraft | void> = operation === 'cancel'
@@ -440,6 +466,7 @@ export class PosPage implements OnInit {
   }
 
   ngOnInit(): void {
+    this.liveRefreshTimer = setInterval(() => this.refreshLiveData(), 5000);
     this.sessionClient.current().subscribe({
       next: (session) => {
         if (!session.context) {
@@ -455,6 +482,7 @@ export class PosPage implements OnInit {
               return;
             }
             this.terminal.set(terminal);
+            void this.refreshDevices().catch(() => undefined);
             this.loadCashierShift();
           },
           error: (error: HttpErrorResponse) => this.terminalError.set(error.status === 401
@@ -466,20 +494,87 @@ export class PosPage implements OnInit {
     });
   }
 
+  private async refreshDevices(): Promise<PosDeviceAvailability> {
+    try {
+      const devices = await this.posDeviceClient.deviceAvailability();
+      this.devices.set(devices);
+      this.deviceConfigError.set(false);
+      return devices;
+    } catch (error) {
+      this.devices.set({ scale: null, printer: null });
+      this.deviceConfigError.set(true);
+      throw error;
+    }
+  }
+
   protected loadPriceLists(): void {
-    this.priceListLoadState.set('loading');
-    this.catalogClient.priceLists().subscribe({
+    if (!this.initialDraftLoadRequested && this.realPriceLists().length === 0)
+      this.priceListLoadState.set('loading');
+    this.refreshPriceLists();
+  }
+
+  @HostListener('window:focus')
+  @HostListener('window:online')
+  protected refreshLiveData(): void {
+    if (!this.canOperate()) return;
+    this.refreshPriceLists();
+    this.refreshStock();
+  }
+
+  private refreshPriceLists(): void {
+    if (this.priceListRefreshInFlight || !this.canOperate()) return;
+    this.priceListRefreshInFlight = true;
+    this.catalogClient.priceLists().pipe(
+      timeout(4000), takeUntilDestroyed(this.destroyRef),
+      finalize(() => { this.priceListRefreshInFlight = false; }),
+    ).subscribe({
       next: (lists) => {
+        const previousId = this.selectedPriceListId();
+        const previousName = this.realPriceLists().find((list) => list.id === previousId)?.name ??
+          this.unavailablePriceListName();
         this.realPriceLists.set(lists);
-        if (!lists.some((list) => list.id === this.selectedPriceListId())) {
-          this.selectedPriceListId.set(lists[0]?.id ?? '');
+        if (previousId && !lists.some((list) => list.id === previousId)) {
+          if (this.lines().length > 0) {
+            this.unavailablePriceListName.set(previousName);
+            this.catalogNotice.set(`La lista ${previousName || 'seleccionada'} ya no está habilitada. El detalle y sus precios se conservan; cancelá la venta para elegir otra lista.`);
+          } else {
+            const nextList = lists[0];
+            this.selectedPriceListId.set(nextList?.id ?? '');
+            this.unavailablePriceListName.set('');
+            this.catalogNotice.set(`La lista ${previousName || 'seleccionada'} ya no está habilitada. ${nextList
+              ? `Se seleccionó ${nextList.name}.` : 'No hay otra lista disponible.'}`);
+            this.resetCatalogForPriceList(nextList?.id ?? '');
+          }
+        } else if (!previousId && lists.length > 0) {
+          this.selectedPriceListId.set(lists[0].id);
+          this.resetCatalogForPriceList(lists[0].id);
+        } else if (previousId && this.unavailablePriceListName()) {
+          this.unavailablePriceListName.set('');
+          this.catalogNotice.set(null);
         }
         this.priceListLoadState.set('ready');
-        if (this.selectedPriceListId()) this.loadCategories(this.selectedPriceListId());
-        this.loadSavedDraft();
+        if (!this.initialDraftLoadRequested) {
+          this.initialDraftLoadRequested = true;
+          this.loadSavedDraft();
+        }
       },
       error: () => this.priceListLoadState.set('error'),
     });
+  }
+
+  private resetCatalogForPriceList(priceListId: string): void {
+    this.ticketViewRevision++;
+    this.searchText.set('');
+    this.selectedProduct.set(null);
+    this.scannedPieceIdentifier.set(null);
+    this.scannedPieceId.set(null);
+    this.realSearchSubmitted.set(false);
+    this.realProducts.set([]);
+    if (priceListId) this.loadCategories(priceListId);
+    else {
+      this.catalogCategories.set([]);
+      this.catalogLoadState.set('idle');
+    }
   }
 
   protected updateSearch(event: Event): void {
@@ -514,6 +609,8 @@ export class PosPage implements OnInit {
     if (this.lines().length > 0) return;
     const priceListId = (event.target as HTMLSelectElement).value;
     this.selectedPriceListId.set(priceListId);
+    this.unavailablePriceListName.set('');
+    this.catalogNotice.set(null);
     this.searchText.set('');
     this.selectedProduct.set(null);
     this.scannedPieceIdentifier.set(null);
@@ -740,6 +837,10 @@ export class PosPage implements OnInit {
     pieceId: string | null = null): void {
     if (!this.canOperate()) return;
     this.errorMessage.set(null);
+    if (!this.isDemoPriceList() && this.liveDataProblem()) {
+      this.errorMessage.set(this.liveDataProblem());
+      return;
+    }
     if (!this.isDemoPriceList() && (this.availableStock(product) ?? 0) <= 0) {
       this.errorMessage.set('No hay stock disponible para este producto en la sucursal.');
       return;
@@ -763,7 +864,8 @@ export class PosPage implements OnInit {
   }
 
   protected readSerialScale(): void {
-    if (this.scaleBusy() || this.selectedProduct()?.mode !== 'weight' || this.scannedPieceIdentifier()) return;
+    if (this.scaleBusy() || !this.devices().scale || this.selectedProduct()?.mode !== 'weight' ||
+        this.scannedPieceIdentifier()) return;
     const productId = this.selectedProduct()?.id;
     const revision = ++this.scaleRequestRevision;
     this.scaleBusy.set(true);
@@ -781,6 +883,10 @@ export class PosPage implements OnInit {
 
   protected addSelectedProduct(): void {
     if (!this.canOperate()) return;
+    if (!this.isDemoPriceList() && this.liveDataProblem()) {
+      this.errorMessage.set(this.liveDataProblem());
+      return;
+    }
     const product = this.selectedProduct();
     const quantity = Number(this.quantityDraft());
     if (!product || this.quantityProblem()) {
@@ -816,6 +922,11 @@ export class PosPage implements OnInit {
     const input = event.target as HTMLInputElement;
     const quantity = Number(input.value.replace(',', '.'));
     const line = this.lines().find((item) => item.id === lineId);
+    if (!this.isDemoPriceList() && this.liveDataProblem()) {
+      if (line) input.value = String(line.quantity);
+      this.errorMessage.set(this.liveDataProblem());
+      return;
+    }
     if (line?.inventoryPieceId) {
       input.value = String(line.quantity);
       this.errorMessage.set('El peso de una pieza leída no se puede modificar. Quitá la pieza si no corresponde.');
@@ -847,6 +958,7 @@ export class PosPage implements OnInit {
 
   protected removeLine(lineId: string): void {
     if (!this.canOperate()) return;
+    if (!this.isDemoPriceList() && this.liveDataProblem()) return;
     const line = this.lines().find((item) => item.id === lineId);
     if (!line || !window.confirm(`¿Querés quitar ${line.product.name} del detalle?`)) return;
     this.lines.update((lines) => lines.filter((item) => item.id !== lineId));
@@ -858,12 +970,14 @@ export class PosPage implements OnInit {
   }
 
   protected updateDiscountAmount(event: Event): void {
+    if (this.liveDataProblem()) return;
     this.discountDraft.set((event.target as HTMLInputElement).value);
     if (this.discountAmount() === 0) this.discountReason.set('');
     this.persistCurrentDraft();
   }
 
   protected updateDiscountReason(event: Event): void {
+    if (this.liveDataProblem()) return;
     this.discountReason.set((event.target as HTMLInputElement).value);
     this.persistCurrentDraft();
   }
@@ -1022,6 +1136,10 @@ export class PosPage implements OnInit {
     if (this.isDemoPriceList()) {
       this.errorMessage.set(null);
       this.checkoutNotice.set(true);
+      return;
+    }
+    if (this.liveDataProblem()) {
+      this.errorMessage.set(this.liveDataProblem());
       return;
     }
     if (this.lines().length === 0) {
@@ -1228,6 +1346,8 @@ export class PosPage implements OnInit {
         const code = response.error?.error?.code;
         this.mercadoPagoMessage.set(code === 'MERCADO_PAGO_REGISTER_NOT_CONFIGURED'
           ? 'Esta caja no tiene configurado ese modo de Mercado Pago en Administración.'
+          : code === 'MERCADO_PAGO_STATIC_QR_UNAVAILABLE'
+            ? 'No se pudo obtener el QR fijo de esta caja en Mercado Pago. Revisá su external_id y que esté activa en modo PDV.'
           : code === 'MERCADO_PAGO_AMOUNT_TOO_SMALL'
             ? 'Point requiere un cobro mínimo de $ 15. Aumentá el importe o elegí otro medio.'
           : code === 'MERCADO_PAGO_NOT_CONFIGURED' || code === 'MERCADO_PAGO_CREDENTIAL_UNAVAILABLE'
@@ -1480,7 +1600,7 @@ export class PosPage implements OnInit {
     this.confirmedSale.set(sale);
     this.fiscalDocument.set(null);
     this.fiscalError.set(null);
-    this.receiptPdfPath.set(null);
+    this.receiptPdfDownloaded.set(false);
     this.receiptPdfError.set(null);
     this.serialPrintResult.set(null);
     this.serialPrintError.set(null);
@@ -1510,6 +1630,7 @@ export class PosPage implements OnInit {
     this.loadPriceLists();
     if (sale.documentType === 'fiscalTicket' || sale.documentType === 'electronicInvoice')
       this.issueFiscalDocument(sale);
+    else this.printSerialReceipt(sale);
   }
 
   protected issueFiscalDocument(sale: ConfirmedSale): void {
@@ -1523,7 +1644,6 @@ export class PosPage implements OnInit {
         this.fiscalBusy.set(false);
         if (document.status === 'Authorized') {
           if (sale.documentType === 'fiscalTicket') this.printSerialReceipt(sale);
-          else this.saveReceiptPdf(sale);
         } else if (document.status === 'Rejected') {
           this.fiscalError.set(`ARCA rechazó la emisión (código ${document.errorCodes ?? 'sin detalle'}). La venta sigue registrada.`);
         }
@@ -1546,14 +1666,15 @@ export class PosPage implements OnInit {
     if (this.receiptPdfBusy() || ((sale.documentType === 'fiscalTicket' ||
       sale.documentType === 'electronicInvoice') && fiscal?.status !== 'Authorized')) return;
     this.receiptPdfBusy.set(true);
+    this.receiptPdfDownloaded.set(false);
     this.receiptPdfError.set(null);
     const branch = this.session()?.context?.branchName ?? 'Sucursal';
     const terminal = this.terminal()?.name ?? 'Caja';
     const cashier = this.session()?.username ?? 'Cajero';
     const save = fiscal ? this.receiptPdfClient.save(sale, branch, terminal, cashier, fiscal)
       : this.receiptPdfClient.save(sale, branch, terminal, cashier);
-    void save.then((path) => this.receiptPdfPath.set(path)).catch(() => {
-      this.receiptPdfError.set('No se pudo generar el PDF. La venta sigue confirmada; podés reintentar.');
+    void save.then(() => this.receiptPdfDownloaded.set(true)).catch(() => {
+      this.receiptPdfError.set('No se pudo descargar el comprobante. La venta sigue confirmada; podés reintentar.');
     }).finally(() => this.receiptPdfBusy.set(false));
   }
 
@@ -1566,10 +1687,31 @@ export class PosPage implements OnInit {
     const branch = this.session()?.context?.branchName ?? 'Sucursal';
     const terminal = this.terminal()?.name ?? 'Caja';
     const cashier = this.session()?.username ?? 'Cajero';
-    const print = fiscal ? this.posDeviceClient.print(sale, branch, terminal, cashier, fiscal)
-      : this.posDeviceClient.print(sale, branch, terminal, cashier);
-    void print.then((result) => this.serialPrintResult.set(result)).catch(() => {
-      this.serialPrintError.set('No se pudo completar el envío a la impresora configurada. La venta sigue confirmada; revisá el dispositivo antes de reintentar para evitar duplicados.');
+    void this.refreshDevices().then((devices) => {
+      if (!devices.printer || (sale.documentType === 'electronicInvoice' &&
+          devices.printer.kind === 'hasar')) return null;
+      return fiscal ? this.posDeviceClient.print(sale, branch, terminal, cashier, fiscal)
+        : this.posDeviceClient.print(sale, branch, terminal, cashier);
+    }).then((result) => {
+      if (result) this.serialPrintResult.set(result);
+      else void this.refreshDevices().catch(() => undefined);
+    }).catch((error: unknown) => {
+      const detail = error instanceof Error ? error.message : String(error);
+      if (detail.includes('PRINTER_NOT_CONFIGURED')) {
+        this.devices.update((devices) => ({ ...devices, printer: null }));
+        return;
+      }
+      const printerStatus = /HASAR_DEVICE_NOT_READY_([0-9A-F]{4})/i.exec(detail)?.[1];
+      this.serialPrintError.set(detail.includes('HASAR_FISCAL_TICKET_B_ONLY')
+        ? 'La venta y el CAE están registrados, pero esta Hasar sólo admite por ahora el ticket fiscal B para consumidor final. No se abrió un comprobante en COM8.'
+        : detail.includes('HASAR_SALE_VAT_MISSING')
+          ? 'La venta está registrada, pero falta una alícuota de IVA válida en el detalle para emitir el ticket fiscal Hasar.'
+          : detail.includes('HASAR_SALE_RESULT_PENDING') || detail.includes('HASAR_RESULT_UNCERTAIN') ||
+              detail.includes('DOCUMENT_CANCELED')
+            ? 'La venta está registrada, pero la impresión Hasar no quedó confirmada. Revisá el papel y el estado del equipo; esta venta no se reenvía automáticamente para evitar duplicados.'
+            : detail.includes('HASAR_DEVICE_NOT_READY') || detail.includes('HASAR_DOCUMENT_ALREADY_OPEN')
+              ? `La Hasar no está lista o tiene un comprobante abierto${printerStatus ? ` (estado ${printerStatus})` : ''}. La venta sigue registrada; revisá el equipo antes de reintentar.`
+              : 'La venta está registrada, pero no se pudo imprimir. Revisá la impresora configurada y el dispositivo antes de reintentar.');
     }).finally(() => this.serialPrintBusy.set(false));
   }
 
@@ -1659,18 +1801,27 @@ export class PosPage implements OnInit {
   }
 
   protected availableStock(product: PosProduct): number | undefined {
-    return this.stockByProduct().get(product.id) ?? product.availableStock;
+    return this.stockLoadState() === 'ready'
+      ? this.stockByProduct().get(product.id) ?? 0
+      : undefined;
   }
 
   private refreshStock(): void {
+    if (this.stockRefreshInFlight || !this.canOperate()) return;
+    this.stockRefreshInFlight = true;
     const revision = ++this.stockRequestRevision;
-    this.inventoryClient.stock().subscribe({
+    this.inventoryClient.stock().pipe(
+      timeout(4000), takeUntilDestroyed(this.destroyRef),
+      finalize(() => { this.stockRefreshInFlight = false; }),
+    ).subscribe({
       next: (items) => {
-        if (revision === this.stockRequestRevision)
+        if (revision === this.stockRequestRevision) {
           this.stockByProduct.set(new Map(items.map((item) => [item.productId, item.available])));
+          this.stockLoadState.set('ready');
+        }
       },
       error: () => {
-        if (revision === this.stockRequestRevision) this.stockByProduct.set(new Map());
+        if (revision === this.stockRequestRevision) this.stockLoadState.set('stale');
       },
     });
   }
@@ -1704,6 +1855,11 @@ export class PosPage implements OnInit {
       return;
     }
     if (this.lines().length === 0) return;
+    if (this.liveDataProblem()) {
+      this.draftStatus.set('error');
+      this.errorMessage.set(this.liveDataProblem());
+      return;
+    }
     if (this.discountProblem()) {
       this.draftStatus.set('error');
       this.errorMessage.set(this.discountProblem());

@@ -8,16 +8,11 @@ export interface SerialDeviceConfig {
 
 export interface DeploymentConfig {
   readonly apiOrigin: string;
-  readonly scale: SerialDeviceConfig;
-  readonly printer: SerialDeviceConfig;
 }
 
 const developmentConfig: DeploymentConfig = {
   apiOrigin: 'http://localhost:5197',
-  scale: { port: 'COM6', baudRate: 9600 },
-  printer: { port: 'COM1', baudRate: 9600 },
 };
-const baudRates = new Set([1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]);
 
 function record(value: unknown): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value))
@@ -45,14 +40,6 @@ function apiOrigin(value: unknown, allowInsecureLan: unknown): string {
   return url.origin;
 }
 
-function serialDevice(value: unknown): SerialDeviceConfig {
-  const input = record(value);
-  if (typeof input.port !== 'string' || !/^COM[1-9][0-9]{0,2}$/iu.test(input.port) ||
-      typeof input.baudRate !== 'number' || !baudRates.has(input.baudRate))
-    throw new Error('POS_SERIAL_CONFIG_INVALID');
-  return { port: input.port.toUpperCase(), baudRate: input.baudRate };
-}
-
 export function parseDeploymentConfig(value: unknown, packaged: boolean): DeploymentConfig {
   if (value === undefined) {
     if (packaged) throw new Error('POS_CONFIG_REQUIRED');
@@ -61,8 +48,6 @@ export function parseDeploymentConfig(value: unknown, packaged: boolean): Deploy
   const input = record(value);
   return {
     apiOrigin: apiOrigin(input.apiOrigin, input.allowInsecureLan),
-    scale: serialDevice(input.scale),
-    printer: serialDevice(input.printer),
   };
 }
 

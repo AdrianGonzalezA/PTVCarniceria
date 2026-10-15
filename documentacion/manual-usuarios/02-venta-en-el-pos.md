@@ -6,6 +6,10 @@ Con turno abierto, elegí una **lista de precios** habilitada para la sucursal. 
 
 La lista queda fija en cuanto el ticket tiene renglones; para usar otra, primero hay que cancelar ese ticket. El costo estadístico del artículo no determina el precio de venta: se aplica el valor de la lista elegida.
 
+Con el turno abierto, la caja vuelve a consultar las existencias y las listas de la sucursal cada **5 segundos**, al recuperar la conexión y al volver a enfocar Electron. Un ajuste de stock hecho desde administración aparece sin reiniciar la caja. Si la consulta de stock o listas falla, se muestra un aviso y se detienen la carga de productos y el cobro hasta sincronizar; el ticket que ya estaba armado no se borra. Usá **Reintentar** o aguardá la próxima consulta automática.
+
+Si administración deshabilita la lista seleccionada y el ticket está vacío, la caja elige la siguiente lista habilitada y avisa el cambio. Si el ticket ya tiene productos, conserva sus renglones y precios, pero no permite continuar ni recalcularlos con otra lista: hay que cancelar esa venta y elegir una lista vigente. La confirmación final y la reserva de stock siguen siendo validadas por el servidor.
+
 ## Agregar artículos
 
 Podés elegir una categoría, buscar por nombre/código o escribir/leer un código en **Producto / lector**. El campo vuelve a quedar disponible para nuevas lecturas durante la operación. Al elegir un artículo se abre una ventana donde se ingresa:

@@ -142,4 +142,66 @@ describe('OrganizationPage', () => {
     fixture.detectChanges();
     expect(page.querySelector('.credential-notice')?.textContent).toContain('new-secret');
   });
+
+  it('assigns or removes serial devices for a specific box in a modal', () => {
+    const { fixture, http, page } = load();
+    page.querySelector<HTMLButtonElement>('.company-row button')!.click();
+    http.expectOne('/api/admin/companies/company-1/branches').flush([branch]);
+    fixture.detectChanges();
+    page.querySelector<HTMLButtonElement>('.branch-row .terminals-button')!.click();
+    const terminal = { id: 'terminal-1', name: 'Caja 1', isActive: true,
+      isHistorical: false, hasCredential: true, devices: { scale: null, printer: null } };
+    http.expectOne('/api/admin/companies/company-1/branches/branch-1/terminals').flush([terminal]);
+    fixture.detectChanges();
+    expect(page.querySelector('.terminal-row')?.textContent).toContain('Sin impresora');
+    page.querySelector<HTMLButtonElement>('.terminal-row .devices-button')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector('dialog[aria-labelledby="terminal-devices-title"]')).not.toBeNull();
+    expect(page.querySelectorAll('dialog[open]')).toHaveLength(1);
+
+    const scaleMode = page.querySelector<HTMLSelectElement>('#device-scale-mode')!;
+    scaleMode.value = 'serial';
+    scaleMode.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    const scalePort = page.querySelector<HTMLInputElement>('#device-scale-port')!;
+    scalePort.value = 'COM6';
+    scalePort.dispatchEvent(new Event('input'));
+    const printerKind = page.querySelector<HTMLSelectElement>('#device-printer-kind')!;
+    printerKind.value = 'hasar';
+    printerKind.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    const printerPort = page.querySelector<HTMLInputElement>('#device-printer-port')!;
+    printerPort.value = 'COM8';
+    printerPort.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    page.querySelector<HTMLFormElement>('.terminal-devices-form')!
+      .dispatchEvent(new Event('submit'));
+    const update = http.expectOne('/api/admin/companies/company-1/branches/branch-1/terminals/terminal-1/devices');
+    expect(update.request.method).toBe('PUT');
+    expect(update.request.body).toEqual({
+      scale: { port: 'COM6', baudRate: 9600 },
+      printer: { kind: 'hasar', port: 'COM8', baudRate: 9600 },
+    });
+    update.flush({ ...terminal, devices: update.request.body });
+    fixture.detectChanges();
+    expect(page.querySelector('.terminal-row')?.textContent).toContain('Balanza COM6');
+    expect(page.querySelector('.terminal-row')?.textContent).toContain('Hasar COM8');
+
+    page.querySelector<HTMLButtonElement>('.terminal-row .devices-button')!.click();
+    fixture.detectChanges();
+    const removeScale = page.querySelector<HTMLSelectElement>('#device-scale-mode')!;
+    removeScale.value = 'none';
+    removeScale.dispatchEvent(new Event('change'));
+    const removePrinter = page.querySelector<HTMLSelectElement>('#device-printer-kind')!;
+    removePrinter.value = 'none';
+    removePrinter.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    page.querySelector<HTMLFormElement>('.terminal-devices-form')!
+      .dispatchEvent(new Event('submit'));
+    const remove = http.expectOne('/api/admin/companies/company-1/branches/branch-1/terminals/terminal-1/devices');
+    expect(remove.request.body).toEqual({ scale: null, printer: null });
+    remove.flush(terminal);
+    fixture.detectChanges();
+    expect(page.querySelector('.terminal-row')?.textContent).toContain('Sin balanza · Sin impresora');
+  });
 });

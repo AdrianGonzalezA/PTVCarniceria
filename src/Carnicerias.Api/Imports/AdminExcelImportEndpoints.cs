@@ -23,6 +23,7 @@ public static class AdminExcelImportEndpoints
         foreach (var kind in new[] { "categories", "products", "price-lists" })
             MapKind(root, kind, PlatformPermissionCatalog.CatalogManage);
         MapKind(root, "customers", PlatformPermissionCatalog.OrganizationManage);
+        MapKind(root, "stock", PlatformPermissionCatalog.InventoryStockManage);
         return endpoints;
     }
 
@@ -49,7 +50,8 @@ public static class AdminExcelImportEndpoints
         if (!ValidContentType(httpContext.Request)) return Error(StatusCodes.Status400BadRequest, "INVALID_CONTENT_TYPE");
         var parsed = AdminExcelWorkbook.Read(kind, payload);
         var result = await AdminExcelImportProcessor.AssessAsync(db, accessor.Context.CompanyId,
-            accessor.Context.UserId, kind, parsed, timeProvider.GetUtcNow(), false, cancellationToken);
+            accessor.Context.BranchId, accessor.Context.UserId, kind, parsed,
+            timeProvider.GetUtcNow(), false, cancellationToken);
         return Results.Json(result, statusCode: result.Issues.Count == 0 ? StatusCodes.Status200OK :
             StructuralError(result) ? StatusCodes.Status400BadRequest : StatusCodes.Status409Conflict);
     }
@@ -65,8 +67,8 @@ public static class AdminExcelImportEndpoints
         var payload = await ReadPayloadAsync(httpContext.Request, cancellationToken);
         if (payload is null) return Error(StatusCodes.Status413PayloadTooLarge, "IMPORT_TOO_LARGE");
         if (!ValidContentType(httpContext.Request)) return Error(StatusCodes.Status400BadRequest, "INVALID_CONTENT_TYPE");
-        var hash = Convert.ToHexString(SHA256.HashData(payload));
         var context = accessor.Context;
+        var hash = RequestHash(kind, context.BranchId, payload);
 
         try
         {
@@ -86,8 +88,8 @@ public static class AdminExcelImportEndpoints
                 await ProductCodeReservation.AcquireCompanyLockAsync(db, context.CompanyId, cancellationToken);
 
             var parsed = AdminExcelWorkbook.Read(kind, payload);
-            var result = await AdminExcelImportProcessor.AssessAsync(db, context.CompanyId, context.UserId,
-                kind, parsed, timeProvider.GetUtcNow(), true, cancellationToken);
+            var result = await AdminExcelImportProcessor.AssessAsync(db, context.CompanyId, context.BranchId,
+                context.UserId, kind, parsed, timeProvider.GetUtcNow(), true, cancellationToken);
             if (!result.CanApply)
                 return Results.Json(result, statusCode: result.Issues.Count == 0 ?
                     StatusCodes.Status400BadRequest : StructuralError(result) ?
@@ -102,15 +104,25 @@ public static class AdminExcelImportEndpoints
         }
         catch (DbUpdateException exception) when (exception.InnerException is PostgresException
             { SqlState: PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ForeignKeyViolation or
-                PostgresErrorCodes.SerializationFailure })
+                PostgresErrorCodes.SerializationFailure or "23514" or "22003" })
         {
             return Error(StatusCodes.Status409Conflict, "IMPORT_CONFLICT_RETRY_PREVIEW");
         }
         catch (PostgresException exception) when (exception.SqlState is PostgresErrorCodes.UniqueViolation or
-            PostgresErrorCodes.ForeignKeyViolation or PostgresErrorCodes.SerializationFailure)
+            PostgresErrorCodes.ForeignKeyViolation or PostgresErrorCodes.SerializationFailure or
+            "23514" or "22003")
         {
             return Error(StatusCodes.Status409Conflict, "IMPORT_CONFLICT_RETRY_PREVIEW");
         }
+    }
+
+    private static string RequestHash(string kind, Guid branchId, byte[] payload)
+    {
+        if (kind != "stock") return Convert.ToHexString(SHA256.HashData(payload));
+        using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        hasher.AppendData(branchId.ToByteArray());
+        hasher.AppendData(payload);
+        return Convert.ToHexString(hasher.GetHashAndReset());
     }
 
     private static bool StructuralError(ImportPreviewResult result) => result.Issues.Any(issue =>

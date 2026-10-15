@@ -15,7 +15,8 @@ public enum PointPaymentStatus
 public enum MercadoPagoOrderMode
 {
     Point,
-    DynamicQr
+    DynamicQr,
+    StaticQr
 }
 
 /// <summary>A durable, non-cardholder record created before sending a Point order.</summary>
@@ -78,9 +79,10 @@ public sealed class PointPaymentIntent
 
     public void SetQrData(string qrData)
     {
-        if (Mode != MercadoPagoOrderMode.DynamicQr || string.IsNullOrWhiteSpace(qrData) ||
+        if (Mode is not MercadoPagoOrderMode.DynamicQr and not MercadoPagoOrderMode.StaticQr ||
+            string.IsNullOrWhiteSpace(qrData) ||
             qrData.Length > 4096 || QrData is not null && QrData != qrData)
-            throw new InvalidOperationException("Invalid or changed dynamic QR data.");
+            throw new InvalidOperationException("Invalid or changed QR data.");
         QrData = qrData;
     }
 
@@ -101,13 +103,22 @@ public sealed class PointPaymentIntent
         UpdatedAtUtc = now.ToUniversalTime();
     }
 
+    public void RejectBeforeProviderOrder(DateTimeOffset now)
+    {
+        if (Status != PointPaymentStatus.Prepared || ProviderOrderId is not null)
+            throw new InvalidOperationException("Only an unsent payment may be rejected locally.");
+        Status = PointPaymentStatus.Rejected;
+        UpdatedAtUtc = now.ToUniversalTime();
+    }
+
     public void RecordProviderState(string orderId, string paymentId, string orderStatus,
-        string paymentStatus, string? paymentStatusDetail, bool isApproved, DateTimeOffset now)
+        string? paymentStatus, string? paymentStatusDetail, bool isApproved, DateTimeOffset now)
     {
         if (string.IsNullOrWhiteSpace(orderId) || orderId.Length > 100 ||
             string.IsNullOrWhiteSpace(paymentId) || paymentId.Length > 100 ||
             string.IsNullOrWhiteSpace(orderStatus) || orderStatus.Length > 40 ||
-            string.IsNullOrWhiteSpace(paymentStatus) || paymentStatus.Length > 40 ||
+            paymentStatus is { Length: > 40 } ||
+            paymentStatus is not null && string.IsNullOrWhiteSpace(paymentStatus) ||
             paymentStatusDetail?.Length > 80 ||
             (ProviderOrderId is not null && ProviderOrderId != orderId) ||
             (ProviderPaymentId is not null && ProviderPaymentId != paymentId))

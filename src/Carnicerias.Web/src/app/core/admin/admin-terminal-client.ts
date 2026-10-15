@@ -7,6 +7,13 @@ export interface AdminTerminal {
   readonly isActive: boolean;
   readonly isHistorical: boolean;
   readonly hasCredential: boolean;
+  readonly devices: TerminalDevices;
+}
+
+export interface TerminalDevices {
+  readonly scale: { readonly port: string; readonly baudRate: number } | null;
+  readonly printer: { readonly kind: 'text' | 'hasar'; readonly port: string;
+    readonly baudRate: number } | null;
 }
 
 export interface ProvisionedTerminal {
@@ -46,5 +53,12 @@ export class AdminTerminalClient {
   rotate(companyId: string, branchId: string, terminalId: string) {
     return this.http.post<ProvisionedTerminal>(
       `${this.endpoint(companyId, branchId)}/${terminalId}/rotate`, {}, { withCredentials: true });
+  }
+
+  configureDevices(companyId: string, branchId: string, terminalId: string,
+    devices: TerminalDevices) {
+    return this.http.put<AdminTerminal>(
+      `${this.endpoint(companyId, branchId)}/${terminalId}/devices`, devices,
+      { withCredentials: true });
   }
 }

@@ -79,23 +79,21 @@ Desde el servidor y **cada caja**, verificar `http://192.168.10.20:5197/api/heal
 3. En **Usuarios**, crear cajeros para las sucursales o administradores adicionales de esa empresa. Cada persona usa su propio usuario y abre/cierra su turno; no compartir una sesión entre responsables.
 4. Cargar categorías, artículos (con unidad de venta, impuestos y códigos), listas de precios habilitadas en la sucursal y clientes. Las plantillas Excel de la administración sirven para esos maestros. Revisar precios e IVA antes de vender.
 5. Contar e ingresar stock inicial mediante las operaciones disponibles. Para piezas ciclo 2, configurar el perfil de lectura y registrar piezas; no asumir que ya existe importación masiva del frigorífico. Una venta sin stock no debe completarse.
-6. Configurar ARCA/pasarelas solo si el laboratorio las incluye. Las credenciales actuales son de homologación/sandbox. Clover no está habilitado aún para cobros POS sin dispositivo/protocolo verificados.
+6. Configurar en **Organización → Cajas → Dispositivos** la balanza y/o impresora de cada puesto, o dejar explícitamente «Sin balanza» y «Sin impresora». Usar COM distintos por caja cuando varias ventanas corren en la misma PC. Configurar ARCA/pasarelas solo si el laboratorio las incluye. Las credenciales actuales son de homologación/sandbox. Clover no está habilitado aún para cobros POS sin dispositivo/protocolo verificados.
 
 ## 7. Preparar cada PC de caja
 
 1. Instalar drivers del lector, balanza e impresora. En Administrador de dispositivos de Windows, confirmar el COM real de cada uno. El lector de códigos tipo teclado debe entregar la lectura al POS; no se le asigna COM en el archivo de ejemplo.
-2. Copiar la carpeta `cajas\Carnicerias POS-win32-x64` completa a la PC. Copiar `Start-PosTerminal.ps1` fuera de la carpeta del ejecutable si se desea. Crear **en esa PC** `C:\Carnicerias\Caja\pos-config.json` a partir de `pos-config.ejemplo.json`, sustituyendo IP y puertos:
+2. Copiar la carpeta `cajas\Carnicerias POS-win32-x64` completa a la PC. Copiar `Start-PosTerminal.ps1` fuera de la carpeta del ejecutable si se desea. Crear **en esa PC** `C:\Carnicerias\Caja\pos-config.json` a partir de `pos-config.ejemplo.json`, sustituyendo la IP:
 
 ```json
 {
   "apiOrigin": "http://192.168.10.20:5197",
-  "allowInsecureLan": true,
-  "scale": { "port": "COM6", "baudRate": 9600 },
-  "printer": { "port": "COM1", "baudRate": 9600 }
+  "allowInsecureLan": true
 }
 ```
 
-   El archivo no contiene secretos. Para una instalación real, usar `https://...` y quitar `allowInsecureLan`; un HTTP remoto sin opt-in, una URL con usuario/contraseña o una ruta adicional se rechazan. Los puertos admitidos son `COM1`–`COM999` y las velocidades admitidas son 1200, 2400, 4800, 9600, 19200, 38400, 57600 y 115200 baudios. El protocolo actual de balanza es **8N1** con tramas `ST,0.750,kg` terminadas en CR/LF; una balanza real distinta requiere adaptación, no solo cambiar el COM.
+   El archivo no contiene secretos ni asignaciones de dispositivos. En Administración, elegir para esa caja «Sin impresora», impresora serial de texto o Hasar SMH/P-441F **desafectada en laboratorio**; y «Sin balanza» o balanza serial. La Hasar usa 9600 baudios y no puede compartir COM con la balanza. Los puertos admitidos son `COM1`–`COM999` y las velocidades admitidas son 1200, 2400, 4800, 9600, 19200, 38400, 57600 y 115200 baudios. Sin asignación no se abre el COM ni se intenta imprimir. El protocolo actual de balanza es **8N1** con tramas `ST,0.750,kg` terminadas en CR/LF; una balanza real distinta requiere adaptación, no solo cambiar el COM. Para una instalación real, usar `https://...` y quitar `allowInsecureLan`; un HTTP remoto sin opt-in, una URL con usuario/contraseña o una ruta adicional se rechazan.
    Restringir escritura del archivo y de la carpeta de instalación a los administradores del equipo: cambiar `apiOrigin` podría desviar credenciales. El cajero solo necesita lectura y ejecución. No usar el opt-in HTTP fuera de una LAN de prueba aislada.
 3. La primera vez, tomar la credencial individual de la caja desde Administración y ejecutar en PowerShell en la PC de esa caja (ajustar rutas y perfil):
 
@@ -104,7 +102,7 @@ Desde el servidor y **cada caja**, verificar `http://192.168.10.20:5197/api/heal
 ```
 
    El script la solicita sin eco, la pasa solo al primer arranque y la retira del entorno de la consola. Electron la guarda cifrada en el perfil Windows local. En arranques posteriores ejecutar lo mismo **sin** `-Provision`. No copiar el perfil de Electron de una PC a otra. Si se rota una credencial, provisionar un perfil nuevo y documentar el cambio; no intentar reutilizar un perfil vinculado a otra caja.
-4. Repetir en la segunda PC con su credencial y su propio nombre de perfil, por ejemplo `caja-2`. Abrir un turno distinto con el cajero responsable. La activación de la caja en Administración no sustituye la credencial local.
+4. Repetir en la segunda PC con su credencial y su propio nombre de perfil, por ejemplo `caja-2`. Abrir un turno distinto con el cajero responsable. La activación de la caja en Administración no sustituye la credencial local. Tras cambiar dispositivos, recargar Electron para actualizar los controles visibles.
 
 La impresora serial actual recibe texto UTF-8 por 8N1; probar acentos, ancho y corte con el modelo real. Una impresión fallida no revierte la venta y repetirla puede duplicar papel. Los PDF se guardan en la PC de caja. El envío por COM no convierte una impresora común en controladora fiscal.
 
@@ -118,6 +116,7 @@ Hacer la revisión visual del POS **dentro de Electron** en cada PC; Administrac
 - [ ] Dejar tickets A y B abiertos, reiniciar **solo** Electron y confirmar que regresan los borradores que habían terminado de guardarse.
 - [ ] Confirmar una venta de prueba en Caja 1; comprobar en Caja 2 y Administración que stock, venta, pago y turno coinciden. Repetir con ventas simultáneas de las dos cajas, sin exceder el stock.
 - [ ] Leer una trama estable de balanza real/virtual, imprimir un ticket de prueba y verificar recepción física; probar que un fallo de periférico no duplica la venta.
+- [ ] Quitar la asignación de balanza e impresora a una caja: no debe abrir sus COM, ofrecer «Leer balanza» ni intentar imprimir al confirmar la venta; el ingreso manual y el PDF siguen disponibles.
 - [ ] Cerrar ambos turnos y conciliar el efectivo por caja. No usar ventas ficticias como histórico real.
 - [ ] Cortar la red de **una caja**: no debe confirmar una venta ni prometer recuperar una edición que no se guardó. Restituir la red y verificar los borradores persistidos. Repetir con caída del servidor solo en un entorno de prueba controlado.
 - [ ] Si se habilitan integraciones externas, verificar por separado los requisitos de Internet, homologación y estado real de cada pago/CAE; no inferir que “sin central” equivale a funcionamiento offline de esos servicios.

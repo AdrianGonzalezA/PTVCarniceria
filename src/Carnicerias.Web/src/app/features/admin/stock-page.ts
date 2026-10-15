@@ -3,12 +3,14 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AdminAreaTabs } from './admin-area-tabs';
+import { AdminDetailDialog } from './admin-detail-dialog';
+import { AdminExcelImportActions } from './admin-excel-import-actions';
 import { InventoryClient, InventoryStockItem } from '../../core/inventory/inventory-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 
 @Component({
   selector: 'app-stock-page',
-  imports: [RouterLink, AdminAreaTabs, ReactiveFormsModule],
+  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, AdminExcelImportActions, ReactiveFormsModule],
   templateUrl: './stock-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './stock-page.scss'],
 })
@@ -35,7 +37,7 @@ export class StockPage implements OnInit {
   });
   protected readonly adjustmentForm = this.formBuilder.nonNullable.group({
     quantityDelta: ['', [Validators.required]],
-    reason: ['', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(240)]],
+    reason: ['', [Validators.maxLength(240)]],
   });
   private pendingOperation: { signature: string; id: string } | null = null;
 
@@ -91,16 +93,16 @@ export class StockPage implements OnInit {
     const item = this.selected();
     const raw = this.adjustmentForm.getRawValue();
     const quantityDelta = Number(raw.quantityDelta);
-    const reason = raw.reason.trim();
+    const reason = raw.reason.trim() || 'Ajuste manual';
     const precision = item?.saleMode === 'unit' ? 0 : 3;
-    if (!item || this.saving() || this.adjustmentForm.invalid || !reason ||
+    if (!item || this.saving() || this.adjustmentForm.invalid ||
         !Number.isFinite(quantityDelta) || quantityDelta === 0 ||
         Math.abs(quantityDelta) > 100000 ||
         Number(quantityDelta.toFixed(precision)) !== quantityDelta) {
       this.adjustmentForm.markAllAsTouched();
       this.actionError.set(item?.saleMode === 'unit'
-        ? 'Ingresá una cantidad entera distinta de cero y un motivo.'
-        : 'Ingresá una cantidad distinta de cero (hasta 3 decimales) y un motivo.');
+        ? 'Ingresá una cantidad entera distinta de cero.'
+        : 'Ingresá una cantidad distinta de cero (hasta 3 decimales).');
       return;
     }
     if (quantityDelta < 0 && item.onHand + quantityDelta < item.reserved) {

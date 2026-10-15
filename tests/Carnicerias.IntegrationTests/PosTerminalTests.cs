@@ -151,4 +151,37 @@ public sealed class PosTerminalTests
         Assert.Throws<InvalidOperationException>(() =>
             terminal.AssignCredentialHash(PosTerminalCredential.Issue().Hash));
     }
+    [Fact]
+    public void DevicesAreUnassignedByDefaultAndCanBeConfiguredOrRemoved()
+    {
+        var terminal = new PosTerminal(Guid.NewGuid(), Guid.NewGuid(), "Caja 1");
+        Assert.Equal(new PosTerminalDevices(null, null), terminal.DeviceAssignments());
+
+        terminal.ConfigureDevices(new PosTerminalDevices(
+            new SerialDeviceAssignment("com6", 9600),
+            new PrinterDeviceAssignment("hasar", "com8", 9600)));
+        Assert.Equal(new PosTerminalDevices(
+            new SerialDeviceAssignment("COM6", 9600),
+            new PrinterDeviceAssignment("hasar", "COM8", 9600)), terminal.DeviceAssignments());
+
+        terminal.ConfigureDevices(new PosTerminalDevices(null, null));
+        Assert.Equal(new PosTerminalDevices(null, null), terminal.DeviceAssignments());
+    }
+
+    [Theory]
+    [InlineData("COM0", 9600, "text", "COM8", 9600)]
+    [InlineData("COM6", 12345, "text", "COM8", 9600)]
+    [InlineData("COM6", 9600, "text", "COM6", 9600)]
+    [InlineData("COM6", 9600, "unknown", "COM8", 9600)]
+    [InlineData("COM6", 9600, "hasar", "COM8", 19200)]
+    public void RejectsInvalidOrConflictingDeviceAssignments(string scalePort, int scaleBaud,
+        string printerKind, string printerPort, int printerBaud)
+    {
+        var terminal = new PosTerminal(Guid.NewGuid(), Guid.NewGuid(), "Caja 1");
+
+        Assert.Throws<ArgumentException>(() => terminal.ConfigureDevices(new PosTerminalDevices(
+            new SerialDeviceAssignment(scalePort, scaleBaud),
+            new PrinterDeviceAssignment(printerKind, printerPort, printerBaud))));
+        Assert.Equal(new PosTerminalDevices(null, null), terminal.DeviceAssignments());
+    }
 }

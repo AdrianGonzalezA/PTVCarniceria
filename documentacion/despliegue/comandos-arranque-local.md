@@ -95,7 +95,7 @@ finally { Remove-Item Env:\CARNICERIAS_POS_TERMINAL_TOKEN -ErrorAction SilentlyC
 
 Los siguientes arranques usan la línea normal del perfil, sin volver a ingresar la credencial. No copiar perfiles ni usar la credencial de Caja 1 en Caja 2/3. Un perfil ya vinculado a otra credencial no se puede reutilizar para una caja diferente.
 
-**Periféricos en una misma PC:** las tres instancias usarían por defecto balanza `COM6` e impresora `COM1`; Windows no permite compartir el puerto serial abierto entre cajas. Para probar balanza/impresión simultáneas, asignar pares de puertos virtuales distintos y pasar a cada instancia su propio archivo `pos-config.json` mediante `--pos-config=C:\ruta\absoluta\pos-config.json`. Para probar solo ventas, la balanza puede quedar no disponible y se ingresa el peso manualmente; imprimir requiere un puerto libre.
+**Periféricos en una misma PC:** ninguna caja tiene balanza ni impresora por defecto. En Administración → Organización → Cajas → Dispositivos, asignar a cada caja sus propios puertos y velocidades. Windows no permite compartir un COM abierto entre cajas: para pruebas simultáneas, usar pares virtuales distintos. Si una caja queda sin balanza se ingresa el peso manualmente; si queda sin impresora, se guarda la venta sin intentar imprimir. `pos-config.json` solo define la URL de la API.
 
 ## 5. Cajas en dos o tres computadoras distintas
 
@@ -108,7 +108,7 @@ dotnet run --project src/Carnicerias.Api/Carnicerias.Api.csproj --configuration 
 
 Habilitar el acceso al puerto 5197 **solo desde la LAN de prueba** en el firewall del servidor. En cada PC de caja, comprobar `Invoke-RestMethod 'http://192.168.10.20:5197/api/health'`. No exponer PostgreSQL (`55433`) a la LAN ni crear una base por caja.
 
-Preparar el paquete de Electron según la [guía de workshop](guia-workshop-por-sucursal.md#3-construir-y-copiar-los-artefactos). En **cada PC**, copiar la carpeta completa de Electron y `Start-PosTerminal.ps1`; crear su propio `C:\Carnicerias\Caja\pos-config.json` con `apiOrigin` apuntando a la IP LAN real, `allowInsecureLan: true` **solo para este laboratorio aislado**, y los puertos COM locales de esa PC. Desde `C:\Carnicerias\Caja`, ejecutar en cada equipo (ajustar rutas):
+Preparar el paquete de Electron según la [guía de workshop](guia-workshop-por-sucursal.md#3-construir-y-copiar-los-artefactos). En **cada PC**, copiar la carpeta completa de Electron y `Start-PosTerminal.ps1`; crear su propio `C:\Carnicerias\Caja\pos-config.json` con `apiOrigin` apuntando a la IP LAN real y `allowInsecureLan: true` **solo para este laboratorio aislado**. Configurar los COM desde Administración para la caja correspondiente. Desde `C:\Carnicerias\Caja`, ejecutar en cada equipo (ajustar rutas):
 
 ```powershell
 cd C:\Carnicerias\Caja

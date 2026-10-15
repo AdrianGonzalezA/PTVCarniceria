@@ -1,5 +1,6 @@
 using System.Data;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Carnicerias.Infrastructure;
 using Carnicerias.Api.Security;
 using Microsoft.EntityFrameworkCore;
@@ -34,14 +35,16 @@ public static class MercadoPagoPaymentEndpoints
     private static async Task<IResult> StartAsync(Guid draftId, StartRequest? request,
         PlatformAccessDbContext db, OperationalContextAccessor accessor,
         MercadoPagoSettingsResolver settings, MercadoPagoPointClient point,
-        MercadoPagoQrClient qr, MercadoPagoOrderLookupClient lookup,
+        MercadoPagoQrClient qr, MercadoPagoStaticQrClient staticQr,
+        MercadoPagoOrderLookupClient lookup,
         TimeProvider clock, HttpContext context,
         CancellationToken cancellationToken)
     {
         if (!AllowedOrigin(context)) return Error(403, "CSRF_REJECTED");
         if (request is null || request.Amount <= 0 || request.Amount > 999_999_999.99m ||
             decimal.Round(request.Amount, 2) != request.Amount ||
-            request.Mode is not "point" and not "qr") return Error(400, "VALIDATION_ERROR");
+            request.Mode is not "point" and not "qr" and not "qrStatic")
+            return Error(400, "VALIDATION_ERROR");
         if (request.Mode == "point" && request.Amount < 15m)
             return Error(400, "MERCADO_PAGO_AMOUNT_TOO_SMALL");
         await using var dbTransaction = await db.Database.BeginTransactionAsync(
@@ -56,14 +59,19 @@ public static class MercadoPagoPaymentEndpoints
         var mapping = await db.MercadoPagoRegisterSettings.AsNoTracking().SingleOrDefaultAsync(item =>
             item.CompanyId == accessor.Context.CompanyId && item.BranchId == accessor.Context.BranchId &&
             item.PosTerminalId == terminalId, cancellationToken);
-        var deviceId = request.Mode == "qr" ? mapping?.QrExternalPosId : mapping?.PointTerminalId;
+        var deviceId = request.Mode == "point" ? mapping?.PointTerminalId : mapping?.QrExternalPosId;
         if (deviceId is null) return Error(409, "MERCADO_PAGO_REGISTER_NOT_CONFIGURED");
         string? token;
         try { token = await settings.AccessTokenAsync(accessor.Context.CompanyId, cancellationToken); }
         catch (CryptographicException) { return Error(409, "MERCADO_PAGO_CREDENTIAL_UNAVAILABLE"); }
         if (token is null) return Error(409, "MERCADO_PAGO_NOT_CONFIGURED");
 
-        var mode = request.Mode == "qr" ? MercadoPagoOrderMode.DynamicQr : MercadoPagoOrderMode.Point;
+        var mode = request.Mode switch
+        {
+            "qr" => MercadoPagoOrderMode.DynamicQr,
+            "qrStatic" => MercadoPagoOrderMode.StaticQr,
+            _ => MercadoPagoOrderMode.Point
+        };
         var intent = await db.PointPaymentIntents.Where(item =>
             item.CompanyId == accessor.Context.CompanyId && item.SaleDraftId == draftId &&
             (item.Status == PointPaymentStatus.Prepared || item.Status == PointPaymentStatus.Pending ||
@@ -86,6 +94,25 @@ public static class MercadoPagoPaymentEndpoints
 
         try
         {
+            if (mode == MercadoPagoOrderMode.StaticQr && intent.QrData is null)
+            {
+                string staticQrData;
+                try { staticQrData = await staticQr.GetAsync(token, deviceId, cancellationToken); }
+                catch (Exception exception) when (exception is HttpRequestException or
+                    TaskCanceledException or InvalidDataException or JsonException)
+                {
+                    if (intent.Status == PointPaymentStatus.Prepared)
+                    {
+                        intent.RejectBeforeProviderOrder(clock.GetUtcNow());
+                        await db.SaveChangesAsync(cancellationToken);
+                        return Error(exception is InvalidDataException ? 409 : 503,
+                            "MERCADO_PAGO_STATIC_QR_UNAVAILABLE");
+                    }
+                    throw;
+                }
+                intent.SetQrData(staticQrData);
+                await db.SaveChangesAsync(cancellationToken);
+            }
             if (retry && await TryReconcileUnknownOrderAsync(intent, token, db,
                 point, qr, lookup, clock, cancellationToken))
                 return Results.Ok(ToResponse(intent));
@@ -99,10 +126,13 @@ public static class MercadoPagoPaymentEndpoints
             else
             {
                 var result = await qr.CreateAsync(token, new QrOrderRequest(deviceId,
-                    intent.Amount, intent.ExternalReference, intent.IdempotencyKey), cancellationToken);
+                    intent.Amount, intent.ExternalReference, intent.IdempotencyKey,
+                    mode == MercadoPagoOrderMode.StaticQr ? MercadoPagoQrMode.Static :
+                        MercadoPagoQrMode.Dynamic), cancellationToken);
                 intent.RecordProviderState(result.Id, result.PaymentId, result.Status,
                     result.PaymentStatus, result.PaymentStatusDetail, result.IsApproved, clock.GetUtcNow());
-                if (result.QrData is not null) intent.SetQrData(result.QrData);
+                if (mode == MercadoPagoOrderMode.DynamicQr && result.QrData is not null)
+                    intent.SetQrData(result.QrData);
             }
             await db.SaveChangesAsync(cancellationToken);
             return Results.Ok(ToResponse(intent));
@@ -163,7 +193,8 @@ public static class MercadoPagoPaymentEndpoints
                     intent.ExternalReference, intent.Amount, cancellationToken);
                 intent.RecordProviderState(result.Id, result.PaymentId, result.Status,
                     result.PaymentStatus, result.PaymentStatusDetail, result.IsApproved, clock.GetUtcNow());
-                if (result.QrData is not null) intent.SetQrData(result.QrData);
+                if (intent.Mode == MercadoPagoOrderMode.DynamicQr && result.QrData is not null)
+                    intent.SetQrData(result.QrData);
             }
             await db.SaveChangesAsync(cancellationToken);
             return Results.Ok(ToResponse(intent));
@@ -256,7 +287,8 @@ public static class MercadoPagoPaymentEndpoints
                 intent.Amount, cancellationToken);
             intent.RecordProviderState(order.Id, order.PaymentId, order.Status,
                 order.PaymentStatus, order.PaymentStatusDetail, order.IsApproved, clock.GetUtcNow());
-            if (order.QrData is not null) intent.SetQrData(order.QrData);
+            if (intent.Mode == MercadoPagoOrderMode.DynamicQr && order.QrData is not null)
+                intent.SetQrData(order.QrData);
         }
         await db.SaveChangesAsync(cancellationToken);
         return true;
@@ -278,7 +310,12 @@ public static class MercadoPagoPaymentEndpoints
 
     private static object ToResponse(PointPaymentIntent intent) => new
     {
-        id = intent.Id, mode = intent.Mode == MercadoPagoOrderMode.Point ? "point" : "qr",
+        id = intent.Id, mode = intent.Mode switch
+        {
+            MercadoPagoOrderMode.Point => "point",
+            MercadoPagoOrderMode.StaticQr => "qrStatic",
+            _ => "qr"
+        },
         amount = intent.Amount, status = intent.Status.ToString(),
         providerOrderId = intent.ProviderOrderId, qrData = intent.QrData,
         approved = intent.Status == PointPaymentStatus.Approved,

@@ -170,6 +170,9 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasAlternateKey(terminal => new { terminal.CompanyId, terminal.BranchId, terminal.Id });
             entity.Property(terminal => terminal.Name).HasMaxLength(120).IsRequired();
             entity.Property(terminal => terminal.CredentialHash).HasMaxLength(64);
+            entity.Property(terminal => terminal.ScalePort).HasMaxLength(6);
+            entity.Property(terminal => terminal.PrinterKind).HasMaxLength(8);
+            entity.Property(terminal => terminal.PrinterPort).HasMaxLength(6);
             entity.HasOne<Branch>().WithMany()
                 .HasForeignKey(terminal => new { terminal.CompanyId, terminal.BranchId })
                 .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
@@ -967,7 +970,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             {
                 table.HasCheckConstraint("CK_point_payment_intents_amount_positive", "\"Amount\" > 0");
                 table.HasCheckConstraint("CK_point_payment_intents_status", "\"Status\" BETWEEN 0 AND 7");
-                table.HasCheckConstraint("CK_point_payment_intents_mode", "\"Mode\" BETWEEN 0 AND 1");
+                table.HasCheckConstraint("CK_point_payment_intents_mode", "\"Mode\" BETWEEN 0 AND 2");
             });
             entity.HasKey(intent => intent.Id);
             entity.Property(intent => intent.Amount).HasPrecision(12, 2);

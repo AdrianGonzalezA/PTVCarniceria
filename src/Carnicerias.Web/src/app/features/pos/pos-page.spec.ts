@@ -13,14 +13,16 @@ import { CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { SaleDraftClient } from '../../core/sales/sale-draft-client';
 import { MercadoPagoClient } from '../../core/sales/mercado-pago-client';
 import type { MercadoPagoIntent } from '../../core/sales/mercado-pago-client';
+import type { MercadoPagoMode } from '../../core/sales/mercado-pago-client';
 import { IntegratedGatewayClient } from '../../core/sales/integrated-gateway-client';
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
-import { FiscalDocumentClient } from '../../core/sales/fiscal-document-client';
+import { AuthorizedFiscalDocument, FiscalDocumentClient } from '../../core/sales/fiscal-document-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { PosPage } from './pos-page';
 
 describe('PosPage', () => {
-  async function checkoutWithGateways(intent: MercadoPagoIntent | null, unavailable = false) {
+  async function checkoutWithGateways(intent: MercadoPagoIntent | null, unavailable = false,
+    modes: readonly MercadoPagoMode[] = []) {
     const session: CurrentSession = {
       userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-14T20:00:00Z',
       context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
@@ -39,7 +41,8 @@ describe('PosPage', () => {
       { provide: MercadoPagoClient, useValue: { get: () => of(intent),
         start: () => NEVER, check: () => NEVER, cancel: () => NEVER } },
       { provide: IntegratedGatewayClient, useValue: { available: () => unavailable
-        ? throwError(() => new HttpErrorResponse({ status: 503 })) : of({ gateways: [] }) } },
+        ? throwError(() => new HttpErrorResponse({ status: 503 })) : of({ gateways: modes.length
+          ? [{ provider: 'mercadoPago', modes }] : [] }) } },
       { provide: InventoryClient, useValue: { stock: () => of([]) } },
     ] });
     const fixture = TestBed.createComponent(PosPage);
@@ -77,6 +80,39 @@ describe('PosPage', () => {
     expect(fixture.nativeElement.querySelector('#mercado-pago-mode')).not.toBeNull();
   });
 
+  it('offers the permanent QR alongside the dynamic QR and recovers it after reopening checkout', async () => {
+    const fixture = await checkoutWithGateways({
+      id: 'intent-id', mode: 'qrStatic', amount: 2500, status: 'Pending',
+      providerOrderId: 'order-id', qrData: '000201STATIC', approved: false,
+      createdAtUtc: '2026-10-14T15:00:00Z',
+    }, false, ['qr', 'qrStatic', 'point']);
+    const selector = fixture.nativeElement.querySelector('#mercado-pago-mode') as HTMLSelectElement;
+    expect(Array.from(selector.options).map((option) => option.textContent))
+      .toEqual(['QR dinámico', 'QR fijo de la caja', 'Terminal Point']);
+    expect(selector.value).toBe('qrStatic');
+    expect(fixture.nativeElement.querySelector('.mercado-pago-panel').textContent)
+      .toContain('QR fijo de esta caja');
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.mercado-pago-qr')).not.toBeNull();
+    });
+    expect(selector.disabled).toBe(true);
+  });
+
+  it('requests a static QR order when the cashier selects the permanent code', async () => {
+    const fixture = await checkoutWithGateways(null, false, ['qr', 'qrStatic']);
+    const start = vi.spyOn(TestBed.inject(MercadoPagoClient), 'start').mockReturnValue(NEVER);
+    const options = fixture.nativeElement.querySelectorAll('.payment-option input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+    options[0].click();
+    options[4].click();
+    fixture.detectChanges();
+    const selector = fixture.nativeElement.querySelector('#mercado-pago-mode') as HTMLSelectElement;
+    selector.value = 'qrStatic';
+    selector.dispatchEvent(new Event('change', { bubbles: true }));
+    (fixture.nativeElement.querySelector('.mercado-pago-actions button') as HTMLButtonElement).click();
+    expect(start).toHaveBeenCalledWith('draft-id', 'qrStatic', 2500);
+  });
+
   beforeEach(() => {
     window.localStorage.clear();
     TestBed.configureTestingModule({ providers: [
@@ -97,6 +133,8 @@ describe('PosPage', () => {
   });
 
   it('requires fiscal recipient details before confirming an electronic invoice and keeps it pending', async () => {
+    const issued = new Subject<AuthorizedFiscalDocument>();
+    const receiptPdf = vi.fn().mockResolvedValue('C:\\Users\\cajero\\Downloads\\factura.pdf');
     const session: CurrentSession = {
       userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
       context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
@@ -110,6 +148,8 @@ describe('PosPage', () => {
     }));
     TestBed.configureTestingModule({ providers: [
       provideRouter([]),
+      { provide: FiscalDocumentClient, useValue: { issue: () => issued.asObservable() } },
+      { provide: ReceiptPdfClient, useValue: { save: receiptPdf } },
       { provide: SessionClient, useValue: { current: () => of(session) } },
       { provide: CatalogClient, useValue: { priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
         categories: () => of([]) } },
@@ -166,6 +206,27 @@ describe('PosPage', () => {
     expect((fixture.nativeElement.querySelector('#sale-recipient-tax-status') as HTMLSelectElement).value).toBe('finalConsumer');
     expect(fixture.nativeElement.querySelector('.sale-receipt').textContent).toContain('pendiente de emisión');
     expect(fixture.nativeElement.querySelector('.serial-print-button')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.save-pdf-button')).toBeNull();
+    issued.next({
+      saleId: 'sale-id', status: 'Authorized', saleDocumentType: 'ElectronicInvoice',
+      issuerCuit: '30000000001', issuerName: 'Emisor', issuerAddress: 'Calle 1',
+      issuerIibb: null, issuerActivityStartDate: null, pointOfSale: 99, voucherType: 1,
+      number: 1, issueDate: '2026-10-09', total: 2500, receiverName: 'Cliente',
+      receiverAddress: 'Calle 123', receiverTaxStatus: 'registered', receiverDocumentType: 80,
+      receiverDocumentNumber: 20000000001, vatBreakdown: [], exemptAmount: 0,
+      notTaxedAmount: 0, cae: '12345678901234', caeExpiry: '2026-10-19', errorCodes: null,
+    });
+    fixture.detectChanges();
+    const download = fixture.nativeElement.querySelector('.save-pdf-button') as HTMLButtonElement;
+    expect(download.textContent).toContain('Descargar comprobante');
+    expect(receiptPdf).not.toHaveBeenCalled();
+    download.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(receiptPdf).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id: 'sale-id' }),
+      'Sucursal', 'Caja 1', 'cajero', expect.objectContaining({ cae: '12345678901234' }));
+    expect(fixture.nativeElement.querySelector('.sale-receipt').textContent)
+      .not.toContain('C:\\Users\\cajero\\Downloads');
   });
 
   it('switches independent saved tickets and restores the active ticket after remount', async () => {
@@ -350,7 +411,7 @@ describe('PosPage', () => {
       { provide: SaleDraftClient, useValue: {
         list: () => of(saved ? [savedDraft] : []), current, save: () => pendingSave,
       } },
-      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+      { provide: InventoryClient, useValue: { stock: () => of([{ productId: 'asado', available: 10 }]) } },
     ] });
     const fixture = TestBed.createComponent(PosPage);
     fixture.detectChanges();
@@ -542,14 +603,17 @@ describe('PosPage', () => {
     };
     let saveAttempts = 0;
     let confirmationAttempts = 0;
-    const receiptPdf = vi.fn().mockResolvedValue('C:\\tickets\\ticket-test.pdf');
+    let printerAssigned = true;
+    const receiptPdf = vi.fn().mockResolvedValue('C:\\Users\\cajero\\Downloads\\ticket-test.pdf');
     const serialPrint = vi.fn().mockResolvedValue({ port: 'COM3', bytesWritten: 480,
       confirmation: 'write-only' });
+    const deviceAvailability = vi.fn(async () => ({ scale: null,
+      printer: printerAssigned ? { kind: 'text' as const, port: 'COM3', baudRate: 9600 } : null }));
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
         { provide: ReceiptPdfClient, useValue: { save: receiptPdf } },
-        { provide: PosDeviceClient, useValue: { print: serialPrint } },
+        { provide: PosDeviceClient, useValue: { print: serialPrint, deviceAvailability } },
         { provide: SessionClient, useValue: { current: () => of(session) } },
         { provide: CatalogClient, useValue: {
           priceLists: () => of([{ id: 'list-id', name: 'Mostrador (datos ficticios)' }]),
@@ -582,7 +646,8 @@ describe('PosPage', () => {
         { provide: CashierShiftClient, useValue: { current: () => of({
           id: 'shift-id', openingCash: 0, openedAtUtc: '2026-10-06T15:00:00Z', closedAtUtc: null,
         }) } },
-        { provide: InventoryClient, useValue: { stock: () => of([]), adjust: () => of(null) } },
+        { provide: InventoryClient, useValue: { stock: () => of([{ productId: 'product-id', available: 40 }]),
+          adjust: () => of(null) } },
       ],
     });
     const fixture = TestBed.createComponent(PosPage);
@@ -638,17 +703,22 @@ describe('PosPage', () => {
     expect(receipt.textContent).toContain('sale-id');
     expect(receipt.textContent).toContain('2.400,00');
     expect(receipt.textContent).toContain('Efectivo');
-    (receipt.querySelector('.serial-print-button') as HTMLButtonElement).click();
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(serialPrint).toHaveBeenCalledWith(expect.objectContaining({ id: 'sale-id' }), 'Sucursal', 'Caja 1', 'cajero');
+    expect(serialPrint).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id: 'sale-id' }),
+      'Sucursal', 'Caja 1', 'cajero');
     expect(receipt.textContent).toContain('COM3');
     expect(receipt.textContent).not.toContain('COM1');
+    expect((receipt.querySelector('.serial-print-button') as HTMLButtonElement).disabled).toBe(true);
+    expect(receipt.textContent).not.toContain('ticket-test.pdf');
+    expect((receipt.querySelector('.save-pdf-button') as HTMLButtonElement).textContent)
+      .toContain('Descargar comprobante');
     (receipt.querySelector('.save-pdf-button') as HTMLButtonElement).click();
     await fixture.whenStable();
     fixture.detectChanges();
     expect(receiptPdf).toHaveBeenCalledWith(expect.objectContaining({ id: 'sale-id' }), 'Sucursal', 'Caja 1', 'cajero');
-    expect(receipt.textContent).toContain('ticket-test.pdf');
+    expect(receipt.textContent).toContain('Comprobante descargado en Descargas.');
+    expect(receipt.textContent).not.toContain('ticket-test.pdf');
 
     (receipt.querySelector('.finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
@@ -663,6 +733,19 @@ describe('PosPage', () => {
     (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#checkout-title').textContent).toContain('Cobrar venta');
+    printerAssigned = false;
+    const secondCash = fixture.nativeElement.querySelector('.payment-amount') as HTMLInputElement;
+    secondCash.value = '2400';
+    secondCash.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.checkout-dialog .finish-button') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(confirmationAttempts).toBe(2);
+    expect(serialPrint).toHaveBeenCalledTimes(1);
+    expect(fixture.nativeElement.querySelector('.sale-receipt').textContent)
+      .toContain('no tiene impresora asignada');
+    expect(fixture.nativeElement.querySelector('.serial-print-button')).toBeNull();
   });
 
   it('fills a weighed product from the serial scale without changing a sale or a unit item', async () => {
@@ -675,7 +758,8 @@ describe('PosPage', () => {
     TestBed.configureTestingModule({ providers: [
       provideRouter([]),
       { provide: SessionClient, useValue: { current: () => of(session) } },
-      { provide: PosDeviceClient, useValue: { readScale } },
+      { provide: PosDeviceClient, useValue: { readScale,
+        deviceAvailability: async () => ({ scale: { port: 'COM6', baudRate: 9600 }, printer: null }) } },
       { provide: CatalogClient, useValue: {
         priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
         categories: () => of([{ id: 'res', name: 'Carne de res', productCount: 1 }]),
@@ -684,7 +768,7 @@ describe('PosPage', () => {
           page: 1, pageSize: 50, totalItems: 1 }),
       } },
       { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of(null) } },
-      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+      { provide: InventoryClient, useValue: { stock: () => of([{ productId: 'asado', available: 10 }]) } },
     ] });
     const fixture = TestBed.createComponent(PosPage);
     fixture.detectChanges();
@@ -699,6 +783,42 @@ describe('PosPage', () => {
     expect((fixture.nativeElement.querySelector('#product-quantity') as HTMLInputElement).value).toBe('0.75');
     expect(fixture.nativeElement.querySelector('.scale-status[role="status"]').textContent).toContain('0,750 kg');
     expect(fixture.nativeElement.querySelector('.sale-receipt')).toBeNull();
+  });
+
+  it('keeps manual weight entry but offers no scale reading without an assignment', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const readScale = vi.fn();
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: PosDeviceClient, useValue: { readScale,
+        deviceAvailability: async () => ({ scale: null, printer: null }) } },
+      { provide: CatalogClient, useValue: {
+        priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
+        categories: () => of([{ id: 'res', name: 'Carne de res', productCount: 1 }]),
+        products: () => of({ items: [{ id: 'asado', code: '1002', name: 'Asado',
+          categoryId: 'res', saleMode: 'weight' as const, price: 4900, availableStock: 10 }],
+          page: 1, pageSize: 50, totalItems: 1 }),
+      } },
+      { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of(null) } },
+      { provide: InventoryClient, useValue: { stock: () => of([{ productId: 'asado', available: 10 }]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.product-card') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.scale-read-button')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.pos-dialog').textContent)
+      .toContain('peso manualmente');
+    expect(fixture.nativeElement.querySelector('#product-quantity')).not.toBeNull();
+    expect(readScale).not.toHaveBeenCalled();
   });
 
   it('offers lists from the active branch without displaying demo prices as real prices', () => {
@@ -824,7 +944,8 @@ describe('PosPage', () => {
           },
           cancel: () => of(null),
         } },
-        { provide: InventoryClient, useValue: { stock: () => of([]), adjust: () => of(null) } },
+        { provide: InventoryClient, useValue: { stock: () => of([{ productId: 'product-id', available: 10 }]),
+          adjust: () => of(null) } },
       ],
     });
 
@@ -895,7 +1016,9 @@ describe('PosPage', () => {
               saleMode: line.productId === 'weight-id' ? 'weight' : 'unit', quantity: line.quantity, unitPrice: 1000 })) });
         },
       } },
-      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+      { provide: InventoryClient, useValue: { stock: () => of([
+        { productId: 'weight-id', available: 0.5 }, { productId: 'pack-id', available: 2 },
+      ]) } },
     ] });
     const fixture = TestBed.createComponent(PosPage);
     fixture.detectChanges();
@@ -953,7 +1076,7 @@ describe('PosPage', () => {
         save: () => throwError(() => new HttpErrorResponse({ status: 409,
           error: { error: { code: 'INSUFFICIENT_STOCK' } } })),
       } },
-      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+      { provide: InventoryClient, useValue: { stock: () => of([{ productId: 'product-id', available: 10 }]) } },
     ] });
     const fixture = TestBed.createComponent(PosPage);
     fixture.detectChanges();
@@ -1046,7 +1169,8 @@ describe('PosPage', () => {
       { provide: CashierShiftClient, useValue: { current: () => of({
         id: 'shift-id', openingCash: 0, openedAtUtc: '2026-10-06T15:00:00Z', closedAtUtc: null,
       }) } },
-      { provide: InventoryClient, useValue: { stock: () => of([]), adjust: () => of(null) } },
+      { provide: InventoryClient, useValue: { stock: () => of([{ productId: 'product-id', available: 10 }]),
+        adjust: () => of(null) } },
     ] });
     const fixture = TestBed.createComponent(PosPage);
     fixture.detectChanges();
@@ -1361,5 +1485,130 @@ describe('PosPage', () => {
       fixture.destroy();
       vi.useRealTimers();
     }
+  });
+
+  async function liveCatalogFixture() {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-14T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    let lists = [{ id: 'list-id', name: 'Mostrador' }, { id: 'other-list', name: 'Mayorista' }];
+    let available = 10;
+    let stockMissing = false;
+    let stockFails = false;
+    let listsFail = false;
+    const priceLists = vi.fn(() => listsFail
+      ? throwError(() => new HttpErrorResponse({ status: 503 })) : of(lists));
+    const stock = vi.fn(() => stockFails
+      ? throwError(() => new HttpErrorResponse({ status: 503 }))
+      : of(stockMissing ? [] : [{ productId: 'asado', available }]));
+    const current = vi.fn(() => of(null));
+    const save = vi.fn(() => NEVER);
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: { priceLists,
+        categories: () => of([{ id: 'meat', name: 'Carnes', productCount: 1 }]),
+        products: () => of({ items: [{ id: 'asado', code: '1002', name: 'Asado', categoryId: 'meat',
+          saleMode: 'unit', unit: 'unidad', price: 1000, availableStock: 10 }],
+          page: 1, pageSize: 50, totalItems: 1 }) } },
+      { provide: SaleDraftClient, useValue: { list: () => of([]), current, save } },
+      { provide: InventoryClient, useValue: { stock } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return { fixture, priceLists, stock, current, save,
+      setLists: (value: typeof lists) => { lists = value; },
+      setAvailable: (value: number) => { available = value; stockMissing = false; },
+      omitStock: () => { stockMissing = true; },
+      failStock: () => { stockFails = true; },
+      failLists: () => { listsFail = true; } };
+  }
+
+  it('refreshes stock and price lists every five seconds, on focus and on reconnect, then stops on destroy', async () => {
+    vi.useFakeTimers();
+    let fixture: { destroy(): void } | undefined;
+    try {
+      const setup = await liveCatalogFixture();
+      fixture = setup.fixture;
+      const { priceLists, stock, current } = setup;
+      expect(priceLists).toHaveBeenCalledTimes(1);
+      expect(stock).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(priceLists).toHaveBeenCalledTimes(2);
+      expect(stock).toHaveBeenCalledTimes(2);
+      window.dispatchEvent(new Event('focus'));
+      window.dispatchEvent(new Event('online'));
+      expect(priceLists).toHaveBeenCalledTimes(4);
+      expect(stock).toHaveBeenCalledTimes(4);
+      expect(current).toHaveBeenCalledTimes(1);
+      fixture.destroy();
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(priceLists).toHaveBeenCalledTimes(4);
+      expect(stock).toHaveBeenCalledTimes(4);
+    } finally {
+      fixture?.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows refreshed stock and blocks adding products while stock cannot be verified', async () => {
+    const { fixture, setAvailable, omitStock, failStock } = await liveCatalogFixture();
+    setAvailable(0);
+    window.dispatchEvent(new Event('focus'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.product-stock').textContent).toContain('0');
+    (fixture.nativeElement.querySelector('.product-card') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#product-dialog-title')).toBeNull();
+    omitStock();
+    window.dispatchEvent(new Event('focus'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.product-stock').textContent).toContain('0');
+    setAvailable(10);
+    window.dispatchEvent(new Event('focus'));
+    failStock();
+    window.dispatchEvent(new Event('focus'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Stock desactualizado');
+    expect(fixture.nativeElement.querySelector('.product-card')).toBeNull();
+  });
+
+  it('switches away from a disabled list only when the current ticket is empty', async () => {
+    const { fixture, setLists, current } = await liveCatalogFixture();
+    setLists([{ id: 'other-list', name: 'Mayorista' }]);
+    window.dispatchEvent(new Event('focus'));
+    fixture.detectChanges();
+    expect((fixture.nativeElement.querySelector('.price-list-field select') as HTMLSelectElement).value)
+      .toBe('other-list');
+    expect(fixture.nativeElement.textContent).toContain('Mostrador ya no está habilitada');
+    expect(current).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves an unsaved ticket and its prices if its list is disabled, but prevents checkout', async () => {
+    const { fixture, setLists, current, save } = await liveCatalogFixture();
+    (fixture.nativeElement.querySelector('.product-card') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Asado');
+    setLists([{ id: 'other-list', name: 'Mayorista' }]);
+    window.dispatchEvent(new Event('focus'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Asado');
+    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('1.000');
+    expect((fixture.nativeElement.querySelector('.price-list-field select') as HTMLSelectElement).value)
+      .toBe('list-id');
+    expect(fixture.nativeElement.textContent).toContain('Mostrador ya no está habilitada');
+    expect((fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).disabled)
+      .toBe(true);
+    expect((fixture.nativeElement.querySelector('.remove-line-button') as HTMLButtonElement).disabled).toBe(true);
+    expect((fixture.nativeElement.querySelector('.quantity-input') as HTMLInputElement).disabled).toBe(true);
+    expect(current).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledTimes(1);
   });
 });

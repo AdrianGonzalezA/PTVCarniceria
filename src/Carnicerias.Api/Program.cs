@@ -13,6 +13,8 @@ using Carnicerias.Api.Fiscal;
 using Carnicerias.Api.Customers;
 using Carnicerias.Api.ExcelImport;
 using Carnicerias.Api.Payments;
+using Carnicerias.Api.Federation;
+using Carnicerias.Api.Contracts;
 using Carnicerias.Domain.PlatformAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.DataProtection;
@@ -41,6 +43,8 @@ builder.Services.AddHttpClient<ArcaWsaaClient>(client => client.Timeout = TimeSp
 builder.Services.AddHttpClient<ArcaWsfeClient>(client => client.Timeout = TimeSpan.FromSeconds(45));
 builder.Services.AddHttpClient<MercadoPagoPointClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddHttpClient<MercadoPagoQrClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHttpClient<MercadoPagoStaticQrClient>(client => client.Timeout = TimeSpan.FromSeconds(30))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddHttpClient<MercadoPagoOrderLookupClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddHttpClient<CloverOAuthClient>(client => client.Timeout = TimeSpan.FromSeconds(20))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
@@ -63,7 +67,22 @@ builder.Services.AddScoped<IOperationalContextChangeBlocker, CashierShiftContext
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (rejection, cancellationToken) =>
+    {
+        if (!rejection.HttpContext.Request.Path.StartsWithSegments("/api/central/v1")) return;
+        rejection.HttpContext.Response.Headers.CacheControl = "no-store";
+        await rejection.HttpContext.Response.WriteAsJsonAsync(
+            new ErrorResponse(new ApiError("RATE_LIMITED", "No se pudo completar la solicitud", [])),
+            cancellationToken);
+    };
     options.AddFixedWindowLimiter("clover-public", limiter =>
+    {
+        limiter.PermitLimit = 30;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+        limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+    });
+    options.AddFixedWindowLimiter("branch-service", limiter =>
     {
         limiter.PermitLimit = 30;
         limiter.Window = TimeSpan.FromMinutes(1);
@@ -73,6 +92,9 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
+var branchServiceSettings = BranchServiceSettings.FromConfiguration(app.Configuration);
+if (branchServiceSettings.IsRequested && !branchServiceSettings.IsEnabled)
+    BranchServiceEndpoints.LogConfigurationIncomplete(app.Logger);
 var serveWeb = !app.Configuration.GetValue<bool>("Clover:TunnelOnly") &&
     app.Environment.WebRootPath is { } webRoot &&
     File.Exists(Path.Combine(webRoot, "index.html"));
@@ -83,10 +105,11 @@ if (serveWeb)
     app.UseStaticFiles();
 }
 
+app.UseRouting();
+app.UseRateLimiter();
+
 if (app.Configuration.GetValue<bool>("Clover:TunnelOnly"))
 {
-    app.UseRouting();
-    app.UseRateLimiter();
     app.Use(async (context, next) =>
     {
         if (!CloverTunnelBoundary.Allows(context.Request.Method, context.Request.Path.Value))
@@ -103,6 +126,8 @@ if (app.Configuration.GetValue<bool>("Clover:TunnelOnly"))
 }
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
+if (!app.Configuration.GetValue<bool>("Clover:TunnelOnly"))
+    app.MapBranchServiceEndpoints(branchServiceSettings);
 app.MapSessionEndpoints();
 app.MapManufacturerEndpoints();
 app.MapUserEndpoints();

@@ -87,6 +87,18 @@ public sealed class CentralRegistrationTests
         Assert.Equal("https://branch.example:8443/", Assert.Single(approved).Destination.AbsoluteUri);
     }
 
+    [Fact]
+    public void ApprovedEndpointConfigurationPreservesCentralCompanyScope()
+    {
+        var companyId = Guid.NewGuid();
+        var approved = CentralApprovedEndpointConfiguration.Parse(
+            $"[{{\"url\":\"https://branch.example/\",\"addresses\":[\"10.10.1.25\"],\"centralCompanyId\":\"{companyId}\"}}]");
+
+        Assert.Equal(companyId, Assert.Single(approved).CentralCompanyId);
+        Assert.Throws<InvalidOperationException>(() => CentralApprovedEndpointConfiguration.Parse(
+            "[{\"url\":\"https://branch.example/\",\"addresses\":[\"10.10.1.25\"],\"centralCompanyId\":\"00000000-0000-0000-0000-000000000000\"}]"));
+    }
+
     private static CentralRegistrationRequest Request() => new(
         "VISUAL", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
         "Sucursal Centro", Destination, "branch_centro");

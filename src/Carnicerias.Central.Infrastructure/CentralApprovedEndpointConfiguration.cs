@@ -25,7 +25,8 @@ public static class CentralApprovedEndpointConfiguration
                 if (entry.Url is null || !Uri.TryCreate(entry.Url, UriKind.Absolute, out var uri)
                     || uri.Scheme is not ("http" or "https") || uri.UserInfo.Length > 0
                     || uri.Query.Length > 0 || uri.Fragment.Length > 0
-                    || uri.AbsolutePath != "/" || entry.Addresses is null
+                    || uri.AbsolutePath != "/" || entry.CentralCompanyId == Guid.Empty
+                    || entry.Addresses is null
                     or { Length: 0 or > 16 }) throw InvalidConfiguration();
 
                 var addresses = new List<IPAddress>(entry.Addresses.Length);
@@ -35,9 +36,10 @@ public static class CentralApprovedEndpointConfiguration
                     addresses.Add(parsed);
                 }
 
-                if (result.Any(existing => existing.Destination == uri))
+                if (result.Any(existing => existing.Destination == uri
+                    && existing.CentralCompanyId == entry.CentralCompanyId))
                     throw InvalidConfiguration();
-                result.Add(new CentralApprovedEndpoint(uri, addresses));
+                result.Add(new CentralApprovedEndpoint(uri, addresses, entry.CentralCompanyId));
             }
 
             return result;
@@ -51,5 +53,6 @@ public static class CentralApprovedEndpointConfiguration
     private static InvalidOperationException InvalidConfiguration() =>
         new("Central approved branch destinations are not configured correctly.");
 
-    private sealed record ApprovedEndpointInput(string? Url, string[]? Addresses);
+    private sealed record ApprovedEndpointInput(string? Url, string[]? Addresses,
+        Guid? CentralCompanyId);
 }

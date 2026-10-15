@@ -49,6 +49,28 @@ public sealed class CentralInstallationProbeTests
     }
 
     [Fact]
+    public async Task WebRegistrationRequiresAnEndpointApprovedForItsOwnCentralCompany()
+    {
+        var companyA = Guid.NewGuid();
+        var companyB = Guid.NewGuid();
+        var url = "https://branch.example:8443/";
+        var address = IPAddress.Parse("10.10.1.25");
+        var policy = new CentralDestinationPolicy(
+            [new CentralApprovedEndpoint(new Uri(url), [address], companyA),
+                new CentralApprovedEndpoint(new Uri("https://legacy.example/"), [address])],
+            false, new StubResolver([address]));
+
+        Assert.Equal(address,
+            (await policy.ApproveForCompanyAsync(url, companyA, CancellationToken.None)).PinnedAddress);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            policy.ApproveForCompanyAsync(url, companyB, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            policy.ApproveForCompanyAsync("https://legacy.example/", companyA, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            policy.ApproveAsync(url, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task ProbeRequiresSecretExactIdentityAndDoesNotFollowRedirects()
     {
         var installationId = Guid.NewGuid();

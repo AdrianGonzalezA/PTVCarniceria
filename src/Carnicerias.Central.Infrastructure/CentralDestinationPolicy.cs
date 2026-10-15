@@ -3,7 +3,8 @@ using System.Net.Sockets;
 
 namespace Carnicerias.Central.Infrastructure;
 
-public sealed record CentralApprovedEndpoint(Uri Destination, IReadOnlyList<IPAddress> AllowedAddresses);
+public sealed record CentralApprovedEndpoint(Uri Destination, IReadOnlyList<IPAddress> AllowedAddresses,
+    Guid? CentralCompanyId = null);
 public sealed class CentralApprovedDestination
 {
     internal CentralApprovedDestination(Uri destination, IPAddress pinnedAddress)
@@ -34,8 +35,18 @@ public sealed class CentralDestinationPolicy(
     bool allowLoopbackHttp,
     ICentralDnsResolver dnsResolver)
 {
-    public async Task<CentralApprovedDestination> ApproveAsync(
-        string? destinationUrl, CancellationToken cancellationToken)
+    public Task<CentralApprovedDestination> ApproveAsync(
+        string? destinationUrl, CancellationToken cancellationToken) =>
+        ApproveForScopeAsync(destinationUrl, null, cancellationToken);
+
+    public Task<CentralApprovedDestination> ApproveForCompanyAsync(
+        string? destinationUrl, Guid centralCompanyId, CancellationToken cancellationToken) =>
+        centralCompanyId == Guid.Empty
+            ? throw Rejected()
+            : ApproveForScopeAsync(destinationUrl, centralCompanyId, cancellationToken);
+
+    private async Task<CentralApprovedDestination> ApproveForScopeAsync(
+        string? destinationUrl, Guid? centralCompanyId, CancellationToken cancellationToken)
     {
         if (destinationUrl is null || destinationUrl.Length > 2048
             || !Uri.TryCreate(destinationUrl, UriKind.Absolute, out var destination)
@@ -48,7 +59,8 @@ public sealed class CentralDestinationPolicy(
 
         var approved = approvedEndpoints.SingleOrDefault(entry =>
             string.Equals(entry.Destination.AbsoluteUri, destination.AbsoluteUri,
-                StringComparison.OrdinalIgnoreCase));
+                StringComparison.OrdinalIgnoreCase)
+            && entry.CentralCompanyId == centralCompanyId);
         if (approved is null || approved.AllowedAddresses.Count == 0)
         {
             throw Rejected();

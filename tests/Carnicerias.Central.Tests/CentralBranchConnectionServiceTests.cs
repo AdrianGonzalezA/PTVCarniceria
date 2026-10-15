@@ -9,6 +9,23 @@ public sealed class CentralBranchConnectionServiceTests
     private const string Token = "5C404463E2888939B5D4D8065233A8BBC8B92525279AA48E409F4982D5F30A90";
 
     [Fact]
+    public void ManagementScopeIncludesInactiveInstallationsOnlyForTheSessionCompany()
+    {
+        var companyA = Guid.NewGuid();
+        var companyB = Guid.NewGuid();
+        var a = CentralInstallation.Create(Guid.NewGuid(), companyA, Guid.NewGuid(),
+            Guid.NewGuid(), "A", "https://branch-a.example/", "A_TOKEN");
+        a.Deactivate();
+        var b = CentralInstallation.Create(Guid.NewGuid(), companyB, Guid.NewGuid(),
+            Guid.NewGuid(), "B", "https://branch-b.example/", "B_TOKEN");
+
+        var result = CentralBranchConnectionQuery.Scope(new[] { a, b }.AsQueryable(),
+            companyA).ToArray();
+
+        Assert.Equal(a.InstallationId, Assert.Single(result).InstallationId);
+    }
+
+    [Fact]
     public async Task RegistrationVerifiesRemoteIdentityThenStoresEncryptedCredential()
     {
         var companyId = Guid.NewGuid();

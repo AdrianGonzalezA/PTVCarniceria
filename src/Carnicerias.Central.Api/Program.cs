@@ -18,6 +18,11 @@ builder.Services.AddScoped<ICentralManufacturerSessionStore, EfCentralManufactur
 builder.Services.AddScoped<CentralManufacturerSessionService>();
 builder.Services.AddScoped<ICentralInstallationReader, EfCentralInstallationReader>();
 builder.Services.AddScoped<ICentralBusinessInstallationReader, EfCentralBusinessInstallationReader>();
+builder.Services.AddScoped<ICentralBranchConnectionStore, EfCentralBranchConnectionStore>();
+builder.Services.AddSingleton<ICentralInstallationVerifier, PinnedCentralInstallationVerifier>();
+builder.Services.AddSingleton<Func<CentralBranchCredentialCrypto>>(
+    _ => CentralBranchCredentialCrypto.FromEnvironment);
+builder.Services.AddScoped<CentralBranchConnectionService>();
 builder.Services.AddSingleton<ICentralBranchCredentialSource, EnvironmentCentralBranchCredentialSource>();
 builder.Services.AddScoped<ICentralEncryptedBranchCredentialReader, EfCentralEncryptedBranchCredentialReader>();
 builder.Services.AddScoped<ICentralBranchCredentialResolver>(services =>
@@ -60,9 +65,27 @@ builder.Services.AddRateLimiter(options =>
             Window = TimeSpan.FromMinutes(1),
             AutoReplenishment = true
         }));
+    options.AddPolicy("central-connections", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 20,
+            QueueLimit = 0,
+            Window = TimeSpan.FromMinutes(1),
+            AutoReplenishment = true
+        }));
     options.OnRejected = async (rateLimitContext, cancellationToken) =>
     {
         rateLimitContext.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        if (rateLimitContext.HttpContext.Request.Path
+            .StartsWithSegments("/api/v1/branch-connections"))
+        {
+            await rateLimitContext.HttpContext.Response.WriteAsJsonAsync(
+                new { error = new { code = "CONNECTION_RATE_LIMITED",
+                    message = "Demasiadas consultas. Reintentá más tarde.",
+                    details = (object?)null } }, cancellationToken);
+            return;
+        }
         var business = rateLimitContext.HttpContext.Request.Path
             .StartsWithSegments("/api/v1/business");
         await rateLimitContext.HttpContext.Response.WriteAsJsonAsync(
@@ -93,6 +116,7 @@ app.Use(async (context, next) =>
     if (context.Request.Path.StartsWithSegments("/api/v1/sessions")
         || context.Request.Path.StartsWithSegments("/api/v1/superadmin")
         || context.Request.Path.StartsWithSegments("/api/v1/installations")
+        || context.Request.Path.StartsWithSegments("/api/v1/branch-connections")
         || context.Request.Path.StartsWithSegments("/api/v1/business"))
     {
         context.Response.Headers.CacheControl = "no-store";
@@ -107,6 +131,7 @@ app.MapCentralSessionEndpoints();
 app.MapCentralManufacturerSessionEndpoints();
 app.MapCentralManufacturerCompanyEndpoints();
 app.MapCentralInstallationEndpoints();
+app.MapCentralBranchConnectionEndpoints();
 app.MapCentralBusinessSummaryEndpoints();
 
 app.Run();

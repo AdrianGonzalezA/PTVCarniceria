@@ -5,12 +5,12 @@
       <h2 id="connections-title">Conexiones a sucursales</h2>
       <p>Registrá las instalaciones de tu empresa. La sucursal debe estar preparada y su destino aprobado antes de conectarla.</p>
     </div>
-    <button #addButton id="add-branch-connection" type="button" (click)="openCreate()">Agregar conexión</button>
+    <button #addButton id="add-branch-connection" type="button" [disabled]="unsupported()" (click)="openCreate()">Agregar conexión</button>
   </div>
 
   @if (listError(); as message) {
     <div class="message error" role="alert"><span>{{ message }}</span>
-      <button type="button" (click)="load(page())">Reintentar</button></div>
+      @if (!unsupported()) { <button type="button" (click)="load(page())">Reintentar</button> }</div>
   }
   @if (actionError(); as message) {
     <p class="message error" role="alert">{{ message }}</p>
@@ -19,7 +19,7 @@
     <p class="message" role="status">Cargando conexiones…</p>
   } @else if (totalCount() === 0 && !listError()) {
     <p class="message" role="status">Todavía no hay conexiones configuradas para esta empresa.</p>
-  } @else {
+  } @else if (totalCount() > 0) {
     <ul class="connections-list">
       @for (connection of connections(); track connection.installationId) {
         <li>

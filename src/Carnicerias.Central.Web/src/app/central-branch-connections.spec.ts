@@ -127,4 +127,23 @@ describe('CentralBranchConnections', () => {
     expect(element.textContent).toContain('Inactiva');
     http.verify();
   });
+
+  it('explains an older API and disables registration when the route is absent', async () => {
+    TestBed.configureTestingModule({
+      imports: [CentralBranchConnections],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    const fixture = TestBed.createComponent(CentralBranchConnections);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/v1/branch-connections?page=1&pageSize=20').flush({},
+      { status: 404, statusText: 'Not Found' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const element: HTMLElement = fixture.nativeElement;
+    expect(element.textContent).toContain('actualizar el servicio central');
+    expect(element.querySelector<HTMLButtonElement>('#add-branch-connection')!.disabled).toBe(true);
+    http.verify();
+  });
 });

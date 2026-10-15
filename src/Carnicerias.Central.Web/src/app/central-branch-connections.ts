@@ -24,6 +24,7 @@ export class CentralBranchConnections implements OnInit {
   protected readonly loading = signal(false);
   protected readonly saving = signal(false);
   protected readonly listError = signal<string | null>(null);
+  protected readonly unsupported = signal(false);
   protected readonly formError = signal<string | null>(null);
   protected readonly actionError = signal<string | null>(null);
   protected readonly editing = signal<CentralBranchConnection | null>(null);
@@ -49,6 +50,7 @@ export class CentralBranchConnections implements OnInit {
     this.listError.set(null);
     this.client.list(page).subscribe({
       next: result => {
+        this.unsupported.set(false);
         this.connections.set(result.data);
         this.page.set(result.pagination.page);
         this.totalPages.set(result.pagination.totalPages);
@@ -58,12 +60,17 @@ export class CentralBranchConnections implements OnInit {
       error: (error: HttpErrorResponse) => {
         this.loading.set(false);
         if (error.status === 401) this.sessionExpired.emit();
+        else if (error.status === 404) {
+          this.unsupported.set(true);
+          this.listError.set('Esta función requiere actualizar el servicio central. Contactá al equipo de implementación.');
+        }
         else this.listError.set('No se pudieron consultar las conexiones. Reintentá.');
       },
     });
   }
 
   protected openCreate(): void {
+    if (this.unsupported()) return;
     this.returnFocus = this.addButton.nativeElement;
     this.editing.set(null);
     this.form.reset();

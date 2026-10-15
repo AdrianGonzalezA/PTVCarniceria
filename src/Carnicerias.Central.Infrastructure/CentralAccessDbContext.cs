@@ -9,6 +9,7 @@ public sealed class CentralAccessDbContext(DbContextOptions<CentralAccessDbConte
     public DbSet<CentralSession> Sessions => Set<CentralSession>();
     public DbSet<CentralAuditEvent> AuditEvents => Set<CentralAuditEvent>();
     public DbSet<CentralInstallation> Installations => Set<CentralInstallation>();
+    public DbSet<CentralBranchCredential> BranchCredentials => Set<CentralBranchCredential>();
     public DbSet<CentralManufacturer> Manufacturers => Set<CentralManufacturer>();
     public DbSet<CentralManufacturerSession> ManufacturerSessions => Set<CentralManufacturerSession>();
 
@@ -74,6 +75,18 @@ public sealed class CentralAccessDbContext(DbContextOptions<CentralAccessDbConte
                 installation.IsActive, installation.Label });
             entity.HasOne<CentralCompany>().WithMany()
                 .HasForeignKey(installation => installation.CentralCompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CentralBranchCredential>(entity =>
+        {
+            entity.ToTable("branch_credentials");
+            entity.HasKey(credential => credential.InstallationId);
+            entity.Property(credential => credential.Nonce).HasMaxLength(12).IsRequired();
+            entity.Property(credential => credential.Ciphertext).HasMaxLength(32).IsRequired();
+            entity.Property(credential => credential.Tag).HasMaxLength(16).IsRequired();
+            entity.HasOne<CentralInstallation>().WithOne()
+                .HasForeignKey<CentralBranchCredential>(credential => credential.InstallationId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

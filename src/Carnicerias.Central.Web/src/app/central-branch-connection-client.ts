@@ -10,11 +10,18 @@ export interface CentralBranchConnection {
   readonly destinationUrl: string;
   readonly isActive: boolean;
   readonly hasCredential: boolean;
+  readonly lastCheckStatus: 'notChecked' | 'available' | 'unavailable';
+  readonly lastCheckedAtUtc: string | null;
 }
 
 export type CreateCentralBranchConnection = Pick<CentralBranchConnection,
   'installationId' | 'remoteCompanyId' | 'remoteBranchId' | 'label' | 'destinationUrl'> & {
   readonly token: string;
+};
+export type EditCentralBranchConnection = {
+  readonly label?: string;
+  readonly destinationUrl?: string;
+  readonly token?: string;
 };
 
 export interface CentralBranchConnectionPage {
@@ -43,5 +50,23 @@ export class CentralBranchConnectionClient {
       credentials: 'same-origin',
       headers: { 'X-Carnicerias-CSRF': '1' },
     });
+  }
+
+  check(installationId: string): Observable<CentralBranchConnection> {
+    return this.http.post<CentralBranchConnection>(
+      `${this.baseUrl}/${encodeURIComponent(installationId)}/checks`, null,
+      { credentials: 'same-origin', headers: { 'X-Carnicerias-CSRF': '1' } });
+  }
+
+  edit(installationId: string, input: EditCentralBranchConnection): Observable<CentralBranchConnection> {
+    return this.http.patch<CentralBranchConnection>(
+      `${this.baseUrl}/${encodeURIComponent(installationId)}`, input,
+      { credentials: 'same-origin', headers: { 'X-Carnicerias-CSRF': '1' } });
+  }
+
+  changeState(installationId: string, isActive: boolean): Observable<CentralBranchConnection> {
+    return this.http.patch<CentralBranchConnection>(
+      `${this.baseUrl}/${encodeURIComponent(installationId)}/state`, { isActive },
+      { credentials: 'same-origin', headers: { 'X-Carnicerias-CSRF': '1' } });
   }
 }

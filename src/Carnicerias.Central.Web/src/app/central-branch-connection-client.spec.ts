@@ -25,6 +25,26 @@ describe('CentralBranchConnectionClient', () => {
     create.flush({ installationId: 'i', remoteCompanyId: 'c', remoteBranchId: 'b',
       label: 'Sucursal', destinationUrl: 'https://branch.example/', isActive: true,
       hasCredential: true });
+
+    client.check('i').subscribe();
+    const check = http.expectOne('/api/v1/branch-connections/i/checks');
+    expect(check.request.method).toBe('POST');
+    expect(check.request.headers.get('X-Carnicerias-CSRF')).toBe('1');
+    check.flush({});
+
+    client.edit('i', { label: 'Nueva etiqueta' }).subscribe();
+    const edit = http.expectOne('/api/v1/branch-connections/i');
+    expect(edit.request.method).toBe('PATCH');
+    expect(edit.request.headers.get('X-Carnicerias-CSRF')).toBe('1');
+    expect(edit.request.body).toEqual({ label: 'Nueva etiqueta' });
+    edit.flush({});
+
+    client.changeState('i', false).subscribe();
+    const state = http.expectOne('/api/v1/branch-connections/i/state');
+    expect(state.request.method).toBe('PATCH');
+    expect(state.request.headers.get('X-Carnicerias-CSRF')).toBe('1');
+    expect(state.request.body).toEqual({ isActive: false });
+    state.flush({});
     http.verify();
   });
 });

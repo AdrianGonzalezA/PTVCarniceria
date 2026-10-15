@@ -12,6 +12,9 @@
     <div class="message error" role="alert"><span>{{ message }}</span>
       <button type="button" (click)="load(page())">Reintentar</button></div>
   }
+  @if (actionError(); as message) {
+    <p class="message error" role="alert">{{ message }}</p>
+  }
   @if (loading()) {
     <p class="message" role="status">Cargando conexiones…</p>
   } @else if (totalCount() === 0 && !listError()) {
@@ -32,7 +35,24 @@
             <div><dt>Empresa remota</dt><dd>{{ connection.remoteCompanyId }}</dd></div>
             <div><dt>Sucursal remota</dt><dd>{{ connection.remoteBranchId }}</dd></div>
           </dl>
-          <p class="credential-state">{{ connection.hasCredential ? 'Credencial configurada' : 'Credencial no disponible' }} · Conectividad sin comprobar</p>
+          <p class="credential-state">
+            {{ connection.hasCredential ? 'Credencial configurada' : 'Credencial no disponible' }} ·
+            @switch (connection.lastCheckStatus) {
+              @case ('available') { Última comprobación: disponible }
+              @case ('unavailable') { Última comprobación: no disponible }
+              @default { Sin comprobar }
+            }
+            @if (connection.lastCheckedAtUtc) { · {{ connection.lastCheckedAtUtc | date:'short' }} }
+          </p>
+          <div class="connection-actions">
+            <button type="button" class="secondary" [disabled]="busyId() !== null || loading()" (click)="check(connection)">
+              {{ busyId() === connection.installationId ? 'Comprobando…' : 'Comprobar' }}
+            </button>
+            <button type="button" class="secondary" [disabled]="busyId() !== null" (click)="openEdit(connection)">Editar</button>
+            <button type="button" class="secondary" [disabled]="busyId() !== null" (click)="openStateChange(connection)">
+              {{ connection.isActive ? 'Desactivar' : 'Reactivar' }}
+            </button>
+          </div>
         </li>
       }
     </ul>
@@ -46,31 +66,50 @@
   }
 </section>
 
-<dialog #connectionDialog id="branch-connection-dialog" aria-labelledby="connection-dialog-title" (cancel)="closeCreate()">
+<dialog #connectionDialog id="branch-connection-dialog" aria-labelledby="connection-dialog-title" (cancel)="$event.preventDefault(); closeCreate()">
   <div class="dialog-heading">
-    <h2 id="connection-dialog-title">Agregar conexión</h2>
-    <p>Copiá los tres identificadores y el token del despliegue de esa sucursal. El token se envía una vez y no volverá a mostrarse.</p>
+    <h2 id="connection-dialog-title">{{ editing() ? 'Editar conexión' : 'Agregar conexión' }}</h2>
+    <p>{{ editing() ? 'Podés cambiar la etiqueta. Si cambiás la URL o el token, se verificará la sucursal antes de guardar.' : 'Copiá los tres identificadores y el token del despliegue de esa sucursal. El token se envía una vez y no volverá a mostrarse.' }}</p>
   </div>
   <form id="branch-connection-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
     <label for="connection-label">Nombre de la sucursal</label>
     <input id="connection-label" formControlName="label" maxlength="200" autocomplete="off" required />
     <label for="connection-url">URL raíz aprobada</label>
     <input id="connection-url" formControlName="destinationUrl" type="url" maxlength="2048" placeholder="https://sucursal.interna:8443/" autocomplete="off" required />
-    <label for="connection-installation-id">ID de instalación</label>
-    <input id="connection-installation-id" formControlName="installationId" autocomplete="off" required />
-    <label for="connection-company-id">ID de empresa en sucursal</label>
-    <input id="connection-company-id" formControlName="remoteCompanyId" autocomplete="off" required />
-    <label for="connection-branch-id">ID de sucursal</label>
-    <input id="connection-branch-id" formControlName="remoteBranchId" autocomplete="off" required />
-    <label for="connection-token">Token de servicio</label>
-    <input id="connection-token" formControlName="token" type="password" maxlength="64" autocomplete="new-password" required />
+    @if (!editing()) {
+      <label for="connection-installation-id">ID de instalación</label>
+      <input id="connection-installation-id" formControlName="installationId" autocomplete="off" required />
+      <label for="connection-company-id">ID de empresa en sucursal</label>
+      <input id="connection-company-id" formControlName="remoteCompanyId" autocomplete="off" required />
+      <label for="connection-branch-id">ID de sucursal</label>
+      <input id="connection-branch-id" formControlName="remoteBranchId" autocomplete="off" required />
+    } @else {
+      <p class="identity-note">Los identificadores de instalación y sucursal no se pueden cambiar.</p>
+    }
+    <label for="connection-token">{{ editing() ? 'Nuevo token (opcional)' : 'Token de servicio' }}</label>
+    <input id="connection-token" formControlName="token" type="password" maxlength="64" autocomplete="new-password" [required]="!editing()" />
     @if (form.touched && form.invalid) {
-      <p class="field-error" role="alert">Completá los identificadores UUID, la URL y el token hexadecimal de 64 caracteres.</p>
+      <p class="field-error" role="alert">Revisá los campos requeridos y el token hexadecimal de 64 caracteres.</p>
     }
     @if (formError(); as message) { <p class="field-error" role="alert">{{ message }}</p> }
     <div class="dialog-actions">
       <button type="button" class="secondary" [disabled]="saving()" (click)="closeCreate()">Cancelar</button>
-      <button type="submit" [disabled]="saving()">{{ saving() ? 'Verificando…' : 'Verificar y agregar' }}</button>
+      <button type="submit" [disabled]="saving()">{{ saving() ? 'Guardando…' : editing() ? 'Guardar cambios' : 'Verificar y agregar' }}</button>
     </div>
   </form>
+</dialog>
+
+<dialog #stateDialog id="branch-state-dialog" aria-labelledby="branch-state-title" (cancel)="$event.preventDefault(); closeStateChange()">
+  @if (stateTarget(); as target) {
+    <div class="dialog-heading">
+      <h2 id="branch-state-title">{{ target.isActive ? 'Desactivar' : 'Reactivar' }} {{ target.label }}</h2>
+      <p>{{ target.isActive ? 'Dejará de incluirse en el dashboard central. La conexión y la auditoría se conservarán.' : 'Antes de reactivarla se comprobarán destino, token e identidad de la sucursal.' }}</p>
+    </div>
+    <div class="dialog-actions state-actions">
+      <button type="button" class="secondary" [disabled]="busyId() !== null" (click)="closeStateChange()">Cancelar</button>
+      <button type="button" [disabled]="busyId() !== null" (click)="confirmStateChange()">
+        {{ busyId() ? 'Verificando…' : target.isActive ? 'Confirmar desactivación' : 'Verificar y reactivar' }}
+      </button>
+    </div>
+  }
 </dialog>

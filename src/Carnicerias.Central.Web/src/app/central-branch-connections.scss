@@ -16,6 +16,9 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .state { padding: 0.2rem 0.55rem; color: #194c35; background: #e2f4e8; border-radius: 1rem; font-size: 0.8rem; font-weight: 700; }
 .state.inactive { color: #5f4a20; background: #f6edda; }
 .destination, .credential-state { margin: 0.45rem 0; color: #46514f; font-size: 0.875rem; overflow-wrap: anywhere; }
+.connection-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.8rem; }
+.connection-actions button { min-height: 2.25rem; padding: 0.35rem 0.75rem; }
+.identity-note { margin: 0.25rem 0; color: #46514f; font-size: 0.875rem; }
 dl { display: grid; gap: 0.35rem; margin: 0.75rem 0; }
 dl div { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: 0.5rem; }
 dt { color: #46514f; }
@@ -32,6 +35,7 @@ label { font-weight: 700; }
 input { box-sizing: border-box; width: 100%; min-height: 2.75rem; padding: 0.625rem 0.75rem; color: #202322; background: #fff; border: 1px solid #9aaca6; border-radius: 0.25rem; font: inherit; }
 .field-error { margin: 0; padding: 0.625rem; font-size: 0.875rem; }
 .dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+.state-actions { margin: 0; padding: 1.25rem; }
 .secondary { background: #fff; border-color: #9aaca6; }
 .secondary:hover:not(:disabled) { background: #e5ece9; }
 @media (max-width: 40rem) {

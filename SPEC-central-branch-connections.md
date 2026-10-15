@@ -1,6 +1,6 @@
 # Configuración de conexiones a sucursales desde la central (`central-access`)
 
-**Estado:** aprobada por el usuario el 15/10/2026. Amplía el módulo `central-access` del [mapa de capacidades](CAPABILITY-MAP-sucursal-central.md). Hasta implementarla, sigue vigente el alta protegida por CLI de [SPEC-central-access.md](SPEC-central-access.md) y [ADR 0006](documentacion/decisiones/0006-superadmin-propio-del-portal-central.md). Tras implementarla, reconciliar esos documentos y registrar una nueva decisión; no borrar el historial de la decisión anterior.
+**Estado:** aprobada por el usuario el 15/10/2026. API, pantalla y migraciones implementadas en la rama `feature/federacion-sucursales`; smoke real de alta, comprobación tras reinicio, rotación y estado completado en la única base, con una conexión efímera eliminada al final. El aprovisionamiento persistente de claves/destinos para una instalación definitiva sigue pendiente del despliegue. Amplía el módulo `central-access` del [mapa de capacidades](CAPABILITY-MAP-sucursal-central.md). La decisión posterior está en [ADR 0007](documentacion/decisiones/0007-conexiones-de-sucursal-gestionadas-por-admin-central.md); el alta protegida por CLI se conserva para legado/recuperación, sin borrar el historial de [ADR 0006](documentacion/decisiones/0006-superadmin-propio-del-portal-central.md).
 
 ## Objetivo y autoridad
 

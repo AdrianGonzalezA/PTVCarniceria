@@ -1,5 +1,7 @@
 # ADR 0006: SuperAdmin propio del portal central
 
+**Actualización del 15/10/2026:** la cláusula de conexiones de sucursal «solo por CLI» de este ADR fue sustituida por [ADR 0007](0007-conexiones-de-sucursal-gestionadas-por-admin-central.md). Se conserva aquí como historial. El SuperAdmin central sigue siendo de Recursos Informáticos y no se convierte en administrador de ninguna empresa.
+
 **Estado:** aceptada, 15/10/2026.
 
 ## Contexto

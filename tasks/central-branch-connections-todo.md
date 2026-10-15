@@ -1,6 +1,6 @@
 # Tareas: conexiones a sucursales desde la central
 
-**Estado:** propuestas para revisión, 15/10/2026. Basadas en la [especificación aprobada](../SPEC-central-branch-connections.md) y el [plan aprobado](central-branch-connections-plan.md). No sustituyen las tareas históricas de `platform-access` ni `central-access`.
+**Estado:** aprobado por el usuario y ejecutado en la rama de función el 15/10/2026. Tareas 2–14 implementadas y verificadas en laboratorio sobre la base única; quedan como límites una carrera simultánea real de altas y el aprovisionamiento **persistente** de clave/destinos en el servidor del workshop. Basadas en la [especificación aprobada](../SPEC-central-branch-connections.md) y el [plan aprobado](central-branch-connections-plan.md). No sustituyen las tareas históricas de `platform-access` ni `central-access`.
 
 Cada tarea modifica aproximadamente cinco archivos o menos (sin contar artefactos generados mecánicamente). No crear, clonar ni reiniciar bases: la única base de aplicación de desarrollo es `carnicerias_test_visual` en Docker `127.0.0.1:55433`. Las pruebas de integración que aprovisionan bases están excluidas.
 
@@ -197,3 +197,12 @@ Cada tarea modifica aproximadamente cinco archivos o menos (sin contar artefacto
 - [ ] Todos los criterios de `SPEC-central-branch-connections.md` verificados o marcados pendientes con evidencia concreta.
 - [ ] Build/API y pruebas .NET/Angular verdes; no se ejecutó integración que crease otra base.
 - [ ] La única base de aplicación sigue siendo `carnicerias_test_visual`; secretos fuera de Git y revisión POS, si la hubiera, solo en Electron.
+
+## Evidencia de ejecución del 15/10/2026
+
+- La migración `AddCentralBranchCredentials` y la migración `AddCentralConnectionManagement` se aplicaron con el bootstrap protegido **solo** a `carnicerias_test_visual` después de `pg_dump -Fc`, `pg_restore --list` y SHA-256 coincidente. Se conservaron 3 instalaciones centrales, 2 empresas centrales y 56 ventas POS ficticias; no se creó otra base.
+- Pasaron 102 pruebas .NET centrales y 25 pruebas Angular. El portal central compiló y se recorrió en Chrome headless autenticado, en pantalla ancha y a 375 px, con listado y modal. No se revisó el POS en navegador.
+- El API central nuevo, servido en puerto temporal, devolvió el listado real de 3 sucursales; una edición de etiqueta vía HTTP respondió `200` y la restauración inmediata de la etiqueta original respondió `200`, con revisión incrementada a 2. No se tocó URL, token ni estado de esas conexiones.
+- Se completó además un smoke real con `LARUSTICA` y la sucursal local activa **Alta Cordoba**: API de sucursal y central temporales, destino loopback aprobado para esa empresa, clave/token aleatorios solo en memoria. Alta `201`, comprobación **después de reiniciar la API central** `200`, rotación al segundo verificador `200`, desactivación `200` y reactivación `200`. Se validó la identidad del registro temporal y se eliminaron **solo** esa conexión, su credencial cifrada y sus eventos de auditoría de prueba; quedaron las 3 instalaciones originales, cero credenciales nuevas, 2 empresas centrales y 56 ventas POS ficticias. Las conexiones existentes no se modificaron.
+- **Pendiente de workshop:** aprovisionar y respaldar una clave maestra y allowlist **persistentes**, luego registrar una conexión definitiva desde la UI. La API temporal inicial sin secretos mostró `hasCredential=false` para registros CLI; la API central preexistente no se sustituyó. También queda la prueba de carrera simultánea real contra la misma base, sin aprovisionar otra.
+- La revisión posterior añadió `EnforceUniqueActiveRemoteBranch`: la pareja remota activa ahora es única **entre todas las empresas centrales**, no solo dentro de una. Se comprobó la ausencia de duplicados, se hizo otro respaldo custom verificado y se aplicó la migración protegida en `carnicerias_test_visual`. Una mutación deliberada de la condición de consulta hizo fallar la prueba enfocada y se restauró el código correcto.

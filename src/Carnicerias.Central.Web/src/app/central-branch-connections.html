@@ -69,7 +69,14 @@
 <dialog #connectionDialog id="branch-connection-dialog" aria-labelledby="connection-dialog-title" (cancel)="$event.preventDefault(); closeCreate()">
   <div class="dialog-heading">
     <h2 id="connection-dialog-title">{{ editing() ? 'Editar conexión' : 'Agregar conexión' }}</h2>
-    <p>{{ editing() ? 'Podés cambiar la etiqueta. Si cambiás la URL o el token, se verificará la sucursal antes de guardar.' : 'Copiá los tres identificadores y el token del despliegue de esa sucursal. El token se envía una vez y no volverá a mostrarse.' }}</p>
+    <p>{{ editing() ? 'Podés cambiar la etiqueta o pegar un paquete nuevo de esta misma sucursal para actualizar URL y credencial. Se verificará antes de guardar.' : 'Obtené todos estos datos en Configuración → Conexión con central del administrador de esa sucursal. El token se envía una vez y no volverá a mostrarse.' }}</p>
+  </div>
+  <div class="bundle-import">
+    <label for="connection-bundle">Pegar datos de sucursal</label>
+    <textarea id="connection-bundle" rows="3" autocomplete="off" spellcheck="false"
+      placeholder="Pegá aquí el paquete copiado desde la sucursal"></textarea>
+    <button id="apply-connection-bundle" type="button" class="secondary" (click)="applyBundle()">Completar formulario</button>
+    <p>El paquete incluye una credencial. Se borra de este campo al completar el formulario.</p>
   </div>
   <form id="branch-connection-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
     <label for="connection-label">Nombre de la sucursal</label>

@@ -1,0 +1,114 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" routerLink="/admin/configuracion" aria-label="Volver a configuración">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Administración</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+
+  <div class="workspace">
+    <app-admin-area-tabs area="configuration" />
+    <a class="back-link" routerLink="/admin/configuracion">← Volver a configuración</a>
+    <p class="eyebrow">Integración de sucursal</p>
+    <h1>Conexión con central</h1>
+    <p class="intro">Obtené aquí todos los datos para conectar esta sucursal con el portal central de tu empresa.</p>
+
+    @if (message(); as notice) { <p class="central-notice" role="status">{{ notice }}</p> }
+    @if (error(); as problem) { <p class="central-error" role="alert">{{ problem }}</p> }
+    @if (loading()) { <p role="status">Cargando configuración de la sucursal…</p> }
+
+    @if (status(); as connection) {
+      <section class="category-panel" aria-labelledby="identity-title">
+        <header class="panel-heading"><div>
+          <h2 id="identity-title">Identidad de la instalación</h2>
+          <p>Estos datos pertenecen a la sucursal activa vinculada a esta API.</p>
+        </div></header>
+        <dl class="identity-grid">
+          <div><dt>Empresa</dt><dd>{{ connection.companyName }}</dd></div>
+          <div><dt>ID de empresa</dt><dd class="identifier">{{ connection.companyId }}</dd></div>
+          <div><dt>Sucursal</dt><dd>{{ connection.branchName }}</dd></div>
+          <div><dt>ID de sucursal</dt><dd class="identifier">{{ connection.branchId }}</dd></div>
+          <div><dt>ID de instalación</dt><dd class="identifier">{{ connection.installationId || 'Se generará al guardar la URL' }}</dd></div>
+          <div><dt>Estado local</dt><dd>{{ connection.isActive ? 'Credencial activa' : 'Sin credencial activa' }}</dd></div>
+        </dl>
+      </section>
+
+      <section class="category-panel" aria-labelledby="url-title">
+        <header class="panel-heading"><div>
+          <h2 id="url-title">Dirección para la central</h2>
+          <p>Indicá la URL raíz por la que el servidor central llegará a esta API. No se puede deducir desde el navegador.</p>
+        </div></header>
+        <form class="url-form" [formGroup]="urlForm" (ngSubmit)="saveUrl()">
+          <label for="central-destination-url">URL raíz de esta sucursal</label>
+          <input id="central-destination-url" type="url" formControlName="destinationUrl"
+            maxlength="2048" placeholder="https://alta.empresa.local/" autocomplete="off" required />
+          @if (urlForm.touched && urlForm.invalid) {
+            <p class="field-error" role="alert">Ingresá una URL raíz válida.</p>
+          }
+          <p class="central-hint">HTTPS para instalaciones reales. HTTP de loopback solo si el laboratorio está habilitado.</p>
+          <button id="save-central-url" type="submit" [disabled]="busy()">
+            {{ busy() ? 'Guardando…' : 'Guardar URL' }}
+          </button>
+        </form>
+        <p class="central-hint side-note">Guardada localmente no significa conectada: el administrador central debe comprobarla desde su portal.</p>
+      </section>
+
+      <section class="category-panel" aria-labelledby="package-title">
+        <header class="panel-heading"><div>
+          <h2 id="package-title">Obtener información para conectar a central</h2>
+          <p>El paquete contiene nombre, URL, tres identificadores y una credencial de lectura del resumen de ventas y cajas. Tratala como secreta; no permite modificar la sucursal.</p>
+        </div></header>
+        <div class="credential-content">
+          @if (!connection.destinationUrl) {
+            <p role="status">Guardá primero la URL de esta sucursal.</p>
+          } @else {
+            <button id="issue-central-credential" type="button" [disabled]="busy() || !!bundle()"
+              (click)="issue()">{{ connection.isActive ? 'Rotar credencial' : 'Generar datos de conexión' }}</button>
+          }
+          @if (confirmingRotation()) {
+            <div class="warning-panel" role="alert">
+              <p>La central tendrá que recibir la credencial nueva. La anterior funcionará durante una hora como máximo, o hasta que finalices la rotación.</p>
+              <div class="actions">
+                <button type="button" class="secondary" (click)="confirmingRotation.set(false)">Cancelar</button>
+                <button type="button" [disabled]="busy()" (click)="confirmIssue()">Confirmar rotación</button>
+              </div>
+            </div>
+          }
+          @if (bundle()) {
+            <div class="bundle-panel">
+              <label for="central-connection-bundle">Paquete para el administrador central · se muestra una sola vez</label>
+              <textarea id="central-connection-bundle" rows="10" readonly spellcheck="false"
+                [value]="bundleText()"></textarea>
+              <div class="actions">
+                <button type="button" (click)="copyBundle()">Copiar paquete</button>
+                <button id="clear-central-credential" type="button" class="secondary"
+                  (click)="clearBundle()">Ya lo guardé · ocultar</button>
+              </div>
+            </div>
+          }
+          @if (connection.hasPreviousCredential) {
+            <div class="warning-panel">
+              <p>Hay una credencial anterior en transición. Actualizá la central y finalizá la rotación para revocarla.</p>
+              <button type="button" class="secondary" [disabled]="busy()" (click)="completeRotation()">Finalizar rotación</button>
+            </div>
+          }
+          @if (connection.isActive) {
+            @if (confirmingDeactivation()) {
+              <div class="warning-panel" role="alert">
+                <p>Desactivar revoca el acceso de la central. La venta local seguirá funcionando.</p>
+                <div class="actions">
+                  <button type="button" class="secondary" (click)="confirmingDeactivation.set(false)">Cancelar</button>
+                  <button type="button" [disabled]="busy()" (click)="deactivate()">Confirmar desactivación</button>
+                </div>
+              </div>
+            } @else {
+              <button type="button" class="secondary" [disabled]="busy()"
+                (click)="confirmingDeactivation.set(true)">Desactivar conexión</button>
+            }
+          }
+        </div>
+      </section>
+    }
+  </div>
+</main>

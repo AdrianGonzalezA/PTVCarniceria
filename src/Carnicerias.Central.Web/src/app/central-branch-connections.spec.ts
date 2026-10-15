@@ -70,6 +70,80 @@ describe('CentralBranchConnections', () => {
     http.verify();
   });
 
+  it('fills all six fields from the package copied in the branch administrator', async () => {
+    TestBed.configureTestingModule({
+      imports: [CentralBranchConnections],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    const fixture = TestBed.createComponent(CentralBranchConnections);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/v1/branch-connections?page=1&pageSize=20').flush(page([]));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const element: HTMLElement = fixture.nativeElement;
+    element.querySelector<HTMLButtonElement>('#add-branch-connection')!.click();
+    fixture.detectChanges();
+
+    const bundle = element.querySelector<HTMLTextAreaElement>('#connection-bundle')!;
+    bundle.value = JSON.stringify({ version: 1, label: 'Alta Córdoba',
+      destinationUrl: 'http://127.0.0.1:5249/',
+      installationId: '11111111-1111-4111-8111-111111111111',
+      remoteCompanyId: '22222222-2222-4222-8222-222222222222',
+      remoteBranchId: '33333333-3333-4333-8333-333333333333', token: 'A'.repeat(64) });
+    element.querySelector<HTMLButtonElement>('#apply-connection-bundle')!.click();
+    fixture.detectChanges();
+
+    expect(bundle.value).toBe('');
+    expect(element.querySelector<HTMLInputElement>('#connection-label')?.value).toBe('Alta Córdoba');
+    expect(element.querySelector<HTMLInputElement>('#connection-url')?.value).toBe('http://127.0.0.1:5249/');
+    expect(element.querySelector<HTMLInputElement>('#connection-token')?.value).toBe('A'.repeat(64));
+    expect(element.querySelector<HTMLInputElement>('#connection-branch-id')?.value)
+      .toBe('33333333-3333-4333-8333-333333333333');
+    http.verify();
+  });
+
+  it('rejects a package for a different branch when rotating a connection', async () => {
+    TestBed.configureTestingModule({
+      imports: [CentralBranchConnections],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    const fixture = TestBed.createComponent(CentralBranchConnections);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/v1/branch-connections?page=1&pageSize=20').flush(page([connection]));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const element: HTMLElement = fixture.nativeElement;
+    element.querySelectorAll<HTMLButtonElement>('.connection-actions button')[1].click();
+    fixture.detectChanges();
+    const bundle = element.querySelector<HTMLTextAreaElement>('#connection-bundle')!;
+    bundle.value = JSON.stringify({ version: 1, label: 'Other branch',
+      destinationUrl: 'https://other.example/',
+      installationId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      remoteCompanyId: connection.remoteCompanyId,
+      remoteBranchId: connection.remoteBranchId, token: 'A'.repeat(64) });
+    element.querySelector<HTMLButtonElement>('#apply-connection-bundle')!.click();
+    fixture.detectChanges();
+    expect(element.querySelector<HTMLInputElement>('#connection-token')?.value).toBe('');
+    expect(element.querySelector<HTMLInputElement>('#connection-url')?.value)
+      .toBe(connection.destinationUrl);
+    expect(element.textContent).toContain('otra sucursal');
+
+    bundle.value = JSON.stringify({ version: 1, label: connection.label,
+      destinationUrl: 'https://new-branch.example/',
+      installationId: connection.installationId,
+      remoteCompanyId: connection.remoteCompanyId,
+      remoteBranchId: connection.remoteBranchId, token: 'B'.repeat(64) });
+    element.querySelector<HTMLButtonElement>('#apply-connection-bundle')!.click();
+    fixture.detectChanges();
+    expect(element.querySelector<HTMLInputElement>('#connection-token')?.value).toBe('B'.repeat(64));
+    expect(element.querySelector<HTMLInputElement>('#connection-url')?.value)
+      .toBe('https://new-branch.example/');
+    expect(element.textContent).not.toContain('otra sucursal');
+    http.verify();
+  });
+
   it('checks, edits and deactivates a connection through the actions beside it', async () => {
     TestBed.configureTestingModule({
       imports: [CentralBranchConnections],

@@ -3,6 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, ElementRef, EventEmitter, inject, OnInit, Output, signal, ViewChild } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { CentralBranchConnection, CentralBranchConnectionClient, EditCentralBranchConnection } from './central-branch-connection-client';
+import { parseBranchConnectionBundle } from './central-branch-connection-bundle';
 
 @Component({
   selector: 'app-central-branch-connections',
@@ -103,6 +104,29 @@ export class CentralBranchConnections implements OnInit {
     if (typeof dialog.showModal === 'function') dialog.showModal();
     else dialog.setAttribute('open', '');
     dialog.querySelector<HTMLInputElement>('#connection-label')?.focus();
+  }
+
+  protected applyBundle(): void {
+    const input = this.dialog.nativeElement.querySelector<HTMLTextAreaElement>('#connection-bundle');
+    if (!input) return;
+    const raw = input.value;
+    input.value = '';
+    try {
+      const parsed = parseBranchConnectionBundle(raw);
+      const editing = this.editing();
+      if (editing && (parsed.installationId.toLowerCase() !== editing.installationId.toLowerCase() ||
+        parsed.remoteCompanyId.toLowerCase() !== editing.remoteCompanyId.toLowerCase() ||
+        parsed.remoteBranchId.toLowerCase() !== editing.remoteBranchId.toLowerCase())) {
+        this.formError.set('El paquete corresponde a otra sucursal. Copiá el de esta conexión.');
+        return;
+      }
+      const { version: _version, ...bundle } = parsed;
+      this.form.setValue(bundle);
+      this.formError.set(null);
+      this.dialog.nativeElement.querySelector<HTMLInputElement>('#connection-label')?.focus();
+    } catch {
+      this.formError.set('El paquete no es válido. Copialo nuevamente desde Configuración de la sucursal.');
+    }
   }
 
   protected closeCreate(): void {

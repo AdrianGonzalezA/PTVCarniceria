@@ -25,14 +25,18 @@ dt { color: #46514f; }
 dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; font-size: 0.875rem; }
 .pagination { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0.75rem 1.25rem; border-top: 1px solid #c8d4d0; color: #46514f; font-size: 0.875rem; }
 .pagination div { display: flex; gap: 0.5rem; }
-dialog { box-sizing: border-box; width: min(100% - 1.5rem, 37rem); max-height: min(90dvh, 60rem); padding: 0; color: #202322; background: #fff; border: 1px solid #c8d4d0; border-radius: 0.35rem; }
+dialog { box-sizing: border-box; width: min(100% - 1.5rem, 37rem); max-height: min(90dvh, 60rem); padding: 0; overflow: auto; color: #202322; background: #fff; border: 1px solid #c8d4d0; border-radius: 0.35rem; }
 dialog::backdrop { background: rgb(13 25 24 / 65%); }
 .dialog-heading { padding: 1.25rem; background: #e5ece9; }
 .dialog-heading h2 { margin: 0; color: #005e60; font-size: 1.3rem; }
 .dialog-heading p { margin: 0.4rem 0 0; color: #46514f; line-height: 1.4; }
+.bundle-import { display: grid; gap: 0.5rem; padding: 1rem 1.25rem; border-bottom: 1px solid #c8d4d0; }
+.bundle-import button { justify-self: start; }
+.bundle-import p { margin: 0; color: #46514f; font-size: 0.875rem; }
 form { display: grid; gap: 0.5rem; padding: 1.25rem; }
 label { font-weight: 700; }
-input { box-sizing: border-box; width: 100%; min-height: 2.75rem; padding: 0.625rem 0.75rem; color: #202322; background: #fff; border: 1px solid #9aaca6; border-radius: 0.25rem; font: inherit; }
+input, textarea { box-sizing: border-box; width: 100%; min-height: 2.75rem; padding: 0.625rem 0.75rem; color: #202322; background: #fff; border: 1px solid #9aaca6; border-radius: 0.25rem; font: inherit; }
+textarea { resize: vertical; }
 .field-error { margin: 0; padding: 0.625rem; font-size: 0.875rem; }
 .dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
 .state-actions { margin: 0; padding: 1.25rem; }

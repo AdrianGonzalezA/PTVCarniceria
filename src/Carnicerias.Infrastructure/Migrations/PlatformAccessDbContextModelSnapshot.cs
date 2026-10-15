@@ -2052,6 +2052,59 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.ToTable("branches", "platform_access");
                 });
 
+            modelBuilder.Entity("Carnicerias.PlatformAccess.BranchCentralConnection", b =>
+                {
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CredentialSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("DestinationUrl")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<Guid>("InstallationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("PreviousCredentialExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PreviousCredentialSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("BranchId");
+
+                    b.HasIndex("InstallationId")
+                        .IsUnique();
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("CompanyId", "BranchId")
+                        .IsUnique();
+
+                    b.ToTable("branch_central_connections", "platform_access");
+                });
+
             modelBuilder.Entity("Carnicerias.PlatformAccess.Company", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3074,6 +3127,22 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.HasOne("Carnicerias.PlatformAccess.Company", null)
                         .WithMany()
                         .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Carnicerias.PlatformAccess.BranchCentralConnection", b =>
+                {
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.PlatformAccess.Branch", null)
+                        .WithOne()
+                        .HasForeignKey("Carnicerias.PlatformAccess.BranchCentralConnection", "CompanyId", "BranchId")
+                        .HasPrincipalKey("Carnicerias.PlatformAccess.Branch", "CompanyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

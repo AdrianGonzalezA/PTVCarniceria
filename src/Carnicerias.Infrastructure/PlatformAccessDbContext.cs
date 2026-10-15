@@ -20,6 +20,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<Branch> Branches => Set<Branch>();
 
+    public DbSet<BranchCentralConnection> BranchCentralConnections => Set<BranchCentralConnection>();
+
     public DbSet<PosTerminal> PosTerminals => Set<PosTerminal>();
 
     public DbSet<ArcaCompanySettings> ArcaCompanySettings => Set<ArcaCompanySettings>();
@@ -161,6 +163,25 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasAlternateKey(branch => new { branch.CompanyId, branch.Id });
             entity.HasIndex(branch => new { branch.CompanyId, branch.Name }).IsUnique();
             entity.HasOne<Company>().WithMany().HasForeignKey(branch => branch.CompanyId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<BranchCentralConnection>(entity =>
+        {
+            entity.ToTable("branch_central_connections");
+            entity.HasKey(connection => connection.BranchId);
+            entity.HasIndex(connection => connection.InstallationId).IsUnique();
+            entity.Property(connection => connection.DestinationUrl).HasMaxLength(2048).IsRequired();
+            entity.Property(connection => connection.CredentialSha256).HasMaxLength(64);
+            entity.Property(connection => connection.PreviousCredentialSha256).HasMaxLength(64);
+            entity.Property(connection => connection.Revision).IsConcurrencyToken();
+            entity.HasOne<Branch>().WithOne()
+                .HasForeignKey<BranchCentralConnection>(connection =>
+                    new { connection.CompanyId, connection.BranchId })
+                .HasPrincipalKey<Branch>(branch => new { branch.CompanyId, branch.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(connection => connection.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<PosTerminal>(entity =>

@@ -73,6 +73,9 @@ namespace Carnicerias.Central.Infrastructure.Migrations
                     b.Property<Guid?>("CentralCompanyId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("InstallationId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("OccurredAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -82,6 +85,8 @@ namespace Carnicerias.Central.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CentralCompanyId", "OccurredAtUtc");
+
+                    b.HasIndex("CentralCompanyId", "InstallationId", "OccurredAtUtc");
 
                     b.ToTable("audit_events", "central_access");
                 });
@@ -163,11 +168,23 @@ namespace Carnicerias.Central.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("LastCheckStatus")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("LastCheckedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("RemoteBranchId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("RemoteCompanyId")
                         .HasColumnType("uuid");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
 
                     b.Property<string>("SecretReference")
                         .IsRequired()
@@ -175,6 +192,10 @@ namespace Carnicerias.Central.Infrastructure.Migrations
                         .HasColumnType("character varying(200)");
 
                     b.HasKey("InstallationId");
+
+                    b.HasIndex("RemoteCompanyId", "RemoteBranchId")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = TRUE");
 
                     b.HasIndex("CentralCompanyId", "IsActive", "Label");
 

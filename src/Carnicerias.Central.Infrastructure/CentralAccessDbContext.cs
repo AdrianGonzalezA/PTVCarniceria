@@ -62,6 +62,8 @@ public sealed class CentralAccessDbContext(DbContextOptions<CentralAccessDbConte
             entity.Property(audit => audit.Action).HasConversion<int>();
             entity.Property(audit => audit.Result).HasConversion<int>();
             entity.HasIndex(audit => new { audit.CentralCompanyId, audit.OccurredAtUtc });
+            entity.HasIndex(audit => new { audit.CentralCompanyId, audit.InstallationId,
+                audit.OccurredAtUtc });
         });
 
         modelBuilder.Entity<CentralInstallation>(entity =>
@@ -71,8 +73,12 @@ public sealed class CentralAccessDbContext(DbContextOptions<CentralAccessDbConte
             entity.Property(installation => installation.Label).HasMaxLength(200).IsRequired();
             entity.Property(installation => installation.DestinationUrl).HasMaxLength(2048).IsRequired();
             entity.Property(installation => installation.SecretReference).HasMaxLength(200).IsRequired();
+            entity.Property(installation => installation.Revision).IsConcurrencyToken();
+            entity.Property(installation => installation.LastCheckStatus).HasMaxLength(16).IsRequired();
             entity.HasIndex(installation => new { installation.CentralCompanyId,
                 installation.IsActive, installation.Label });
+            entity.HasIndex(installation => new { installation.RemoteCompanyId,
+                installation.RemoteBranchId }).IsUnique().HasFilter("\"IsActive\" = TRUE");
             entity.HasOne<CentralCompany>().WithMany()
                 .HasForeignKey(installation => installation.CentralCompanyId)
                 .OnDelete(DeleteBehavior.Restrict);

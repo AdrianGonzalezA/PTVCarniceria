@@ -35,6 +35,14 @@ public sealed class CentralInstallationModelTests
         Assert.Equal("installations", entity.GetTableName());
         Assert.Equal(nameof(CentralInstallation.InstallationId),
             Assert.Single(entity.FindPrimaryKey()!.Properties).Name);
+        Assert.True(entity.FindProperty(nameof(CentralInstallation.Revision))!.IsConcurrencyToken);
+        Assert.Contains(entity.GetIndexes(), index => index.IsUnique
+            && index.Properties.Select(property => property.Name).SequenceEqual(
+                [nameof(CentralInstallation.RemoteCompanyId),
+                    nameof(CentralInstallation.RemoteBranchId)]));
+        Assert.Equal("notChecked", CentralInstallation.Create(Guid.NewGuid(), Guid.NewGuid(),
+            Guid.NewGuid(), Guid.NewGuid(), "Test", "https://branch.example/", "TOKEN")
+            .LastCheckStatus);
         Assert.All(context.Model.GetEntityTypes(), item => Assert.Equal("central_access", item.GetSchema()));
     }
 }

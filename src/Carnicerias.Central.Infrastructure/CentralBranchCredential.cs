@@ -37,4 +37,14 @@ public sealed class CentralBranchCredential
     public CentralEncryptedBranchCredential ToEnvelope() =>
         new(KeyVersion, (byte[])Nonce.Clone(), (byte[])Ciphertext.Clone(),
             (byte[])Tag.Clone());
+
+    public void ReplaceWith(CentralBranchCredential replacement)
+    {
+        if (replacement.InstallationId != InstallationId)
+            throw new ArgumentException("Credential belongs to another installation.");
+        KeyVersion = replacement.KeyVersion;
+        Nonce = (byte[])replacement.Nonce.Clone();
+        Ciphertext = (byte[])replacement.Ciphertext.Clone();
+        Tag = (byte[])replacement.Tag.Clone();
+    }
 }

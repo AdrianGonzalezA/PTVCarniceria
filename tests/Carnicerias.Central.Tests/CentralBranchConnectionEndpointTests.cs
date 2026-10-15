@@ -46,6 +46,69 @@ public sealed class CentralBranchConnectionEndpointTests
         Assert.Equal(fixture.Store.Company.Id, Assert.Single(fixture.Store.Installations).CentralCompanyId);
     }
 
+    [Fact]
+    public async Task CheckEditAndStateAreTenantScopedAndDoNotExposeCredential()
+    {
+        using var fixture = new CentralFactory();
+        using var client = fixture.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"), HandleCookies = false
+        });
+        using var login = await client.SendAsync(LoginRequest());
+        var cookie = Assert.Single(login.Headers.GetValues("Set-Cookie")).Split(';')[0];
+        using var created = await client.SendAsync(CreateRequest(cookie, true));
+        var installationId = Assert.Single(fixture.Store.Installations).InstallationId;
+
+        using var check = await client.SendAsync(ActionRequest(HttpMethod.Post, cookie,
+            $"/api/v1/branch-connections/{installationId}/checks"));
+        Assert.Equal(HttpStatusCode.OK, check.StatusCode);
+        Assert.Contains("available", await check.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        using var edit = await client.SendAsync(ActionRequest(HttpMethod.Patch, cookie,
+            $"/api/v1/branch-connections/{installationId}", new { label = "Sucursal editada" }));
+        Assert.Equal(HttpStatusCode.OK, edit.StatusCode);
+        Assert.Equal("Sucursal editada", Assert.Single(fixture.Store.Installations).Label);
+        Assert.DoesNotContain(Token, await edit.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        using var forbiddenIdChange = await client.SendAsync(ActionRequest(HttpMethod.Patch, cookie,
+            $"/api/v1/branch-connections/{installationId}",
+            new { label = "No", remoteCompanyId = Guid.NewGuid() }));
+        Assert.Equal(HttpStatusCode.BadRequest, forbiddenIdChange.StatusCode);
+
+        using var off = await client.SendAsync(ActionRequest(HttpMethod.Patch, cookie,
+            $"/api/v1/branch-connections/{installationId}/state", new { isActive = false }));
+        Assert.Equal(HttpStatusCode.OK, off.StatusCode);
+        Assert.False(Assert.Single(fixture.Store.Installations).IsActive);
+
+        var other = CentralInstallation.Create(Guid.NewGuid(), Guid.NewGuid(),
+            Guid.NewGuid(), Guid.NewGuid(), "Other", "https://branch.example/", "OTHER_TOKEN");
+        fixture.Store.Installations.Add(other);
+        using var scopedList = await client.SendAsync(GetRequest(cookie));
+        Assert.DoesNotContain("Other", await scopedList.Content.ReadAsStringAsync(),
+            StringComparison.Ordinal);
+        using var otherCheck = await client.SendAsync(ActionRequest(HttpMethod.Post, cookie,
+            $"/api/v1/branch-connections/{other.InstallationId}/checks"));
+        Assert.Equal(HttpStatusCode.NotFound, otherCheck.StatusCode);
+        using var otherEdit = await client.SendAsync(ActionRequest(HttpMethod.Patch, cookie,
+            $"/api/v1/branch-connections/{other.InstallationId}", new { label = "Hijack" }));
+        Assert.Equal(HttpStatusCode.NotFound, otherEdit.StatusCode);
+        using var otherState = await client.SendAsync(ActionRequest(HttpMethod.Patch, cookie,
+            $"/api/v1/branch-connections/{other.InstallationId}/state", new { isActive = false }));
+        Assert.Equal(HttpStatusCode.NotFound, otherState.StatusCode);
+        Assert.True(other.IsActive);
+
+        using var missingOrigin = new HttpRequestMessage(HttpMethod.Post,
+            $"/api/v1/branch-connections/{installationId}/checks");
+        missingOrigin.Headers.Add("Cookie", cookie);
+        using var rejectedOrigin = await client.SendAsync(missingOrigin);
+        Assert.Equal(HttpStatusCode.Forbidden, rejectedOrigin.StatusCode);
+
+        using var unauthenticated = await client.SendAsync(ActionRequest(HttpMethod.Patch,
+            "carnicerias.central.session=invalid",
+            $"/api/v1/branch-connections/{installationId}/state", new { isActive = true }));
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthenticated.StatusCode);
+    }
+
     private static HttpRequestMessage LoginRequest()
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/sessions")
@@ -89,6 +152,17 @@ public sealed class CentralBranchConnectionEndpointTests
         return request;
     }
 
+    private static HttpRequestMessage ActionRequest(HttpMethod method, string cookie,
+        string path, object? body = null)
+    {
+        var request = new HttpRequestMessage(method, path);
+        if (body is not null) request.Content = JsonContent.Create(body);
+        request.Headers.Add("Cookie", cookie);
+        request.Headers.Add("Origin", "https://localhost");
+        request.Headers.Add("X-Carnicerias-CSRF", "1");
+        return request;
+    }
+
     private sealed class CentralFactory : WebApplicationFactory<Program>
     {
         public FixtureStore Store { get; } = new();
@@ -113,6 +187,9 @@ public sealed class CentralBranchConnectionEndpointTests
                 services.AddSingleton<Func<CentralBranchCredentialCrypto>>(
                     _ => () => new CentralBranchCredentialCrypto(1,
                         version => version == 1 ? key : null));
+                services.RemoveAll<ICentralBranchCredentialResolver>();
+                services.AddScoped<ICentralBranchCredentialResolver>(_ =>
+                    new FixtureCredentialResolver(Store, key));
             });
         }
     }
@@ -123,6 +200,7 @@ public sealed class CentralBranchConnectionEndpointTests
         private readonly CentralAdministrator administrator;
         private readonly List<CentralSession> sessions = [];
         public List<CentralInstallation> Installations { get; } = [];
+        public List<CentralBranchCredential> Credentials { get; } = [];
 
         public FixtureStore() => administrator = CentralAdministrator.Create(Company.Id,
             "central-admin", new CentralPasswordHasher().Hash("a unique laboratory password"));
@@ -154,7 +232,7 @@ public sealed class CentralBranchConnectionEndpointTests
             var scope = Installations.Where(item => item.CentralCompanyId == companyId).ToArray();
             var data = scope.Select(item => new CentralBranchConnectionView(item.InstallationId,
                 item.RemoteCompanyId, item.RemoteBranchId, item.Label, item.DestinationUrl,
-                item.IsActive, true)).ToArray();
+                item.IsActive, true, item.LastCheckStatus, item.LastCheckedAtUtc)).ToArray();
             return Task.FromResult(new CentralManagementPage<CentralBranchConnectionView>(
                 data, page, pageSize, scope.Length));
         }
@@ -164,6 +242,27 @@ public sealed class CentralBranchConnectionEndpointTests
             CancellationToken cancellationToken)
         {
             Installations.Add(installation);
+            Credentials.Add(credential);
+            return Task.CompletedTask;
+        }
+        public Task<CentralBranchConnectionSnapshot?> FindAsync(Guid companyId, Guid installationId,
+            CancellationToken cancellationToken)
+        {
+            var installation = Installations.SingleOrDefault(item =>
+                item.CentralCompanyId == companyId && item.InstallationId == installationId);
+            return Task.FromResult(installation is null ? null :
+                new CentralBranchConnectionSnapshot(installation,
+                    Credentials.Any(item => item.InstallationId == installationId)));
+        }
+        public Task SaveChangedAsync(CentralInstallation installation,
+            CentralBranchCredential? credential, CentralAuditEvent audit,
+            long expectedRevision, CancellationToken cancellationToken)
+        {
+            if (credential is not null)
+            {
+                Credentials.RemoveAll(item => item.InstallationId == installation.InstallationId);
+                Credentials.Add(credential);
+            }
             return Task.CompletedTask;
         }
         public Task RecordRejectedAsync(CentralAuditEvent audit,
@@ -181,5 +280,20 @@ public sealed class CentralBranchConnectionEndpointTests
         public Task VerifyAsync(CentralApprovedDestination destination, string token,
             Guid installationId, Guid companyId, Guid branchId,
             CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class FixtureCredentialResolver(FixtureStore store, byte[] key)
+        : ICentralBranchCredentialResolver
+    {
+        public Task<string> ResolveAsync(CentralInstallation installation,
+            CancellationToken cancellationToken)
+        {
+            var credential = store.Credentials.Single(item =>
+                item.InstallationId == installation.InstallationId);
+            var crypto = new CentralBranchCredentialCrypto(1, version =>
+                version == 1 ? key : null);
+            return Task.FromResult(crypto.Decrypt(installation.CentralCompanyId,
+                installation.InstallationId, credential.ToEnvelope()));
+        }
     }
 }

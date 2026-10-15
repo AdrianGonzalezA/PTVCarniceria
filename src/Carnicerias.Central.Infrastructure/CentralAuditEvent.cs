@@ -14,7 +14,13 @@ public enum CentralAuditAction
     ManufacturerSessionIssued = 9,
     ManufacturerSessionRevoked = 10,
     ManufacturerSessionDenied = 11,
-    ManufacturerPasswordReset = 12
+    ManufacturerPasswordReset = 12,
+    InstallationChecked = 13,
+    InstallationEdited = 14,
+    InstallationDeactivated = 15,
+    InstallationReactivated = 16,
+    InstallationEditRejected = 17,
+    InstallationReactivationRejected = 18
 }
 
 public enum CentralAuditResult
@@ -29,7 +35,8 @@ public sealed class CentralAuditEvent
     private CentralAuditEvent() { }
 
     private CentralAuditEvent(CentralAuditAction action, CentralAuditResult result,
-        Guid? centralCompanyId, Guid? actorId, DateTimeOffset occurredAtUtc)
+        Guid? centralCompanyId, Guid? actorId, DateTimeOffset occurredAtUtc,
+        Guid? installationId)
     {
         Id = Guid.NewGuid();
         Action = action;
@@ -37,6 +44,7 @@ public sealed class CentralAuditEvent
         CentralCompanyId = centralCompanyId;
         ActorId = actorId;
         OccurredAtUtc = occurredAtUtc;
+        InstallationId = installationId;
     }
 
     public Guid Id { get; private set; }
@@ -45,14 +53,17 @@ public sealed class CentralAuditEvent
     public Guid? CentralCompanyId { get; private set; }
     public Guid? ActorId { get; private set; }
     public DateTimeOffset OccurredAtUtc { get; private set; }
+    public Guid? InstallationId { get; private set; }
 
     public static CentralAuditEvent Record(CentralAuditAction action, CentralAuditResult result,
-        Guid? centralCompanyId, Guid? actorId, DateTimeOffset occurredAtUtc)
+        Guid? centralCompanyId, Guid? actorId, DateTimeOffset occurredAtUtc,
+        Guid? installationId = null)
     {
         if (!Enum.IsDefined(action) || !Enum.IsDefined(result))
             throw new ArgumentOutOfRangeException(nameof(action));
         if (occurredAtUtc.Offset != TimeSpan.Zero)
             throw new ArgumentException("Audit timestamp must be UTC.", nameof(occurredAtUtc));
-        return new CentralAuditEvent(action, result, centralCompanyId, actorId, occurredAtUtc);
+        return new CentralAuditEvent(action, result, centralCompanyId, actorId,
+            occurredAtUtc, installationId);
     }
 }

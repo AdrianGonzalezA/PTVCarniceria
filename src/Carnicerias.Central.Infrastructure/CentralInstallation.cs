@@ -7,6 +7,7 @@ public sealed class CentralInstallation
         Label = string.Empty;
         DestinationUrl = string.Empty;
         SecretReference = string.Empty;
+        LastCheckStatus = "notChecked";
     }
 
     private CentralInstallation(Guid installationId, Guid centralCompanyId,
@@ -21,6 +22,7 @@ public sealed class CentralInstallation
         DestinationUrl = destinationUrl;
         SecretReference = secretReference;
         IsActive = true;
+        LastCheckStatus = "notChecked";
     }
 
     public Guid InstallationId { get; private set; }
@@ -31,6 +33,9 @@ public sealed class CentralInstallation
     public string DestinationUrl { get; private set; }
     public string SecretReference { get; private set; }
     public bool IsActive { get; private set; }
+    public long Revision { get; private set; }
+    public string LastCheckStatus { get; private set; }
+    public DateTimeOffset? LastCheckedAtUtc { get; private set; }
 
     public static CentralInstallation Create(Guid installationId, Guid centralCompanyId,
         Guid remoteCompanyId, Guid remoteBranchId, string? label,
@@ -70,5 +75,39 @@ public sealed class CentralInstallation
             destination.AbsoluteUri, normalizedReference);
     }
 
-    public void Deactivate() => IsActive = false;
+    public void Deactivate() => ChangeState(false);
+
+    public void ChangeState(bool isActive)
+    {
+        if (IsActive == isActive) return;
+        IsActive = isActive;
+        Revision++;
+    }
+
+    public void RecordCheck(bool available, DateTimeOffset checkedAtUtc)
+    {
+        if (checkedAtUtc.Offset != TimeSpan.Zero)
+            throw new ArgumentException("Check timestamp must be UTC.", nameof(checkedAtUtc));
+        LastCheckStatus = available ? "available" : "unavailable";
+        LastCheckedAtUtc = checkedAtUtc;
+        Revision++;
+    }
+
+    public void UpdateConfiguration(string label, string destinationUrl,
+        string secretReference, bool verified, DateTimeOffset changedAtUtc)
+    {
+        if (verified && changedAtUtc.Offset != TimeSpan.Zero)
+            throw new ArgumentException("Verification timestamp must be UTC.", nameof(changedAtUtc));
+        var validated = Create(InstallationId, CentralCompanyId, RemoteCompanyId,
+            RemoteBranchId, label, destinationUrl, secretReference);
+        Label = validated.Label;
+        DestinationUrl = validated.DestinationUrl;
+        SecretReference = validated.SecretReference;
+        if (verified)
+        {
+            LastCheckStatus = "available";
+            LastCheckedAtUtc = changedAtUtc;
+        }
+        Revision++;
+    }
 }

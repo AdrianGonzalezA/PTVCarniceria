@@ -2105,6 +2105,38 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.ToTable("branch_central_connections", "platform_access");
                 });
 
+            modelBuilder.Entity("Carnicerias.PlatformAccess.BranchCentralConnectionEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("AtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("CompanyId", "BranchId", "AtUtc");
+
+                    b.ToTable("branch_central_connection_events", "platform_access");
+                });
+
             modelBuilder.Entity("Carnicerias.PlatformAccess.Company", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3143,6 +3175,22 @@ namespace Carnicerias.Infrastructure.Migrations
                         .WithOne()
                         .HasForeignKey("Carnicerias.PlatformAccess.BranchCentralConnection", "CompanyId", "BranchId")
                         .HasPrincipalKey("Carnicerias.PlatformAccess.Branch", "CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Carnicerias.PlatformAccess.BranchCentralConnectionEvent", b =>
+                {
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.PlatformAccess.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "BranchId")
+                        .HasPrincipalKey("CompanyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

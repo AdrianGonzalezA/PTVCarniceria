@@ -22,6 +22,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<BranchCentralConnection> BranchCentralConnections => Set<BranchCentralConnection>();
 
+    public DbSet<BranchCentralConnectionEvent> BranchCentralConnectionEvents => Set<BranchCentralConnectionEvent>();
+
     public DbSet<PosTerminal> PosTerminals => Set<PosTerminal>();
 
     public DbSet<ArcaCompanySettings> ArcaCompanySettings => Set<ArcaCompanySettings>();
@@ -181,6 +183,21 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<UserIdentity>().WithMany()
                 .HasForeignKey(connection => connection.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<BranchCentralConnectionEvent>(entity =>
+        {
+            entity.ToTable("branch_central_connection_events");
+            entity.HasKey(entry => entry.Id);
+            entity.Property(entry => entry.Action).HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.HasIndex(entry => new { entry.CompanyId, entry.BranchId, entry.AtUtc });
+            entity.HasOne<Branch>().WithMany()
+                .HasForeignKey(entry => new { entry.CompanyId, entry.BranchId })
+                .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(entry => entry.ActorUserId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

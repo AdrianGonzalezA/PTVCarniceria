@@ -7,6 +7,7 @@ namespace Carnicerias.Api.Federation;
 
 public static class BranchServiceEndpoints
 {
+    private const string ManagedInstallationItem = "ManagedBranchInstallationId";
     private static readonly Action<ILogger, Exception?> LogIncompleteConfiguration =
         LoggerMessage.Define(LogLevel.Warning, new EventId(4101, "BranchServiceConfiguration"),
             "Central branch service disabled because its configuration is incomplete.");
@@ -35,13 +36,37 @@ public static class BranchServiceEndpoints
                 var liveSettings = BranchServiceSettings.FromConfiguration(
                     http.RequestServices.GetRequiredService<IConfiguration>());
                 var authorization = http.Request.Headers.Authorization;
-                if (!liveSettings.IsEnabled || liveSettings.InstallationId != settings.InstallationId ||
+                if (!liveSettings.IsEnabled || liveSettings.IsManaged != settings.IsManaged ||
+                    (!settings.IsManaged && liveSettings.InstallationId != settings.InstallationId) ||
                     liveSettings.CompanyId != settings.CompanyId ||
                     liveSettings.BranchId != settings.BranchId ||
                     authorization.Count != 1 || authorization[0] is not { } header ||
                     header.Length != 71 ||
-                    !header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ||
-                    !liveSettings.VerifyCredential(header[7..]))
+                    !header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                    return Error(StatusCodes.Status401Unauthorized, "NOT_AUTHENTICATED");
+
+                if (settings.IsManaged)
+                {
+                    try
+                    {
+                        var db = http.RequestServices.GetRequiredService<PlatformAccessDbContext>();
+                        var connection = await db.BranchCentralConnections.AsNoTracking()
+                            .SingleOrDefaultAsync(item => item.CompanyId == settings.CompanyId &&
+                                item.BranchId == settings.BranchId, http.RequestAborted);
+                        var now = http.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow();
+                        if (connection is null || !connection.VerifyCredential(header[7..], now))
+                            return Error(StatusCodes.Status401Unauthorized, "NOT_AUTHENTICATED");
+                        http.Items[ManagedInstallationItem] = connection.InstallationId;
+                    }
+                    catch (Exception exception) when (!http.RequestAborted.IsCancellationRequested)
+                    {
+                        var logger = http.RequestServices.GetRequiredService<ILogger<Program>>();
+                        LogBindingFailure(logger, exception.GetType().Name, null);
+                        return Error(StatusCodes.Status503ServiceUnavailable,
+                            "BRANCH_BINDING_UNAVAILABLE");
+                    }
+                }
+                else if (!liveSettings.VerifyCredential(header[7..]))
                     return Error(StatusCodes.Status401Unauthorized, "NOT_AUTHENTICATED");
 
                 return await next(invocation);
@@ -68,7 +93,7 @@ public static class BranchServiceEndpoints
             if (binding is null)
                 return Error(StatusCodes.Status503ServiceUnavailable, "BRANCH_BINDING_UNAVAILABLE");
 
-            return Results.Ok(new BranchInstallationResponse(1, settings.InstallationId,
+            return Results.Ok(new BranchInstallationResponse(1, InstallationId(http, settings),
                 settings.CompanyId, binding.CompanyName, settings.BranchId, binding.BranchName,
                 ["summary"]));
         }
@@ -98,7 +123,7 @@ public static class BranchServiceEndpoints
             var data = await BranchSummaryQuery.ReadAsync(db, settings.CompanyId,
                 settings.BranchId, window, timeout.Token);
             var generatedAtUtc = http.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow();
-            return Results.Ok(new BranchSummaryResponse(1, settings.InstallationId,
+            return Results.Ok(new BranchSummaryResponse(1, InstallationId(http, settings),
                 settings.CompanyId, settings.BranchId, window.FromUtc, window.ToUtc,
                 generatedAtUtc, "ARS", data.SaleCount, data.SalesTotal,
                 data.SalePaymentsTotal, data.PaymentsByMethod, data.OpenShiftCount,
@@ -137,6 +162,9 @@ public static class BranchServiceEndpoints
     private static IResult Error(int statusCode, string code) => Results.Json(
         new ErrorResponse(new ApiError(code, "No se pudo completar la solicitud", [])),
         statusCode: statusCode);
+
+    private static Guid InstallationId(HttpContext http, BranchServiceSettings settings) =>
+        settings.IsManaged ? (Guid)http.Items[ManagedInstallationItem]! : settings.InstallationId;
 
     private sealed record BranchBinding(string CompanyName, string BranchName);
     private sealed record BranchInstallationResponse(int ContractVersion, Guid InstallationId,

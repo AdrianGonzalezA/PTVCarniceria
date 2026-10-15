@@ -67,6 +67,42 @@ public sealed class BranchServiceSettingsTests
         Assert.False(settings.VerifyCredential(CurrentToken));
     }
 
+    [Fact]
+    public void ManagedModeRequiresFixedBranchButNotAStartupCredential()
+    {
+        var companyId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var settings = BranchServiceSettings.FromConfiguration(Configuration(new Dictionary<string, string?>
+        {
+            ["Federation:Enabled"] = "true",
+            ["Federation:Mode"] = "managed",
+            ["Federation:CompanyId"] = companyId.ToString(),
+            ["Federation:BranchId"] = branchId.ToString()
+        }));
+
+        Assert.True(settings.IsEnabled);
+        Assert.True(settings.IsManaged);
+        Assert.Equal(companyId, settings.CompanyId);
+        Assert.Equal(branchId, settings.BranchId);
+        Assert.False(settings.VerifyCredential(CurrentToken));
+    }
+
+    [Fact]
+    public void InvalidManagedBindingNeverFallsBackToLegacyCredential()
+    {
+        var settings = BranchServiceSettings.FromConfiguration(Configuration(new Dictionary<string, string?>
+        {
+            ["Federation:Enabled"] = "true",
+            ["Federation:Mode"] = "managed",
+            ["Federation:InstallationId"] = Guid.NewGuid().ToString(),
+            ["Federation:CompanyId"] = Guid.NewGuid().ToString(),
+            ["Federation:CredentialSha256"] = Hash(CurrentToken)
+        }));
+
+        Assert.False(settings.IsEnabled);
+        Assert.False(settings.VerifyCredential(CurrentToken));
+    }
+
     private static IConfiguration Configuration(Dictionary<string, string?>? values = null) =>
         new ConfigurationBuilder().AddInMemoryCollection(values ?? []).Build();
 

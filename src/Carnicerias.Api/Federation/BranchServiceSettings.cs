@@ -8,10 +8,11 @@ public sealed class BranchServiceSettings
     private readonly byte[]? credentialHash;
     private readonly byte[]? nextCredentialHash;
 
-    private BranchServiceSettings(bool isRequested, Guid installationId, Guid companyId,
+    private BranchServiceSettings(bool isRequested, bool isManaged, Guid installationId, Guid companyId,
         Guid branchId, byte[]? credentialHash, byte[]? nextCredentialHash)
     {
         IsRequested = isRequested;
+        IsManaged = isManaged;
         InstallationId = installationId;
         CompanyId = companyId;
         BranchId = branchId;
@@ -20,7 +21,9 @@ public sealed class BranchServiceSettings
     }
 
     public bool IsRequested { get; }
-    public bool IsEnabled => credentialHash is not null;
+    public bool IsManaged { get; }
+    public bool IsEnabled => IsManaged ? CompanyId != Guid.Empty && BranchId != Guid.Empty
+        : credentialHash is not null;
     public Guid InstallationId { get; }
     public Guid CompanyId { get; }
     public Guid BranchId { get; }
@@ -30,6 +33,20 @@ public sealed class BranchServiceSettings
         ArgumentNullException.ThrowIfNull(configuration);
         var isRequested = bool.TryParse(configuration["Federation:Enabled"], out var enabled) && enabled;
         if (!isRequested) return Disabled(false);
+
+        var mode = configuration["Federation:Mode"];
+        if (string.Equals(mode, "managed", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!Guid.TryParse(configuration["Federation:CompanyId"], out var managedCompanyId) ||
+                !Guid.TryParse(configuration["Federation:BranchId"], out var managedBranchId) ||
+                managedCompanyId == Guid.Empty || managedBranchId == Guid.Empty)
+                return Disabled(true);
+            return new BranchServiceSettings(true, true, Guid.Empty, managedCompanyId,
+                managedBranchId, null, null);
+        }
+        if (!string.IsNullOrWhiteSpace(mode) &&
+            !string.Equals(mode, "legacy", StringComparison.OrdinalIgnoreCase))
+            return Disabled(true);
 
         if (!Guid.TryParse(configuration["Federation:InstallationId"], out var installationId) ||
             !Guid.TryParse(configuration["Federation:CompanyId"], out var companyId) ||
@@ -46,13 +63,13 @@ public sealed class BranchServiceSettings
             nextCredentialHash = nextHash;
         }
 
-        return new BranchServiceSettings(true, installationId, companyId, branchId,
+        return new BranchServiceSettings(true, false, installationId, companyId, branchId,
             credentialHash, nextCredentialHash);
     }
 
     public bool VerifyCredential(string? credential)
     {
-        if (!IsEnabled || credential is null || credential.Length != 64 ||
+        if (!IsEnabled || IsManaged || credential is null || credential.Length != 64 ||
             !TryReadHash(credential, out var tokenBytes)) return false;
 
         var hash = SHA256.HashData(tokenBytes);
@@ -63,7 +80,7 @@ public sealed class BranchServiceSettings
     }
 
     private static BranchServiceSettings Disabled(bool isRequested) =>
-        new(isRequested, Guid.Empty, Guid.Empty, Guid.Empty, null, null);
+        new(isRequested, false, Guid.Empty, Guid.Empty, Guid.Empty, null, null);
 
     private static bool TryReadHash(string? value, out byte[] bytes)
     {

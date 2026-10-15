@@ -89,6 +89,13 @@ builder.Services.AddRateLimiter(options =>
         limiter.QueueLimit = 0;
         limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
     });
+    options.AddFixedWindowLimiter("branch-central-credential", limiter =>
+    {
+        limiter.PermitLimit = 10;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+        limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+    });
 });
 
 var app = builder.Build();
@@ -128,6 +135,8 @@ if (app.Configuration.GetValue<bool>("Clover:TunnelOnly"))
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
 if (!app.Configuration.GetValue<bool>("Clover:TunnelOnly"))
     app.MapBranchServiceEndpoints(branchServiceSettings);
+if (!app.Configuration.GetValue<bool>("Clover:TunnelOnly"))
+    app.MapAdminBranchCentralConnectionEndpoints(branchServiceSettings);
 app.MapSessionEndpoints();
 app.MapManufacturerEndpoints();
 app.MapUserEndpoints();

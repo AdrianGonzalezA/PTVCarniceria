@@ -25,7 +25,7 @@ $buildArtifacts = Join-Path $output 'compilacion'
 if ($LASTEXITCODE -ne 0) { throw 'Falló la compilación Angular.' }
 & npm run build:electron --prefix $posProject
 if ($LASTEXITCODE -ne 0) { throw 'Falló la compilación Electron.' }
-& npm run stage:web --prefix $posProject
+& npm run stage:web --prefix $posProject -- --clean
 if ($LASTEXITCODE -ne 0) { throw 'Falló la preparación del bundle Angular para Electron.' }
 if (-not (Test-Path -LiteralPath (Join-Path $webBuild 'index.html'))) {
     throw 'No se encontró el index.html compilado de Angular.'

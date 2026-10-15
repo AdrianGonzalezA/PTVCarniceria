@@ -31,6 +31,8 @@ No exponer el servidor POS a Internet. Si se precisa acceso administrativo remot
 
 En una máquina de compilación con .NET 10 SDK, Node compatible, npm 11.19.0 y las dependencias ya instaladas en `src/Carnicerias.Web` y `src/Carnicerias.Pos`, desde la raíz del repositorio:
 
+Antes de generar el paquete, cerrar las ventanas Electron de desarrollo. La publicación limpia la copia web anterior para no incluir JavaScript obsoleto en la entrega; la preparación habitual de desarrollo conserva esos archivos para no interrumpir cajas que siguen abiertas.
+
 ```powershell
 .\tools\Publish-BranchLab.ps1 -OutputDirectory 'C:\Entregas\Carnicerias-Workshop-001'
 ```

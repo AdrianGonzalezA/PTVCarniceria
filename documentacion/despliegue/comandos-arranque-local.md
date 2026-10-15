@@ -65,6 +65,8 @@ npm run build:electron --prefix src/Carnicerias.Pos
 npm run stage:web --prefix src/Carnicerias.Pos
 ```
 
+`stage:web` conserva los archivos de versiones anteriores que puedan seguir usando las cajas Electron abiertas. La copia nueva se carga al cerrar y volver a abrir cada caja; no hace falta volver a vincular su perfil. Para armar un paquete de entrega, cerrar primero todas las cajas de desarrollo: `electron:build` y `Publish-BranchLab.ps1` usan una preparación limpia (`--clean`) para no incluir archivos obsoletos.
+
 Después, abrir una consola PowerShell **por caja** y ejecutar solo su línea. Se pueden abrir dos o tres a la vez:
 
 ```powershell

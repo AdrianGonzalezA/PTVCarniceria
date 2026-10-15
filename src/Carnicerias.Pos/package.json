@@ -7,7 +7,7 @@
     "build:web": "npm run build --prefix ../Carnicerias.Web",
     "build:electron": "tsc --project tsconfig.build.json && tsc --project tsconfig.emulator-ui.json",
     "stage:web": "node scripts/stage-web.mjs",
-    "electron:build": "npm run build:web && npm run build:electron && npm run stage:web && electron-forge package",
+    "electron:build": "npm run build:web && npm run build:electron && npm run stage:web -- --clean && electron-forge package",
     "electron:start": "npm run build:web && npm run build:electron && npm run stage:web && electron . --pos-profile=caja-1",
     "electron:start:caja2": "npm run build:web && npm run build:electron && npm run stage:web && electron . --pos-profile=caja-2",
     "electron:start:admin": "npm run build:web && npm run build:electron && npm run stage:web && electron .",

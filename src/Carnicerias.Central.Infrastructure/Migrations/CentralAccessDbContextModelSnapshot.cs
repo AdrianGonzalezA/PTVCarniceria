@@ -86,6 +86,34 @@ namespace Carnicerias.Central.Infrastructure.Migrations
                     b.ToTable("audit_events", "central_access");
                 });
 
+            modelBuilder.Entity("Carnicerias.Central.Infrastructure.CentralBranchCredential", b =>
+                {
+                    b.Property<Guid>("InstallationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("Ciphertext")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("bytea");
+
+                    b.Property<int>("KeyVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<byte[]>("Nonce")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("bytea");
+
+                    b.Property<byte[]>("Tag")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("bytea");
+
+                    b.HasKey("InstallationId");
+
+                    b.ToTable("branch_credentials", "central_access");
+                });
+
             modelBuilder.Entity("Carnicerias.Central.Infrastructure.CentralCompany", b =>
                 {
                     b.Property<Guid>("Id")
@@ -259,6 +287,15 @@ namespace Carnicerias.Central.Infrastructure.Migrations
                     b.HasOne("Carnicerias.Central.Infrastructure.CentralCompany", null)
                         .WithMany()
                         .HasForeignKey("CentralCompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Carnicerias.Central.Infrastructure.CentralBranchCredential", b =>
+                {
+                    b.HasOne("Carnicerias.Central.Infrastructure.CentralInstallation", null)
+                        .WithOne()
+                        .HasForeignKey("Carnicerias.Central.Infrastructure.CentralBranchCredential", "InstallationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

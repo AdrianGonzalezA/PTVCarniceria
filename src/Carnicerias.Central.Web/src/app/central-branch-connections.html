@@ -1,0 +1,76 @@
+<section class="connections-panel" aria-labelledby="connections-title">
+  <div class="connections-heading">
+    <div>
+      <p class="eyebrow">Configuración de empresa</p>
+      <h2 id="connections-title">Conexiones a sucursales</h2>
+      <p>Registrá las instalaciones de tu empresa. La sucursal debe estar preparada y su destino aprobado antes de conectarla.</p>
+    </div>
+    <button #addButton id="add-branch-connection" type="button" (click)="openCreate()">Agregar conexión</button>
+  </div>
+
+  @if (listError(); as message) {
+    <div class="message error" role="alert"><span>{{ message }}</span>
+      <button type="button" (click)="load(page())">Reintentar</button></div>
+  }
+  @if (loading()) {
+    <p class="message" role="status">Cargando conexiones…</p>
+  } @else if (totalCount() === 0 && !listError()) {
+    <p class="message" role="status">Todavía no hay conexiones configuradas para esta empresa.</p>
+  } @else {
+    <ul class="connections-list">
+      @for (connection of connections(); track connection.installationId) {
+        <li>
+          <div class="connection-title">
+            <h3>{{ connection.label }}</h3>
+            <span class="state" [class.inactive]="!connection.isActive">
+              {{ connection.isActive ? 'Activa' : 'Inactiva' }}
+            </span>
+          </div>
+          <p class="destination">{{ connection.destinationUrl }}</p>
+          <dl>
+            <div><dt>Instalación</dt><dd>{{ connection.installationId }}</dd></div>
+            <div><dt>Empresa remota</dt><dd>{{ connection.remoteCompanyId }}</dd></div>
+            <div><dt>Sucursal remota</dt><dd>{{ connection.remoteBranchId }}</dd></div>
+          </dl>
+          <p class="credential-state">{{ connection.hasCredential ? 'Credencial configurada' : 'Credencial no disponible' }} · Conectividad sin comprobar</p>
+        </li>
+      }
+    </ul>
+    <div class="pagination">
+      <span>{{ totalCount() }} conexión{{ totalCount() === 1 ? '' : 'es' }} · página {{ page() }} de {{ totalPages() }}</span>
+      <div>
+        <button type="button" [disabled]="loading() || page() <= 1" (click)="load(page() - 1)">Anterior</button>
+        <button type="button" [disabled]="loading() || page() >= totalPages()" (click)="load(page() + 1)">Siguiente</button>
+      </div>
+    </div>
+  }
+</section>
+
+<dialog #connectionDialog id="branch-connection-dialog" aria-labelledby="connection-dialog-title" (cancel)="closeCreate()">
+  <div class="dialog-heading">
+    <h2 id="connection-dialog-title">Agregar conexión</h2>
+    <p>Copiá los tres identificadores y el token del despliegue de esa sucursal. El token se envía una vez y no volverá a mostrarse.</p>
+  </div>
+  <form id="branch-connection-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+    <label for="connection-label">Nombre de la sucursal</label>
+    <input id="connection-label" formControlName="label" maxlength="200" autocomplete="off" required />
+    <label for="connection-url">URL raíz aprobada</label>
+    <input id="connection-url" formControlName="destinationUrl" type="url" maxlength="2048" placeholder="https://sucursal.interna:8443/" autocomplete="off" required />
+    <label for="connection-installation-id">ID de instalación</label>
+    <input id="connection-installation-id" formControlName="installationId" autocomplete="off" required />
+    <label for="connection-company-id">ID de empresa en sucursal</label>
+    <input id="connection-company-id" formControlName="remoteCompanyId" autocomplete="off" required />
+    <label for="connection-branch-id">ID de sucursal</label>
+    <input id="connection-branch-id" formControlName="remoteBranchId" autocomplete="off" required />
+    <label for="connection-token">Token de servicio</label>
+    <input id="connection-token" formControlName="token" type="password" maxlength="64" autocomplete="new-password" required />
+    @if (form.touched && form.invalid) {
+      <p class="field-error" role="alert">Completá los identificadores UUID, la URL y el token hexadecimal de 64 caracteres.</p>
+    }
+    @if (formError(); as message) { <p class="field-error" role="alert">{{ message }}</p> }
+    <div class="dialog-actions">
+      <button type="button" class="secondary" [disabled]="saving()" (click)="closeCreate()">Cancelar</button>
+      <button type="submit" [disabled]="saving()">{{ saving() ? 'Verificando…' : 'Verificar y agregar' }}</button>
+    </div>
+  </form>
+</dialog>

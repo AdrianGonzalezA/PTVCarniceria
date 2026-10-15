@@ -101,6 +101,9 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .page-actions { display: flex; gap: 0.5rem; }
 .portal-switch { margin-top: 1.25rem; color: var(--muted); }
 .portal-switch a { color: var(--teal); font-weight: 700; }
+.workspace-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 1rem; }
+.workspace-tabs button { color: var(--teal); background: #fff; border-color: var(--border); }
+.workspace-tabs button[aria-current="page"] { color: var(--ink); background: #d3ff00; border-color: #a5c900; }
 
 @media (max-width: 40rem) {
   .app-header { align-items: flex-start; flex-direction: column; }
@@ -108,4 +111,5 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   .login-panel button { width: 100%; }
   .installation-item dl div { grid-template-columns: 1fr; gap: 0; }
   .pagination-bar { align-items: stretch; flex-direction: column; }
+  .workspace-tabs button { flex: 1 1 auto; }
 }

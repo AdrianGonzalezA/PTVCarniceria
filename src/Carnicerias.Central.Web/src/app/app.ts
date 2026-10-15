@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { CentralBusinessDashboard } from './central-business-dashboard';
+import { CentralBranchConnections } from './central-branch-connections';
 import { CentralInstallation, CentralInstallationClient } from './central-installation-client';
 import { CentralManufacturerPage } from './central-manufacturer-page';
 import { CentralSession, CentralSessionClient } from './central-session-client';
@@ -9,7 +10,8 @@ import { CentralSession, CentralSessionClient } from './central-session-client';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [ReactiveFormsModule, CentralBusinessDashboard, CentralManufacturerPage],
+  imports: [ReactiveFormsModule, CentralBusinessDashboard, CentralBranchConnections,
+    CentralManufacturerPage],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
@@ -24,6 +26,7 @@ export class App implements OnInit {
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly session = signal<CentralSession | null>(null);
+  protected readonly connectionsOpen = signal(false);
   protected readonly installations = signal<CentralInstallation[]>([]);
   protected readonly installationsBusy = signal(false);
   protected readonly installationsError = signal<string | null>(null);
@@ -91,6 +94,7 @@ export class App implements OnInit {
       next: () => {
         this.sessionEpoch++;
         this.session.set(null);
+        this.connectionsOpen.set(false);
         this.installations.set([]);
         this.installationsError.set(null);
         this.installationsBusy.set(false);
@@ -134,6 +138,7 @@ export class App implements OnInit {
   protected expireSession(): void {
     this.sessionEpoch++;
     this.session.set(null);
+    this.connectionsOpen.set(false);
     this.installations.set([]);
     this.installationsBusy.set(false);
     this.totalCount.set(0);

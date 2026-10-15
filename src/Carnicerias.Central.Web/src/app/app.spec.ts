@@ -270,4 +270,35 @@ describe('central login', () => {
     expect(element.textContent).toContain('Sucursal B');
     http.verify({ ignoreCancelled: true });
   });
+
+  it('opens tenant connection management without using the SuperAdmin route', async () => {
+    const { fixture, http } = setup();
+    http.expectOne('/api/v1/sessions/current').flush({
+      userId: 'a', centralCompanyId: 'company-a', username: 'central-admin',
+      expiresAtUtc: '2026-10-14T23:00:00Z',
+    });
+    http.expectOne('/api/v1/installations?page=1&pageSize=20').flush({
+      data: [], pagination: { page: 1, pageSize: 20, totalCount: 0, totalPages: 0 },
+    });
+    fixture.detectChanges();
+    http.expectOne('/api/v1/business/summary').flush({
+      window: { fromUtc: '2026-10-14T03:00:00Z', toUtc: '2026-10-14T18:00:00Z' },
+      retrievedAtUtc: '2026-10-14T18:00:00Z', completeness: 'empty',
+      aggregate: null, branches: [],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const element: HTMLElement = fixture.nativeElement;
+    element.querySelector<HTMLButtonElement>('#connections-tab')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/v1/branch-connections?page=1&pageSize=20').flush({
+      data: [], pagination: { page: 1, pageSize: 20, totalCount: 0, totalPages: 0 },
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(element.querySelector('#connections-title')?.textContent).toContain('Conexiones a sucursales');
+    expect(element.querySelector('#business-title')).toBeNull();
+    http.verify();
+  });
 });

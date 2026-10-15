@@ -39,6 +39,16 @@
       </section>
       <p class="portal-switch">¿Administrás la plataforma? <a href="/superadmin">Ingresar como SuperAdmin central</a></p>
     } @else {
+      <nav class="workspace-tabs" aria-label="Secciones de la central">
+        <button type="button" [attr.aria-current]="!connectionsOpen() ? 'page' : null"
+          (click)="connectionsOpen.set(false)">Negocio</button>
+        <button id="connections-tab" type="button"
+          [attr.aria-current]="connectionsOpen() ? 'page' : null"
+          (click)="connectionsOpen.set(true)">Conexiones a sucursales</button>
+      </nav>
+      @if (connectionsOpen()) {
+        <app-central-branch-connections (sessionExpired)="expireSession()" />
+      } @else {
       <app-central-business-dashboard (sessionExpired)="expireSession()" />
       <section class="content-panel" aria-labelledby="branches-title">
         <div class="panel-heading">
@@ -83,6 +93,7 @@
           </div>
         }
       </section>
+      }
     }
   </div>
 </main>

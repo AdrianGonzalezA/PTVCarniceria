@@ -9,7 +9,11 @@ public enum CentralAuditAction
     SessionRevoked = 4,
     InstallationRegistrationAccepted = 5,
     InstallationRegistrationRejected = 6,
-    SessionDenied = 7
+    SessionDenied = 7,
+    ManufacturerCreated = 8,
+    ManufacturerSessionIssued = 9,
+    ManufacturerSessionRevoked = 10,
+    ManufacturerSessionDenied = 11
 }
 
 public enum CentralAuditResult

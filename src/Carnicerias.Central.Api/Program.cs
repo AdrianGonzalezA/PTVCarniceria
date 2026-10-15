@@ -7,6 +7,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ICentralPasswordHasher, CentralPasswordHasher>();
 builder.Services.AddScoped<ICentralSessionStore, EfCentralSessionStore>();
+builder.Services.AddScoped<ICentralManufacturerSessionStore, EfCentralManufacturerSessionStore>();
+builder.Services.AddScoped<CentralManufacturerSessionService>();
 builder.Services.AddScoped<ICentralInstallationReader, EfCentralInstallationReader>();
 builder.Services.AddScoped<ICentralBusinessInstallationReader, EfCentralBusinessInstallationReader>();
 builder.Services.AddSingleton<ICentralBranchCredentialSource, EnvironmentCentralBranchCredentialSource>();
@@ -76,6 +78,7 @@ app.Use(async (context, next) =>
     context.Response.Headers["Content-Security-Policy"] =
         "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'";
     if (context.Request.Path.StartsWithSegments("/api/v1/sessions")
+        || context.Request.Path.StartsWithSegments("/api/v1/manufacturer")
         || context.Request.Path.StartsWithSegments("/api/v1/installations")
         || context.Request.Path.StartsWithSegments("/api/v1/business"))
     {
@@ -88,6 +91,7 @@ app.UseRouting();
 app.UseRateLimiter();
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
 app.MapCentralSessionEndpoints();
+app.MapCentralManufacturerSessionEndpoints();
 app.MapCentralInstallationEndpoints();
 app.MapCentralBusinessSummaryEndpoints();
 

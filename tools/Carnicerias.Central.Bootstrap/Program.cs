@@ -1,3 +1,5 @@
+using Carnicerias.Central.Infrastructure;
+
 namespace Carnicerias.Central.Bootstrap;
 
 internal static class Program
@@ -24,6 +26,18 @@ internal static class Program
                 var companyId = await CentralBootstrapCommand.CreateCompanyAsync(
                     connectionString, code, name, username, CancellationToken.None);
                 Console.WriteLine($"Created central company {companyId} and its first administrator.");
+                return 0;
+            }
+
+            if (args is ["manufacturer-create", "--username", var manufacturerUsername])
+            {
+                await using var context = await CentralBootstrapCommand.OpenVerifiedContextAsync(
+                    connectionString, CancellationToken.None);
+                var password = CentralBootstrapCommand.ReadConfirmedPassword();
+                var id = await CentralManufacturerBootstrapService.CreateAsync(context,
+                    manufacturerUsername, password, new CentralPasswordHasher(6),
+                    CancellationToken.None);
+                Console.WriteLine($"Created central SuperAdmin {id}.");
                 return 0;
             }
 
@@ -57,6 +71,7 @@ internal static class Program
 
             Console.Error.WriteLine("Usage: migrate --backup-file <absolute .dump path> --backup-sha256 <SHA256> --apply");
             Console.Error.WriteLine("   or: company-create --code <code> --name <name> --username <username>");
+            Console.Error.WriteLine("   or: manufacturer-create --username <username>");
             Console.Error.WriteLine("   or: password-reset --code <code> --username <username>");
             Console.Error.WriteLine("   or: installation-register --company-code <code> --installation-id <uuid> --remote-company-id <uuid> --remote-branch-id <uuid> --label <name> --url <approved-url> --secret-ref <reference> [--allow-loopback-http]");
             return 2;

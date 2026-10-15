@@ -62,7 +62,7 @@ internal static class CentralBootstrapCommand
         }
     }
 
-    private static string ReadConfirmedPassword()
+    internal static string ReadConfirmedPassword()
     {
         if (Console.IsInputRedirected)
         {

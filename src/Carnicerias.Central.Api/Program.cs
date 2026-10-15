@@ -19,6 +19,12 @@ builder.Services.AddScoped<CentralManufacturerSessionService>();
 builder.Services.AddScoped<ICentralInstallationReader, EfCentralInstallationReader>();
 builder.Services.AddScoped<ICentralBusinessInstallationReader, EfCentralBusinessInstallationReader>();
 builder.Services.AddSingleton<ICentralBranchCredentialSource, EnvironmentCentralBranchCredentialSource>();
+builder.Services.AddScoped<ICentralEncryptedBranchCredentialReader, EfCentralEncryptedBranchCredentialReader>();
+builder.Services.AddScoped<ICentralBranchCredentialResolver>(services =>
+    new CentralBranchCredentialResolver(
+        services.GetRequiredService<ICentralEncryptedBranchCredentialReader>(),
+        services.GetRequiredService<ICentralBranchCredentialSource>(),
+        CentralBranchCredentialCrypto.FromEnvironment));
 builder.Services.AddSingleton<ICentralDnsResolver, CentralDnsResolver>();
 builder.Services.AddSingleton(services =>
 {
@@ -66,7 +72,7 @@ builder.Services.AddRateLimiter(options =>
             cancellationToken);
     };
 });
-builder.Services.AddDbContext<CentralAccessDbContext>((services, options) =>
+builder.Services.AddDbContextFactory<CentralAccessDbContext>((services, options) =>
 {
     var configuration = services.GetRequiredService<IConfiguration>();
     var connectionString = configuration.GetConnectionString("CentralAccess")

@@ -36,17 +36,18 @@ public sealed class EnvironmentCentralBranchCredentialSource : ICentralBranchCre
 }
 
 public sealed class CentralLiveBranchSummarySource(
-    CentralDestinationPolicy destinationPolicy, ICentralBranchCredentialSource credentials)
+    CentralDestinationPolicy destinationPolicy, ICentralBranchCredentialResolver credentials)
     : ICentralBranchSummarySource
 {
     public async Task<CentralBranchSummary> ReadAsync(CentralInstallation installation,
         CentralBusinessWindow window, CancellationToken cancellationToken)
     {
-        var secret = credentials.Read(installation.SecretReference);
-        if (secret is null || secret.Length != 64 || !secret.All(Uri.IsHexDigit))
-            throw new InvalidOperationException("Branch credential is unavailable.");
-        var approved = await destinationPolicy.ApproveAsync(
-            installation.DestinationUrl, cancellationToken);
+        var approved = CentralManagedSecretReference.IsManaged(installation)
+            ? await destinationPolicy.ApproveForCompanyAsync(installation.DestinationUrl,
+                installation.CentralCompanyId, cancellationToken)
+            : await destinationPolicy.ApproveAsync(installation.DestinationUrl,
+                cancellationToken);
+        var secret = await credentials.ResolveAsync(installation, cancellationToken);
         return await CentralBranchSummaryProbe.ReadAsync(approved, secret, installation,
             window, cancellationToken);
     }

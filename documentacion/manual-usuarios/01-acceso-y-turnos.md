@@ -1,12 +1,18 @@
 # 01 · Acceso, sucursal y turno de caja
 
-En el navegador, el ingreso pide el **código de empresa** además del usuario y la contraseña. En la caja Electron, antes de ingresar se ven **empresa, sucursal y caja** vinculadas a esa terminal; no se pide código de empresa. Revisá esos datos antes de operar. Si aparece **Caja no vinculada**, no podrás iniciar sesión hasta que administración vincule o renueve la credencial de esa caja.
+En el navegador, el ingreso pide el **código de empresa** además del usuario y la contraseña. En la caja Electron, antes de ingresar se ven **empresa, sucursal y caja** vinculadas a esa terminal; no se pide código de empresa ni se elige sucursal. Revisá esos datos antes de operar. Si aparece **Caja no vinculada**, no podrás iniciar sesión hasta que administración vincule o renueve la credencial de esa caja.
 
-## Ingresar
+## Ingresar en la caja Electron
 
-1. En **Iniciar sesión**, escribí el código de empresa si estás en el navegador, luego tu usuario o correo y contraseña.
-2. Comprobá la empresa que se muestra como dato fijo. Elegí la **sucursal** habilitada y pulsá **Confirmar sucursal**, incluso si solo aparece una opción. No hay un selector de empresa en este paso; en Electron ya está determinada por la caja y en el navegador por el código ingresado.
-3. Desde la pantalla de contexto, abrí **Punto de venta** o **Administración**, según tus permisos. También podés usar **Cambiar sucursal** y **Cerrar sesión**.
+1. Comprobá la empresa, sucursal y caja que aparecen antes del ingreso.
+2. Escribí tu usuario o correo y contraseña, y pulsá **Ingresar**. El sistema abre automáticamente la sucursal vinculada a esa caja; no hay que confirmarla ni se puede cambiar desde el POS.
+3. Si aparece un aviso de falta de acceso a la sucursal, pedí a administración que revise tu asignación. Elegir otra sucursal no es una solución para esa caja.
+
+## Ingresar desde el navegador
+
+1. Escribí el código de empresa, usuario o correo y contraseña.
+2. Elegí una sucursal habilitada y pulsá **Confirmar sucursal**.
+3. Desde la pantalla de contexto, abrí **Punto de venta** o **Administración**, según tus permisos. En el navegador podés usar **Cambiar sucursal** y **Cerrar sesión**.
 
 El POS requiere una caja activa y una credencial de esa caja guardada en el perfil local de Electron. Que la caja figure activa en Administración no reemplaza esa credencial. Si aparece **Caja no disponible**, un administrador debe revisar o renovar la vinculación de la terminal; el cajero no debe intentar cobrar desde otra caja por su cuenta.
 
@@ -24,7 +30,8 @@ Antes de pulsar **Cerrar turno**, confirmá o cancelá todos los tickets A–D p
 
 ## Si no aparece la sucursal o la caja
 
-- Si no hay empresas o sucursales disponibles, pedí al administrador que revise tus asignaciones y el estado de la sucursal.
+- Si el navegador no muestra sucursales disponibles, pedí al administrador que revise tus asignaciones y el estado de la sucursal.
+- Si Electron informa que tu usuario no tiene acceso a la sucursal de esa caja, pedí al administrador que te asigne a ella.
 - Si la caja está inactiva o su credencial local falta/caducó, pedí al administrador que la reactive o rote la credencial y la vincule al perfil de Electron correspondiente.
 - Si un turno ajeno sigue abierto en la caja, primero debe resolverse el relevo de responsabilidad; no compartas la sesión ni crees ventas atribuidas a otra persona.
 

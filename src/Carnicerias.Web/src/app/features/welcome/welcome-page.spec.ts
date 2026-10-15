@@ -2,7 +2,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
-import { POS_ELECTRON_MODE, WelcomePage } from './welcome-page';
+import { POS_ELECTRON_MODE } from '../../core/pos/pos-electron-mode';
+import { WelcomePage } from './welcome-page';
 
 describe('WelcomePage', () => {
   beforeEach(() => {
@@ -109,7 +110,117 @@ describe('WelcomePage', () => {
     http.expectNone('/api/sessions');
   });
 
-  it('uses the company fixed to Electron and asks only for its branch', () => {
+  it('opens the fixed branch immediately after an Electron cashier signs in', () => {
+    TestBed.overrideProvider(POS_ELECTRON_MODE, { useValue: true });
+    const navigation = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    const fixture = TestBed.createComponent(WelcomePage);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/health').flush({ status: 'healthy' });
+    http.expectOne('/api/sessions/current').flush(null, { status: 401, statusText: 'Unauthorized' });
+    http.expectOne('/api/pos-terminals/current').flush({
+      id: 'terminal-id', name: 'Caja 1', companyId: 'company-id', companyName: 'Empresa Visual',
+      branchId: 'branch-id', branchName: 'Sucursal Visual',
+    });
+    fixture.detectChanges();
+
+    const page = fixture.nativeElement as HTMLElement;
+    for (const [id, value] of [['credential', 'cajero1'], ['password', 'password']]) {
+      const input = page.querySelector<HTMLInputElement>(`#${id}`)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+    }
+    fixture.detectChanges();
+    page.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit'));
+    const login = http.expectOne('/api/sessions');
+    expect(login.request.body).toEqual({ credential: 'cajero1', password: 'password' });
+    login.flush({
+      userId: 'cashier-id', username: 'cajero1', expiresAtUtc: '2026-10-14T20:00:00Z', context: null,
+    });
+
+    const selection = http.expectOne('/api/sessions/current/context');
+    expect(selection.request.body).toEqual({ companyId: 'company-id', branchId: 'branch-id' });
+    http.expectNone('/api/operational-contexts');
+    selection.flush({
+      userId: 'cashier-id', username: 'cajero1', expiresAtUtc: '2026-10-14T20:00:00Z',
+      context: {
+        userId: 'cashier-id', companyId: 'company-id', companyName: 'Empresa Visual',
+        branchId: 'branch-id', branchName: 'Sucursal Visual', permissions: [], sessionId: 'session-id',
+      },
+    });
+    fixture.detectChanges();
+    expect(navigation).toHaveBeenCalledWith('/pos');
+    expect(page.querySelector('#branch')).toBeNull();
+  });
+
+  it('enters the branch fixed to Electron without asking the cashier to select it', () => {
+    TestBed.overrideProvider(POS_ELECTRON_MODE, { useValue: true });
+    const navigation = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    const fixture = TestBed.createComponent(WelcomePage);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/health').flush({ status: 'healthy' });
+    http.expectOne('/api/pos-terminals/current').flush({
+      id: 'terminal-id', name: 'Caja 1', companyId: 'company-id', companyName: 'Empresa Visual',
+      branchId: 'branch-id', branchName: 'Sucursal Visual',
+    });
+    http.expectOne('/api/sessions/current').flush({
+      userId: 'cashier-id', username: 'cajero1', expiresAtUtc: '2026-10-14T20:00:00Z', context: null,
+    });
+    const selection = http.expectOne('/api/sessions/current/context');
+    expect(selection.request.body).toEqual({ companyId: 'company-id', branchId: 'branch-id' });
+    http.expectNone('/api/operational-contexts');
+    fixture.detectChanges();
+
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('#branch')).toBeNull();
+    expect(page.textContent).not.toContain('Cambiar sucursal');
+    selection.flush({
+      userId: 'cashier-id', username: 'cajero1', expiresAtUtc: '2026-10-14T20:00:00Z',
+      context: {
+        userId: 'cashier-id', companyId: 'company-id', companyName: 'Empresa Visual',
+        branchId: 'branch-id', branchName: 'Sucursal Visual', permissions: [], sessionId: 'session-id',
+      },
+    });
+    fixture.detectChanges();
+    expect(navigation).toHaveBeenCalledWith('/pos');
+    expect(page.querySelector('#branch')).toBeNull();
+    expect(page.textContent).not.toContain('Cambiar sucursal');
+  });
+
+  it('waits for the terminal identity if the cashier session arrives first', () => {
+    TestBed.overrideProvider(POS_ELECTRON_MODE, { useValue: true });
+    vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    const fixture = TestBed.createComponent(WelcomePage);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/health').flush({ status: 'healthy' });
+    http.expectOne('/api/sessions/current').flush({
+      userId: 'cashier-id', username: 'cajero1', expiresAtUtc: '2026-10-14T20:00:00Z', context: null,
+    });
+    http.expectNone('/api/sessions/current/context');
+    http.expectOne('/api/pos-terminals/current').flush({
+      id: 'terminal-id', name: 'Caja 1', companyId: 'company-id', companyName: 'Empresa Visual',
+      branchId: 'branch-id', branchName: 'Sucursal Visual',
+    });
+
+    const selection = http.expectOne('/api/sessions/current/context');
+    expect(selection.request.body).toEqual({ companyId: 'company-id', branchId: 'branch-id' });
+    selection.flush({
+      userId: 'cashier-id', username: 'cajero1', expiresAtUtc: '2026-10-14T20:00:00Z',
+      context: {
+        userId: 'cashier-id', companyId: 'company-id', companyName: 'Empresa Visual',
+        branchId: 'branch-id', branchName: 'Sucursal Visual', permissions: [], sessionId: 'session-id',
+      },
+    });
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector('#branch')).toBeNull();
+  });
+
+  it('does not offer another branch if the cashier lacks access to this terminal branch', () => {
     TestBed.overrideProvider(POS_ELECTRON_MODE, { useValue: true });
     const fixture = TestBed.createComponent(WelcomePage);
     fixture.detectChanges();
@@ -123,24 +234,15 @@ describe('WelcomePage', () => {
     http.expectOne('/api/sessions/current').flush({
       userId: 'cashier-id', username: 'cajero1', expiresAtUtc: '2026-10-14T20:00:00Z', context: null,
     });
-    http.expectOne('/api/operational-contexts').flush([{
-      companyId: 'company-id', companyName: 'Empresa Visual',
-      branches: [{ branchId: 'branch-id', branchName: 'Sucursal Visual' }],
-    }]);
+    http.expectOne('/api/sessions/current/context').flush(
+      { error: { code: 'CONTEXT_NOT_ASSIGNED' } },
+      { status: 403, statusText: 'Forbidden' },
+    );
     fixture.detectChanges();
 
     const page = fixture.nativeElement as HTMLElement;
-    expect(page.querySelector('#company')).toBeNull();
-    expect(page.querySelector('.context-picker .context-company')?.textContent).toContain('Empresa Visual');
-    expect(page.querySelector<HTMLSelectElement>('#branch')?.options[1]?.textContent).toContain('Sucursal Visual');
-    const branch = page.querySelector<HTMLSelectElement>('#branch')!;
-    branch.value = 'branch-id';
-    branch.dispatchEvent(new Event('change'));
-    fixture.detectChanges();
-    page.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
-    expect(http.expectOne('/api/sessions/current/context').request.body).toEqual({
-      companyId: 'company-id', branchId: 'branch-id',
-    });
+    expect(page.querySelector('#branch')).toBeNull();
+    expect(page.querySelector('[role="alert"]')?.textContent).toContain('no tiene acceso');
   });
 
   it('does not ask for a company again after browser login', () => {

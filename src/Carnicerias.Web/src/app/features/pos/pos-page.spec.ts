@@ -1,5 +1,6 @@
 import '@angular/compiler';
 import { HttpErrorResponse } from '@angular/common/http';
+import { provideHttpClient } from '@angular/common/http';
 import { provideRouter, Router } from '@angular/router';
 import { TestBed } from '@angular/core/testing';
 import { NEVER, of, Subject, throwError } from 'rxjs';
@@ -19,8 +20,25 @@ import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { AuthorizedFiscalDocument, FiscalDocumentClient } from '../../core/sales/fiscal-document-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { PosPage } from './pos-page';
+import { POS_ELECTRON_MODE } from '../../core/pos/pos-electron-mode';
 
 describe('PosPage', () => {
+  it('does not offer branch switching from the menu of an Electron box', () => {
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]), provideHttpClient(),
+      { provide: POS_ELECTRON_MODE, useValue: true },
+      { provide: SessionClient, useValue: { current: () => NEVER } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.menu-trigger')!.click();
+    fixture.detectChanges();
+    const menu = (fixture.nativeElement as HTMLElement).querySelector('.account-menu');
+    expect(menu?.textContent).toContain('Cerrar sesi');
+    expect(menu?.textContent).not.toContain('Cambiar sucursal');
+  });
+
   async function checkoutWithGateways(intent: MercadoPagoIntent | null, unavailable = false,
     modes: readonly MercadoPagoMode[] = []) {
     const session: CurrentSession = {

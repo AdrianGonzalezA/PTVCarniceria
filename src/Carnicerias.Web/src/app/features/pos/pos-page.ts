@@ -8,6 +8,7 @@ import { CatalogCategory, CatalogClient, PriceListOption } from '../../core/cata
 import { InventoryClient, InventoryStockItem } from '../../core/inventory/inventory-client';
 import { InventoryPieceClient, PosPieceLookup } from '../../core/inventory/inventory-piece-client';
 import { PosTerminal, PosTerminalClient } from '../../core/pos/pos-terminal-client';
+import { POS_ELECTRON_MODE } from '../../core/pos/pos-electron-mode';
 import { HasarSalePrintResult, PosDeviceAvailability, PosDeviceClient, SerialPrintResult } from '../../core/pos/pos-device-client';
 import { ConfirmedSale, SaleDocumentType, SaleDraft, SaleDraftClient, SaleDraftLine, SalePaymentMethod, SaleRecipientTaxStatus, SaleTicketSlot } from '../../core/sales/sale-draft-client';
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
@@ -83,6 +84,7 @@ const demoPriceLists = [
   templateUrl: './pos-page.html',
 })
 export class PosPage implements OnInit {
+  protected readonly isPosElectron = inject(POS_ELECTRON_MODE);
   private readonly sessionClient = inject(SessionClient);
   private readonly catalogClient = inject(CatalogClient);
   private readonly saleDraftClient = inject(SaleDraftClient);

@@ -6,7 +6,7 @@ Esta carpeta describe **las funciones disponibles en el corte del 9 de octubre d
 
 | Necesidad | Documento |
 | --- | --- |
-| Ingresar, elegir sucursal y operar una caja/turno | [01 · Acceso y turnos](01-acceso-y-turnos.md) |
+| Ingresar, identificar la sucursal de la caja y operar un turno | [01 · Acceso y turnos](01-acceso-y-turnos.md) |
 | Armar tickets, usar lector/balanza y controlar stock | [02 · Venta en el POS](02-venta-en-el-pos.md) |
 | Cobrar, emitir comprobantes de prueba y cobrar cuentas | [03 · Cobros y comprobantes](03-cobros-y-comprobantes.md) |
 | Consultar ventas, cuentas e inventario desde administración | [04 · Negocio](04-negocio.md) |

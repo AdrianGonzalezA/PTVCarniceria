@@ -20,7 +20,9 @@
       </button>
       @if (isMenuOpen()) {
         <nav class="account-menu" aria-label="Menú de usuario">
-          <a routerLink="/">Cambiar sucursal</a>
+          @if (!isPosElectron) {
+            <a routerLink="/">Cambiar sucursal</a>
+          }
           @if (session()?.context?.permissions?.includes('platform.users.manage')) {
             <a routerLink="/admin">Administración</a>
           }

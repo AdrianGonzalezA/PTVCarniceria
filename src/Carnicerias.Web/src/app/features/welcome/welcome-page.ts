@@ -1,15 +1,11 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, InjectionToken, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { HealthClient } from '../../core/health/health-client';
 import { PosTerminal, PosTerminalClient } from '../../core/pos/pos-terminal-client';
+import { POS_ELECTRON_MODE } from '../../core/pos/pos-electron-mode';
 import { CurrentSession, OperationalCompanyOption, SessionClient } from '../../core/session/session-client';
-
-export const POS_ELECTRON_MODE = new InjectionToken<boolean>('POS Electron mode', {
-  providedIn: 'root',
-  factory: () => window.location.protocol === 'app:',
-});
 
 @Component({
   selector: 'app-welcome-page',
@@ -62,6 +58,7 @@ export class WelcomePage implements OnInit {
         next: (terminal) => {
           this.terminal.set(terminal);
           this.terminalStatus.set('ready');
+          this.activateTerminalContext();
         },
         error: () => this.terminalStatus.set('unavailable'),
       });
@@ -77,6 +74,7 @@ export class WelcomePage implements OnInit {
         this.currentSession.set(session);
         this.sessionChecked.set(true);
         if (session.context) void this.router.navigateByUrl(this.homeFor(session));
+        else if (this.isPosElectron) this.activateTerminalContext();
         else this.loadOperationalContexts();
       },
       error: (error: HttpErrorResponse) => {
@@ -95,31 +93,40 @@ export class WelcomePage implements OnInit {
     const company = this.selectedCompany();
     if (!company || !this.canConfirmContext() || this.isSubmitting()) return;
 
+    this.selectContext(company.companyId, this.selectedBranchId());
+  }
+
+  protected retryTerminalContext(): void {
+    this.activateTerminalContext();
+  }
+
+  private activateTerminalContext(): void {
+    const terminal = this.terminal();
+    if (!this.isPosElectron || !this.sessionChecked() || !this.currentSession() ||
+        this.currentSession()?.context || !terminal || this.isSubmitting()) return;
+
+    this.selectContext(terminal.companyId, terminal.branchId);
+  }
+
+  private selectContext(companyId: string, branchId: string): void {
     this.contextError.set(null);
     this.isSubmitting.set(true);
-    this.sessionClient
-      .selectOperationalContext(company.companyId, this.selectedBranchId())
-      .subscribe({
-        next: (session) => {
-          this.currentSession.set(session);
-          this.isChangingContext.set(false);
-          this.isSubmitting.set(false);
-          void this.router.navigateByUrl(this.homeFor(session));
-        },
-        error: (error: HttpErrorResponse) => {
-          this.contextError.set(
-            error.status === 403
-              ? 'Esa combinación ya no está habilitada para tu usuario. Volvé a elegir una opción.'
-              : error.status === 409
-                ? this.contextChangeBlockedMessage(error)
-              : 'No se pudo confirmar la sucursal. Revisá la conexión e intentá de nuevo.',
-          );
-          this.isSubmitting.set(false);
-        },
-      });
+    this.sessionClient.selectOperationalContext(companyId, branchId).subscribe({
+      next: (session) => {
+        this.currentSession.set(session);
+        this.isChangingContext.set(false);
+        this.isSubmitting.set(false);
+        void this.router.navigateByUrl(this.homeFor(session));
+      },
+      error: (error: HttpErrorResponse) => {
+        this.contextError.set(this.contextSelectionError(error));
+        this.isSubmitting.set(false);
+      },
+    });
   }
 
   protected startContextChange(): void {
+    if (this.isPosElectron) return;
     this.isChangingContext.set(true);
     this.loadOperationalContexts();
   }
@@ -143,7 +150,8 @@ export class WelcomePage implements OnInit {
         this.sessionChecked.set(true);
         this.credentialsForm.reset();
         this.isSubmitting.set(false);
-        this.loadOperationalContexts();
+        if (this.isPosElectron) this.activateTerminalContext();
+        else this.loadOperationalContexts();
       },
       error: (error: HttpErrorResponse) => {
         this.sessionError.set(
@@ -195,6 +203,16 @@ export class WelcomePage implements OnInit {
 
   private homeFor(session: CurrentSession): string {
     return session.context?.permissions.includes('platform.users.manage') ? '/admin' : '/pos';
+  }
+
+  private contextSelectionError(error: HttpErrorResponse): string {
+    if (error.status === 403) return this.isPosElectron
+      ? 'Tu usuario no tiene acceso a la sucursal de esta caja. Pedí a administración que revise tus permisos.'
+      : 'Esa combinación ya no está habilitada para tu usuario. Volvé a elegir una opción.';
+    if (error.status === 409) return this.contextChangeBlockedMessage(error);
+    return this.isPosElectron
+      ? 'No se pudo abrir esta caja. Revisá la conexión e intentá de nuevo.'
+      : 'No se pudo confirmar la sucursal. Revisá la conexión e intentá de nuevo.';
   }
 
   private contextChangeBlockedMessage(error: HttpErrorResponse): string {

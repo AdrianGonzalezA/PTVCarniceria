@@ -1,3 +1,6 @@
+@if (manufacturerRoute) {
+  <app-central-manufacturer-page />
+} @else {
 <main class="central-shell">
   <header class="app-header">
     <div class="brand"><span class="brand-mark" aria-hidden="true">C</span><span>Carnicerías <small>· Central</small></span></div>
@@ -34,6 +37,7 @@
           <button type="submit" [disabled]="busy()">{{ busy() ? 'Ingresando…' : 'Ingresar' }}</button>
         </form>
       </section>
+      <p class="portal-switch">¿Administrás la plataforma? <a href="/superadmin">Ingresar como SuperAdmin central</a></p>
     } @else {
       <app-central-business-dashboard (sessionExpired)="expireSession()" />
       <section class="content-panel" aria-labelledby="branches-title">
@@ -82,3 +86,4 @@
     }
   </div>
 </main>
+}

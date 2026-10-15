@@ -99,6 +99,8 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .pagination-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem 1.25rem; border-top: 1px solid var(--border); }
 .pagination-bar p { margin: 0; color: var(--muted); font-size: 0.875rem; }
 .page-actions { display: flex; gap: 0.5rem; }
+.portal-switch { margin-top: 1.25rem; color: var(--muted); }
+.portal-switch a { color: var(--teal); font-weight: 700; }
 
 @media (max-width: 40rem) {
   .app-header { align-items: flex-start; flex-direction: column; }

@@ -15,6 +15,24 @@ describe('central login', () => {
     return { fixture, http };
   }
 
+  it('routes SuperAdmin to its own session without requesting a tenant session', async () => {
+    const originalPath = window.location.pathname;
+    window.history.replaceState(null, '', '/superadmin');
+    try {
+      const { fixture, http } = setup();
+      http.expectNone('/api/v1/sessions/current');
+      http.expectOne('/api/v1/superadmin/sessions/current').flush(null,
+        { status: 401, statusText: 'Unauthorized' });
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect((fixture.nativeElement as HTMLElement).querySelector('h1')?.textContent)
+        .toContain('SuperAdmin central');
+      http.verify();
+    } finally {
+      window.history.replaceState(null, '', originalPath);
+    }
+  });
+
   it('shows an accessible login after an absent central session', async () => {
     const { fixture, http } = setup();
     http.expectOne('/api/v1/sessions/current').flush(

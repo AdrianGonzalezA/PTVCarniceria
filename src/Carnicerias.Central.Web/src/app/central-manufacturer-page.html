@@ -1,0 +1,170 @@
+<main class="central-shell">
+  <header class="app-header">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">C</span><span>Carnicerías <small>· Central</small></span></div>
+    @if (session(); as current) {
+      <div class="account-bar">
+        <span>{{ current.username }}</span>
+        <button type="button" class="header-button" [disabled]="busy()" (click)="logout()">Cerrar sesión</button>
+      </div>
+    }
+  </header>
+
+  <div class="workspace manufacturer-workspace">
+    <p class="eyebrow">Administración de la plataforma</p>
+    <h1>SuperAdmin central</h1>
+    <p class="intro">Gestioná las empresas de la central y sus administradores. Este acceso es independiente de los usuarios del POS y de cada empresa.</p>
+
+    @if (error(); as errorText) { <p class="error-message" role="alert">{{ errorText }}</p> }
+    @if (message(); as successText) { <p class="success-message" role="status">{{ successText }}</p> }
+
+    @if (!checked()) {
+      <p class="status-message" role="status">Verificando sesión central…</p>
+    } @else if (!session()) {
+      <section class="login-panel" aria-labelledby="manufacturer-login-title">
+        <h2 id="manufacturer-login-title">Ingresar como SuperAdmin</h2>
+        <form id="manufacturer-login-form" [formGroup]="loginForm" (ngSubmit)="login()" novalidate>
+          <label for="manufacturer-username">Usuario central</label>
+          <input id="manufacturer-username" formControlName="credential" autocomplete="username" maxlength="100" required />
+          <label for="manufacturer-password">Contraseña</label>
+          <input id="manufacturer-password" type="password" formControlName="password" autocomplete="current-password" required />
+          @if (loginForm.touched && loginForm.invalid) {
+            <p class="field-error" role="alert">Completá usuario y contraseña.</p>
+          }
+          <button type="submit" [disabled]="busy()">{{ busy() ? 'Ingresando…' : 'Ingresar' }}</button>
+        </form>
+      </section>
+      <p class="portal-switch">¿Administrás una empresa? <a href="/">Ingresar al panel de empresa</a></p>
+    } @else if (view() === 'companies') {
+      <section class="content-panel" aria-labelledby="central-companies-title">
+        <div class="panel-heading manufacturer-heading">
+          <div>
+            <h2 id="central-companies-title">Empresas centrales</h2>
+            <p>Solo las empresas dadas de alta aquí pueden tener una administración central.</p>
+          </div>
+          <button id="new-central-company" type="button" [disabled]="companiesBusy()" (click)="openCreate()">Nueva empresa</button>
+        </div>
+        @if (companiesError(); as listError) {
+          <div class="list-error" role="alert">
+            <p>{{ listError }}</p>
+            <button type="button" (click)="loadCompanies(companyPage())">Reintentar</button>
+          </div>
+        }
+        @if (companiesBusy()) {
+          <p class="status-message" role="status">Cargando empresas centrales…</p>
+        } @else if (companyCount() === 0 && !companiesError()) {
+          <p class="status-message">Todavía no hay empresas centrales. Creá la primera con su administrador inicial.</p>
+        } @else {
+          <ul class="manufacturer-list">
+            @for (company of companies(); track company.id) {
+              <li class="manufacturer-item">
+                <div>
+                  <div class="manufacturer-item-heading">
+                    <h3>{{ company.name }}</h3>
+                    <span class="registration-state" [class.inactive-state]="!company.isActive">{{ company.isActive ? 'Activa' : 'Inactiva' }}</span>
+                  </div>
+                  <p class="manufacturer-code">{{ company.code }}</p>
+                  <p class="manufacturer-meta">{{ company.administratorCount }} administrador{{ company.administratorCount === 1 ? '' : 'es' }} · {{ company.installationCount }} sucursal{{ company.installationCount === 1 ? '' : 'es' }} registrada{{ company.installationCount === 1 ? '' : 's' }}</p>
+                </div>
+                <button type="button" [attr.aria-label]="'Administrar ' + company.name" (click)="openAdministrators(company)">Administrar</button>
+              </li>
+            }
+          </ul>
+          <div class="pagination-bar">
+            <p>{{ companyCount() }} empresa{{ companyCount() === 1 ? '' : 's' }} · página {{ companyPage() }} de {{ companyPages() }}</p>
+            <div class="page-actions">
+              <button type="button" [disabled]="companiesBusy() || companyPage() <= 1" (click)="loadCompanies(companyPage() - 1)">Anterior</button>
+              <button type="button" [disabled]="companiesBusy() || companyPage() >= companyPages()" (click)="loadCompanies(companyPage() + 1)">Siguiente</button>
+            </div>
+          </div>
+        }
+      </section>
+    } @else if (view() === 'create') {
+      <button type="button" class="back-button" (click)="showCompanies()">← Volver a empresas</button>
+      <section class="content-panel editor-panel" aria-labelledby="create-central-company-title">
+        <div class="panel-heading">
+          <h2 id="create-central-company-title">Nueva empresa central</h2>
+          <p>Se crea la empresa y su primer administrador en una sola operación. Las sucursales se registran por separado.</p>
+        </div>
+        <form id="create-central-company-form" class="editor-form" [formGroup]="createForm" (ngSubmit)="createCompany()" novalidate>
+          <div class="form-field">
+            <label for="central-company-code">Código de empresa</label>
+            <input id="central-company-code" formControlName="code" maxlength="40" autocomplete="off" required aria-describedby="company-code-help" />
+            <small id="company-code-help">Entre 2 y 40 letras, números o guiones. No se puede repetir.</small>
+          </div>
+          <div class="form-field">
+            <label for="central-company-name">Nombre de empresa</label>
+            <input id="central-company-name" formControlName="name" maxlength="200" autocomplete="organization" required />
+          </div>
+          <div class="form-field">
+            <label for="central-company-admin">Usuario del primer administrador</label>
+            <input id="central-company-admin" formControlName="initialAdministratorUsername" maxlength="100" autocomplete="off" required />
+          </div>
+          <div class="form-field">
+            <label for="central-company-password">Contraseña inicial</label>
+            <input id="central-company-password" type="password" formControlName="initialAdministratorPassword" autocomplete="new-password" minlength="6" required />
+            <small>Este valor no se vuelve a mostrar. Mínimo 6 caracteres en laboratorio; 12 fuera del laboratorio.</small>
+          </div>
+          @if (createForm.touched && createForm.invalid) {
+            <p class="field-error" role="alert">Revisá los campos obligatorios y el formato del código.</p>
+          }
+          <div class="form-actions">
+            <button type="submit" [disabled]="busy()">{{ busy() ? 'Creando…' : 'Crear empresa' }}</button>
+            <button type="button" class="secondary-button" [disabled]="busy()" (click)="showCompanies()">Cancelar</button>
+          </div>
+        </form>
+      </section>
+    } @else if (selectedCompany(); as company) {
+      <button type="button" class="back-button" (click)="showCompanies()">← Volver a empresas</button>
+      <section class="content-panel" aria-labelledby="central-admins-title">
+        <div class="panel-heading">
+          <h2 id="central-admins-title">Administradores de {{ company.name }}</h2>
+          <p>{{ company.code }} · Cada administrador accede solo a esta empresa.</p>
+        </div>
+        @if (administratorsError(); as listError) {
+          <div class="list-error" role="alert">
+            <p>{{ listError }}</p>
+            <button type="button" (click)="loadAdministrators(administratorPage())">Reintentar</button>
+          </div>
+        }
+        @if (administratorsBusy()) {
+          <p class="status-message" role="status">Cargando administradores…</p>
+        } @else if (administratorCount() === 0 && !administratorsError()) {
+          <p class="status-message">Esta empresa todavía no tiene administradores.</p>
+        } @else {
+          <ul class="manufacturer-list">
+            @for (administrator of administrators(); track administrator.id) {
+              <li class="manufacturer-item">
+                <strong>{{ administrator.username }}</strong>
+                <span class="registration-state" [class.inactive-state]="!administrator.isActive">{{ administrator.isActive ? 'Activo' : 'Inactivo' }}</span>
+              </li>
+            }
+          </ul>
+          <div class="pagination-bar">
+            <p>{{ administratorCount() }} administrador{{ administratorCount() === 1 ? '' : 'es' }} · página {{ administratorPage() }} de {{ administratorPages() }}</p>
+            <div class="page-actions">
+              <button type="button" [disabled]="administratorsBusy() || administratorPage() <= 1" (click)="loadAdministrators(administratorPage() - 1)">Anterior</button>
+              <button type="button" [disabled]="administratorsBusy() || administratorPage() >= administratorPages()" (click)="loadAdministrators(administratorPage() + 1)">Siguiente</button>
+            </div>
+          </div>
+        }
+      </section>
+      <section class="content-panel editor-panel add-admin-panel" aria-labelledby="add-admin-title">
+        <div class="panel-heading"><h2 id="add-admin-title">Agregar administrador</h2></div>
+        <form id="additional-admin-form" class="editor-form" [formGroup]="administratorForm" (ngSubmit)="addAdministrator()" novalidate>
+          <div class="form-field">
+            <label for="additional-admin-username">Usuario</label>
+            <input id="additional-admin-username" formControlName="username" maxlength="100" autocomplete="off" required />
+          </div>
+          <div class="form-field">
+            <label for="additional-admin-password">Contraseña inicial</label>
+            <input id="additional-admin-password" type="password" formControlName="password" autocomplete="new-password" minlength="6" required />
+          </div>
+          @if (administratorForm.touched && administratorForm.invalid) {
+            <p class="field-error" role="alert">Completá usuario y contraseña de al menos 6 caracteres.</p>
+          }
+          <button type="submit" [disabled]="busy() || administratorsBusy()">{{ busy() ? 'Agregando…' : 'Agregar administrador' }}</button>
+        </form>
+      </section>
+    }
+  </div>
+</main>

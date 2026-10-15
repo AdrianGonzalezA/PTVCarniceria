@@ -3,16 +3,18 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { CentralBusinessDashboard } from './central-business-dashboard';
 import { CentralInstallation, CentralInstallationClient } from './central-installation-client';
+import { CentralManufacturerPage } from './central-manufacturer-page';
 import { CentralSession, CentralSessionClient } from './central-session-client';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [ReactiveFormsModule, CentralBusinessDashboard],
+  imports: [ReactiveFormsModule, CentralBusinessDashboard, CentralManufacturerPage],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
 export class App implements OnInit {
+  protected readonly manufacturerRoute = window.location.pathname.replace(/\/+$/, '') === '/superadmin';
   private sessionEpoch = 0;
   private readonly client = inject(CentralSessionClient);
   private readonly installationClient = inject(CentralInstallationClient);
@@ -35,6 +37,7 @@ export class App implements OnInit {
   });
 
   ngOnInit(): void {
+    if (this.manufacturerRoute) return;
     this.client.current().subscribe({
       next: (session) => {
         this.sessionEpoch++;

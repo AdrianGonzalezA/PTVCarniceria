@@ -6,3 +6,4 @@
 - Conservar en el repositorio el código, las migraciones y los scripts de inicialización. Nunca guardar contraseñas ni credenciales de terminal en Git.
 - La base actual contiene datos ficticios para probar el flujo de venta. Más adelante se desplegará en un servidor PostgreSQL; no tratar esta base local como productiva ni usar su contenido como histórico real.
 - Revisar visualmente el POS siempre dentro de Electron, no en una pestaña del navegador.
+- Registrar el tiempo activo de cada turno de desarrollo en `documentacion/desarrollo/registro-tiempo.md`: inicio, fin, tarea y pausas conocidas. Separar siempre el tiempo medido de las estimaciones retrospectivas; no contar automáticamente la espera entre turnos.

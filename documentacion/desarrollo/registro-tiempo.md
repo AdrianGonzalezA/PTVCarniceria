@@ -41,5 +41,6 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 | 16/10/2026 | 10:54:09 | 11:05:46 | 11 min | Crear comandos Stop para APIs y Angular locales | Se detuvieron los laboratorios Visual y La Rústica, se comprobó el caso POS `5197` y quedaron libres los puertos documentados. Pruebas PowerShell en verde. Se descuenta aproximadamente 1 min de espera de aprobación. |
 | 16/10/2026 | 11:14:45 | 11:17:12 | 2 min | Diagnosticar y restablecer el administrador de sucursal | El proxy Angular apuntaba a la API POS `5197`, detenida por el Stop anterior. Se reiniciaron API y Angular; `/admin` respondió 200 y `/api/sessions/current` devolvió el 401 esperado sin sesión. Se descontó la breve espera de aprobación. |
 | 16/10/2026 | 11:30:06 | 11:30:29 | <1 min | Aclarar el alcance de los comandos Start | Visual y La Rústica levantan sus APIs de laboratorio; el administrador Angular `4200` requiere por separado la API POS `5197`. Sin pausas conocidas. |
+| 16/10/2026 | 11:36:28 | 11:37:08 | 1 min | Explicar la topología de APIs compartidas y sucursales aisladas | Se contrastaron las decisiones de despliegue, el contrato de central y el filtro de contexto operativo. Sin cambios de arquitectura ni pausas conocidas. |
 
-**Total activo registrado desde el 16/10/2026:** 46 min.
+**Total activo registrado desde el 16/10/2026:** 47 min.

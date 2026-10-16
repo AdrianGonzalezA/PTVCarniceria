@@ -41,9 +41,10 @@ async function main() {
       if (!await evaluate("document.querySelector('.sale-receipt')?.innerText.includes('Promoción de desarrollo')"))
         throw new Error('No hay un ticket descontado visible.');
       await evaluate("document.querySelector('.sale-receipt .save-pdf-button').click()");
-      await waitFor("!!document.querySelector('.sale-receipt .receipt-file') || !!document.querySelector('.sale-receipt .pos-error')");
-      const output = await evaluate("document.querySelector('.sale-receipt .receipt-file')?.innerText ?? document.querySelector('.sale-receipt .pos-error')?.innerText");
-      if (!output.includes('.pdf')) throw new Error(`No se pudo guardar el PDF: ${output}`);
+      await waitFor("[...document.querySelectorAll('.sale-receipt .receipt-file')].some(item => item.innerText.includes('Comprobante descargado en Descargas.')) || !!document.querySelector('.sale-receipt .pos-error')");
+      const output = await evaluate("[...document.querySelectorAll('.sale-receipt .receipt-file')].find(item => item.innerText.includes('Comprobante descargado en Descargas.'))?.innerText ?? document.querySelector('.sale-receipt .pos-error')?.innerText");
+      if (!output.includes('Comprobante descargado en Descargas.'))
+        throw new Error(`No se pudo descargar el comprobante: ${output}`);
       console.log(output);
       return;
     }

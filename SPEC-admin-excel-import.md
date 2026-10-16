@@ -4,7 +4,7 @@
 
 **Estado:** aprobado para desarrollo el 9/10/2026. El usuario seleccionó categorías, artículos junto con códigos alternativos, listas de precios y clientes. Confirmó que las listas incluyen precios por artículo y habilitación por sucursal; el costo del artículo es estadístico y tanto sus cambios como los cambios de precio conservan vigencias. Este alcance complementa `SPEC-admin.md`, `SPEC-catalog-pricing.md` y `SPEC-customers-credit.md`.
 
-Quedan fuera empresas, sucursales, cajas, usuarios, impuestos, perfiles de etiquetas, existencias, recepción de piezas y movimientos transaccionales. La importación no sustituye los ABM manuales ni modifica tickets históricos.
+El alcance original de maestros excluye empresas, sucursales, cajas, usuarios, impuestos, perfiles de etiquetas, existencias, recepción de piezas y movimientos transaccionales. Posteriormente se aprobó una importación **separada** de variaciones de stock por artículo, documentada en [SPEC-stock-import.md](SPEC-stock-import.md). La importación de maestros no sustituye los ABM manuales ni modifica tickets históricos.
 
 ## Objetivo
 
@@ -68,7 +68,7 @@ Las migraciones aditivas `AddProductCostVersions` y `AddAdminImportOperations` s
 
 - Siempre: vista previa sin escrituras, confirmación antes de aplicar, validación en servidor, transacción por archivo, autorización por empresa, historial de costos y precios, y resultado seguro ante reintento.
 - Consultar antes: cambiar la regla de creación sin sobrescritura, importar datos fiscales o modificar saldos de cuenta, ampliar entidades, o crear otra base.
-- Nunca: aceptar macros o fórmulas como instrucciones, cargar contraseñas/credenciales desde Excel, importar movimientos de stock o ventas por estos endpoints, ni guardar secretos o archivos subidos en Git.
+- Nunca: aceptar macros o fórmulas como instrucciones, cargar contraseñas/credenciales desde Excel, importar movimientos de stock desde los cuatro tipos de maestros o importar ventas, ni guardar secretos o archivos subidos en Git. La importación de existencias usa exclusivamente `kind=stock` y su permiso propio.
 
 ## Criterios de éxito
 

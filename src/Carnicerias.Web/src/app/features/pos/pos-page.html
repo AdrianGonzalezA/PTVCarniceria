@@ -20,7 +20,9 @@
       </button>
       @if (isMenuOpen()) {
         <nav class="account-menu" aria-label="Menú de usuario">
-          <a routerLink="/">Cambiar sucursal</a>
+          @if (!isPosElectron) {
+            <a routerLink="/">Cambiar sucursal</a>
+          }
           @if (session()?.context?.permissions?.includes('platform.users.manage')) {
             <a routerLink="/admin">Administración</a>
           }
@@ -106,6 +108,26 @@
               <h2>Elegí una lista de precios</h2>
               <p>Seleccioná la lista que corresponde a esta venta para ver los productos.</p>
             </div>
+          } @else if (priceListUnavailable()) {
+            <div class="catalog-empty" role="alert">
+              <span class="empty-mark" aria-hidden="true">!</span>
+              <h2>Lista no disponible</h2>
+              <p>La lista seleccionada se deshabilitó. El ticket conserva su detalle y sus precios.</p>
+            </div>
+          } @else if (priceListLoadState() === 'error') {
+            <div class="catalog-empty" role="alert">
+              <span class="empty-mark" aria-hidden="true">!</span>
+              <h2>Listas sin verificar</h2>
+              <p>No podemos confirmar que la lista siga habilitada.</p>
+              <button class="catalog-retry" type="button" (click)="refreshLiveData()">Reintentar</button>
+            </div>
+          } @else if (stockLoadState() === 'stale') {
+            <div class="catalog-empty" role="alert">
+              <span class="empty-mark" aria-hidden="true">!</span>
+              <h2>Stock desactualizado</h2>
+              <p>Revisá la conexión con la sucursal antes de seguir agregando productos.</p>
+              <button class="catalog-retry" type="button" (click)="refreshLiveData()">Reintentar</button>
+            </div>
           } @else if (!isDemoPriceList() && catalogLoadState() === 'loading') {
             <div class="catalog-empty" role="status">
               <span class="empty-mark" aria-hidden="true">▤</span>
@@ -122,7 +144,7 @@
           } @else if (visibleProducts().length > 0) {
             <div class="product-grid">
               @for (product of visibleProducts(); track product.id) {
-                <button class="product-card" type="button" (click)="openProduct(product)">
+                <button class="product-card" type="button" [disabled]="!canSearchCatalog()" (click)="openProduct(product)">
                   <span class="product-name">{{ product.name }}</span>
                   <span class="product-price">{{ formatMoney(product.price) }} <small>/ {{ unitLabel(product) }}</small></span>
                   @if (!isDemoPriceList()) { <small class="product-stock">Disponible: {{ availableStock(product) ?? 0 }} {{ unitLabel(product) }}</small> }
@@ -162,11 +184,25 @@
         <button class="cancel-sale-button" type="button" (click)="cancelSale()">⊘ <span>Cancelar venta</span></button>
       </div>
 
+      @if (priceListUnavailable()) {
+        <p class="live-data-notice" role="alert">{{ catalogNotice() ?? liveDataProblem() }}</p>
+      } @else if (catalogNotice(); as notice) {
+        <p class="live-data-notice" role="status">{{ notice }}</p>
+      }
+      @if (stockLoadState() === 'stale') {
+        <p class="live-data-notice" role="alert">Stock desactualizado. El ticket permanece intacto, pero no se pueden agregar productos ni cobrar hasta sincronizar.
+          <button type="button" (click)="refreshLiveData()">Reintentar</button>
+        </p>
+      }
+
       <div class="sale-metadata">
         <label class="price-list-field">
           <span>Lista de precios</span>
-          <select [value]="selectedPriceListId()" [disabled]="lines().length > 0" (change)="selectPriceList($event)">
+          <select [value]="selectedPriceListId()" [disabled]="lines().length > 0 || priceListLoadState() !== 'ready'" (change)="selectPriceList($event)">
             <option value="">Seleccioná una lista</option>
+            @if (priceListUnavailable()) {
+              <option [value]="selectedPriceListId()" [selected]="true" disabled>{{ selectedPriceListName() }} · deshabilitada</option>
+            }
             @if (realPriceLists().length > 0) {
               <optgroup label="Habilitadas para esta sucursal">
                 @for (list of realPriceLists(); track list.id) {
@@ -234,6 +270,7 @@
                       [step]="line.product.mode === 'weight' ? 0.001 : 1"
                       [value]="line.quantity"
                       [readOnly]="!!line.inventoryPieceId"
+                      [disabled]="!!liveDataProblem()"
                       [attr.aria-label]="line.product.mode === 'weight' ? 'Peso en kilogramos de ' + line.product.name : 'Cantidad de ' + unitLabel(line.product) + ' de ' + line.product.name"
                       (change)="updateLineQuantity(line.id, $event)"
                     />
@@ -243,7 +280,7 @@
                   <td>0,00%</td>
                   <td class="line-total">{{ formatMoney(lineTotal(line)) }}</td>
                   <td>
-                    <button class="remove-line-button" type="button" [attr.aria-label]="'Quitar ' + line.product.name + (line.pieceIdentifier ? ' pieza ' + line.pieceIdentifier : '')" (click)="removeLine(line.id)">×</button>
+                    <button class="remove-line-button" type="button" [disabled]="!isDemoPriceList() && !!liveDataProblem()" [attr.aria-label]="'Quitar ' + line.product.name + (line.pieceIdentifier ? ' pieza ' + line.pieceIdentifier : '')" (click)="removeLine(line.id)">×</button>
                   </td>
                 </tr>
               }
@@ -262,12 +299,12 @@
       @if (lines().length > 0 && !isDemoPriceList() && canDiscount()) {
         <div class="sale-discount-fields">
           <label for="sale-discount-amount">Descuento del ticket ($)
-            <input id="sale-discount-amount" type="number" min="0" step="0.01"
+            <input id="sale-discount-amount" type="number" min="0" step="0.01" [disabled]="!!liveDataProblem()"
               [max]="grossSubtotal()" [value]="discountDraft()" (change)="updateDiscountAmount($event)" />
           </label>
           @if (discountAmount() > 0) {
             <label for="sale-discount-reason">Motivo del descuento
-              <input id="sale-discount-reason" type="text" maxlength="200"
+              <input id="sale-discount-reason" type="text" maxlength="200" [disabled]="!!liveDataProblem()"
                 [value]="discountReason()" (change)="updateDiscountReason($event)"
                 placeholder="Promoción, autorización o motivo" />
             </label>
@@ -283,7 +320,7 @@
       }
 
       <footer class="sale-footer">
-        <button class="finish-button" type="button" [disabled]="lines().length === 0" (click)="continueToCheckout()">Finalizar compra</button>
+        <button class="finish-button" type="button" [disabled]="lines().length === 0 || !!liveDataProblem()" (click)="continueToCheckout()">Finalizar compra</button>
         <div class="total-field" aria-live="polite">
           @if (discountAmount() > 0) {
             <small>Subtotal {{ formatMoney(grossSubtotal()) }} · Descuento −{{ formatMoney(discountAmount()) }}</small>
@@ -325,7 +362,9 @@
             <p class="scale-status" role="status">Pieza {{ identifier }} · {{ quantityDraft() }} kg leídos de la etiqueta · peso fijo</p>
             <p class="scale-status">La pieza se guarda por separado en el ticket; el saldo de stock se calcula por artículo.</p>
           } @else {
-            <p class="scale-status">Peso manual o balanza serial configurada</p>
+            <p class="scale-status">{{ devices().scale ? 'Peso manual o balanza serial asignada' :
+              deviceConfigError() ? 'No se pudo verificar la balanza; ingresá el peso manualmente.' :
+              'Esta caja no tiene balanza asignada; ingresá el peso manualmente.' }}</p>
           }
         }
         <label class="quantity-field" for="product-quantity">
@@ -340,7 +379,7 @@
             (input)="updateQuantity($event)"
           />
         </label>
-        @if (product.mode === 'weight' && !scannedPieceIdentifier()) {
+        @if (product.mode === 'weight' && !scannedPieceIdentifier() && devices().scale) {
           <button class="receipt-pdf-button scale-read-button" type="button" [disabled]="scaleBusy()" (click)="readSerialScale()">
             {{ scaleBusy() ? 'Leyendo balanza…' : 'Leer balanza' }}
           </button>
@@ -400,9 +439,13 @@
             <select id="mercado-pago-mode" [value]="mercadoPagoMode()"
               [disabled]="mercadoPagoBusy() || mercadoPagoOrderActive()"
               (change)="selectMercadoPagoMode($event)">
-              @if (visibleMercadoPagoModes().includes('qr')) { <option value="qr">QR dinámico</option> }
-              @if (visibleMercadoPagoModes().includes('point')) { <option value="point">Terminal Point</option> }
+              @if (visibleMercadoPagoModes().includes('qr')) { <option value="qr" [selected]="mercadoPagoMode() === 'qr'">QR dinámico</option> }
+              @if (visibleMercadoPagoModes().includes('qrStatic')) { <option value="qrStatic" [selected]="mercadoPagoMode() === 'qrStatic'">QR fijo de la caja</option> }
+              @if (visibleMercadoPagoModes().includes('point')) { <option value="point" [selected]="mercadoPagoMode() === 'point'">Terminal Point</option> }
             </select>
+            @if (mercadoPagoMode() === 'qrStatic' && !mercadoPagoOrderActive()) {
+              <p>El QR fijo de la caja se habilita para este importe al solicitar el cobro. Pedile al cliente que lo escanee después.</p>
+            }
             <div class="mercado-pago-actions">
               <button type="button" [disabled]="mercadoPagoBusy() || (mercadoPagoOrderActive() && !!mercadoPagoIntent()?.providerOrderId) || paymentAmount('mercadoPago') <= 0"
                 (click)="startMercadoPago()">{{ mercadoPagoBusy() ? 'Consultando…' : 'Solicitar cobro' }}</button>
@@ -418,8 +461,14 @@
             @if (mercadoPagoIntent(); as intent) {
               <p class="mercado-pago-state" role="status">Orden {{ intent.providerOrderId || 'pendiente de respuesta' }} ·
                 {{ intent.approved ? 'Acreditado' : intent.status === 'Canceled' ? 'Cancelado' : intent.status === 'Expired' ? 'Vencido' : intent.status === 'Rejected' ? 'Rechazado' : 'Pendiente' }}</p>
-              @if (intent.mode === 'qr' && mercadoPagoOrderActive() && !intent.approved && mercadoPagoQrImage(); as image) {
-                <img class="mercado-pago-qr" [src]="image" alt="QR de Mercado Pago para esta venta" width="240" height="240" />
+              @if (intent.mode === 'qrStatic' && intent.providerOrderId && mercadoPagoOrderActive() && !intent.approved) {
+                <p>QR fijo de esta caja: el importe de esta venta ya está asociado al código permanente.</p>
+              }
+              @if ((intent.mode === 'qr' || intent.mode === 'qrStatic') && intent.providerOrderId &&
+                mercadoPagoOrderActive() && !intent.approved && mercadoPagoQrImage(); as image) {
+                <img class="mercado-pago-qr" [src]="image"
+                  [alt]="intent.mode === 'qrStatic' ? 'QR fijo de Mercado Pago de esta caja' : 'QR de Mercado Pago para esta venta'"
+                  width="240" height="240" />
               } @else if (intent.mode === 'point' && intent.providerOrderId) {
                 <p>La orden se envió a la terminal Point configurada para esta caja.</p>
               }
@@ -527,19 +576,28 @@
         } @else {
           <p class="checkout-context">El stock, los pagos y el saldo a cuenta quedaron registrados. Ticket interno no fiscal.</p>
         }
-        @if (receiptPdfPath(); as path) {
-          <p class="receipt-file" role="status">Ticket de prueba guardado en: {{ path }}</p>
+        @if (receiptPdfDownloaded()) {
+          <p class="receipt-file" role="status">Comprobante descargado en Descargas.</p>
         }
         @if (receiptPdfError(); as error) {
           <p class="pos-error" role="alert">{{ error }}</p>
         }
         @if (serialPrintResult(); as result) {
-          <p class="receipt-file" role="status">Ticket enviado a {{ result.port }}.
-            @if (result.confirmation === 'write-only') { El controlador virtual no confirmó el vaciado; comprobá el ticket en PuTTY. }
-          </p>
+          @if ('kind' in result) {
+            <p class="receipt-file" role="status">{{ result.kind === 'fiscal' ? 'Ticket fiscal' : 'Ticket no fiscal' }} impreso y confirmado por la Hasar en {{ result.port }}.
+              @if (result.number) { Número {{ result.number }}. }
+            </p>
+          } @else {
+            <p class="receipt-file" role="status">Ticket enviado a {{ result.port }}.
+              @if (result.confirmation === 'write-only') { El controlador virtual no confirmó el vaciado; comprobá el ticket en PuTTY. }
+            </p>
+          }
         }
         @if (serialPrintError(); as error) {
           <p class="pos-error" role="alert">{{ error }}</p>
+        }
+        @if (!devices().printer && !deviceConfigError()) {
+          <p class="checkout-context" role="status">Esta caja no tiene impresora asignada; no se intentó imprimir.</p>
         }
         <div class="dialog-actions">
           @if (sale.documentType === 'fiscalTicket' || sale.documentType === 'electronicInvoice') {
@@ -550,11 +608,13 @@
             }
           }
           @if (sale.documentType !== 'fiscalTicket' && sale.documentType !== 'electronicInvoice' || fiscalDocument()?.status === 'Authorized') {
-            <button class="receipt-pdf-button serial-print-button" type="button" [disabled]="serialPrintBusy()" (click)="printSerialReceipt(sale)">
-              {{ serialPrintBusy() ? 'Enviando a impresora…' : 'Imprimir ticket' }}
-            </button>
+            @if (devices().printer && (sale.documentType !== 'electronicInvoice' || devices().printer?.kind === 'text')) {
+              <button class="receipt-pdf-button serial-print-button" type="button" [disabled]="serialPrintBusy() || !!serialPrintResult()" (click)="printSerialReceipt(sale)">
+                {{ serialPrintBusy() ? 'Imprimiendo…' : serialPrintResult() ? 'Ticket impreso' : 'Reintentar impresión' }}
+              </button>
+            }
             <button class="receipt-pdf-button save-pdf-button" type="button" [disabled]="receiptPdfBusy()" (click)="saveReceiptPdf(sale)">
-              {{ receiptPdfBusy() ? 'Generando PDF…' : sale.documentType === 'electronicInvoice' ? 'Guardar factura PDF' : 'Guardar ticket PDF' }}
+              {{ receiptPdfBusy() ? 'Descargando…' : 'Descargar comprobante' }}
             </button>
           }
           <button class="finish-button" type="button" [disabled]="receiptPdfBusy() || serialPrintBusy() || fiscalBusy()" (click)="confirmedSale.set(null)">Nueva venta</button>

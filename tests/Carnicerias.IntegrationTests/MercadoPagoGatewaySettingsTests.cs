@@ -1,3 +1,4 @@
+using Carnicerias.Api.Payments;
 using Carnicerias.Infrastructure;
 
 namespace Carnicerias.IntegrationTests;
@@ -19,6 +20,8 @@ public sealed class MercadoPagoGatewaySettingsTests
             "SUC1CAJA1", "NEWLAND_N950__SBX0000001", actor, DateTimeOffset.UtcNow);
         Assert.Equal("SUC1CAJA1", register.QrExternalPosId);
         Assert.Equal("NEWLAND_N950__SBX0000001", register.PointTerminalId);
+        var available = Assert.Single(IntegratedGatewayAvailability.ForRegister(settings, register));
+        Assert.Equal(["qr", "qrStatic", "point"], available.Modes);
         register.Update(null, "NEWLAND_N950__SBX0000001", actor, DateTimeOffset.UtcNow);
         Assert.Null(register.QrExternalPosId);
     }

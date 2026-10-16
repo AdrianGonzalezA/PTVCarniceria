@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\src\Carnicerias.Domain\Carnicerias.Domain.csproj" />
     <ProjectReference Include="..\..\src\Carnicerias.Api\Carnicerias.Api.csproj" />
     <ProjectReference Include="..\..\src\Carnicerias.PlatformAccess\Carnicerias.PlatformAccess.csproj" />
+    <ProjectReference Include="..\..\tools\Carnicerias.Bootstrap\Carnicerias.Bootstrap.csproj" />
   </ItemGroup>
 
 </Project>

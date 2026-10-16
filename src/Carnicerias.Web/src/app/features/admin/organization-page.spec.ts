@@ -43,28 +43,11 @@ describe('OrganizationPage', () => {
     expect(page.querySelector<HTMLButtonElement>('.branch-row .toggle-button')?.disabled).toBe(true);
   });
 
-  it('creates a company with its first branch', () => {
-    const { fixture, http, page } = load();
-    page.querySelector<HTMLButtonElement>('.create-company-button')!.click();
-    fixture.detectChanges();
-    expect(page.querySelector('dialog[aria-labelledby="company-editor-title"]')).not.toBeNull();
-    for (const [id, value] of Object.entries({
-      'company-name': 'Nueva empresa', 'initial-branch-name': 'Principal',
-    })) {
-      const input = page.querySelector<HTMLInputElement>(`#${id}`)!;
-      input.value = value;
-      input.dispatchEvent(new Event('input'));
-    }
-    fixture.detectChanges();
-    page.querySelector<HTMLFormElement>('.company-form')!.dispatchEvent(new Event('submit'));
-    const create = http.expectOne('/api/admin/companies');
-    expect(create.request.body).toEqual({ name: 'Nueva empresa', initialBranchName: 'Principal' });
-    create.flush({ id: 'company-2', name: 'Nueva empresa',
-      initialBranchId: 'branch-2', initialBranchName: 'Principal' });
-    http.expectOne('/api/admin/companies').flush([company,
-      { id: 'company-2', name: 'Nueva empresa', isActive: true, activeBranchCount: 1 }]);
-    fixture.detectChanges();
-    expect(page.textContent).toContain('Nueva empresa');
+  it('does not offer company creation or editing to a client administrator', () => {
+    const { page } = load();
+    expect(page.querySelector('.create-company-button')).toBeNull();
+    expect(page.querySelector('.company-row .toggle-button')).toBeNull();
+    expect(page.textContent).toContain('El alta y el estado de las empresas los administra el fabricante');
   });
 
   it('adds a branch under the selected company', () => {
@@ -120,21 +103,6 @@ describe('OrganizationPage', () => {
     expect(page.querySelector('dialog[open] .branches-panel')).not.toBeNull();
   });
 
-  it('confirms company inactivation in a dialog before updating', () => {
-    const other = { id: 'company-2', name: 'Otra empresa', isActive: true, activeBranchCount: 0 };
-    const { fixture, http, page } = load([company, other]);
-    page.querySelector<HTMLButtonElement>('.company-row:last-child .toggle-button')!.click();
-    fixture.detectChanges();
-    expect(page.querySelector('dialog[aria-labelledby="organization-action-title"]')).not.toBeNull();
-    http.expectNone('/api/admin/companies/company-2');
-    page.querySelector<HTMLButtonElement>('.confirm-organization-action')!.click();
-    const update = http.expectOne('/api/admin/companies/company-2');
-    expect(update.request.body).toEqual({ isActive: false });
-    update.flush({ ...other, isActive: false });
-    fixture.detectChanges();
-    expect(page.querySelector('dialog')).toBeNull();
-  });
-
   it('confirms a branch status change without leaving two dialogs open', () => {
     const { fixture, http, page } = load();
     page.querySelector<HTMLButtonElement>('.company-row button')!.click();
@@ -173,5 +141,67 @@ describe('OrganizationPage', () => {
     rotate.flush({ credential: 'new-secret' });
     fixture.detectChanges();
     expect(page.querySelector('.credential-notice')?.textContent).toContain('new-secret');
+  });
+
+  it('assigns or removes serial devices for a specific box in a modal', () => {
+    const { fixture, http, page } = load();
+    page.querySelector<HTMLButtonElement>('.company-row button')!.click();
+    http.expectOne('/api/admin/companies/company-1/branches').flush([branch]);
+    fixture.detectChanges();
+    page.querySelector<HTMLButtonElement>('.branch-row .terminals-button')!.click();
+    const terminal = { id: 'terminal-1', name: 'Caja 1', isActive: true,
+      isHistorical: false, hasCredential: true, devices: { scale: null, printer: null } };
+    http.expectOne('/api/admin/companies/company-1/branches/branch-1/terminals').flush([terminal]);
+    fixture.detectChanges();
+    expect(page.querySelector('.terminal-row')?.textContent).toContain('Sin impresora');
+    page.querySelector<HTMLButtonElement>('.terminal-row .devices-button')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector('dialog[aria-labelledby="terminal-devices-title"]')).not.toBeNull();
+    expect(page.querySelectorAll('dialog[open]')).toHaveLength(1);
+
+    const scaleMode = page.querySelector<HTMLSelectElement>('#device-scale-mode')!;
+    scaleMode.value = 'serial';
+    scaleMode.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    const scalePort = page.querySelector<HTMLInputElement>('#device-scale-port')!;
+    scalePort.value = 'COM6';
+    scalePort.dispatchEvent(new Event('input'));
+    const printerKind = page.querySelector<HTMLSelectElement>('#device-printer-kind')!;
+    printerKind.value = 'hasar';
+    printerKind.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    const printerPort = page.querySelector<HTMLInputElement>('#device-printer-port')!;
+    printerPort.value = 'COM8';
+    printerPort.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    page.querySelector<HTMLFormElement>('.terminal-devices-form')!
+      .dispatchEvent(new Event('submit'));
+    const update = http.expectOne('/api/admin/companies/company-1/branches/branch-1/terminals/terminal-1/devices');
+    expect(update.request.method).toBe('PUT');
+    expect(update.request.body).toEqual({
+      scale: { port: 'COM6', baudRate: 9600 },
+      printer: { kind: 'hasar', port: 'COM8', baudRate: 9600 },
+    });
+    update.flush({ ...terminal, devices: update.request.body });
+    fixture.detectChanges();
+    expect(page.querySelector('.terminal-row')?.textContent).toContain('Balanza COM6');
+    expect(page.querySelector('.terminal-row')?.textContent).toContain('Hasar COM8');
+
+    page.querySelector<HTMLButtonElement>('.terminal-row .devices-button')!.click();
+    fixture.detectChanges();
+    const removeScale = page.querySelector<HTMLSelectElement>('#device-scale-mode')!;
+    removeScale.value = 'none';
+    removeScale.dispatchEvent(new Event('change'));
+    const removePrinter = page.querySelector<HTMLSelectElement>('#device-printer-kind')!;
+    removePrinter.value = 'none';
+    removePrinter.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    page.querySelector<HTMLFormElement>('.terminal-devices-form')!
+      .dispatchEvent(new Event('submit'));
+    const remove = http.expectOne('/api/admin/companies/company-1/branches/branch-1/terminals/terminal-1/devices');
+    expect(remove.request.body).toEqual({ scale: null, printer: null });
+    remove.flush(terminal);
+    fixture.detectChanges();
+    expect(page.querySelector('.terminal-row')?.textContent).toContain('Sin balanza · Sin impresora');
   });
 });

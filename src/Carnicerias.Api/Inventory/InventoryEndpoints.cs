@@ -54,10 +54,11 @@ public static class InventoryEndpoints
         if (request is null || request.ProductId == Guid.Empty || request.OperationId == Guid.Empty ||
             request.QuantityDelta == 0 || request.QuantityDelta is > 100000 or < -100000 ||
             decimal.Round(request.QuantityDelta, 3) != request.QuantityDelta ||
-            string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Trim().Length > 240)
+            request.Reason?.Trim().Length > 240)
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var context = accessor.Context;
+        var reason = InventoryMovement.NormalizeAdjustmentDescription(request.Reason);
         var product = await db.CatalogProducts.AsNoTracking().SingleOrDefaultAsync(item =>
             item.CompanyId == context.CompanyId && item.Id == request.ProductId && item.IsActive, cancellationToken);
         if (product is null) return Error(StatusCodes.Status404NotFound, "PRODUCT_NOT_AVAILABLE");
@@ -72,7 +73,7 @@ public static class InventoryEndpoints
         {
             if (existingOperation.ProductId != request.ProductId ||
                 existingOperation.QuantityDelta != request.QuantityDelta ||
-                existingOperation.Reason != request.Reason.Trim())
+                existingOperation.Reason != reason)
                 return Error(StatusCodes.Status409Conflict, "OPERATION_ID_REUSED");
 
             var existingBalance = await GetBalanceAsync(db, context.CompanyId, context.BranchId,
@@ -102,7 +103,7 @@ public static class InventoryEndpoints
 
         db.InventoryMovements.Add(new InventoryMovement(context.CompanyId, context.BranchId,
             request.ProductId, context.UserId, request.OperationId, InventoryMovementKind.Adjustment,
-            request.QuantityDelta, request.Reason, timeProvider.GetUtcNow()));
+            request.QuantityDelta, reason, timeProvider.GetUtcNow()));
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
@@ -132,7 +133,7 @@ public static class InventoryEndpoints
             new Carnicerias.Api.Contracts.ApiError(code, "No se pudo completar la solicitud", [])),
         statusCode: statusCode);
 
-    private sealed record AdjustStockRequest(Guid ProductId, Guid OperationId, decimal QuantityDelta, string Reason);
+    private sealed record AdjustStockRequest(Guid ProductId, Guid OperationId, decimal QuantityDelta, string? Reason);
     private sealed record StockItem(Guid ProductId, string Code, string Name, string Unit,
         string SaleMode, decimal OnHand, decimal Reserved, decimal Available);
     private sealed record StockAdjustmentResponse(Guid OperationId, decimal OnHand, decimal Reserved, decimal Available);

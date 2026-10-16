@@ -12,7 +12,7 @@ public sealed record ImportPreviewResult(bool CanApply, int CreateCount, int Upd
 public static class AdminExcelImportProcessor
 {
     public static async Task<ImportPreviewResult> AssessAsync(PlatformAccessDbContext db,
-        Guid companyId, Guid userId, string kind, ParsedImport parsed, DateTimeOffset now,
+        Guid companyId, Guid branchId, Guid userId, string kind, ParsedImport parsed, DateTimeOffset now,
         bool apply, CancellationToken cancellationToken)
     {
         var outcomes = new List<ImportRowOutcome>();
@@ -35,6 +35,10 @@ public static class AdminExcelImportProcessor
                     await PricesAsync(db, companyId, userId, parsed.Rows, outcomes, issues, now,
                         apply, cancellationToken);
                     break;
+                case "stock":
+                    await StockAsync(db, companyId, branchId, userId, parsed.Rows, outcomes, issues,
+                        now, apply, cancellationToken);
+                    break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(kind));
             }
@@ -43,6 +47,43 @@ public static class AdminExcelImportProcessor
             outcomes.Count(row => row.Status == "create"), outcomes.Count(row => row.Status == "update"),
             outcomes.Count(row => row.Status == "skipped"), outcomes.Count(row => row.Status == "unchanged"),
             outcomes, issues);
+    }
+
+    private static async Task StockAsync(PlatformAccessDbContext db, Guid companyId, Guid branchId,
+        Guid userId, IReadOnlyList<ImportRow> rows, List<ImportRowOutcome> outcomes,
+        List<ImportIssue> issues, DateTimeOffset now, bool apply, CancellationToken cancellationToken)
+    {
+        if (rows.Count == 0) return;
+        var codes = rows.Select(row => row.Text("CodigoArticulo"))
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Select(code => NormalizeCode(code!)).Distinct(StringComparer.Ordinal).ToArray();
+        var products = await db.CatalogProducts.AsNoTracking().Where(product =>
+            product.CompanyId == companyId && codes.Contains(product.NormalizedCode))
+            .ToArrayAsync(cancellationToken);
+        var productIds = products.Select(product => product.Id).ToArray();
+        var balanceQuery = db.BranchInventoryBalances.Where(balance => balance.CompanyId == companyId &&
+            balance.BranchId == branchId && productIds.Contains(balance.ProductId));
+        var balances = apply ? await balanceQuery.ToArrayAsync(cancellationToken) :
+            await balanceQuery.AsNoTracking().ToArrayAsync(cancellationToken);
+        var plan = StockImportPlanner.Plan(companyId, branchId, rows, products, balances);
+        outcomes.AddRange(plan.Outcomes);
+        issues.AddRange(plan.Issues);
+        if (!apply || issues.Count != 0) return;
+
+        foreach (var change in plan.Changes)
+        {
+            if (change.Balance is null)
+            {
+                var balance = new BranchInventoryBalance(companyId, branchId, change.Product.Id);
+                balance.SetQuantities(change.OnHandAfter, 0);
+                db.BranchInventoryBalances.Add(balance);
+            }
+            else change.Balance.SetQuantities(change.OnHandAfter, change.Balance.Reserved);
+
+            db.InventoryMovements.Add(new InventoryMovement(companyId, branchId, change.Product.Id,
+                userId, Guid.NewGuid(), InventoryMovementKind.Adjustment, change.QuantityDelta,
+                change.Reason, now));
+        }
     }
 
     private static async Task CategoriesAsync(PlatformAccessDbContext db, Guid companyId,

@@ -31,25 +31,29 @@ No exponer el servidor POS a Internet. Si se precisa acceso administrativo remot
 
 En una máquina de compilación con .NET 10 SDK, Node compatible, npm 11.19.0 y las dependencias ya instaladas en `src/Carnicerias.Web` y `src/Carnicerias.Pos`, desde la raíz del repositorio:
 
+Antes de generar el paquete, cerrar las ventanas Electron de desarrollo. La publicación limpia la copia web anterior para no incluir JavaScript obsoleto en la entrega; la preparación habitual de desarrollo conserva esos archivos para no interrumpir cajas que siguen abiertas.
+
 ```powershell
 .\tools\Publish-BranchLab.ps1 -OutputDirectory 'C:\Entregas\Carnicerias-Workshop-001'
 ```
 
-La carpeta de salida debe estar vacía; el script no pisa una entrega anterior. Genera `servidor` (API y Angular), `inicializacion` (alta del primer administrador) y `cajas` (carpeta completa del Electron Windows x64, `Start-PosTerminal.ps1` y ejemplo de configuración). **Copiar la carpeta completa de Electron**, no solo el `.exe`. El paquete sigue siendo portable; aún no hay instalador MSI ni actualización automática. Electron Forge distingue el paquete de un instalador, según su [documentación de distribución](https://www.electronjs.org/docs/latest/tutorial/tutorial-packaging).
+La carpeta de salida debe estar vacía; el script no pisa una entrega anterior. Genera `servidor` (API y Angular), `inicializacion` (alta del superadmin del fabricante) y `cajas` (carpeta completa del Electron Windows x64, `Start-PosTerminal.ps1` y ejemplo de configuración). **Copiar la carpeta completa de Electron**, no solo el `.exe`. El paquete sigue siendo portable; aún no hay instalador MSI ni actualización automática. Electron Forge distingue el paquete de un instalador, según su [documentación de distribución](https://www.electronjs.org/docs/latest/tutorial/tutorial-packaging).
 
 Copiar `servidor` e `inicializacion` al servidor local. No copiar contraseñas, PFX, claves, perfiles de Electron ni la base ficticia dentro del paquete. Conservar el código, migraciones y herramientas de bootstrap del repositorio para reconstruir la misma versión.
 
 ## 4. Elegir la ruta de datos
 
-**Workshop con el entorno de desarrollo actual:** utilizar exclusivamente `carnicerias_test_visual` en `127.0.0.1:55433`. Ya contiene usuarios, empresa, sucursal y datos ficticios; **no ejecutar** `create-admin` ni `seed-pos-visual` sobre ella y no crear otra base. Revisar stock, cajas y usuarios desde Administración antes de comenzar.
+**Workshop con el entorno de desarrollo actual:** utilizar exclusivamente `carnicerias_test_visual` en `127.0.0.1:55433`. Ya contiene usuarios, empresas, sucursales y datos ficticios; **no ejecutar** `create-admin` ni `seed-pos-visual` y no crear otra base. La migración de identidad por empresa y el alta de cuentas independientes ya se aplicaron con respaldo fuera de Git. Véase [auditoría de identidad](auditoria-identidad-por-empresa-20261013.md).
 
-**Primera instalación nueva de una sucursal, más adelante:** requiere autorización explícita antes de crear su única base de aplicación en el servidor de esa sucursal. El operador de PostgreSQL crea el usuario y la base con permisos mínimos y registra sus credenciales fuera de Git. Configurar `CARNICERIAS_CONNECTION_STRING` en la consola de inicialización y luego en el proceso API, nunca en las cajas. Con una base vacía, ejecutar una sola vez desde una consola interactiva del servidor:
+**Primera instalación nueva de una sucursal, más adelante:** requiere autorización explícita antes de crear su única base de aplicación en el servidor de esa sucursal. El operador de PostgreSQL crea el usuario y la base con permisos mínimos y registra sus credenciales fuera de Git. Configurar `CARNICERIAS_CONNECTION_STRING` en la consola de inicialización y luego en el proceso API, nunca en las cajas. Aplicar las migraciones de la versión desde el repositorio sobre esa base ya existente y después de verificar la cadena de conexión. El comando `create-superadmin` **no aplica migraciones automáticamente**. Con la base migrada, ejecutar una sola vez desde una consola interactiva del servidor:
 
 ```powershell
-dotnet .\inicializacion\Carnicerias.Bootstrap.dll create-admin --username administrador --email admin@Sucursal.local --company 'Empresa' --branch 'Sucursal'
+dotnet .\inicializacion\Carnicerias.Bootstrap.dll create-superadmin --username superadmin --email superadmin@instalacion.local
 ```
 
-La herramienta aplica las migraciones y pide una contraseña inicial de al menos 12 caracteres sin mostrarla. Si la base ya tiene usuarios, rechaza el alta inicial. No usar el seed visual como datos comerciales ni transportar ventas de desarrollo. Si cambió la versión, respaldar antes de migrar. No ejecutar pruebas de integración que creen o reinicien otra base de aplicación en este entorno.
+La herramienta pide la contraseña sin mostrarla y rechaza un segundo superadmin inicial. En una instalación nueva exige al menos 12 caracteres; la excepción de seis caracteres solo existe para la base visual local. Abrir `/superadmin` en un navegador de esa instalación y crear empresa, código de acceso, primera sucursal y administrador inicial. Para agregar otro administrador después, abrir **Editar** en esa empresa y completar **Agregar administrador**; no reemplaza al inicial. Si la empresa está inactiva, la nueva cuenta no podrá ingresar hasta activarla. El antiguo `create-admin` quedó deshabilitado. No usar el seed visual como datos comerciales ni transportar ventas de desarrollo. Si cambió la versión, respaldar antes de migrar. No ejecutar pruebas de integración que creen o reinicien otra base de aplicación en este entorno.
+
+Para recuperar **una empresa existente sin administrador** después de una migración controlada, el operador del servidor puede ejecutar `dotnet .\inicializacion\Carnicerias.Bootstrap.dll create-company-admin --company-id <uuid> --username <usuario> --email <correo>` con la misma variable de conexión. El comando solicita la contraseña oculta y se niega si la empresa ya tiene una asignación administradora. No es el alta normal de empresas ni debe entregarse a una caja o a un administrador cliente. La empresa inactiva puede recibir administrador, pero solo podrá iniciar sesión después de que el fabricante la active.
 
 ## 5. Configurar y levantar la API local
 
@@ -69,31 +73,31 @@ New-NetFirewallRule -DisplayName 'Carnicerias POS laboratorio' -Direction Inboun
 
 Desde el servidor y **cada caja**, verificar `http://192.168.10.20:5197/api/health` (JSON con estado saludable). En un navegador de administración de esa LAN, abrir `http://192.168.10.20:5197/admin`; Angular y la API comparten origen. Una ruta API inexistente debe devolver 404, no la pantalla Angular. No abrir el puerto 55433 de PostgreSQL en el firewall. Al reiniciar Windows la API **no se inicia automáticamente todavía**: definir servicio y cuenta de ejecución fija antes de una instalación desatendida.
 
+Después del alta inicial de empresa y sucursal, fijar en la configuración protegida del proceso `Federation:Enabled=true`, `Federation:Mode=managed`, `Federation:CompanyId=<ID de la empresa>` y `Federation:BranchId=<ID de la sucursal>`; reiniciar la API y verificar que los IDs correspondan a esta instalación. Son identificadores de vínculo, no una selección del navegador. Sin este vínculo el servidor se comporta como compartido y seguirá ofreciendo el selector de sucursal. El procedimiento de integración con central detalla la [configuración del vínculo](integracion-central-sucursal.md); no es necesario activar una conexión central para que el vínculo local limite la sesión.
+
 ## 6. Configurar el negocio desde Administración
 
-1. Iniciar sesión con el administrador y confirmar la empresa/sucursal correcta.
+1. En el navegador, ingresar código de empresa, usuario y contraseña del administrador inicial. Si la API ya está vinculada a esta sucursal, el acceso la confirma automáticamente y no muestra selector; si todavía opera en modo compartido, habrá que elegirla. En Electron, la credencial de terminal determina la empresa y el cajero no escribe el código.
 2. En **Configuración → Organización**, revisar o crear la sucursal y una caja activa por PC. Generar/vincular la credencial de cada terminal de forma individual; se entrega una sola vez por canal seguro. Registrar en la hoja de instalación qué PC corresponde a cada caja, sin anotar la credencial.
-   La interfaz actual aún permite crear otras sucursales en la misma base; en este workshop **no hacerlo**. La restricción técnica por instalación está pendiente.
-3. En **Usuarios**, crear los cajeros y asignarles la sucursal. Cada persona usa su propio usuario y abre/cierra su turno; no compartir una sesión entre responsables.
+   La interfaz aún permite crear otras sucursales en la misma base; en este workshop **no hacerlo**. El vínculo de API restringe las sesiones a la sucursal configurada, pero todavía no impide almacenar otra sucursal.
+3. En **Usuarios**, crear cajeros para las sucursales o administradores adicionales de esa empresa. Cada persona usa su propio usuario y abre/cierra su turno; no compartir una sesión entre responsables.
 4. Cargar categorías, artículos (con unidad de venta, impuestos y códigos), listas de precios habilitadas en la sucursal y clientes. Las plantillas Excel de la administración sirven para esos maestros. Revisar precios e IVA antes de vender.
 5. Contar e ingresar stock inicial mediante las operaciones disponibles. Para piezas ciclo 2, configurar el perfil de lectura y registrar piezas; no asumir que ya existe importación masiva del frigorífico. Una venta sin stock no debe completarse.
-6. Configurar ARCA/pasarelas solo si el laboratorio las incluye. Las credenciales actuales son de homologación/sandbox. Clover no está habilitado aún para cobros POS sin dispositivo/protocolo verificados.
+6. Configurar en **Organización → Cajas → Dispositivos** la balanza y/o impresora de cada puesto, o dejar explícitamente «Sin balanza» y «Sin impresora». Usar COM distintos por caja cuando varias ventanas corren en la misma PC. Configurar ARCA/pasarelas solo si el laboratorio las incluye. Las credenciales actuales son de homologación/sandbox. Clover no está habilitado aún para cobros POS sin dispositivo/protocolo verificados.
 
 ## 7. Preparar cada PC de caja
 
 1. Instalar drivers del lector, balanza e impresora. En Administrador de dispositivos de Windows, confirmar el COM real de cada uno. El lector de códigos tipo teclado debe entregar la lectura al POS; no se le asigna COM en el archivo de ejemplo.
-2. Copiar la carpeta `cajas\Carnicerias POS-win32-x64` completa a la PC. Copiar `Start-PosTerminal.ps1` fuera de la carpeta del ejecutable si se desea. Crear **en esa PC** `C:\Carnicerias\Caja\pos-config.json` a partir de `pos-config.ejemplo.json`, sustituyendo IP y puertos:
+2. Copiar la carpeta `cajas\Carnicerias POS-win32-x64` completa a la PC. Copiar `Start-PosTerminal.ps1` fuera de la carpeta del ejecutable si se desea. Crear **en esa PC** `C:\Carnicerias\Caja\pos-config.json` a partir de `pos-config.ejemplo.json`, sustituyendo la IP:
 
 ```json
 {
   "apiOrigin": "http://192.168.10.20:5197",
-  "allowInsecureLan": true,
-  "scale": { "port": "COM6", "baudRate": 9600 },
-  "printer": { "port": "COM1", "baudRate": 9600 }
+  "allowInsecureLan": true
 }
 ```
 
-   El archivo no contiene secretos. Para una instalación real, usar `https://...` y quitar `allowInsecureLan`; un HTTP remoto sin opt-in, una URL con usuario/contraseña o una ruta adicional se rechazan. Los puertos admitidos son `COM1`–`COM999` y las velocidades admitidas son 1200, 2400, 4800, 9600, 19200, 38400, 57600 y 115200 baudios. El protocolo actual de balanza es **8N1** con tramas `ST,0.750,kg` terminadas en CR/LF; una balanza real distinta requiere adaptación, no solo cambiar el COM.
+   El archivo no contiene secretos ni asignaciones de dispositivos. En Administración, elegir para esa caja «Sin impresora», impresora serial de texto o Hasar SMH/P-441F **desafectada en laboratorio**; y «Sin balanza» o balanza serial. La Hasar usa 9600 baudios y no puede compartir COM con la balanza. Los puertos admitidos son `COM1`–`COM999` y las velocidades admitidas son 1200, 2400, 4800, 9600, 19200, 38400, 57600 y 115200 baudios. Sin asignación no se abre el COM ni se intenta imprimir. El protocolo actual de balanza es **8N1** con tramas `ST,0.750,kg` terminadas en CR/LF; una balanza real distinta requiere adaptación, no solo cambiar el COM. Para una instalación real, usar `https://...` y quitar `allowInsecureLan`; un HTTP remoto sin opt-in, una URL con usuario/contraseña o una ruta adicional se rechazan.
    Restringir escritura del archivo y de la carpeta de instalación a los administradores del equipo: cambiar `apiOrigin` podría desviar credenciales. El cajero solo necesita lectura y ejecución. No usar el opt-in HTTP fuera de una LAN de prueba aislada.
 3. La primera vez, tomar la credencial individual de la caja desde Administración y ejecutar en PowerShell en la PC de esa caja (ajustar rutas y perfil):
 
@@ -102,7 +106,7 @@ Desde el servidor y **cada caja**, verificar `http://192.168.10.20:5197/api/heal
 ```
 
    El script la solicita sin eco, la pasa solo al primer arranque y la retira del entorno de la consola. Electron la guarda cifrada en el perfil Windows local. En arranques posteriores ejecutar lo mismo **sin** `-Provision`. No copiar el perfil de Electron de una PC a otra. Si se rota una credencial, provisionar un perfil nuevo y documentar el cambio; no intentar reutilizar un perfil vinculado a otra caja.
-4. Repetir en la segunda PC con su credencial y su propio nombre de perfil, por ejemplo `caja-2`. Abrir un turno distinto con el cajero responsable. La activación de la caja en Administración no sustituye la credencial local.
+4. Repetir en la segunda PC con su credencial y su propio nombre de perfil, por ejemplo `caja-2`. Abrir un turno distinto con el cajero responsable. La activación de la caja en Administración no sustituye la credencial local. Tras cambiar dispositivos, recargar Electron para actualizar los controles visibles.
 
 La impresora serial actual recibe texto UTF-8 por 8N1; probar acentos, ancho y corte con el modelo real. Una impresión fallida no revierte la venta y repetirla puede duplicar papel. Los PDF se guardan en la PC de caja. El envío por COM no convierte una impresora común en controladora fiscal.
 
@@ -116,6 +120,7 @@ Hacer la revisión visual del POS **dentro de Electron** en cada PC; Administrac
 - [ ] Dejar tickets A y B abiertos, reiniciar **solo** Electron y confirmar que regresan los borradores que habían terminado de guardarse.
 - [ ] Confirmar una venta de prueba en Caja 1; comprobar en Caja 2 y Administración que stock, venta, pago y turno coinciden. Repetir con ventas simultáneas de las dos cajas, sin exceder el stock.
 - [ ] Leer una trama estable de balanza real/virtual, imprimir un ticket de prueba y verificar recepción física; probar que un fallo de periférico no duplica la venta.
+- [ ] Quitar la asignación de balanza e impresora a una caja: no debe abrir sus COM, ofrecer «Leer balanza» ni intentar imprimir al confirmar la venta; el ingreso manual y el PDF siguen disponibles.
 - [ ] Cerrar ambos turnos y conciliar el efectivo por caja. No usar ventas ficticias como histórico real.
 - [ ] Cortar la red de **una caja**: no debe confirmar una venta ni prometer recuperar una edición que no se guardó. Restituir la red y verificar los borradores persistidos. Repetir con caída del servidor solo en un entorno de prueba controlado.
 - [ ] Si se habilitan integraciones externas, verificar por separado los requisitos de Internet, homologación y estado real de cada pago/CAE; no inferir que “sin central” equivale a funcionamiento offline de esos servicios.

@@ -1,0 +1,143 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Carnicerías <small>· SuperAdmin</small></div>
+    @if (session(); as current) {
+      <div class="account-bar">
+        <span>{{ current.username }}</span>
+        <button type="button" class="header-button" [disabled]="busy()" (click)="logout()">Cerrar sesión</button>
+      </div>
+    }
+  </header>
+
+  <div class="workspace manufacturer-workspace">
+    <p class="eyebrow">Administración SuperAdmin</p>
+    <h1>Empresas de la instalación</h1>
+    <p class="intro">Creá y administrá empresas de esta instalación. Esta cuenta no abre cajas ni consulta ventas.</p>
+
+    @if (error(); as text) { <p class="error-message" role="alert">{{ text }}</p> }
+    @if (message(); as text) { <p class="success-message" role="status">{{ text }}</p> }
+
+    @if (!checked()) {
+      <p role="status">Verificando sesión…</p>
+    } @else if (!session()) {
+      <section class="category-panel manufacturer-login" aria-labelledby="manufacturer-login-title">
+        <h2 id="manufacturer-login-title">Ingresar como SuperAdmin</h2>
+        <form [formGroup]="loginForm" (ngSubmit)="login()">
+          <label for="manufacturer-credential">Usuario o correo</label>
+          <input id="manufacturer-credential" formControlName="credential" autocomplete="username" maxlength="320" required />
+          <label for="manufacturer-password">Contraseña</label>
+          <input id="manufacturer-password" type="password" formControlName="password" autocomplete="current-password" required />
+          <button type="submit" [disabled]="loginForm.invalid || busy()">{{ busy() ? 'Ingresando…' : 'Ingresar' }}</button>
+        </form>
+      </section>
+    } @else {
+      <section class="category-panel" aria-labelledby="manufacturer-companies-title" [attr.aria-busy]="loadingCompanies()">
+        <header class="panel-heading">
+          <div>
+            <h2 id="manufacturer-companies-title">Empresas</h2>
+            <p>El código de acceso es único y no cambia cuando se modifica el nombre.</p>
+          </div>
+          <button type="button" class="create-company-button" [disabled]="busy()" (click)="openCreate()">Nueva empresa</button>
+        </header>
+        @if (loadingCompanies()) {
+          <p role="status">Cargando empresas…</p>
+        } @else if (companies().length === 0) {
+          <p role="status">Todavía no hay empresas en esta instalación.</p>
+        } @else {
+          <div class="table-wrap"><table>
+            <thead><tr><th scope="col">Código</th><th scope="col">Empresa</th><th scope="col">Sucursales activas</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr></thead>
+            <tbody>
+              @for (company of companies(); track company.id) {
+                <tr>
+                  <td><code>{{ company.code }}</code></td>
+                  <td>{{ company.name }}</td>
+                  <td>{{ company.activeBranchCount }}</td>
+                  <td><span class="manufacturer-status" [class.manufacturer-status--active]="company.isActive">{{ company.isActive ? 'Activa' : 'Inactiva' }}</span></td>
+                  <td class="manufacturer-actions">
+                    <button type="button" class="secondary-button" [attr.aria-label]="'Editar ' + company.name" [disabled]="busy()" (click)="startEdit(company)">Editar</button>
+                    <button type="button" class="secondary-button" [attr.aria-label]="(company.isActive ? 'Inactivar ' : 'Activar ') + company.name" [disabled]="busy()" (click)="confirmStatus(company)">{{ company.isActive ? 'Inactivar' : 'Activar' }}</button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table></div>
+        }
+      </section>
+    }
+  </div>
+
+  @if (createOpen()) {
+    <app-admin-detail-dialog labelledBy="manufacturer-create-title" [compact]="true" [canClose]="!busy()" (closed)="closeCreate()">
+      <form class="manufacturer-form" [formGroup]="createForm" (ngSubmit)="createCompany()">
+        <h2 id="manufacturer-create-title">Nueva empresa</h2>
+        <p>La primera sucursal y su administrador se crean en la misma operación.</p>
+        <label for="new-company-name">Nombre</label>
+        <input id="new-company-name" formControlName="name" maxlength="200" required />
+        <label for="new-company-code">Código de acceso</label>
+        <input id="new-company-code" formControlName="code" maxlength="40" autocomplete="off" required />
+        <p class="field-help">De 2 a 40 letras, números o guiones; no se podrá cambiar después.</p>
+        <label for="new-branch-name">Primera sucursal</label>
+        <input id="new-branch-name" formControlName="initialBranchName" maxlength="200" required />
+        <label for="new-admin-username">Administrador inicial · usuario</label>
+        <input id="new-admin-username" formControlName="adminUsername" maxlength="100" autocomplete="off" required />
+        <label for="new-admin-email">Administrador inicial · correo</label>
+        <input id="new-admin-email" type="email" formControlName="adminEmail" maxlength="320" autocomplete="off" required />
+        <label for="new-admin-password">Contraseña inicial</label>
+        <input id="new-admin-password" type="password" formControlName="adminPassword" autocomplete="new-password" required />
+        @if (createForm.touched && createForm.invalid) { <p class="error-message" role="alert">Revisá los datos obligatorios y el formato del código.</p> }
+        @if (error(); as text) { <p class="error-message" role="alert">{{ text }}</p> }
+        <div class="manufacturer-actions">
+          <button type="submit" [disabled]="busy()">{{ busy() ? 'Creando…' : 'Crear empresa' }}</button>
+          <button type="button" class="secondary-button" [disabled]="busy()" (click)="closeCreate()">Cancelar</button>
+        </div>
+      </form>
+    </app-admin-detail-dialog>
+  }
+
+  @if (editingCompany(); as company) {
+    <app-admin-detail-dialog labelledBy="manufacturer-edit-title" [compact]="true" [canClose]="!busy()" (closed)="closeEdit()">
+      <section class="manufacturer-form" aria-labelledby="manufacturer-edit-title">
+        <h2 id="manufacturer-edit-title">Editar empresa</h2>
+        <p>Código de acceso: <code>{{ company.code }}</code></p>
+        <label for="edit-company-name">Nombre</label>
+        <input id="edit-company-name" [value]="editName()" maxlength="200" (input)="changeEditName($event)" />
+        @if (error(); as text) { <p class="error-message" role="alert">{{ text }}</p> }
+        <div class="manufacturer-actions">
+          <button type="button" [disabled]="busy() || !editName().trim()" (click)="saveEdit()">Guardar</button>
+          <button type="button" class="secondary-button" [disabled]="busy()" (click)="closeEdit()">Cancelar</button>
+        </div>
+        <form class="manufacturer-admin-form" data-testid="create-company-admin" [formGroup]="administratorForm" (ngSubmit)="createAdministrator()">
+          <h3>Agregar administrador a {{ company.name }}</h3>
+          <p>La nueva cuenta administrará solo esta empresa. Las cuentas existentes no cambian.</p>
+          <label for="company-admin-username">Usuario</label>
+          <input id="company-admin-username" formControlName="username" maxlength="100" autocomplete="off" required />
+          <label for="company-admin-email">Correo</label>
+          <input id="company-admin-email" type="email" formControlName="email" maxlength="320" autocomplete="off" required />
+          <label for="company-admin-password">Contraseña inicial</label>
+          <input id="company-admin-password" type="password" formControlName="password" autocomplete="new-password" required />
+          @if (administratorForm.touched && administratorForm.invalid) { <p class="error-message" role="alert">Revisá usuario, correo y contraseña.</p> }
+          @if (administratorError(); as text) { <p class="error-message" role="alert">{{ text }}</p> }
+          @if (administratorCreated(); as text) { <p class="success-message" role="status">{{ text }}</p> }
+          <div class="manufacturer-actions">
+            <button type="submit" [disabled]="busy()">{{ busy() ? 'Creando…' : 'Crear administrador' }}</button>
+          </div>
+        </form>
+      </section>
+    </app-admin-detail-dialog>
+  }
+
+  @if (statusCompany(); as company) {
+    <app-admin-detail-dialog labelledBy="manufacturer-status-title" [compact]="true" [canClose]="!busy()" (closed)="closeStatus()">
+      <section class="manufacturer-form" aria-labelledby="manufacturer-status-title">
+        <h2 id="manufacturer-status-title">{{ company.isActive ? 'Inactivar' : 'Activar' }} empresa</h2>
+        <p>{{ company.name }} · {{ company.code }}</p>
+        @if (company.isActive) { <p>Sus usuarios no podrán ingresar mientras esté inactiva. No se borrarán ventas ni configuración.</p> }
+        @if (error(); as text) { <p class="error-message" role="alert">{{ text }}</p> }
+        <div class="manufacturer-actions">
+          <button type="button" [disabled]="busy()" (click)="changeStatus()">Confirmar</button>
+          <button type="button" class="secondary-button" [disabled]="busy()" (click)="closeStatus()">Cancelar</button>
+        </div>
+      </section>
+    </app-admin-detail-dialog>
+  }
+</main>

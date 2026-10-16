@@ -13,14 +13,22 @@ describe('SessionClient', () => {
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
   it('posts credentials without exposing or persisting a session token', () => {
-    TestBed.inject(SessionClient).login('admin', 'correct password').subscribe();
+    TestBed.inject(SessionClient).login('VISUAL', 'admin', 'correct password').subscribe();
 
     const request = TestBed.inject(HttpTestingController).expectOne('/api/sessions');
     expect(request.request.method).toBe('POST');
     expect(request.request.withCredentials).toBe(true);
-    expect(request.request.body).toEqual({ credential: 'admin', password: 'correct password' });
+    expect(request.request.body).toEqual({ companyCode: 'VISUAL', credential: 'admin', password: 'correct password' });
     request.flush({ userId: 'user-id', username: 'admin', expiresAtUtc: '2026-10-01T20:00:00Z' });
     expect(localStorage.length).toBe(0);
+  });
+
+  it('omits company code when the POS terminal determines the company', () => {
+    TestBed.inject(SessionClient).login(null, 'cajero1', 'correct password').subscribe();
+
+    const request = TestBed.inject(HttpTestingController).expectOne('/api/sessions');
+    expect(request.request.body).toEqual({ credential: 'cajero1', password: 'correct password' });
+    request.flush({ userId: 'user-id', username: 'cajero1', expiresAtUtc: '2026-10-01T20:00:00Z' });
   });
 
   it('reads and revokes the current server-managed session', () => {

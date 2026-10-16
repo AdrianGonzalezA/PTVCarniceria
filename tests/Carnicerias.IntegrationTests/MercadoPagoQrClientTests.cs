@@ -26,6 +26,37 @@ public sealed class MercadoPagoQrClientTests
     }
 
     [Fact]
+    public async Task CreatesStaticQrOrderWithoutExpectingAnOrderSpecificQr()
+    {
+        var handler = new Handler("""
+            {"id":"ORD123","type":"qr","external_reference":"0123456789abcdef0123456789abcdef",
+             "status":"created","transactions":{"payments":[{"id":"PAY123","amount":"2500.00",
+             "status":"created"}]}}
+            """);
+        var client = new MercadoPagoQrClient(new HttpClient(handler));
+        var order = await client.CreateAsync("test-token", new QrOrderRequest(
+            "SUC1CAJA1", 2500m, "0123456789abcdef0123456789abcdef", Guid.NewGuid(),
+            MercadoPagoQrMode.Static));
+        Assert.False(order.IsApproved);
+        Assert.Null(order.QrData);
+        Assert.Contains("\"mode\":\"static\"", handler.Body);
+    }
+
+    [Fact]
+    public async Task CreatedQrWithoutPaymentStatusIsStillPending()
+    {
+        var handler = new Handler("""
+            {"id":"ORD123","type":"qr","external_reference":"0123456789abcdef0123456789abcdef",
+             "status":"created","transactions":{"payments":[{"id":"PAY123","amount":"2500.00"}]}}
+            """);
+        var client = new MercadoPagoQrClient(new HttpClient(handler));
+        var order = await client.GetAsync("test-token", "ORD123",
+            "0123456789abcdef0123456789abcdef", 2500m);
+        Assert.False(order.IsApproved);
+        Assert.Null(order.PaymentStatus);
+    }
+
+    [Fact]
     public async Task RequiresMatchingAmountAndReferenceWhenCheckingApproval()
     {
         var handler = new Handler("""

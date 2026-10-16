@@ -1,0 +1,69 @@
+<section class="business-panel" aria-labelledby="business-title">
+  <div class="business-heading">
+    <div>
+      <h2 id="business-title">Negocio en vivo</h2>
+      <p>Ventas y pagos de las sucursales registradas · horario de Buenos Aires</p>
+    </div>
+    <button type="button" class="refresh-button" [disabled]="busy()" (click)="refresh()">Actualizar</button>
+  </div>
+
+  <div class="period-controls">
+    <button type="button" [class.selected]="todaySelected()" [disabled]="busy()" (click)="loadToday()">Hoy</button>
+    <form class="period-form" [formGroup]="periodForm" (ngSubmit)="loadDates()" novalidate>
+      <div><label for="business-from-date">Desde</label><input id="business-from-date" type="date" formControlName="fromDate" required /></div>
+      <div><label for="business-to-date">Hasta</label><input id="business-to-date" type="date" formControlName="toDate" required /></div>
+      <button type="submit" [disabled]="busy()">Consultar período</button>
+    </form>
+    <p>Fechas inclusivas de Argentina · máximo 31 días.</p>
+  </div>
+
+  @if (error(); as message) { <p class="business-error" role="alert">{{ message }}</p> }
+  @if (busy()) { <p class="business-status" role="status">Consultando sucursales…</p> }
+  @if (summary(); as data) {
+    <div class="result-heading">
+      <p>{{ todaySelected() ? 'Hoy' : 'Período elegido' }} · consulta: {{ formatInstant(data.retrievedAtUtc) }}</p>
+      <p>Desde {{ formatInstant(data.window.fromUtc) }} hasta {{ formatInstant(data.window.toUtc) }}</p>
+    </div>
+
+    @if (data.completeness === 'empty') {
+      <p class="business-status">Todavía no hay sucursales activas registradas para esta empresa.</p>
+    } @else {
+      @if (data.completeness === 'incomplete') {
+        <p class="partial-warning" role="alert">Datos incompletos: alguna sucursal no respondió o envió datos incompatibles. No se muestra un total general.</p>
+      }
+      @if (data.aggregate; as total) {
+        <div class="aggregate" aria-label="Total de ventas y pagos de todas las sucursales">
+          <div><span>Ventas</span><strong>{{ money(total.salesTotal) }}</strong><small>{{ total.saleCount }} ticket{{ total.saleCount === 1 ? '' : 's' }}</small></div>
+          <div><span>Pagos aplicados</span><strong>{{ money(total.salePaymentsTotal) }}</strong></div>
+        </div>
+      }
+      <h3 class="branch-list-title">Por sucursal</h3>
+      <ul class="business-branches">
+        @for (branch of data.branches; track branch.installationId) {
+          <li class="business-branch">
+            <div class="branch-heading"><h4>{{ branch.label }}</h4><span>{{ branch.status === 'ok' ? 'Disponible' : 'No disponible' }}</span></div>
+            @if (branch.status === 'ok') {
+              <p class="generated-at">Generado en sucursal: {{ formatInstant(branch.generatedAtUtc!) }}</p>
+              <dl class="branch-metrics">
+                <div><dt>Ventas</dt><dd>{{ money(branch.salesTotal!) }} · {{ branch.saleCount }} ticket{{ branch.saleCount === 1 ? '' : 's' }}</dd></div>
+                <div><dt>Pagos aplicados</dt><dd>{{ money(branch.salePaymentsTotal!) }}</dd></div>
+                <div><dt>Turnos abiertos</dt><dd>{{ branch.openShiftCount }}</dd></div>
+                <div><dt>Saldo de turnos abiertos</dt><dd>{{ money(branch.openShiftCashBalance!) }}</dd></div>
+              </dl>
+              @if (branch.paymentsByMethod?.length) {
+                <p class="payment-caption">Pagos por medio</p>
+                <ul class="payment-methods">
+                  @for (payment of branch.paymentsByMethod!; track payment.method) {
+                    <li>{{ methodLabel(payment.method) }}: {{ money(payment.amount) }}</li>
+                  }
+                </ul>
+              }
+            } @else {
+              <p class="unavailable-note">Sin métricas actuales de esta sucursal.</p>
+            }
+          </li>
+        }
+      </ul>
+    }
+  }
+</section>

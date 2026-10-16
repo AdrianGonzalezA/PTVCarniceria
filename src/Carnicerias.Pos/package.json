@@ -7,14 +7,16 @@
     "build:web": "npm run build --prefix ../Carnicerias.Web",
     "build:electron": "tsc --project tsconfig.build.json && tsc --project tsconfig.emulator-ui.json",
     "stage:web": "node scripts/stage-web.mjs",
-    "electron:build": "npm run build:web && npm run build:electron && npm run stage:web && electron-forge package",
+    "electron:build": "npm run build:web && npm run build:electron && npm run stage:web -- --clean && electron-forge package",
     "electron:start": "npm run build:web && npm run build:electron && npm run stage:web && electron . --pos-profile=caja-1",
     "electron:start:caja2": "npm run build:web && npm run build:electron && npm run stage:web && electron . --pos-profile=caja-2",
     "electron:start:admin": "npm run build:web && npm run build:electron && npm run stage:web && electron .",
     "devices:start": "npm run build:electron && electron dist/emulator-main.js",
     "electron:test": "vitest run",
     "electron:test:pdf": "npm run build:electron && electron tests/receipt-pdf-smoke.cjs",
-    "serial:smoke": "npm run build:electron && node tests/serial-port-smoke.cjs"
+    "serial:smoke": "npm run build:electron && node tests/serial-port-smoke.cjs",
+    "hasar:status": "npm run build:electron && node tests/hasar-status-smoke.cjs COM8",
+    "hasar:lab-ticket": "npm run build:electron && node tests/hasar-ticket-smoke.cjs"
   },
   "packageManager": "npm@11.19.0",
   "engines": {

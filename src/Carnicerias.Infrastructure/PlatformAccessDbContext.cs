@@ -20,6 +20,10 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<Branch> Branches => Set<Branch>();
 
+    public DbSet<BranchCentralConnection> BranchCentralConnections => Set<BranchCentralConnection>();
+
+    public DbSet<BranchCentralConnectionEvent> BranchCentralConnectionEvents => Set<BranchCentralConnectionEvent>();
+
     public DbSet<PosTerminal> PosTerminals => Set<PosTerminal>();
 
     public DbSet<ArcaCompanySettings> ArcaCompanySettings => Set<ArcaCompanySettings>();
@@ -94,15 +98,27 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
         modelBuilder.Entity<UserIdentity>(entity =>
         {
-            entity.ToTable("users");
+            entity.ToTable("users", table => table.HasCheckConstraint(
+                "CK_users_account_scope",
+                "(\"IsManufacturer\" = TRUE AND \"CompanyId\" IS NULL) OR (\"IsManufacturer\" = FALSE AND \"CompanyId\" IS NOT NULL)"));
             entity.HasKey(user => user.Id);
             entity.Property(user => user.Username).HasMaxLength(100).IsRequired();
             entity.Property(user => user.UsernameNormalized).HasMaxLength(100).IsRequired();
             entity.Property(user => user.Email).HasMaxLength(320).IsRequired();
             entity.Property(user => user.EmailNormalized).HasMaxLength(320).IsRequired();
             entity.Property(user => user.PasswordHash).HasMaxLength(512).IsRequired();
-            entity.HasIndex(user => user.UsernameNormalized).IsUnique();
-            entity.HasIndex(user => user.EmailNormalized).IsUnique();
+            entity.HasOne<Company>().WithMany().HasForeignKey(user => user.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(user => new { user.CompanyId, user.UsernameNormalized }).IsUnique()
+                .HasFilter("\"IsManufacturer\" = FALSE");
+            entity.HasIndex(user => new { user.CompanyId, user.EmailNormalized }).IsUnique()
+                .HasFilter("\"IsManufacturer\" = FALSE");
+            entity.HasIndex(user => user.UsernameNormalized).IsUnique()
+                .HasDatabaseName("IX_users_manufacturer_username")
+                .HasFilter("\"IsManufacturer\" = TRUE");
+            entity.HasIndex(user => user.EmailNormalized).IsUnique()
+                .HasDatabaseName("IX_users_manufacturer_email")
+                .HasFilter("\"IsManufacturer\" = TRUE");
         });
 
         modelBuilder.Entity<Role>(entity =>
@@ -136,7 +152,9 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.ToTable("companies");
             entity.HasKey(company => company.Id);
             entity.Property(company => company.Name).HasMaxLength(200).IsRequired();
+            entity.Property(company => company.Code).HasMaxLength(40).IsRequired();
             entity.HasIndex(company => company.Name).IsUnique();
+            entity.HasIndex(company => company.Code).IsUnique();
         });
 
         modelBuilder.Entity<Branch>(entity =>
@@ -149,6 +167,40 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasOne<Company>().WithMany().HasForeignKey(branch => branch.CompanyId).OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<BranchCentralConnection>(entity =>
+        {
+            entity.ToTable("branch_central_connections");
+            entity.HasKey(connection => connection.BranchId);
+            entity.HasIndex(connection => connection.InstallationId).IsUnique();
+            entity.Property(connection => connection.DestinationUrl).HasMaxLength(2048).IsRequired();
+            entity.Property(connection => connection.CredentialSha256).HasMaxLength(64);
+            entity.Property(connection => connection.PreviousCredentialSha256).HasMaxLength(64);
+            entity.Property(connection => connection.Revision).IsConcurrencyToken();
+            entity.HasOne<Branch>().WithOne()
+                .HasForeignKey<BranchCentralConnection>(connection =>
+                    new { connection.CompanyId, connection.BranchId })
+                .HasPrincipalKey<Branch>(branch => new { branch.CompanyId, branch.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(connection => connection.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<BranchCentralConnectionEvent>(entity =>
+        {
+            entity.ToTable("branch_central_connection_events");
+            entity.HasKey(entry => entry.Id);
+            entity.Property(entry => entry.Action).HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.HasIndex(entry => new { entry.CompanyId, entry.BranchId, entry.AtUtc });
+            entity.HasOne<Branch>().WithMany()
+                .HasForeignKey(entry => new { entry.CompanyId, entry.BranchId })
+                .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(entry => entry.ActorUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<PosTerminal>(entity =>
         {
             entity.ToTable("pos_terminals");
@@ -156,6 +208,9 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasAlternateKey(terminal => new { terminal.CompanyId, terminal.BranchId, terminal.Id });
             entity.Property(terminal => terminal.Name).HasMaxLength(120).IsRequired();
             entity.Property(terminal => terminal.CredentialHash).HasMaxLength(64);
+            entity.Property(terminal => terminal.ScalePort).HasMaxLength(6);
+            entity.Property(terminal => terminal.PrinterKind).HasMaxLength(8);
+            entity.Property(terminal => terminal.PrinterPort).HasMaxLength(6);
             entity.HasOne<Branch>().WithMany()
                 .HasForeignKey(terminal => new { terminal.CompanyId, terminal.BranchId })
                 .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
@@ -279,7 +334,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
         {
             entity.ToTable("sessions", table => table.HasCheckConstraint(
                 "CK_sessions_context_pair",
-                "(\"CompanyId\" IS NULL AND \"BranchId\" IS NULL) OR (\"CompanyId\" IS NOT NULL AND \"BranchId\" IS NOT NULL)"));
+                "\"BranchId\" IS NULL OR \"CompanyId\" IS NOT NULL"));
             entity.HasKey(session => session.Id);
             entity.Property(session => session.TokenHash).HasMaxLength(64).IsRequired();
             entity.HasIndex(session => session.TokenHash).IsUnique();
@@ -953,7 +1008,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             {
                 table.HasCheckConstraint("CK_point_payment_intents_amount_positive", "\"Amount\" > 0");
                 table.HasCheckConstraint("CK_point_payment_intents_status", "\"Status\" BETWEEN 0 AND 7");
-                table.HasCheckConstraint("CK_point_payment_intents_mode", "\"Mode\" BETWEEN 0 AND 1");
+                table.HasCheckConstraint("CK_point_payment_intents_mode", "\"Mode\" BETWEEN 0 AND 2");
             });
             entity.HasKey(intent => intent.Id);
             entity.Property(intent => intent.Amount).HasPrecision(12, 2);

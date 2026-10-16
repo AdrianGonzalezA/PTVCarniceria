@@ -16,13 +16,16 @@ import {
 } from 'electron';
 import { resolveAppAsset, toBackendRequest, toBackendUrl } from './app-protocol';
 import { createDiagnostic } from './diagnostic';
-import { parseDeploymentConfig, resolveConfigPath, type SerialDeviceConfig } from './deployment-config';
+import { parseDeploymentConfig, resolveConfigPath } from './deployment-config';
 import { createFiscalInvoiceHtml } from './fiscal-invoice';
+import { HasarSerialSession } from './hasar-serial';
+import { printHasarSaleWithLedger } from './hasar-sale-ledger';
+import { issueHasarFiscalTicket, issueHasarNonFiscalTicket } from './hasar-ticket';
 import { NativeChannel } from './native-api';
 import { initialUrlForProfile, resolvePosProfile } from './pos-profile';
 import { createReceiptHtml, validateReceiptRequest } from './receipt-pdf';
 import { sendSerialReceipt } from './serial-printer';
-import { SerialScale } from './serial-scale';
+import { fetchAssignedDevices, noDevices, TerminalDevices, type AssignedDevices } from './terminal-devices';
 import { createSecureWebPreferences, isAllowedNavigation } from './security-policy';
 import { loadTerminalCredential } from './terminal-credential';
 
@@ -63,7 +66,23 @@ function validateIpcSender(event: IpcMainInvokeEvent): void {
   }
 }
 
-function registerNativeApi(serialScale: SerialScale, printer: SerialDeviceConfig): void {
+function registerNativeApi(devices: TerminalDevices,
+  synchronizeDevices: () => Promise<AssignedDevices>): void {
+  let hasarBusy = false;
+  async function withHasar<T>(use: (session: HasarSerialSession, port: string) => Promise<T>): Promise<T> {
+    const printer = devices.hasarPrinter();
+    if (hasarBusy) throw new Error('HASAR_PORT_BUSY');
+    hasarBusy = true;
+    let session: HasarSerialSession | undefined;
+    try {
+      session = new HasarSerialSession(printer);
+      await session.open();
+      return await use(session, printer.port);
+    } finally {
+      try { await session?.close(); }
+      finally { hasarBusy = false; }
+    }
+  }
   ipcMain.handle(NativeChannel.Diagnostic, (event) => {
     validateIpcSender(event);
     return createDiagnostic(process.platform, process.versions.electron);
@@ -92,7 +111,7 @@ function registerNativeApi(serialScale: SerialScale, printer: SerialDeviceConfig
           ? { top: 0, bottom: 0, left: 0, right: 0 }
           : { top: 0.12, bottom: 0.12, left: 0.12, right: 0.12 },
       });
-      const directory = path.join(app.getPath('userData'), 'tickets');
+      const directory = app.getPath('downloads');
       await mkdir(directory, { recursive: true });
       const fiscalName = receipt.fiscal
         ? `${receipt.fiscal.saleDocumentType === 'ElectronicInvoice' ? 'factura' : 'ticket-fiscal'}-homo-${receipt.fiscal.voucherType === 1 ? 'a' : 'b'}-${receipt.fiscal.pointOfSale.toString().padStart(5, '0')}-${receipt.fiscal.number.toString().padStart(8, '0')}`
@@ -104,14 +123,44 @@ function registerNativeApi(serialScale: SerialScale, printer: SerialDeviceConfig
       receiptWindow.destroy();
     }
   });
-  ipcMain.handle(NativeChannel.ReadSerialScale, (event) => {
+  ipcMain.handle(NativeChannel.DeviceAvailability, async (event) => {
     validateIpcSender(event);
-    return serialScale.read();
+    return synchronizeDevices();
+  });
+  ipcMain.handle(NativeChannel.ReadSerialScale, async (event) => {
+    validateIpcSender(event);
+    await synchronizeDevices();
+    return devices.readScale();
   });
   ipcMain.handle(NativeChannel.PrintSerialReceipt, async (event, payload: unknown) => {
     validateIpcSender(event);
+    await synchronizeDevices();
     const receipt = validateReceiptRequest(payload);
-    return sendSerialReceipt(receipt, undefined, printer);
+    return sendSerialReceipt(receipt, undefined, devices.textPrinter());
+  });
+  ipcMain.handle(NativeChannel.HasarSaleAvailability, async (event) => {
+    validateIpcSender(event);
+    const assigned = await synchronizeDevices();
+    return { port: assigned.printer?.kind === 'hasar' ? assigned.printer.port : null };
+  });
+  ipcMain.handle(NativeChannel.PrintHasarSaleReceipt, async (event, payload: unknown) => {
+    validateIpcSender(event);
+    await synchronizeDevices();
+    const receipt = validateReceiptRequest(payload);
+    return withHasar(async (session, port) => {
+      const result = await printHasarSaleWithLedger(receipt,
+        path.join(app.getPath('userData'), 'hasar-sale-prints'), async (document) => {
+          if (document.kind === 'fiscal') {
+            const printed = await issueHasarFiscalTicket(session, document.ticket, { allowFiscalized: true });
+            return { kind: 'fiscal' as const, number: printed.number,
+              trainingMode: printed.trainingMode, total: receipt.total };
+          }
+          const printed = await issueHasarNonFiscalTicket(session, document.lines);
+          return { kind: 'nonFiscal' as const, number: null,
+            trainingMode: printed.trainingMode, total: receipt.total };
+        });
+      return { ...result, port };
+    });
   });
 }
 
@@ -177,7 +226,6 @@ app.whenReady().then(async () => {
     configPath ? JSON.parse(readFileSync(configPath, 'utf8')) as unknown : undefined,
     app.isPackaged,
   );
-  const serialScale = new SerialScale(undefined, deploymentConfig.scale);
   const terminalCredential = await loadTerminalCredential(
     app.getPath('userData'),
     initialTerminalCredential,
@@ -186,9 +234,28 @@ app.whenReady().then(async () => {
   session.defaultSession.setPermissionCheckHandler(() => false);
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   registerApplicationProtocol(deploymentConfig.apiOrigin, terminalCredential);
-  registerNativeApi(serialScale, deploymentConfig.printer);
-  serialScale.start();
-  app.on('before-quit', () => { void serialScale.stop(); });
+  const devices = new TerminalDevices();
+  let synchronization: Promise<AssignedDevices> | undefined;
+  function synchronizeDevices(): Promise<AssignedDevices> {
+    if (!synchronization) {
+      synchronization = (async () => {
+        try {
+          const assigned = await fetchAssignedDevices(deploymentConfig.apiOrigin,
+            terminalCredential, (request) => net.fetch(request));
+          await devices.apply(assigned);
+          return assigned;
+        } catch (error) {
+          await devices.apply(noDevices);
+          throw error;
+        } finally {
+          synchronization = undefined;
+        }
+      })();
+    }
+    return synchronization;
+  }
+  registerNativeApi(devices, synchronizeDevices);
+  app.on('before-quit', () => { void devices.stop(); });
   createWindow();
 
   app.on('activate', () => {

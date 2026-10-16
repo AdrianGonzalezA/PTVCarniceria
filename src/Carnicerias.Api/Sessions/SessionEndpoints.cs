@@ -1,6 +1,8 @@
 using Carnicerias.Api.Contracts;
+using Carnicerias.Api.Federation;
 using Carnicerias.Api.Security;
 using Carnicerias.Infrastructure;
+using Microsoft.EntityFrameworkCore;
 
 namespace Carnicerias.Api.Sessions;
 
@@ -23,6 +25,8 @@ public static class SessionEndpoints
         LoginRequest? request,
         SessionAuthenticationService sessions,
         PosTerminalAuthenticationService terminals,
+        BranchServiceSettings branchBinding,
+        PlatformAccessDbContext db,
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
@@ -30,10 +34,15 @@ public static class SessionEndpoints
             string.IsNullOrWhiteSpace(request.Credential) ||
             string.IsNullOrWhiteSpace(request.Password) ||
             request.Credential.Length > 320 ||
+            (request.CompanyCode?.Length ?? 0) > 40 ||
             System.Text.Encoding.UTF8.GetByteCount(request.Password) > 1024)
         {
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
         }
+
+        var origin = httpContext.Request.Headers.Origin.ToString();
+        if (!string.IsNullOrEmpty(origin) && !RequestOriginValidator.IsAllowed(origin, httpContext.Request))
+            return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
 
         var terminalCredentialPresent = httpContext.Request.Headers.ContainsKey(Pos.PosTerminalEndpoints.CredentialHeader);
         var terminal = terminalCredentialPresent
@@ -43,8 +52,23 @@ public static class SessionEndpoints
         if (terminalCredentialPresent && terminal is null)
             return Error(StatusCodes.Status401Unauthorized, "POS_TERMINAL_REQUIRED");
 
+        if (terminal is null && string.IsNullOrWhiteSpace(request.CompanyCode))
+            return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+
+        var normalizedCompanyCode = request.CompanyCode?.Trim().ToUpperInvariant();
+        var companyId = terminal?.CompanyId ?? await db.Companies
+            .Where(company => company.Code == normalizedCompanyCode && company.IsActive)
+            .Select(company => company.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (terminal is not null && normalizedCompanyCode is not null &&
+            !await db.Companies.AnyAsync(company => company.Id == terminal.CompanyId &&
+                                                company.Code == normalizedCompanyCode, cancellationToken))
+            companyId = Guid.Empty;
+        if (!BranchOperationalScope.AllowsCompany(branchBinding, companyId))
+            companyId = Guid.Empty;
+
         var created = await sessions.CreateAsync(
-            request.Credential, request.Password, terminal?.Id, cancellationToken);
+            companyId, request.Credential, request.Password, terminal?.Id, cancellationToken);
         if (created is null)
         {
             return Error(StatusCodes.Status401Unauthorized, "AUTHENTICATION_FAILED");
@@ -63,13 +87,15 @@ public static class SessionEndpoints
             created.User.Id,
             created.User.Username,
             created.Session.ExpiresAtUtc,
-            null));
+            null,
+            branchBinding.IsEnabled));
     }
 
     private static async Task<IResult> GetCurrentSessionAsync(
         SessionAuthenticationService sessions,
         PosTerminalAuthenticationService terminals,
         OperationalContextAccessService contexts,
+        BranchServiceSettings branchBinding,
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
@@ -81,18 +107,26 @@ public static class SessionEndpoints
             return Error(StatusCodes.Status401Unauthorized, "NOT_AUTHENTICATED");
         }
 
+        if (current.Session.CompanyId is not Guid companyId ||
+            !BranchOperationalScope.AllowsCompany(branchBinding, companyId) ||
+            current.Session.BranchId is Guid branchId &&
+            !BranchOperationalScope.AllowsContext(branchBinding, companyId, branchId))
+            return Error(StatusCodes.Status401Unauthorized, "NOT_AUTHENTICATED");
+
         var context = await contexts.ResolveSessionAsync(current.Session, cancellationToken);
         return Results.Ok(new SessionResponse(
             current.User.Id,
             current.User.Username,
             current.Session.ExpiresAtUtc,
-            ToResponse(context)));
+            ToResponse(context),
+            branchBinding.IsEnabled));
     }
 
     private static async Task<IResult> GetOperationalContextsAsync(
         SessionAuthenticationService sessions,
         PosTerminalAuthenticationService terminals,
         OperationalContextAccessService contexts,
+        BranchServiceSettings branchBinding,
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
@@ -109,7 +143,12 @@ public static class SessionEndpoints
         if (!terminalCheck.IsValid)
             return Error(StatusCodes.Status401Unauthorized, "NOT_AUTHENTICATED");
 
-        var options = await contexts.ListAsync(current.User.Id, cancellationToken);
+        if (current.Session.CompanyId is not Guid companyId ||
+            !BranchOperationalScope.AllowsCompany(branchBinding, companyId))
+            return Error(StatusCodes.Status401Unauthorized, "NOT_AUTHENTICATED");
+
+        var options = BranchOperationalScope.Restrict(
+            await contexts.ListAsync(current.User.Id, cancellationToken), branchBinding);
         if (terminalCheck.Terminal is { } terminal)
         {
             options = options
@@ -134,6 +173,7 @@ public static class SessionEndpoints
         PosTerminalAuthenticationService terminals,
         OperationalContextAccessService contexts,
         OperationalContextChangeGuard contextChangeGuard,
+        BranchServiceSettings branchBinding,
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
@@ -160,6 +200,13 @@ public static class SessionEndpoints
             current.Session, httpContext, terminals, cancellationToken);
         if (!terminalCheck.IsValid)
             return Error(StatusCodes.Status401Unauthorized, "NOT_AUTHENTICATED");
+
+        if (current.Session.CompanyId is not Guid sessionCompanyId ||
+            !BranchOperationalScope.AllowsCompany(branchBinding, sessionCompanyId))
+            return Error(StatusCodes.Status401Unauthorized, "NOT_AUTHENTICATED");
+
+        if (!BranchOperationalScope.AllowsContext(branchBinding, request.CompanyId, request.BranchId))
+            return Error(StatusCodes.Status403Forbidden, "BRANCH_INSTALLATION_MISMATCH");
 
         if (terminalCheck.Terminal is { } terminal)
         {
@@ -212,7 +259,8 @@ public static class SessionEndpoints
             current.User.Id,
             current.User.Username,
             current.Session.ExpiresAtUtc,
-            ToResponse(context)));
+            ToResponse(context),
+            branchBinding.IsEnabled));
     }
 
     private static async Task<IResult> DeleteCurrentSessionAsync(
@@ -258,7 +306,7 @@ public static class SessionEndpoints
         new ErrorResponse(new ApiError(code, "No se pudo completar la solicitud", details ?? [])),
         statusCode: statusCode);
 
-    private sealed record LoginRequest(string? Credential, string? Password);
+    private sealed record LoginRequest(string? CompanyCode, string? Credential, string? Password);
 
     private sealed record SelectOperationalContextRequest(Guid CompanyId, Guid BranchId);
 }

@@ -30,10 +30,11 @@ public sealed class BootstrapAdminService(
                 "La instalación ya contiene usuarios; el administrador inicial no se creó.");
         }
 
-        var company = new Company(companyName);
+        var company = new Company(companyName, "PRINCIPAL");
         var branch = new Branch(company.Id, branchName);
         var role = new Role("administrator", "Administrador");
-        var user = UserIdentity.Create(username, email, passwordHasher.Hash(password));
+        var user = UserIdentity.CreateForCompany(company.Id, username, email,
+            passwordHasher.Hash(password));
         var existingPermissions = await db.Permissions.ToDictionaryAsync(
             permission => permission.Code, cancellationToken);
         var permissions = initialPermissions.Select(permission =>

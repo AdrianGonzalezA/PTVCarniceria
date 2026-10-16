@@ -9,14 +9,12 @@ describe('AdminOrganizationClient', () => {
   }));
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
-  it('creates a company with an initial branch for the existing administrator', () => {
+  it('reads the current company without a client-side company creation method', () => {
     const client = TestBed.inject(AdminOrganizationClient);
-    client.createCompany('Empresa nueva', 'Principal').subscribe();
+    client.companies().subscribe();
     const request = TestBed.inject(HttpTestingController).expectOne('/api/admin/companies');
-    expect(request.request.method).toBe('POST');
-    expect(request.request.body).toEqual({ name: 'Empresa nueva', initialBranchName: 'Principal' });
-    request.flush({ id: 'company-2', name: 'Empresa nueva',
-      initialBranchId: 'branch-2', initialBranchName: 'Principal' });
+    expect(request.request.method).toBe('GET');
+    request.flush([{ id: 'company-1', name: 'Empresa Visual', isActive: true, activeBranchCount: 1 }]);
   });
 
   it('inactivates a branch without deleting its record', () => {

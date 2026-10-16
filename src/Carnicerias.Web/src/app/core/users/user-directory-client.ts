@@ -41,8 +41,9 @@ export class UserDirectoryClient {
     return this.http.get<UserPasswordPolicy>('/api/users/password-policy', { withCredentials: true });
   }
 
-  createCashier(username: string, email: string, password: string, branchIds: readonly string[]) {
-    return this.http.post<UserListItem>('/api/users', { username, email, password, branchIds }, {
+  createUser(username: string, email: string, password: string,
+    role: UserAssignments['role'], branchIds: readonly string[]) {
+    return this.http.post<UserListItem>('/api/users', { username, email, password, role, branchIds }, {
       withCredentials: true,
     });
   }
@@ -53,9 +54,9 @@ export class UserDirectoryClient {
     });
   }
 
-  replaceAssignments(userId: string, branchIds: readonly string[]) {
+  replaceAssignments(userId: string, role: UserAssignments['role'], branchIds: readonly string[]) {
     return this.http.put<UserAssignments>(`/api/users/${encodeURIComponent(userId)}/assignments`,
-      { branchIds }, { withCredentials: true });
+      { role, branchIds }, { withCredentials: true });
   }
 
   resetUserPassword(userId: string, password: string) {

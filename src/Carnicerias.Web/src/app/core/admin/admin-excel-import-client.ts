@@ -1,7 +1,7 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 
-export type AdminImportKind = 'categories' | 'products' | 'price-lists' | 'customers';
+export type AdminImportKind = 'categories' | 'products' | 'price-lists' | 'customers' | 'stock';
 
 export interface AdminImportIssue {
   readonly sheet: string;

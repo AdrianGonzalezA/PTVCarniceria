@@ -33,6 +33,22 @@
           }
         </p>
 
+        @if (isPosElectron) {
+          <section class="terminal-identity" [attr.role]="terminalStatus() === 'unavailable' ? 'alert' : 'status'"
+            aria-live="polite">
+            @if (terminal(); as register) {
+              <p class="terminal-label eyebrow">Empresa de esta caja</p>
+              <p class="terminal-company">{{ register.companyName }}</p>
+              <p class="terminal-location context-branch">{{ register.branchName }} · {{ register.name }}</p>
+            } @else if (terminalStatus() === 'unavailable') {
+              <p class="terminal-unavailable form-error">Caja no vinculada</p>
+              <p>La credencial de esta terminal falta o no está vigente. Pedí a administración que la vincule o renueve.</p>
+            } @else {
+              <p>Identificando la empresa de esta caja…</p>
+            }
+          </section>
+        }
+
         @if (sessionError(); as error) {
           <p class="form-error" role="alert">{{ error }}</p>
         }
@@ -49,15 +65,39 @@
               @if (session.context.permissions.includes('platform.users.manage')) {
                 <a class="admin-link" routerLink="/admin">Abrir administración</a>
               }
-              <button type="button" class="secondary-button" [disabled]="isSubmitting()" (click)="startContextChange()">
-                Cambiar empresa o sucursal
-              </button>
+              @if (!isPosElectron && !session.branchBound) {
+                <button type="button" class="secondary-button" [disabled]="isSubmitting()" (click)="startContextChange()">
+                  Cambiar sucursal
+                </button>
+              }
+            </section>
+          } @else if (isPosElectron) {
+            <section class="context-picker" aria-labelledby="context-title" [attr.aria-busy]="isSubmitting()">
+              <h2 id="context-title">Ingresando a esta caja</h2>
+              @if (contextError(); as error) {
+                <p class="form-error" role="alert">{{ error }}</p>
+                <button type="button" class="secondary-button" (click)="retryTerminalContext()">Reintentar acceso</button>
+              } @else if (terminalStatus() === 'unavailable') {
+                <p class="empty-message">Esta caja debe estar vinculada para continuar.</p>
+              } @else {
+                <p class="loading-message" role="status">Verificando el acceso a la sucursal de esta caja…</p>
+              }
+            </section>
+          } @else if (session.branchBound) {
+            <section class="context-picker" aria-labelledby="context-title" [attr.aria-busy]="isLoadingContexts() || isSubmitting()">
+              <h2 id="context-title">Ingresando a esta sucursal</h2>
+              @if (contextError(); as error) {
+                <p class="form-error" role="alert">{{ error }}</p>
+                <button type="button" class="secondary-button" [disabled]="isLoadingContexts() || isSubmitting()" (click)="retryBoundBranch()">Reintentar acceso</button>
+              } @else {
+                <p class="loading-message" role="status">Verificando el acceso a la sucursal de esta instalación…</p>
+              }
             </section>
           } @else {
             <section class="context-picker" aria-labelledby="context-title" [attr.aria-busy]="isLoadingContexts()">
               <h2 id="context-title">¿Dónde vas a trabajar?</h2>
               <p class="context-help">
-                Elegí una empresa y una sucursal. Confirmá la selección aunque tengas una sola opción.
+                Tu empresa quedó fijada al ingresar. Elegí una sucursal y confirmá la selección.
               </p>
 
               @if (isLoadingContexts()) {
@@ -70,24 +110,9 @@
                     Tu usuario todavía no tiene empresas y sucursales habilitadas.
                   }
                 </p>
-              } @else {
+              } @else if (selectedCompany(); as company) {
+                <p class="context-company">{{ company.companyName }}</p>
                 <form class="context-form" (ngSubmit)="confirmContext()" novalidate>
-                  <div class="field-group">
-                    <label for="company">Empresa</label>
-                    <select
-                      id="company"
-                      name="company"
-                      [value]="selectedCompanyId()"
-                      (change)="onCompanyChange($event)"
-                      required
-                    >
-                      <option value="">Seleccioná una empresa</option>
-                      @for (company of contextOptions(); track company.companyId) {
-                        <option [value]="company.companyId">{{ company.companyName }}</option>
-                      }
-                    </select>
-                  </div>
-
                   <div class="field-group">
                     <label for="branch">Sucursal</label>
                     <select
@@ -120,12 +145,28 @@
                     </button>
                   </div>
                 </form>
+              } @else {
+                <p class="empty-message" role="alert">
+                  No se pudo determinar la empresa de esta sesión. Cerrá sesión y volvé a ingresar.
+                </p>
               }
             </section>
           }
         } @else {
           <form class="login-form" [formGroup]="credentialsForm" (ngSubmit)="signIn()" novalidate>
             <h2>Iniciar sesión</h2>
+            @if (!isPosElectron) {
+              <label for="company-code">Código de empresa</label>
+              <input
+                id="company-code"
+                name="company-code"
+                type="text"
+                formControlName="companyCode"
+                autocomplete="organization"
+                maxlength="40"
+                required
+              />
+            }
             <label for="credential">Usuario o correo</label>
             <input
               id="credential"
@@ -148,7 +189,7 @@
               required
             />
 
-            <button type="submit" [disabled]="credentialsForm.invalid || isSubmitting()">
+            <button type="submit" [disabled]="credentialsForm.invalid || isSubmitting() || (isPosElectron && terminalStatus() !== 'ready')">
               {{ isSubmitting() ? 'Ingresando…' : 'Ingresar' }}
             </button>
           </form>

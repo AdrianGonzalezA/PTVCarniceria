@@ -9,6 +9,7 @@ El primer despliegue se probará como workshop con varias PC de caja. El usuario
 ## Decisión
 
 - Una API y una base PostgreSQL por sucursal desplegada, ambas en un servidor local; varias cajas Electron se conectan por LAN. Administración usa navegador en esa LAN.
+- La API de esa instalación se vincula por configuración a una empresa y sucursal. Limita los contextos operativos a esa identidad; el administrador web entra sin selector de sucursal. El servidor compartido de desarrollo conserva la selección manual.
 - La API es la única que conecta a PostgreSQL. Cada caja conserva identidad de terminal y cada cajero abre su turno.
 - Se prepara configuración del destino API y de periféricos por puesto, sin recompilar Electron y sin guardar credenciales en Git.
 - No se crea ahora ninguna base nueva: la restricción de una sola base de desarrollo `carnicerias_test_visual` continúa vigente.

@@ -36,6 +36,9 @@ public sealed class InventoryMovement
 {
     private InventoryMovement() => Reason = string.Empty;
 
+    public static string NormalizeAdjustmentDescription(string? description) =>
+        string.IsNullOrWhiteSpace(description) ? "Ajuste manual" : description.Trim();
+
     public InventoryMovement(Guid companyId, Guid branchId, Guid productId, Guid userId,
         Guid operationId, InventoryMovementKind kind, decimal quantityDelta, string reason, DateTimeOffset createdAtUtc)
     {

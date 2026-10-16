@@ -20,6 +20,7 @@ public sealed class SessionAuthenticationService(
     private static readonly TimeSpan AbsoluteLifetime = TimeSpan.FromHours(8);
 
     public async Task<CreatedUserSession?> CreateAsync(
+        Guid companyId,
         string credential,
         string password,
         Guid? terminalId = null,
@@ -29,16 +30,43 @@ public sealed class SessionAuthenticationService(
         var normalizedUsername = normalizedCredential.ToUpperInvariant();
         var normalizedEmail = normalizedCredential.ToLowerInvariant();
         var user = await db.Users.SingleOrDefaultAsync(
-            candidate => candidate.UsernameNormalized == normalizedUsername ||
-                         candidate.EmailNormalized == normalizedEmail,
+            candidate => candidate.CompanyId == companyId && !candidate.IsManufacturer && candidate.IsActive &&
+                         (candidate.UsernameNormalized == normalizedUsername ||
+                          candidate.EmailNormalized == normalizedEmail),
             cancellationToken);
 
         var passwordMatches = passwordHasher.Verify(password, user?.PasswordHash ?? DummyPasswordHash.Value);
-        if (!passwordMatches || user is not { IsActive: true })
+        var companyActive = user is not null && await db.Companies.AnyAsync(
+            company => company.Id == companyId && company.IsActive, cancellationToken);
+        if (!passwordMatches || !companyActive || user is null)
         {
             return null;
         }
 
+        return await IssueAsync(user, companyId, terminalId, cancellationToken);
+    }
+
+    public async Task<CreatedUserSession?> CreateManufacturerAsync(
+        string credential,
+        string password,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedCredential = Normalize(credential);
+        var normalizedUsername = normalizedCredential.ToUpperInvariant();
+        var normalizedEmail = normalizedCredential.ToLowerInvariant();
+        var user = await db.Users.SingleOrDefaultAsync(candidate => candidate.IsManufacturer &&
+            candidate.CompanyId == null && candidate.IsActive &&
+            (candidate.UsernameNormalized == normalizedUsername || candidate.EmailNormalized == normalizedEmail),
+            cancellationToken);
+        var passwordMatches = passwordHasher.Verify(password, user?.PasswordHash ?? DummyPasswordHash.Value);
+        return passwordMatches && user is not null
+            ? await IssueAsync(user, null, null, cancellationToken)
+            : null;
+    }
+
+    private async Task<CreatedUserSession> IssueAsync(
+        UserIdentity user, Guid? companyId, Guid? terminalId, CancellationToken cancellationToken)
+    {
         var now = timeProvider.GetUtcNow();
         var credentialBytes = RandomNumberGenerator.GetBytes(32);
         var sessionCredential = Convert.ToBase64String(credentialBytes)
@@ -49,12 +77,44 @@ public sealed class SessionAuthenticationService(
 
         var tokenHash = HashCredential(sessionCredential);
         var session = new UserSession(user.Id, tokenHash, now, now.Add(AbsoluteLifetime));
+        if (companyId is Guid boundCompanyId)
+            session.BindToCompany(boundCompanyId);
         if (terminalId is Guid boundTerminalId)
             session.BindToTerminal(boundTerminalId);
         db.Sessions.Add(session);
         await db.SaveChangesAsync(cancellationToken);
 
         return new CreatedUserSession(sessionCredential, user, session);
+    }
+
+    public async Task<AuthenticatedUserSession?> FindManufacturerActiveAsync(
+        string? credential,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(credential) || credential.Length > 128)
+            return null;
+
+        var tokenHash = HashCredential(credential);
+        var session = await db.Sessions.SingleOrDefaultAsync(candidate => candidate.TokenHash == tokenHash,
+            cancellationToken);
+        if (session is null)
+            return null;
+
+        var user = await db.Users.SingleOrDefaultAsync(candidate => candidate.Id == session.UserId,
+            cancellationToken);
+        var now = timeProvider.GetUtcNow();
+        if (user is not { IsActive: true, IsManufacturer: true, CompanyId: null } ||
+            session.CompanyId is not null || session.BranchId is not null ||
+            session.PosTerminalId is not null || !session.IsActiveAt(now))
+        {
+            session.Revoke(now);
+            await db.SaveChangesAsync(cancellationToken);
+            return null;
+        }
+
+        session.Touch(now);
+        await db.SaveChangesAsync(cancellationToken);
+        return new AuthenticatedUserSession(user, session);
     }
 
     public async Task<AuthenticatedUserSession?> FindActiveAsync(
@@ -77,7 +137,9 @@ public sealed class SessionAuthenticationService(
 
         var user = await db.Users.SingleOrDefaultAsync(candidate => candidate.Id == session.UserId, cancellationToken);
         var now = timeProvider.GetUtcNow();
-        if (user is not { IsActive: true } || !session.IsActiveAt(now))
+        if (user is not { IsActive: true, IsManufacturer: false } ||
+            user.CompanyId is null || user.CompanyId != session.CompanyId ||
+            !session.IsActiveAt(now))
         {
             session.Revoke(now);
             await db.SaveChangesAsync(cancellationToken);

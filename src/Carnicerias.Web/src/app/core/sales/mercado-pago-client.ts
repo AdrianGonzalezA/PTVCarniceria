@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 
-export type MercadoPagoMode = 'qr' | 'point';
+export type MercadoPagoMode = 'qr' | 'qrStatic' | 'point';
 
 export interface MercadoPagoIntent {
   readonly id: string;

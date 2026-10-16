@@ -1,0 +1,16 @@
+html {
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color-scheme: light;
+}
+
+body {
+  min-width: 20rem;
+  margin: 0;
+  background: #f3f6f4;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid #267d9d;
+  outline-offset: 2px;
+}

@@ -1,6 +1,4 @@
 {
   "apiOrigin": "http://192.168.10.20:5197",
-  "allowInsecureLan": true,
-  "scale": { "port": "COM6", "baudRate": 9600 },
-  "printer": { "port": "COM1", "baudRate": 9600 }
+  "allowInsecureLan": true
 }

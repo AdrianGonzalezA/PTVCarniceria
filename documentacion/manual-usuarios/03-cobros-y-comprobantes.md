@@ -6,16 +6,16 @@ Con el borrador guardado, pulsá **Finalizar compra**. En **Cobrar venta** revis
 
 Débito, crédito, transferencia y cheque son hoy **registros manuales del medio declarado**; el POS no verifica esas operaciones con bancos o adquirentes. Mercado Pago sí exige una orden acreditada y verificada por la API. El cheque todavía no tiene cartera, depósito ni rechazo gestionados en la aplicación.
 
-## Mercado Pago: QR o Point
+## Mercado Pago: QR dinámico, QR fijo o Point
 
 1. Marcá **Mercado Pago** y verificá el importe asignado a ese medio.
-2. Elegí **QR dinámico** o **Terminal Point** y pulsá **Solicitar cobro**. QR presenta un código en pantalla; Point envía la orden a la terminal vinculada a la caja.
+2. Elegí **QR dinámico**, **QR fijo del puesto** o **Terminal Point** y pulsá **Solicitar cobro**. El dinámico genera un QR para esta venta; el fijo reutiliza el QR de la caja, pero crea una orden por el importe de esta venta; Point envía la orden a la terminal vinculada.
 3. Esperá a que la orden figure **Acreditado**. Mientras el cierre permanezca abierto, el POS consulta automáticamente cada 5 segundos. **Consultar pago** permite verificar manualmente si hace falta.
 4. Solo entonces pulsá **Confirmar venta**. La acreditación externa por sí sola **no cierra** el ticket ni descuenta stock.
 
 Si la orden sigue **Pendiente**, no vuelvas a cobrar por otro medio ni generes otra orden para el mismo ticket sin aclarar su estado. **Cancelar orden** se usa únicamente para una orden no acreditada; un resultado incierto requiere nueva consulta. Si se cierra la ventana de cobro, la consulta automática se detiene; al volver a abrir el ticket se recupera la orden y se consulta nuevamente.
 
-Mercado Pago aparece solo si la caja y el turno actuales tienen QR o Point configurado; el selector muestra únicamente esos modos. Si falla la consulta de pasarelas, podés seguir con medios manuales, pero no iniciar un cobro integrado nuevo. Una orden previa permanece visible para consultar o cancelar aunque la configuración de la caja haya cambiado; no se puede quitar mientras esté activa o incierta. Clover sandbox puede probarse desde Administración, pero aún no se ofrece para cobrar en el POS sin terminal y confirmación del pago.
+Mercado Pago aparece solo si la caja y el turno actuales tienen QR o Point configurado; el selector muestra únicamente esos modos. El QR fijo requiere que el `external_id` de la caja corresponda a un puesto QR activo e integrado de Mercado Pago; no es el ID numérico del puesto. Si falla la consulta de pasarelas, podés seguir con medios manuales, pero no iniciar un cobro integrado nuevo. Una orden previa permanece visible para consultar o cancelar aunque la configuración de la caja haya cambiado; no se puede quitar mientras esté activa o incierta. Clover sandbox puede probarse desde Administración, pero aún no se ofrece para cobrar en el POS sin terminal y confirmación del pago.
 
 ## Cuenta corriente y saldo a favor
 
@@ -33,6 +33,6 @@ La instalación actual es de prueba: los comprobantes fiscales se identifican co
 
 ## Imprimir o guardar
 
-En **Venta confirmada** podés usar **Imprimir en COM1** o **Guardar ticket PDF / Guardar factura PDF**, según el comprobante. La impresión serial requiere el dispositivo configurado en ese puerto; el PDF se guarda en el equipo del puesto. Un fallo de impresión o guardado **no repite ni deshace** la venta. Verificá el comprobante antes de reenviarlo para evitar duplicar papel.
+Al cerrar una venta, el ticket se imprime automáticamente en el dispositivo de la caja. En el laboratorio, la Hasar COM8 imprime el ticket no fiscal al confirmarse la venta; para el ticket fiscal B de consumidor final espera el CAE de ARCA homologación y luego imprime. En **Venta confirmada**, pulsá **Descargar comprobante** para guardar el PDF en la carpeta Descargas del equipo; en la factura electrónica y el ticket fiscal el botón aparece solo después de la autorización de ARCA. La pantalla confirma la descarga sin mostrar la ruta del archivo. Si la caja no tiene Hasar configurada, se usa la impresora serial de texto. La pantalla **Venta confirmada** muestra el resultado o el error y permite reintentar solo cuando sea seguro. Una falla de impresión o descarga **no repite ni deshace** la venta; ante un resultado incierto, revisá el papel y el estado del equipo antes de cualquier nueva acción.
 
 Base técnica: [cobro y turno](../../SPEC-pos-checkout.md), [Mercado Pago](../../SPEC-mercado-pago.md), [cuenta corriente](../../SPEC-customers-credit.md) y [dispositivos](../../SPEC-device-emulation.md).

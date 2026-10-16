@@ -1,0 +1,24 @@
+# Administración central: negocio y conexiones
+
+La administración central usa una cuenta propia de **cada empresa central**. No abre turnos ni reemplaza al administrador o al POS de cada sucursal. Tras ingresar, aparecen las pestañas **Negocio** y **Conexiones a sucursales**. El SuperAdmin del portal central pertenece a Recursos Informáticos y crea empresas/administradores; no entra como administrador de una empresa ni configura las conexiones cotidianas.
+
+En **Negocio en vivo**, el sistema consulta inicialmente **Hoy**: desde las 00:00 de Buenos Aires hasta el momento de la consulta. **Actualizar** vuelve a pedir los datos. Para otro período, elegir **Desde** y **Hasta** como fechas inclusivas de Argentina y pulsar **Consultar período**; se admiten como máximo 31 días. **Hoy** vuelve al día corriente.
+
+Cuando todas las sucursales activas responden, el panel muestra el total de ventas, tickets y pagos aplicados, seguido del detalle por sucursal. El **saldo de turnos abiertos** y la cantidad de turnos aparecen únicamente en cada sucursal: son una fotografía al consultar y no se suman a las ventas del período. También se indica cuándo se generó cada respuesta.
+
+Si una sucursal no responde o entrega datos incompatibles, aparece **Datos incompletos**. Las sucursales disponibles siguen visibles, pero **no se muestra un total general**; los valores de la sucursal faltante figuran como no disponibles, no como cero. Si no hay sucursales registradas, el panel lo indica. Ante sesión vencida, se vuelve al ingreso. Esta pantalla es de solo lectura: no cobra, factura ni altera stock o caja.
+
+## Conexiones a sucursales
+
+Para una sucursal en modo administrado, pedí a su administrador el paquete generado en **Configuración → Conexión con central** de esa sucursal. Allí salen la etiqueta, URL, tres identificadores y token sin recurrir a SQL o consola. Implementación debe haber vinculado esa API a la sucursal, aprobado esa URL/IP para **esta empresa** y configurado la clave de cifrado de la central. El administrador central **no puede** aprobar destinos nuevos desde la pantalla.
+
+1. Abrir **Conexiones a sucursales** → **Agregar conexión**. Pegar el paquete en **Pegar datos de sucursal** y pulsar **Completar formulario**. Revisar etiqueta, URL raíz y los tres UUID; luego pulsar **Verificar y agregar**. También se pueden ingresar los campos individualmente para conexiones heredadas. La central comprueba la identidad remota antes de guardar. El paquete se borra del campo al completarlo y el token se borra del formulario al enviarlo; no aparece en el listado ni puede recuperarse desde el navegador.
+2. En la fila, **Comprobar** actualiza el resultado y la fecha de una prueba puntual. *Disponible* significa que respondió en esa prueba, **no** que estará siempre en línea. *No disponible* tampoco equivale a ventas cero: en **Negocio** se muestra un agregado incompleto si falta una sucursal activa.
+3. **Editar** permite cambiar el nombre sin contactar a la sucursal. Para actualizar URL o credencial, se puede pegar el **paquete nuevo de esa misma sucursal**; si sus tres IDs no coinciden, se rechaza antes de completar el formulario. Cambiar URL o introducir **Nuevo token** obliga a verificar destino, credencial y los tres UUID. Si falla, la configuración anterior queda intacta. Los identificadores no se editan.
+4. **Desactivar** pide confirmación, conserva registro e historial y excluye esa sucursal del dashboard. **Reactivar** comprueba nuevamente la sucursal antes de incluirla. Si la comprobación falla, permanece inactiva.
+
+Para rotar una conexión **administrada**, el administrador de la sucursal emite el paquete nuevo. Abrí **Editar** en la central, pegá ese paquete, guardá y pulsá **Comprobar**. Después, el administrador local finaliza la rotación y revoca el token anterior. Para conexiones **heredadas**, implementación prepara primero `NextCredentialSha256` en la API de sucursal, el administrador carga el nuevo token en **Editar** y, tras comprobarlo, implementación retira el anterior. En ambos casos el token anterior nunca se muestra.
+
+Si aparece **No se pudo verificar la sucursal**, revisar con implementación destino aprobado, conectividad/TLS, token y UUID; no enviar el token por capturas, chat ni tickets. Si falta el almacén de credenciales, implementación debe revisar la clave protegida de la central. Si se corta la respuesta mientras se guarda, **actualizar el listado antes de volver a enviar**, para evitar un alta o cambio duplicado. El administrador solo ve conexiones de su empresa; no puede seleccionar otra.
+
+Si la pantalla dice que hay que **actualizar el servicio central**, el sitio web ya tiene la función pero la API que sigue encendida es anterior. El alta se deshabilita hasta que implementación despliegue la API nueva conservando sus credenciales protegidas; el panel de negocio y las cajas siguen operando.

@@ -14,8 +14,12 @@ public static class IntegratedGatewayAvailability
         if (seller?.HasAccessToken != true || register is null ||
             seller.CompanyId != register.CompanyId)
             return [];
-        var modes = new List<string>(2);
-        if (register.QrExternalPosId is not null) modes.Add("qr");
+        var modes = new List<string>(3);
+        if (register.QrExternalPosId is not null)
+        {
+            modes.Add("qr");
+            modes.Add("qrStatic");
+        }
         if (register.PointTerminalId is not null) modes.Add("point");
         return modes.Count == 0 ? [] : [new AvailableIntegratedGateway("mercadoPago", modes)];
     }

@@ -20,7 +20,7 @@ public sealed class IntegratedGatewayAvailabilityTests
 
         Assert.Single(available);
         Assert.Equal("mercadoPago", available[0].Provider);
-        Assert.Equal(["qr"], available[0].Modes);
+        Assert.Equal(["qr", "qrStatic"], available[0].Modes);
     }
 
     [Fact]

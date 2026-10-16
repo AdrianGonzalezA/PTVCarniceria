@@ -8,6 +8,7 @@ import { posCanDeactivateGuard, posGuard } from './core/pos/pos.guard';
 
 export const routes: Routes = [
   { path: '', component: WelcomePage },
+  { path: 'superadmin', loadComponent: () => import('./features/manufacturer/manufacturer-page').then((page) => page.ManufacturerPage) },
   { path: 'users', loadComponent: () => import('./features/users/users-page').then((page) => page.UsersPage), canActivate: [userAdminGuard] },
   { path: 'admin/configuracion', loadComponent: () => import('./features/admin/admin-page').then((page) => page.AdminPage), canActivate: [userAdminGuard], data: { area: 'configuration' } },
   { path: 'admin', loadComponent: () => import('./features/admin/admin-page').then((page) => page.AdminPage), canActivate: [userAdminGuard], data: { area: 'business' } },
@@ -16,6 +17,7 @@ export const routes: Routes = [
   { path: 'admin/taxes', loadComponent: () => import('./features/admin/product-tax-page').then((page) => page.ProductTaxPage), canActivate: [catalogAdminGuard] },
   { path: 'admin/price-lists', loadComponent: () => import('./features/admin/price-lists-page').then((page) => page.PriceListsPage), canActivate: [catalogAdminGuard] },
   { path: 'admin/organization', loadComponent: () => import('./features/admin/organization-page').then((page) => page.OrganizationPage), canActivate: [organizationAdminGuard] },
+  { path: 'admin/central-connection', loadComponent: () => import('./features/admin/central-connection-page').then((page) => page.CentralConnectionPage), canActivate: [organizationAdminGuard] },
   { path: 'admin/arca', loadComponent: () => import('./features/admin/arca-settings-page').then((page) => page.ArcaSettingsPage), canActivate: [organizationAdminGuard] },
   { path: 'admin/payment-gateways', loadComponent: () => import('./features/admin/payment-gateways-page').then((page) => page.PaymentGatewaysPage), canActivate: [organizationAdminGuard] },
   { path: 'admin/customers', loadComponent: () => import('./features/admin/customers-page').then((page) => page.CustomersPage), canActivate: [organizationAdminGuard] },

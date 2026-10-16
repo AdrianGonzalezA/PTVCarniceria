@@ -1,0 +1,100 @@
+@if (manufacturerRoute) {
+  <app-central-manufacturer-page />
+} @else {
+<main class="central-shell">
+  <header class="app-header">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">C</span><span>Carnicerías <small>· Central</small></span></div>
+    @if (session(); as current) {
+      <div class="account-bar">
+        <span>{{ current.username }}</span>
+        <button type="button" class="header-button" [disabled]="busy()" (click)="logout()">Cerrar sesión</button>
+      </div>
+    }
+  </header>
+
+  <div class="workspace">
+    <p class="eyebrow">Administración multi-sucursal</p>
+    <h1>Administración central</h1>
+    <p class="intro">Consultá el negocio y administrá las conexiones a las sucursales de tu empresa. Esta cuenta no abre cajas ni modifica ventas locales.</p>
+
+    @if (error(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
+
+    @if (!checked()) {
+      <p class="status-message" role="status">Verificando sesión central…</p>
+    } @else if (!session()) {
+      <section class="login-panel" aria-labelledby="login-title">
+        <h2 id="login-title">Ingresar a la central</h2>
+        <form [formGroup]="loginForm" (ngSubmit)="login()" novalidate>
+          <label for="central-code">Código de empresa</label>
+          <input id="central-code" formControlName="companyCode" autocomplete="organization" maxlength="40" required />
+          <label for="central-username">Usuario central</label>
+          <input id="central-username" formControlName="credential" autocomplete="username" maxlength="100" required />
+          <label for="central-password">Contraseña</label>
+          <input id="central-password" type="password" formControlName="password" autocomplete="current-password" required />
+          @if (loginForm.touched && loginForm.invalid) {
+            <p class="field-error" role="alert">Completá código de empresa, usuario y contraseña.</p>
+          }
+          <button type="submit" [disabled]="busy()">{{ busy() ? 'Ingresando…' : 'Ingresar' }}</button>
+        </form>
+      </section>
+      <p class="portal-switch">¿Administrás la plataforma? <a href="/superadmin">Ingresar como SuperAdmin central</a></p>
+    } @else {
+      <nav class="workspace-tabs" aria-label="Secciones de la central">
+        <button type="button" [attr.aria-current]="!connectionsOpen() ? 'page' : null"
+          (click)="connectionsOpen.set(false)">Negocio</button>
+        <button id="connections-tab" type="button"
+          [attr.aria-current]="connectionsOpen() ? 'page' : null"
+          (click)="connectionsOpen.set(true)">Conexiones a sucursales</button>
+      </nav>
+      @if (connectionsOpen()) {
+        <app-central-branch-connections (sessionExpired)="expireSession()" />
+      } @else {
+      <app-central-business-dashboard (sessionExpired)="expireSession()" />
+      <section class="content-panel" aria-labelledby="branches-title">
+        <div class="panel-heading">
+          <div>
+            <h2 id="branches-title">Sucursales registradas</h2>
+            <p>Empresa central: {{ session()!.centralCompanyId }}</p>
+          </div>
+        </div>
+        @if (installationsError(); as branchError) {
+          <div class="list-error" role="alert">
+            <p>{{ branchError }}</p>
+            <button type="button" [disabled]="installationsBusy()" (click)="loadInstallations(currentPage())">Reintentar</button>
+          </div>
+        }
+        @if (installationsBusy()) {
+          <p class="status-message" role="status">Cargando sucursales registradas…</p>
+        } @else if (totalCount() === 0 && !installationsError()) {
+          <p class="status-message">Todavía no hay sucursales registradas para esta empresa.</p>
+        } @else {
+          <ul class="installation-list">
+            @for (installation of installations(); track installation.installationId) {
+              <li class="installation-item">
+                <div class="installation-heading">
+                  <h3>{{ installation.label }}</h3>
+                  <span class="registration-state">Registrada</span>
+                </div>
+                <p class="connection-note">Conectividad sin comprobar</p>
+                <dl>
+                  <div><dt>Instalación</dt><dd>{{ installation.installationId }}</dd></div>
+                  <div><dt>Empresa remota</dt><dd>{{ installation.remoteCompanyId }}</dd></div>
+                  <div><dt>Sucursal remota</dt><dd>{{ installation.remoteBranchId }}</dd></div>
+                </dl>
+              </li>
+            }
+          </ul>
+          <div class="pagination-bar">
+            <p>{{ totalCount() }} sucursal{{ totalCount() === 1 ? '' : 'es' }} registrada{{ totalCount() === 1 ? '' : 's' }} · página {{ currentPage() }} de {{ totalPages() }}</p>
+            <div class="page-actions">
+              <button type="button" [disabled]="installationsBusy() || currentPage() <= 1" (click)="loadInstallations(currentPage() - 1)">Anterior</button>
+              <button type="button" [disabled]="installationsBusy() || currentPage() >= totalPages()" (click)="loadInstallations(currentPage() + 1)">Siguiente</button>
+            </div>
+          </div>
+        }
+      </section>
+      }
+    }
+  </div>
+</main>
+}

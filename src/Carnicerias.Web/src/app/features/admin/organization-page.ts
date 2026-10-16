@@ -4,13 +4,12 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AdminAreaTabs } from './admin-area-tabs';
 import { Observable } from 'rxjs';
-import { AdminBranch, AdminCompany, AdminCompanyCreated, AdminOrganizationClient } from '../../core/admin/admin-organization-client';
-import { AdminTerminal, AdminTerminalClient, AdminTerminalUpdate, ProvisionedTerminal } from '../../core/admin/admin-terminal-client';
+import { AdminBranch, AdminCompany, AdminOrganizationClient } from '../../core/admin/admin-organization-client';
+import { AdminTerminal, AdminTerminalClient, AdminTerminalUpdate, ProvisionedTerminal, TerminalDevices } from '../../core/admin/admin-terminal-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { AdminDetailDialog } from './admin-detail-dialog';
 
 type OrganizationAction =
-  | { kind: 'company'; company: AdminCompany }
   | { kind: 'branch'; branch: AdminBranch }
   | { kind: 'terminal' | 'rotate'; terminal: AdminTerminal };
 
@@ -27,15 +26,15 @@ export class OrganizationPage implements OnInit {
   private readonly router = inject(Router);
   private readonly formBuilder = inject(FormBuilder);
 
-  protected readonly companyForm = this.formBuilder.nonNullable.group({
-    name: ['', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(200)]],
-    initialBranchName: ['', Validators.maxLength(200)],
-  });
   protected readonly branchForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(200)]],
   });
   protected readonly terminalForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(120)]],
+  });
+  protected readonly devicesForm = this.formBuilder.nonNullable.group({
+    scaleMode: 'none', scalePort: '', scaleBaudRate: 9600,
+    printerKind: 'none', printerPort: '', printerBaudRate: 9600,
   });
   protected readonly session = signal<CurrentSession | null>(null);
   protected readonly companies = signal<readonly AdminCompany[]>([]);
@@ -45,13 +44,9 @@ export class OrganizationPage implements OnInit {
   protected readonly branches = signal<readonly AdminBranch[]>([]);
   protected readonly branchesLoading = signal(false);
   protected readonly branchesError = signal<string | null>(null);
-  protected readonly companyEditorOpen = signal(false);
-  protected readonly editingCompany = signal<AdminCompany | null>(null);
   protected readonly branchEditorOpen = signal(false);
   protected readonly editingBranch = signal<AdminBranch | null>(null);
-  protected readonly companySaving = signal(false);
   protected readonly branchSaving = signal(false);
-  protected readonly companyActionId = signal<string | null>(null);
   protected readonly branchActionId = signal<string | null>(null);
   protected readonly actionMessage = signal<string | null>(null);
   protected readonly actionError = signal<string | null>(null);
@@ -63,6 +58,9 @@ export class OrganizationPage implements OnInit {
   protected readonly editingTerminal = signal<AdminTerminal | null>(null);
   protected readonly terminalSaving = signal(false);
   protected readonly terminalActionId = signal<string | null>(null);
+  protected readonly deviceEditorTerminal = signal<AdminTerminal | null>(null);
+  protected readonly devicesSaving = signal(false);
+  protected readonly devicesError = signal<string | null>(null);
   protected readonly shownCredential = signal<string | null>(null);
   protected readonly pendingAction = signal<OrganizationAction | null>(null);
 
@@ -91,80 +89,6 @@ export class OrganizationPage implements OnInit {
     if (this.branchSaving() || this.branchActionId() || this.selectedTerminalBranch()) return;
     this.selectedCompany.set(null);
     this.branches.set([]);
-  }
-
-  protected startCreateCompany(): void {
-    this.editingCompany.set(null);
-    this.companyForm.reset({ name: '', initialBranchName: '' });
-    this.actionError.set(null);
-    this.companyEditorOpen.set(true);
-  }
-
-  protected startEditCompany(company: AdminCompany): void {
-    this.editingCompany.set(company);
-    this.companyForm.reset({ name: company.name, initialBranchName: '' });
-    this.actionError.set(null);
-    this.companyEditorOpen.set(true);
-  }
-
-  protected cancelCompany(): void {
-    if (!this.companySaving()) this.companyEditorOpen.set(false);
-  }
-
-  protected saveCompany(): void {
-    const values = this.companyForm.getRawValue();
-    const name = values.name.trim();
-    const initialBranchName = values.initialBranchName.trim();
-    const editing = this.editingCompany();
-    if (this.companySaving() || this.companyForm.invalid || !name ||
-        (!editing && (!initialBranchName || initialBranchName.length > 200))) {
-      this.companyForm.markAllAsTouched();
-      if (!editing && !initialBranchName) this.actionError.set('Ingresá la primera sucursal.');
-      return;
-    }
-    this.companySaving.set(true);
-    this.actionError.set(null);
-    const operation: Observable<AdminCompany | AdminCompanyCreated> = editing
-      ? this.client.updateCompany(editing.id, { name })
-      : this.client.createCompany(name, initialBranchName);
-    operation.subscribe({
-      next: (result) => {
-        this.companySaving.set(false);
-        this.companyEditorOpen.set(false);
-        if ('activeBranchCount' in result) this.replaceCompany(result);
-        else this.loadCompanies();
-        this.actionMessage.set(editing ? 'Empresa actualizada.' :
-          'Empresa y sucursal inicial creadas. El administrador ya tiene acceso.');
-      },
-      error: (error: HttpErrorResponse) => {
-        this.companySaving.set(false);
-        this.actionError.set(error.status === 409 ? 'Ya existe una empresa con ese nombre.' :
-          'No se pudo guardar la empresa. Intentá de nuevo.');
-      },
-    });
-  }
-
-  protected toggleCompany(company: AdminCompany): void {
-    if (this.companyActionId() || this.session()?.context?.companyId === company.id) return;
-    this.pendingAction.set({ kind: 'company', company });
-  }
-
-  private executeCompanyToggle(company: AdminCompany): void {
-    this.companyActionId.set(company.id);
-    this.actionError.set(null);
-    this.client.updateCompany(company.id, { isActive: !company.isActive }).subscribe({
-      next: (updated) => {
-        this.replaceCompany(updated);
-        this.companyActionId.set(null);
-        this.pendingAction.set(null);
-        this.actionMessage.set(updated.isActive ? 'Empresa activada.' : 'Empresa inactivada.');
-      },
-      error: (error: HttpErrorResponse) => {
-        this.companyActionId.set(null);
-        this.pendingAction.set(null);
-        this.actionError.set(this.organizationError(error));
-      },
-    });
   }
 
   protected startCreateBranch(): void {
@@ -253,12 +177,14 @@ export class OrganizationPage implements OnInit {
     if (!company) return;
     this.selectedTerminalBranch.set(branch);
     this.terminalEditorOpen.set(false);
+    this.deviceEditorTerminal.set(null);
     this.clearCredential();
     this.loadTerminals(company.id, branch.id);
   }
 
   protected closeTerminals(): void {
-    if (this.terminalSaving() || this.terminalActionId() || this.shownCredential()) return;
+    if (this.terminalSaving() || this.terminalActionId() || this.shownCredential() ||
+        this.deviceEditorTerminal()) return;
     this.selectedTerminalBranch.set(null);
     this.terminals.set([]);
     this.terminalEditorOpen.set(false);
@@ -287,6 +213,70 @@ export class OrganizationPage implements OnInit {
     if (!this.terminalSaving()) this.terminalEditorOpen.set(false);
   }
 
+  protected startDeviceEditor(terminal: AdminTerminal): void {
+    const devices = terminal.devices ?? { scale: null, printer: null };
+    this.devicesForm.reset({
+      scaleMode: devices.scale ? 'serial' : 'none',
+      scalePort: devices.scale?.port ?? '', scaleBaudRate: devices.scale?.baudRate ?? 9600,
+      printerKind: devices.printer?.kind ?? 'none',
+      printerPort: devices.printer?.port ?? '', printerBaudRate: devices.printer?.baudRate ?? 9600,
+    });
+    this.devicesError.set(null);
+    this.deviceEditorTerminal.set(terminal);
+  }
+
+  protected cancelDeviceEditor(): void {
+    if (!this.devicesSaving()) this.deviceEditorTerminal.set(null);
+  }
+
+  protected saveDevices(): void {
+    const company = this.selectedCompany();
+    const branch = this.selectedTerminalBranch();
+    const terminal = this.deviceEditorTerminal();
+    if (!company || !branch || !terminal || this.devicesSaving()) return;
+    const value = this.devicesForm.getRawValue();
+    const scalePort = value.scalePort.trim().toUpperCase();
+    const printerPort = value.printerPort.trim().toUpperCase();
+    const scale = value.scaleMode === 'serial'
+      ? { port: scalePort, baudRate: value.scaleBaudRate } : null;
+    const printerKind = value.printerKind === 'text' ? 'text'
+      : value.printerKind === 'hasar' ? 'hasar' : null;
+    const printer: TerminalDevices['printer'] = printerKind
+      ? { kind: printerKind, port: printerPort,
+        baudRate: printerKind === 'hasar' ? 9600 : value.printerBaudRate } : null;
+    if ((scale && !/^COM[1-9][0-9]{0,2}$/.test(scale.port)) ||
+        (printer && !/^COM[1-9][0-9]{0,2}$/.test(printer.port)) ||
+        (scale && printer && scale.port === printer.port)) {
+      this.devicesError.set('Revisá los puertos COM: deben ser válidos y distintos.');
+      return;
+    }
+    const devices: TerminalDevices = { scale, printer };
+    this.devicesSaving.set(true);
+    this.devicesError.set(null);
+    this.terminalsClient.configureDevices(company.id, branch.id, terminal.id, devices).subscribe({
+      next: (updated) => {
+        this.replaceTerminal(updated);
+        this.devicesSaving.set(false);
+        this.deviceEditorTerminal.set(null);
+        this.actionMessage.set('Dispositivos actualizados. Recargá la caja Electron para ver el cambio.');
+      },
+      error: () => {
+        this.devicesSaving.set(false);
+        this.devicesError.set('No se pudo guardar la asignación. Revisá los puertos e intentá de nuevo.');
+      },
+    });
+  }
+
+  protected scaleDescription(terminal: AdminTerminal): string {
+    return terminal.devices?.scale ? `Balanza ${terminal.devices.scale.port}` : 'Sin balanza';
+  }
+
+  protected printerDescription(terminal: AdminTerminal): string {
+    return terminal.devices?.printer
+      ? `${terminal.devices.printer.kind === 'hasar' ? 'Hasar' : 'Texto'} ${terminal.devices.printer.port}`
+      : 'Sin impresora';
+  }
+
   protected saveTerminal(): void {
     const company = this.selectedCompany();
     const branch = this.selectedTerminalBranch();
@@ -305,7 +295,8 @@ export class OrganizationPage implements OnInit {
       next: (result) => {
         if ('credential' in result) {
           this.terminals.set([...this.terminals(), { id: result.id, name: result.name,
-            isActive: true, isHistorical: false, hasCredential: true }]);
+            isActive: true, isHistorical: false, hasCredential: true,
+            devices: { scale: null, printer: null } }]);
           this.shownCredential.set(result.credential);
           this.updateBranchTerminalCount(branch.id, 1);
         } else {
@@ -392,7 +383,6 @@ export class OrganizationPage implements OnInit {
     const action = this.pendingAction();
     if (!action) return;
     switch (action.kind) {
-      case 'company': this.executeCompanyToggle(action.company); break;
       case 'branch': this.executeBranchToggle(action.branch); break;
       case 'terminal': this.executeTerminalToggle(action.terminal); break;
       case 'rotate': this.executeTerminalRotation(action.terminal); break;
@@ -400,26 +390,22 @@ export class OrganizationPage implements OnInit {
   }
 
   protected closeAction(): void {
-    if (!this.companyActionId() && !this.branchActionId() && !this.terminalActionId())
+    if (!this.branchActionId() && !this.terminalActionId())
       this.pendingAction.set(null);
   }
 
   protected actionTitle(action: OrganizationAction): string {
     if (action.kind === 'rotate') return 'Rotar credencial de caja';
-    const active = action.kind === 'company' ? action.company.isActive :
-      action.kind === 'branch' ? action.branch.isActive : action.terminal.isActive;
-    return `${active ? 'Inactivar' : 'Activar'} ${action.kind === 'company' ? 'empresa' :
-      action.kind === 'branch' ? 'sucursal' : 'caja'}`;
+    const active = action.kind === 'branch' ? action.branch.isActive : action.terminal.isActive;
+    return `${active ? 'Inactivar' : 'Activar'} ${action.kind === 'branch' ? 'sucursal' : 'caja'}`;
   }
 
   protected actionName(action: OrganizationAction): string {
-    return action.kind === 'company' ? action.company.name :
-      action.kind === 'branch' ? action.branch.name : action.terminal.name;
+    return action.kind === 'branch' ? action.branch.name : action.terminal.name;
   }
 
   protected actionWarning(action: OrganizationAction): string {
     switch (action.kind) {
-      case 'company': return action.company.isActive ? 'Sus sucursales dejarán de ofrecerse.' : '';
       case 'branch': return action.branch.isActive ? 'No debe tener turnos ni tickets abiertos.' : '';
       case 'terminal': return action.terminal.isActive ? 'Su credencial y sesiones dejarán de funcionar.' :
         'Se emitirá una credencial nueva que deberás guardar.';
@@ -496,11 +482,10 @@ export class OrganizationPage implements OnInit {
 
   private organizationError(error: HttpErrorResponse): string {
     const code = error.error?.error?.code;
-    if (code === 'BRANCH_HAS_OPEN_OPERATIONS' || code === 'COMPANY_HAS_OPEN_OPERATIONS')
+    if (code === 'BRANCH_HAS_OPEN_OPERATIONS')
       return 'Hay turnos o tickets abiertos. Resolvelos antes de inactivar.';
-    if (code === 'CURRENT_BRANCH_CANNOT_BE_INACTIVATED' ||
-        code === 'CURRENT_COMPANY_CANNOT_BE_INACTIVATED')
-      return 'No se puede inactivar la empresa o sucursal de la sesión actual.';
+    if (code === 'CURRENT_BRANCH_CANNOT_BE_INACTIVATED')
+      return 'No se puede inactivar la sucursal de la sesión actual.';
     return 'No se pudo cambiar el estado. Intentá de nuevo.';
   }
 }

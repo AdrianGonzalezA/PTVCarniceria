@@ -1,22 +1,26 @@
 # Base del manual de usuarios de Carnicerías
 
-Esta carpeta describe **las funciones disponibles en el corte del 9 de octubre de 2026**. Es una base de trabajo para redactar el manual definitivo, no una certificación de aptitud productiva. Los ejemplos de la instalación actual usan datos ficticios; ARCA está en homologación y Mercado Pago usa credenciales de prueba.
+Esta carpeta describe **las funciones disponibles hasta el corte del 15 de octubre de 2026**. Es una base de trabajo para redactar el manual definitivo, no una certificación de aptitud productiva. Los ejemplos de la instalación actual usan datos ficticios; ARCA está en homologación y Mercado Pago usa credenciales de prueba.
 
 ## Recorrido de lectura
 
 | Necesidad | Documento |
 | --- | --- |
-| Ingresar, elegir sucursal y operar una caja/turno | [01 · Acceso y turnos](01-acceso-y-turnos.md) |
+| Ingresar, identificar la sucursal de la caja y operar un turno | [01 · Acceso y turnos](01-acceso-y-turnos.md) |
 | Armar tickets, usar lector/balanza y controlar stock | [02 · Venta en el POS](02-venta-en-el-pos.md) |
 | Cobrar, emitir comprobantes de prueba y cobrar cuentas | [03 · Cobros y comprobantes](03-cobros-y-comprobantes.md) |
 | Consultar ventas, cuentas e inventario desde administración | [04 · Negocio](04-negocio.md) |
 | Mantener maestros, usuarios e integraciones | [05 · Configuración](05-configuracion.md) |
-| Interpretar mensajes y conocer límites del corte | [06 · Límites y problemas frecuentes](06-limites-y-problemas-frecuentes.md) |
+| Consultar el negocio de varias sucursales desde la central | [06 · Administración central](06-administracion-central.md) |
+| Crear empresas y administradores centrales | [07 · SuperAdmin central](07-superadmin-central.md) |
+| Interpretar mensajes y conocer límites del corte | [Límites y problemas frecuentes](06-limites-y-problemas-frecuentes.md) |
 
 ## Perfiles y entornos
 
 - **Cajero:** vende desde una caja identificada en Electron y abre su propio turno. No debe compartir su usuario con el siguiente responsable.
 - **Administrador:** trabaja en **Negocio** y **Configuración** con los permisos asignados. La administración puede abrirse en navegador cuando la interfaz web esté servida; el POS se revisa y opera en Electron.
+- **Administrador central de empresa:** consulta únicamente las sucursales registradas de su empresa en el portal central; no hereda permisos de una instalación POS.
+- **SuperAdmin central:** crea empresas centrales y sus administradores desde `/superadmin`, con una cuenta propia del portal central.
 - Las opciones visibles dependen de los permisos de la sesión. Una sucursal puede tener varias cajas, y cada caja conserva sus propios turnos y tickets A–D. El stock pertenece a la sucursal y es compartido.
 
 ## Criterio editorial para el manual definitivo

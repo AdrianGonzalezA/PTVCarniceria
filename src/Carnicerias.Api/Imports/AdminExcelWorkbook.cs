@@ -40,7 +40,9 @@ public static class AdminExcelWorkbook
                 new("Sucursales", ["Lista", "Sucursal"], ["Mostrador", "Sucursal Centro"])
             ],
             ["customers"] = [new("Clientes", ["Codigo", "Nombre", "CuentaCorriente"],
-                ["CLI-001", "Cliente de ejemplo", "NO"])]
+                ["CLI-001", "Cliente de ejemplo", "NO"])],
+            ["stock"] = [new("Existencias", ["CodigoArticulo", "Variacion", "Descripcion"],
+                ["2546", "5.500", "Reposición"])]
         };
 
     public static bool Supports(string kind) => Definitions.ContainsKey(kind);
@@ -60,14 +62,17 @@ public static class AdminExcelWorkbook
                 cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#27383D");
                 cell.Style.Font.FontColor = XLColor.White;
                 sheet.Column(column + 1).Width = Math.Max(18, definition.Columns[column].Length + 4);
-                if (definition.Columns[column] is "CostoARS" or "PrecioARS")
-                    sheet.Column(column + 1).Style.NumberFormat.Format = "0.00";
+                if (definition.Columns[column] is "CostoARS" or "PrecioARS" or "Variacion")
+                    sheet.Column(column + 1).Style.NumberFormat.Format =
+                        definition.Columns[column] == "Variacion" ? "0.000" : "0.00";
             }
             sheet.SheetView.FreezeRows(1);
         }
 
         var examples = workbook.Worksheets.Add("Ejemplos");
-        examples.Cell(1, 1).Value = "Ejemplos: copiá cada fila a su hoja de carga y reemplazá los valores.";
+        examples.Cell(1, 1).Value = kind == "stock"
+            ? "Ejemplos: variación positiva suma y negativa resta al stock actual; copiá las filas a Existencias."
+            : "Ejemplos: copiá cada fila a su hoja de carga y reemplazá los valores.";
         examples.Cell(1, 1).Style.Font.Bold = true;
         examples.Column(1).Width = 26;
         var exampleRow = 3;
@@ -79,12 +84,18 @@ public static class AdminExcelWorkbook
             {
                 examples.Cell(exampleRow + 1, column + 1).Value = definition.Columns[column];
                 examples.Cell(exampleRow + 1, column + 1).Style.Font.Bold = true;
-                if (definition.Columns[column] is "CostoARS" or "PrecioARS")
+                if (definition.Columns[column] is "CostoARS" or "PrecioARS" or "Variacion")
                     examples.Cell(exampleRow + 2, column + 1).Value =
                         decimal.Parse(definition.Example[column], CultureInfo.InvariantCulture);
                 else examples.Cell(exampleRow + 2, column + 1).Value = definition.Example[column];
                 examples.Column(column + 1).Width = Math.Max(examples.Column(column + 1).Width,
                     definition.Columns[column].Length + 4);
+            }
+            if (kind == "stock")
+            {
+                examples.Cell(exampleRow + 3, 1).Value = "2546";
+                examples.Cell(exampleRow + 3, 2).Value = -1.250;
+                examples.Cell(exampleRow + 3, 3).Value = "Merma";
             }
             exampleRow += 5;
         }
@@ -184,7 +195,7 @@ public static class AdminExcelWorkbook
             foreach (var column in definition.Columns)
             {
                 var cell = sheet.Cell(rowNumber, columns[column]);
-                var numeric = column is "CostoARS" or "PrecioARS";
+                var numeric = column is "CostoARS" or "PrecioARS" or "Variacion";
                 if (cell.IsEmpty())
                 {
                     cells[column] = new ImportCell(null, null);

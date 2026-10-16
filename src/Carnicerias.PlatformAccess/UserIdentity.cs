@@ -13,16 +13,21 @@ public sealed class UserIdentity
         PasswordHash = string.Empty;
     }
 
-    private UserIdentity(string username, string email, string passwordHash)
+    private UserIdentity(string username, string email, string passwordHash, Guid? companyId, bool isManufacturer)
     {
+        if (!isManufacturer && companyId == Guid.Empty)
+            throw new ArgumentException("Company id is required.", nameof(companyId));
+        if (isManufacturer && companyId is not null)
+            throw new ArgumentException("Manufacturer accounts cannot belong to a client company.", nameof(companyId));
+
         var normalizedUsername = Normalize(username);
         var normalizedEmail = Normalize(email);
-        if (normalizedUsername.Length == 0 || normalizedUsername.Length > 100)
+        if (normalizedUsername.Length == 0 || normalizedUsername.Length > 100 || normalizedUsername.Contains('@'))
         {
             throw new ArgumentException("Username is required.", nameof(username));
         }
 
-        if (normalizedEmail.Length == 0 || normalizedEmail.Length > 320)
+        if (normalizedEmail.Length == 0 || normalizedEmail.Length > 320 || !HasEmailSeparator(normalizedEmail))
         {
             throw new ArgumentException("Email is required.", nameof(email));
         }
@@ -38,6 +43,8 @@ public sealed class UserIdentity
         Email = normalizedEmail;
         EmailNormalized = normalizedEmail.ToLowerInvariant();
         PasswordHash = passwordHash;
+        CompanyId = companyId;
+        IsManufacturer = isManufacturer;
         IsActive = true;
         CreatedAtUtc = DateTimeOffset.UtcNow;
     }
@@ -54,6 +61,10 @@ public sealed class UserIdentity
 
     public string PasswordHash { get; private set; }
 
+    public Guid? CompanyId { get; private set; }
+
+    public bool IsManufacturer { get; private set; }
+
     public bool IsActive { get; private set; }
 
     public DateTimeOffset CreatedAtUtc { get; private set; }
@@ -66,8 +77,8 @@ public sealed class UserIdentity
     {
         var normalizedUsername = Normalize(username);
         var normalizedEmail = Normalize(email);
-        if (normalizedUsername.Length == 0 || normalizedUsername.Length > 100 ||
-            normalizedEmail.Length == 0 || normalizedEmail.Length > 320)
+        if (normalizedUsername.Length == 0 || normalizedUsername.Length > 100 || normalizedUsername.Contains('@') ||
+            normalizedEmail.Length == 0 || normalizedEmail.Length > 320 || !HasEmailSeparator(normalizedEmail))
         {
             throw new ArgumentException("Username and email are required.");
         }
@@ -86,8 +97,20 @@ public sealed class UserIdentity
     }
 
     public static UserIdentity Create(string username, string email, string passwordHash) =>
-        new(username, email, passwordHash);
+        new(username, email, passwordHash, null, false);
+
+    public static UserIdentity CreateForCompany(Guid companyId, string username, string email, string passwordHash) =>
+        new(username, email, passwordHash, companyId, false);
+
+    public static UserIdentity CreateManufacturer(string username, string email, string passwordHash) =>
+        new(username, email, passwordHash, null, true);
 
     private static string Normalize(string value) =>
         (value ?? string.Empty).Trim().Normalize(NormalizationForm.FormKC);
+
+    private static bool HasEmailSeparator(string value)
+    {
+        var separator = value.IndexOf('@');
+        return separator > 0 && separator < value.Length - 1;
+    }
 }

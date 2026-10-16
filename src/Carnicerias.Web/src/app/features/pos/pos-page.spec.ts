@@ -284,7 +284,7 @@ describe('PosPage', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Asado');
+    expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('Asado');
     expect(fixture.nativeElement.querySelector('.ticket-panel .ticket-strip')).not.toBeNull();
 
     const choose = (id: string, value: string) => {
@@ -299,8 +299,8 @@ describe('PosPage', () => {
     (fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).click();
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Bondiola');
-    expect(fixture.nativeElement.querySelector('.line-table').textContent).not.toContain('Asado');
+    expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('Bondiola');
+    expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).not.toContain('Asado');
     expect((fixture.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement).value).toBe('nonFiscalTicket');
     expect((fixture.nativeElement.querySelector('#sale-recipient-tax-status') as HTMLSelectElement).value).toBe('finalConsumer');
     choose('sale-document-type', 'fiscalTicket');
@@ -308,18 +308,18 @@ describe('PosPage', () => {
     (fixture.nativeElement.querySelectorAll('.ticket-tab')[2] as HTMLButtonElement).click();
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Pollo');
+    expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('Pollo');
     (fixture.nativeElement.querySelectorAll('.ticket-tab')[3] as HTMLButtonElement).click();
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Pan');
+    expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('Pan');
     fixture.destroy();
 
     const reopened = TestBed.createComponent(PosPage);
     reopened.detectChanges();
     await reopened.whenStable();
     reopened.detectChanges();
-    expect(reopened.nativeElement.querySelector('.line-table').textContent).toContain('Pan');
+    expect(reopened.nativeElement.querySelector('.ticket-lines').textContent).toContain('Pan');
     expect((reopened.nativeElement.querySelectorAll('.ticket-tab')[3] as HTMLButtonElement)
       .getAttribute('aria-current')).toBe('page');
     (reopened.nativeElement.querySelectorAll('.ticket-tab')[0] as HTMLButtonElement).click();
@@ -453,7 +453,7 @@ describe('PosPage', () => {
     (fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(current).toHaveBeenLastCalledWith('B');
-    expect(fixture.nativeElement.querySelector('.line-table')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.ticket-lines')).toBeNull();
   });
 
   it('ignores a late barcode result from the previous ticket', async () => {
@@ -527,7 +527,7 @@ describe('PosPage', () => {
       (fixture.nativeElement.querySelector('.remove-line-button') as HTMLButtonElement).click();
       fixture.detectChanges();
       expect(cancel).toHaveBeenCalledExactlyOnceWith('A');
-      expect(fixture.nativeElement.querySelector('.line-table')).toBeNull();
+      expect(fixture.nativeElement.querySelector('.ticket-lines')).toBeNull();
       expect((fixture.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement).value).toBe('nonFiscalTicket');
       expect((fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).disabled).toBe(false);
     } finally {
@@ -700,7 +700,7 @@ describe('PosPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(saveAttempts).toBe(1);
-    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Pan rallado');
+    expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('Pan rallado');
     expect(fixture.nativeElement.querySelector('.price-list-lock').textContent).toContain('Borrador guardado');
     expect(priceList.disabled).toBe(true);
     (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
@@ -921,8 +921,17 @@ describe('PosPage', () => {
 
     expect((fixture.componentInstance as unknown as { selectedPriceListId: () => string }).selectedPriceListId()).toBe('list-id');
     expect(fixture.nativeElement.querySelector('.price-list-field select').textContent).toContain('Mayorista');
-    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Corte guardado');
-    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('12.345,67');
+    const compactLine = fixture.nativeElement.querySelector('.ticket-lines .ticket-line') as HTMLElement;
+    expect(compactLine).not.toBeNull();
+    expect(compactLine.textContent).toContain('Corte guardado');
+    expect(compactLine.textContent).toContain('CAR-01');
+    expect(compactLine.textContent).toContain('Precio');
+    const ticketBody = fixture.nativeElement.querySelector('.ticket-body-scroll') as HTMLElement;
+    expect(ticketBody.querySelector('.sale-metadata')).not.toBeNull();
+    expect(ticketBody.querySelector('.ticket-line')).not.toBeNull();
+    expect(ticketBody.querySelector('.sale-footer')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('Corte guardado');
+    expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('12.345,67');
     expect((fixture.nativeElement.querySelector('.quantity-input') as HTMLInputElement).value).toBe('1.25');
     (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
@@ -987,7 +996,7 @@ describe('PosPage', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Bife');
+    expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('Bife');
     const retry = fixture.nativeElement.querySelector('.draft-retry') as HTMLButtonElement;
     expect(retry).not.toBeNull();
     expect(fixture.nativeElement.querySelector('.price-list-lock[role="alert"]').textContent).toContain('No se pudo guardar el ticket');
@@ -1002,7 +1011,7 @@ describe('PosPage', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
     expect(saveAttempts).toBe(2);
-    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Bife');
+    expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('Bife');
     expect(fixture.nativeElement.querySelector('.price-list-lock').textContent).toContain('Borrador guardado');
     expect(fixture.nativeElement.querySelector('.pos-error')).toBeNull();
   });
@@ -1110,7 +1119,7 @@ describe('PosPage', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('.line-table')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.ticket-lines')).toBeNull();
     expect(fixture.nativeElement.querySelector('.pos-error[role="alert"]').textContent).toContain('No hay stock suficiente');
     expect((fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).disabled).toBe(true);
   });
@@ -1320,7 +1329,7 @@ describe('PosPage', () => {
     fixture.detectChanges();
     expect(save).toHaveBeenCalledWith('list-id', [expect.objectContaining({ productId: asado.id, quantity: 0.5, inventoryPieceId: 'piece-id' })], 'A', 0, null);
     expect((fixture.nativeElement.querySelector('.quantity-input') as HTMLInputElement).value).toBe('0.5');
-    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('5.750,00');
+    expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('5.750,00');
 
     search.value = '2999002007507';
     search.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1328,7 +1337,7 @@ describe('PosPage', () => {
     fixture.detectChanges();
     (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
-    const ticketRows = fixture.nativeElement.querySelectorAll('.line-table tbody tr');
+    const ticketRows = fixture.nativeElement.querySelectorAll('.ticket-lines .ticket-line');
     expect(ticketRows).toHaveLength(2);
     expect(ticketRows[0].textContent).toContain('999001');
     expect(ticketRows[1].textContent).toContain('999002');
@@ -1345,7 +1354,7 @@ describe('PosPage', () => {
     fixture.detectChanges();
     (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.line-table tbody tr')).toHaveLength(2);
+    expect(fixture.nativeElement.querySelectorAll('.ticket-lines .ticket-line')).toHaveLength(2);
     expect(fixture.nativeElement.querySelector('.pos-error').textContent).toContain('ya está en el ticket');
     (fixture.nativeElement.querySelector('.pos-dialog .dialog-close') as HTMLButtonElement).click();
 
@@ -1617,12 +1626,12 @@ describe('PosPage', () => {
     (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(save).toHaveBeenCalledTimes(1);
-    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Asado');
+    expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('Asado');
     setLists([{ id: 'other-list', name: 'Mayorista' }]);
     window.dispatchEvent(new Event('focus'));
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Asado');
-    expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('1.000');
+    expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('Asado');
+    expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('1.000');
     expect((fixture.nativeElement.querySelector('.price-list-field select') as HTMLSelectElement).value)
       .toBe('list-id');
     expect(fixture.nativeElement.textContent).toContain('Mostrador ya no está habilitada');

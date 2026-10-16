@@ -214,123 +214,116 @@
         </p>
       }
 
-      <div class="sale-metadata">
-        <label class="price-list-field">
-          <span>Lista de precios</span>
-          <select [value]="selectedPriceListId()" [disabled]="lines().length > 0 || priceListLoadState() !== 'ready'" (change)="selectPriceList($event)">
-            <option value="">Seleccioná una lista</option>
-            @if (priceListUnavailable()) {
-              <option [value]="selectedPriceListId()" [selected]="true" disabled>{{ selectedPriceListName() }} · deshabilitada</option>
-            }
-            @if (realPriceLists().length > 0) {
-              <optgroup label="Habilitadas para esta sucursal">
-                @for (list of realPriceLists(); track list.id) {
-                  <option [value]="list.id" [selected]="list.id === selectedPriceListId()">{{ list.name }}</option>
-                }
-              </optgroup>
-            }
-          </select>
-        </label>
-        @if (priceListLoadState() === 'loading') {
-          <p class="price-list-lock" role="status">Cargando listas de esta sucursal…</p>
-        } @else if (priceListLoadState() === 'error') {
-          <p class="price-list-lock" role="alert">No se pudieron cargar las listas de esta sucursal. <button type="button" (click)="loadPriceLists()">Reintentar</button></p>
-        } @else if (realPriceLists().length === 0) {
-          <p class="price-list-lock">Esta sucursal no tiene listas de precios habilitadas.</p>
-        }
-        @if (lines().length > 0) {
-          <p class="price-list-lock">Para cambiar la lista, cancelá primero esta venta.</p>
-        }
-        <label>
-          <span>Tipo de comprobante</span>
-          <select id="sale-document-type" [value]="documentType()" (change)="selectDocumentType($event)">
-            <option value="nonFiscalTicket">Ticket no fiscal</option>
-            <option value="fiscalTicket">Ticket fiscal</option>
-            <option value="electronicInvoice">Factura electrónica</option>
-          </select>
-        </label>
-        <label>
-          <span>Tipo de cliente</span>
-          <select id="sale-recipient-tax-status" [value]="recipientTaxStatus()" (change)="selectRecipientTaxStatus($event)">
-            <option value="finalConsumer">Consumidor final</option>
-            <option value="registered">Responsable inscripto</option>
-            <option value="smallTaxpayer">Monotributista</option>
-            <option value="exempt">Exento</option>
-          </select>
-        </label>
-      </div>
-
-      @if (lines().length > 0) {
-        <div class="line-table-wrap">
-          <table class="line-table">
-            <thead>
-              <tr>
-                <th scope="col">Producto</th>
-                <th scope="col">Peso / Cant.</th>
-                <th scope="col">Precio</th>
-                <th scope="col">Desc.</th>
-                <th scope="col">Total</th>
-                <th scope="col"><span class="sr-only">Acciones</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (line of lines(); track line.id) {
-                <tr>
-                  <td>
-                    <span class="line-product-name">{{ line.product.name }}</span>
-                    <small>{{ line.product.code }}</small>
-                    @if (line.pieceIdentifier) { <small>Pieza {{ line.pieceIdentifier }}</small> }
-                  </td>
-                  <td>
-                    <input
-                      class="quantity-input"
-                      type="number"
-                      [min]="line.product.mode === 'weight' ? 0.001 : 1"
-                      [step]="line.product.mode === 'weight' ? 0.001 : 1"
-                      [value]="line.quantity"
-                      [readOnly]="!!line.inventoryPieceId"
-                      [disabled]="!!liveDataProblem()"
-                      [attr.aria-label]="line.product.mode === 'weight' ? 'Peso en kilogramos de ' + line.product.name : 'Cantidad de ' + unitLabel(line.product) + ' de ' + line.product.name"
-                      (change)="updateLineQuantity(line.id, $event)"
-                    />
-                    <small>{{ unitLabel(line.product) }}</small>
-                  </td>
-                  <td>{{ formatMoney(line.product.price) }}</td>
-                  <td>0,00%</td>
-                  <td class="line-total">{{ formatMoney(lineTotal(line)) }}</td>
-                  <td>
-                    <button class="remove-line-button" type="button" [disabled]="!isDemoPriceList() && !!liveDataProblem()" [attr.aria-label]="'Quitar ' + line.product.name + (line.pieceIdentifier ? ' pieza ' + line.pieceIdentifier : '')" (click)="removeLine(line.id)">×</button>
-                  </td>
-                </tr>
+      <div class="ticket-body-scroll">
+        <div class="sale-metadata">
+          <label class="price-list-field">
+            <span>Lista de precios</span>
+            <select [value]="selectedPriceListId()" [disabled]="lines().length > 0 || priceListLoadState() !== 'ready'" (change)="selectPriceList($event)">
+              <option value="">Seleccioná una lista</option>
+              @if (priceListUnavailable()) {
+                <option [value]="selectedPriceListId()" [selected]="true" disabled>{{ selectedPriceListName() }} · deshabilitada</option>
               }
-            </tbody>
-          </table>
-        </div>
-      } @else {
-        <div class="ticket-empty" role="status">
-          <span aria-hidden="true">▤</span>
-          <h3>Cargá los productos de la venta</h3>
-          <p>Buscá y agregá productos para armar el pedido.</p>
-          <p>El detalle persistirá automáticamente como borrador.</p>
-        </div>
-      }
-
-      @if (lines().length > 0 && !isDemoPriceList() && canDiscount()) {
-        <div class="sale-discount-fields">
-          <label for="sale-discount-amount">Descuento del ticket ($)
-            <input id="sale-discount-amount" type="number" min="0" step="0.01" [disabled]="!!liveDataProblem()"
-              [max]="grossSubtotal()" [value]="discountDraft()" (change)="updateDiscountAmount($event)" />
+              @if (realPriceLists().length > 0) {
+                <optgroup label="Habilitadas para esta sucursal">
+                  @for (list of realPriceLists(); track list.id) {
+                    <option [value]="list.id" [selected]="list.id === selectedPriceListId()">{{ list.name }}</option>
+                  }
+                </optgroup>
+              }
+            </select>
           </label>
-          @if (discountAmount() > 0) {
-            <label for="sale-discount-reason">Motivo del descuento
-              <input id="sale-discount-reason" type="text" maxlength="200" [disabled]="!!liveDataProblem()"
-                [value]="discountReason()" (change)="updateDiscountReason($event)"
-                placeholder="Promoción, autorización o motivo" />
-            </label>
+          @if (priceListLoadState() === 'loading') {
+            <p class="price-list-lock" role="status">Cargando listas de esta sucursal…</p>
+          } @else if (priceListLoadState() === 'error') {
+            <p class="price-list-lock" role="alert">No se pudieron cargar las listas de esta sucursal. <button type="button" (click)="loadPriceLists()">Reintentar</button></p>
+          } @else if (realPriceLists().length === 0) {
+            <p class="price-list-lock">Esta sucursal no tiene listas de precios habilitadas.</p>
           }
-          @if (discountProblem(); as problem) { <p role="status">{{ problem }}</p> }
+          @if (lines().length > 0) {
+            <p class="price-list-lock">Para cambiar la lista, cancelá primero esta venta.</p>
+          }
+          <label>
+            <span>Tipo de comprobante</span>
+            <select id="sale-document-type" [value]="documentType()" (change)="selectDocumentType($event)">
+              <option value="nonFiscalTicket">Ticket no fiscal</option>
+              <option value="fiscalTicket">Ticket fiscal</option>
+              <option value="electronicInvoice">Factura electrónica</option>
+            </select>
+          </label>
+          <label>
+            <span>Tipo de cliente</span>
+            <select id="sale-recipient-tax-status" [value]="recipientTaxStatus()" (change)="selectRecipientTaxStatus($event)">
+              <option value="finalConsumer">Consumidor final</option>
+              <option value="registered">Responsable inscripto</option>
+              <option value="smallTaxpayer">Monotributista</option>
+              <option value="exempt">Exento</option>
+            </select>
+          </label>
         </div>
-      }
+
+        @if (lines().length > 0) {
+          <div class="ticket-lines-wrap">
+            <ul class="ticket-lines" aria-label="Productos en el ticket">
+              @for (line of lines(); track line.id) {
+                <li class="ticket-line">
+                  <div class="ticket-line-heading">
+                    <div class="ticket-line-identity">
+                      <strong class="line-product-name">{{ line.product.name }}</strong>
+                      <small>{{ line.product.code }}@if (line.pieceIdentifier) { · Pieza {{ line.pieceIdentifier }} }</small>
+                    </div>
+                    <button class="remove-line-button" type="button" [disabled]="!isDemoPriceList() && !!liveDataProblem()" [attr.aria-label]="'Quitar ' + line.product.name + (line.pieceIdentifier ? ' pieza ' + line.pieceIdentifier : '')" (click)="removeLine(line.id)">×</button>
+                  </div>
+                  <div class="ticket-line-values">
+                    <label class="ticket-line-quantity">
+                      <span>{{ line.product.mode === 'weight' ? 'Peso (kg)' : 'Cantidad (' + unitLabel(line.product) + ')' }}</span>
+                      <input
+                        class="quantity-input"
+                        type="number"
+                        [min]="line.product.mode === 'weight' ? 0.001 : 1"
+                        [step]="line.product.mode === 'weight' ? 0.001 : 1"
+                        [value]="line.quantity"
+                        [readOnly]="!!line.inventoryPieceId"
+                        [disabled]="!!liveDataProblem()"
+                        [attr.aria-label]="line.product.mode === 'weight' ? 'Peso en kilogramos de ' + line.product.name : 'Cantidad de ' + unitLabel(line.product) + ' de ' + line.product.name"
+                        (change)="updateLineQuantity(line.id, $event)"
+                      />
+                    </label>
+                    <div class="ticket-line-total"><span>Total</span><strong>{{ formatMoney(lineTotal(line)) }}</strong></div>
+                  </div>
+                  <div class="ticket-line-pricing">
+                    <span>Precio {{ formatMoney(line.product.price) }} / {{ unitLabel(line.product) }}</span>
+                    <span>Desc. 0,00%</span>
+                  </div>
+                </li>
+              }
+            </ul>
+          </div>
+        } @else {
+          <div class="ticket-empty" role="status">
+            <span aria-hidden="true">▤</span>
+            <h3>Cargá los productos de la venta</h3>
+            <p>Buscá y agregá productos para armar el pedido.</p>
+            <p>El detalle persistirá automáticamente como borrador.</p>
+          </div>
+        }
+
+        @if (lines().length > 0 && !isDemoPriceList() && canDiscount()) {
+          <div class="sale-discount-fields">
+            <label for="sale-discount-amount">Descuento del ticket ($)
+              <input id="sale-discount-amount" type="number" min="0" step="0.01" [disabled]="!!liveDataProblem()"
+                [max]="grossSubtotal()" [value]="discountDraft()" (change)="updateDiscountAmount($event)" />
+            </label>
+            @if (discountAmount() > 0) {
+              <label for="sale-discount-reason">Motivo del descuento
+                <input id="sale-discount-reason" type="text" maxlength="200" [disabled]="!!liveDataProblem()"
+                  [value]="discountReason()" (change)="updateDiscountReason($event)"
+                  placeholder="Promoción, autorización o motivo" />
+              </label>
+            }
+            @if (discountProblem(); as problem) { <p role="status">{{ problem }}</p> }
+          </div>
+        }
+      </div>
 
       @if (draftStatus() !== 'error') {
         @if (errorMessage(); as error) {

@@ -38,5 +38,6 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 | 16/10/2026 | 10:40:50 | 10:42:28 | 2 min | Diagnosticar error de `Start-RusticaManagedLab.ps1 -Action Verify` | Tras el arranque, las tres URLs terminaron respondiendo `healthy`; el fallo ocurrió antes de que el sitio Angular aceptara conexiones. El ajuste automático de espera quedó pendiente al cambiar la prioridad a apagar servicios. Sin pausas conocidas. |
 | 16/10/2026 | 10:42:28 | 10:43:35 | 1 min | Apagar APIs y Angular para prueba de arranque del usuario | Se detuvieron ocho procesos del laboratorio y se verificó que no quedan listeners ni procesos de API/Angular de Carnicerías. Sin pausas conocidas. |
 | 16/10/2026 | 10:46:43 | 10:49:23 | 3 min | Corregir `Verify` del laboratorio La Rústica | Prueba de espera en rojo y luego en verde; pasaron las pruebas PowerShell y `Verify` real con `5249`, `5251` y `4302` saludables. Los comandos de arranque no cambiaron. Sin pausas conocidas. |
+| 16/10/2026 | 10:54:09 | 11:05:46 | 11 min | Crear comandos Stop para APIs y Angular locales | Se detuvieron los laboratorios Visual y La Rústica, se comprobó el caso POS `5197` y quedaron libres los puertos documentados. Pruebas PowerShell en verde. Se descuenta aproximadamente 1 min de espera de aprobación. |
 
-**Total activo registrado desde el 16/10/2026:** 33 min.
+**Total activo registrado desde el 16/10/2026:** 44 min.

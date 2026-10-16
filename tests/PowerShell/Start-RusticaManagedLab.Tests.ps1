@@ -5,6 +5,14 @@ $parseErrors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile(
     $scriptPath, [ref]$tokens, [ref]$parseErrors)
 if ($parseErrors.Count -ne 0) { throw 'El script del laboratorio La Rústica no se puede analizar.' }
+$actionParameter = @($ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'Action' })[0]
+$actionValues = @($actionParameter.Attributes |
+    Where-Object { $_.TypeName.FullName -eq 'ValidateSet' } |
+    ForEach-Object { $_.PositionalArguments } |
+    ForEach-Object { $_.Value })
+if ('Stop' -notin $actionValues -or 'StopBranch' -notin $actionValues) {
+    throw 'El laboratorio La Rústica necesita Stop y StopBranch.'
+}
 
 $waitFunction = $ast.Find({
     param($node)

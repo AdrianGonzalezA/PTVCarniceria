@@ -1,5 +1,21 @@
 # Arranque local (PowerShell)
 
+Para apagar las APIs y Angular de estos pasos (sin cerrar Docker ni Electron):
+
+```powershell
+cd C:\Proyectos\Carnicerias
+.\tools\Stop-LocalServices.ps1 -Group All
+```
+
+Para apagar solo el laboratorio Visual o solo el de La Rústica:
+
+```powershell
+.\tools\Start-VisualCentralLab.ps1 -Action Stop
+.\tools\Start-RusticaManagedLab.ps1 -Action Stop
+```
+
+El apagado no requiere que PostgreSQL esté activo. Verifica la identidad de los procesos y no cierra las cajas Electron. Para los grupos `Pos` (`5197`, `4200`) y `Portals` (`4300`, `4301`), consultar la [guía completa](comandos-arranque-local.md#apagado-de-apis-y-angular-de-esta-computadora).
+
 1. API — consola 1 (Docker Desktop iniciado)
 
    ```powershell

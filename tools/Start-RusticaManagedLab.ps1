@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Check', 'Start', 'StartBranch', 'Verify')]
+    [ValidateSet('Check', 'Start', 'StartBranch', 'Stop', 'StopBranch', 'Verify')]
     [string]$Action
 )
 
@@ -125,6 +125,12 @@ function Wait-HealthyUrls {
             }
         }
     }
+}
+
+if ($Action -in @('Stop', 'StopBranch')) {
+    $group = if ($Action -eq 'StopBranch') { 'RusticaBranch' } else { 'Rustica' }
+    & (Join-Path $PSScriptRoot 'Stop-LocalServices.ps1') -Group $group
+    return
 }
 
 Assert-Lab

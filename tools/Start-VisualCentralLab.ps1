@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Provision', 'Check', 'Start', 'StartCentral', 'Verify')]
+    [ValidateSet('Provision', 'Check', 'Start', 'StartCentral', 'Stop', 'StopCentral', 'Verify')]
     [string]$Action
 )
 
@@ -127,6 +127,12 @@ function New-CentralSettings($vaultData) {
         $settings["CARNICERIAS_CENTRAL_BRANCH_SECRET_$($branch.SecretReference)"] = $vaultData.Tokens.($branch.SecretReference)
     }
     return $settings
+}
+
+if ($Action -in @('Stop', 'StopCentral')) {
+    $group = if ($Action -eq 'StopCentral') { 'VisualCentral' } else { 'Visual' }
+    & (Join-Path $PSScriptRoot 'Stop-LocalServices.ps1') -Group $group
+    return
 }
 
 $inspection = Assert-LabDatabase

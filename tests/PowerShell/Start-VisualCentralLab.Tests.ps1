@@ -5,6 +5,14 @@ $parseErrors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile(
     $scriptPath, [ref]$tokens, [ref]$parseErrors)
 if ($parseErrors.Count -ne 0) { throw 'El script del laboratorio central no se puede analizar.' }
+$actionParameter = @($ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'Action' })[0]
+$actionValues = @($actionParameter.Attributes |
+    Where-Object { $_.TypeName.FullName -eq 'ValidateSet' } |
+    ForEach-Object { $_.PositionalArguments } |
+    ForEach-Object { $_.Value })
+if ('Stop' -notin $actionValues -or 'StopCentral' -notin $actionValues) {
+    throw 'El laboratorio Visual necesita Stop y StopCentral.'
+}
 
 $settingsFunction = $ast.Find({
     param($node)

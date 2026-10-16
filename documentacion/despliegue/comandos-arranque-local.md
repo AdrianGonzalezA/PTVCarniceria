@@ -4,6 +4,26 @@ Estos comandos son para **PowerShell**: primero en este equipo y, al final, en o
 
 > **Identidad por empresa (13/10/2026):** las migraciones ya están aplicadas en la única base local. `visual-admin` pertenece solo a Empresa Visual; `rustica-admin` y `prueba-admin` son cuentas separadas. La empresa de prueba continúa inactiva, por lo que su login se rechaza. Para el navegador usar el código de empresa indicado en la [auditoría](auditoria-identidad-por-empresa-20261013.md); el POS Electron obtiene la empresa de la credencial de caja.
 
+## Apagado de APIs y Angular de esta computadora
+
+Desde PowerShell, para detener juntos la API POS (`5197`), los Angular locales (`4200`, `4300`, `4301`, `4302`) y las APIs de laboratorio (`5245`–`5251`):
+
+```powershell
+cd C:\Proyectos\Carnicerias
+.\tools\Stop-LocalServices.ps1 -Group All
+```
+
+También se puede detener un grupo sin afectar los demás:
+
+```powershell
+.\tools\Stop-LocalServices.ps1 -Group Pos
+.\tools\Stop-LocalServices.ps1 -Group Portals
+.\tools\Start-VisualCentralLab.ps1 -Action Stop
+.\tools\Start-RusticaManagedLab.ps1 -Action Stop
+```
+
+`Pos` comprende `5197` y `4200`; `Portals`, `4300` y `4301`. `-Action Stop` de Visual detiene `5245`–`5248` y `5250`; el de La Rústica detiene `5249`, `5251` y `4302`. Para detener solo las centrales Visual (`5245` y `5250`), usar `-Action StopCentral`; para detener solo la API de Alta Córdoba (`5249`), `-Action StopBranch`. Los comandos de parada funcionan aunque PostgreSQL no esté activo, verifican que cada puerto pertenezca al servicio esperado y no detienen procesos ajenos. Se pueden repetir si los puertos ya están libres. No detienen Docker, PostgreSQL ni ventanas Electron. El apagado de la API POS por IP LAN no está contemplado en este comando local: cerrarla con `Ctrl+C` en su consola.
+
 ## 1. API (consola 1)
 
 Comprobar que Docker Desktop y el contenedor PostgreSQL estén activos:
@@ -122,7 +142,7 @@ cd C:\Carnicerias\Caja
 
 Ejecutar **solo la línea de esa PC**. `-Provision` solicita sin eco la credencial **distinta** de su caja; se usa únicamente en la primera vinculación. Para los siguientes arranques, repetir la misma línea **sin** `-Provision`. Cada PC puede usar sus propios COM1/COM6, porque sus puertos son independientes. Para la configuración de red, firewall y archivos de caja, seguir la [guía completa](guia-workshop-por-sucursal.md#7-preparar-cada-pc-de-caja).
 
-Para detener API o Angular, usar `Ctrl+C` en su consola. Para detener una caja, cerrar normalmente su ventana de Electron.
+Para detener la API o Angular de esta computadora, usar los comandos de [apagado local](#apagado-de-apis-y-angular-de-esta-computadora) o `Ctrl+C` en su consola. Para detener una caja, cerrar normalmente su ventana de Electron.
 
 ## 6. Laboratorio local de sucursales y central
 

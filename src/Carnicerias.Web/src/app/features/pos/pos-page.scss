@@ -368,12 +368,15 @@
 .catalog-empty { color: var(--nt-ink); }
 .catalog-empty p { color: var(--nt-muted); }
 .catalog-retry { min-height: 48px; color: var(--nt-dark); background: var(--nt-copper); }
-.ticket-toolbar { border-color: var(--nt-border); }
-.cancel-sale-button { min-height: 48px; color: var(--nt-ink); background: var(--nt-tile); border: 1px solid var(--nt-border); touch-action: manipulation; }
+.ticket-toolbar { align-items: start; border-color: var(--nt-border); }
+.ticket-toolbar > div { min-width: 0; flex: 1; }
+.cancel-sale-button { min-width: 48px; min-height: 48px; padding: 0; color: var(--nt-ink); background: var(--nt-tile); border: 1px solid var(--nt-border); font-size: 1.3rem; touch-action: manipulation; }
 .ticket-toolbar h2 { font-size: 1rem; }
 .eyebrow { color: var(--nt-copper); }
 .price-list-lock { color: var(--nt-muted); }
+.sale-metadata { grid-template-columns: 1fr; gap: 6px; padding: 8px 0; }
 .sale-metadata label { color: var(--nt-muted); }
+.sale-metadata select,.sale-metadata input { min-height: 48px; }
 .sale-metadata select,.sale-metadata input,.quantity-input { color: var(--nt-ink); background: var(--nt-bg); border-color: var(--nt-border); }
 .line-table-wrap { background: var(--nt-panel); }
 .line-table th { color: var(--nt-ink); background: var(--nt-bg); }
@@ -389,9 +392,12 @@
 .total-field { color: var(--nt-ink); background: var(--nt-panel); }
 .total-field span { color: var(--nt-muted); }
 .total-field strong { color: var(--nt-copper); font-size: 1.25rem; font-variant-numeric: tabular-nums; }
-.ticket-strip { min-height: 48px; background: var(--nt-bg); border-top: 1px solid var(--nt-border); }
-.ticket-tab { min-height: 48px; color: var(--nt-ink); background: var(--nt-tile); border: 1px solid var(--nt-border); touch-action: manipulation; }
+.ticket-strip { display: grid; min-height: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; padding: 8px 0; background: transparent; border-top: 0; border-bottom: 1px solid var(--nt-border); }
+.ticket-tab { min-width: 0; min-height: 48px; padding: 0; color: var(--nt-ink); background: var(--nt-tile); border: 1px solid var(--nt-border); font-size: 1rem; touch-action: manipulation; }
 .ticket-tab.selected { color: var(--nt-copper); background: var(--nt-select); border-color: var(--nt-copper); }
+.ticket-tab-saved { display: inline; margin-left: 0.1rem; color: var(--nt-copper); font-size: 1rem; }
+.ticket-strip-status,.ticket-strip-retry { grid-column: 1 / -1; margin: 0; }
+.ticket-strip-retry { min-height: 48px; color: var(--nt-ink); border-color: var(--nt-border); }
 .pos-dialog { color: var(--pos-ink); }
 
 @media (min-width: 1500px) {

@@ -285,6 +285,7 @@ describe('PosPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.line-table').textContent).toContain('Asado');
+    expect(fixture.nativeElement.querySelector('.ticket-panel .ticket-strip')).not.toBeNull();
 
     const choose = (id: string, value: string) => {
       const element = fixture.nativeElement.querySelector(`#${id}`) as HTMLSelectElement;
@@ -362,8 +363,8 @@ describe('PosPage', () => {
     fixture.detectChanges();
 
     const labels = [...fixture.nativeElement.querySelectorAll('.ticket-tab') as NodeListOf<HTMLButtonElement>]
-      .map((button) => button.textContent?.trim().replace(/\s+/g, ' '));
-    expect(labels).toEqual(['Ticket A · Guardado', 'Ticket B', 'Ticket C · Guardado', 'Ticket D']);
+      .map((button) => button.getAttribute('aria-label'));
+    expect(labels).toEqual(['Ticket A, guardado', 'Ticket B', 'Ticket C, guardado', 'Ticket D']);
   });
 
   it('does not guess which tickets are saved when the list fails, and allows retry', async () => {
@@ -399,7 +400,7 @@ describe('PosPage', () => {
     retry.click();
     fixture.detectChanges();
     expect((fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement)
-      .textContent).toContain('Guardado');
+      .getAttribute('aria-label')).toContain('guardado');
     expect(fixture.nativeElement.querySelector('.ticket-strip-retry')).toBeNull();
   });
 
@@ -447,7 +448,7 @@ describe('PosPage', () => {
     pendingSave.complete();
     fixture.detectChanges();
     expect((fixture.nativeElement.querySelectorAll('.ticket-tab')[0] as HTMLButtonElement)
-      .textContent).toContain('Guardado');
+      .getAttribute('aria-label')).toContain('guardado');
     expect((fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).disabled).toBe(false);
     (fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).click();
     fixture.detectChanges();
@@ -590,6 +591,7 @@ describe('PosPage', () => {
     expect(fixture.nativeElement.textContent).toContain('Abrí el turno');
     expect(fixture.nativeElement.querySelector('#product-search')).toBeNull();
     expect(fixture.nativeElement.querySelector('.sale-footer')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.ticket-strip')).toBeNull();
     expect(saved).toBe(false);
     for (const key of ['8', '0', '0', '1', 'Enter'])
       window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));

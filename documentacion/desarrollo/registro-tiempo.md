@@ -42,5 +42,6 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 | 16/10/2026 | 11:14:45 | 11:17:12 | 2 min | Diagnosticar y restablecer el administrador de sucursal | El proxy Angular apuntaba a la API POS `5197`, detenida por el Stop anterior. Se reiniciaron API y Angular; `/admin` respondió 200 y `/api/sessions/current` devolvió el 401 esperado sin sesión. Se descontó la breve espera de aprobación. |
 | 16/10/2026 | 11:30:06 | 11:30:29 | <1 min | Aclarar el alcance de los comandos Start | Visual y La Rústica levantan sus APIs de laboratorio; el administrador Angular `4200` requiere por separado la API POS `5197`. Sin pausas conocidas. |
 | 16/10/2026 | 11:36:28 | 11:37:08 | 1 min | Explicar la topología de APIs compartidas y sucursales aisladas | Se contrastaron las decisiones de despliegue, el contrato de central y el filtro de contexto operativo. Sin cambios de arquitectura ni pausas conocidas. |
+| 16/10/2026 | 11:43:21 | 11:44:19 | 1 min medido | Evaluar Electron POS en Raspberry Pi | Se revisaron versión, empaquetado y puertos seriales locales contra documentación oficial de Electron, Forge, SerialPort y Raspberry Pi. La investigación anterior a la primera marca horaria no se cuantifica. |
 
-**Total activo registrado desde el 16/10/2026:** 47 min.
+**Total activo registrado desde el 16/10/2026:** 48 min medidos, más tramos no cuantificables.

@@ -1,4 +1,4 @@
-# Registro de tiempo de desarrollo
+# Registro de tiempo por petición
 
 Este registro distingue **tiempo activo registrado** de **estimaciones retrospectivas**. Las horas no registradas no se convierten en horas trabajadas por el solo paso del tiempo. Todas las horas se expresan en Argentina (UTC−03:00).
 
@@ -24,12 +24,16 @@ Fuente reproducible: `git log --all --no-merges --format=%cI`. El cálculo usa f
 
 ## Registro desde el 16/10/2026
 
-En cada turno de desarrollo se anota la primera marca horaria fiable, la última, la tarea y el tiempo activo. Se descuentan pausas conocidas, esperas de respuesta del usuario e interrupciones del entorno; compilaciones y pruebas supervisadas sí cuentan. Una interrupción no documentada se señala como incertidumbre, sin inventar precisión. No se incluyen los períodos entre turnos. Redondear a minutos y no mezclar estos valores con la estimación anterior.
+En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documentación u operación, se anota la primera marca horaria fiable, la última, la tarea y el tiempo activo. Se descuentan pausas conocidas, esperas de respuesta del usuario e interrupciones del entorno; compilaciones y pruebas supervisadas sí cuentan. Si no hay marcas suficientes, la petición queda como **no cuantificable**, sin asignarle cero minutos ni inventar precisión. No se incluyen los períodos entre peticiones. Redondear a minutos y no mezclar estos valores con la estimación anterior.
 
 | Fecha | Inicio | Fin | Tiempo activo | Tarea | Evidencia / observaciones |
 | --- | --- | --- | ---: | --- | --- |
 | 16/10/2026 | 07:49 | 07:52 | 3 min | Reconstruir actividad y crear registro de tiempo | Primera marca horaria fiable del turno; 137 commits y 12 bloques analizados. Sin pausas conocidas. |
 | 16/10/2026 | 08:11 | 08:15 | 4 min | Actualizar comandos locales de sucursales y central | Se cotejaron scripts, proxies y puertos; `Check` y `Verify` de ambos laboratorios pasaron. Sin pausas conocidas. |
 | 16/10/2026 | 09:29 | 09:48 | 19 min | Corregir arranque local de la API POS y documentar comando directo | Se reprodujo el HTTP 500 de `5197`, se probó el arranque en `5198` contra la base existente y `/api/sessions/current` respondió 401 sin sesión. Sin pausas conocidas. |
+| 16/10/2026 | — | — | No cuantificable | Apagar las APIs de Carnicerías | Se cerraron siete procesos de API y se verificaron los puertos. No se tomaron marcas horarias de este turno. |
+| 16/10/2026 | — | — | No cuantificable | Apagar los servidores Angular restantes | Se cerró el proceso de `4302` y se verificaron `4200`, `4300`, `4301` y `4302`. No se tomaron marcas horarias de este turno. |
+| 16/10/2026 | — | — | No cuantificable | Solicitar registro de tiempo por petición | La petición se amplió durante el mismo turno para incluir `AGENTS.md`; no se registró una marca de inicio independiente. |
+| 16/10/2026 | 10:39:50 | 10:40:50 | 1 min medido | Incorporar la regla de tiempo por petición a `AGENTS.md` | Primera marca fiable posterior al inicio del trabajo; el tramo previo no se cuantifica. Sin pausas conocidas en el intervalo medido. |
 
-**Total activo registrado desde el 16/10/2026:** 26 min.
+**Total activo registrado desde el 16/10/2026:** 27 min.

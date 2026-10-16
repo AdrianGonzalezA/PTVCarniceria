@@ -33,7 +33,7 @@ El detalle muestra una tabla con producto, cantidad o peso, precio e importe. Po
 
 ## Trabajar con tickets A–D
 
-Las pestañas A–D permiten mantener hasta cuatro ventas en curso por caja, cajero y turno. Esperá a que termine **Guardando ticket…** antes de cambiar de pestaña. Cada pestaña marcada **Guardado** se recupera desde la base de datos al reiniciar Electron, junto con su reserva. Una edición que no llegó a guardarse antes de un corte de energía no se considera recuperada.
+Las pestañas A–D, junto al campo de búsqueda/lector, permiten mantener hasta cuatro ventas en curso por caja, cajero y turno. Esperá a que termine **Guardando ticket…** antes de cambiar de pestaña. Cada pestaña marcada **Guardado** se recupera desde la base de datos al reiniciar Electron, junto con su reserva. Una edición que no llegó a guardarse antes de un corte de energía no se considera recuperada.
 
 Confirmar o cancelar una venta afecta solo el ticket activo; los otros tickets continúan separados. Para cerrar el turno hay que resolverlos todos.
 

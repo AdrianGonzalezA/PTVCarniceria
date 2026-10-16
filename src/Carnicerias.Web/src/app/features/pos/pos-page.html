@@ -72,6 +72,20 @@
           />
           <span aria-hidden="true">⌕</span>
         </div>
+        <nav class="ticket-strip" aria-label="Tickets de venta">
+          @for (slot of ticketSlots; track slot) {
+            <button class="ticket-tab" type="button" [class.selected]="activeTicketSlot() === slot"
+              [attr.aria-current]="activeTicketSlot() === slot ? 'page' : null"
+              [attr.aria-label]="'Ticket ' + slot + (ticketSlotsLoadState() === 'ready' && savedTicketSlots().has(slot) ? ', guardado' : '')"
+              [disabled]="activeTicketSlot() !== slot && !canSwitchTicket()"
+              (click)="switchTicket(slot)">{{ slot }}@if (ticketSlotsLoadState() === 'ready' && savedTicketSlots().has(slot)) { <span class="ticket-tab-saved" aria-hidden="true">·</span> }</button>
+          }
+          @if (ticketSlotsLoadState() === 'loading') {
+            <span class="ticket-strip-status" role="status">Consultando tickets…</span>
+          } @else if (ticketSlotsLoadState() === 'error') {
+            <button class="ticket-strip-retry" type="button" (click)="loadTicketSlots()">No se pudieron consultar los tickets · Reintentar</button>
+          }
+        </nav>
         <span class="catalog-badge">{{ !selectedPriceListId() ? 'Elegí una lista' : isDemoPriceList() ? 'Catálogo de prueba' : 'Catálogo de la sucursal' }}</span>
       </div>
 
@@ -187,21 +201,6 @@
         </div>
         <button class="cancel-sale-button" type="button" aria-label="Cancelar venta" title="Cancelar venta" (click)="cancelSale()">⊘</button>
       </div>
-
-      <nav class="ticket-strip" aria-label="Tickets de venta">
-        @for (slot of ticketSlots; track slot) {
-          <button class="ticket-tab" type="button" [class.selected]="activeTicketSlot() === slot"
-            [attr.aria-current]="activeTicketSlot() === slot ? 'page' : null"
-            [attr.aria-label]="'Ticket ' + slot + (ticketSlotsLoadState() === 'ready' && savedTicketSlots().has(slot) ? ', guardado' : '')"
-            [disabled]="activeTicketSlot() !== slot && !canSwitchTicket()"
-            (click)="switchTicket(slot)">{{ slot }}@if (ticketSlotsLoadState() === 'ready' && savedTicketSlots().has(slot)) { <span class="ticket-tab-saved" aria-hidden="true">·</span> }</button>
-        }
-        @if (ticketSlotsLoadState() === 'loading') {
-          <span class="ticket-strip-status" role="status">Consultando tickets…</span>
-        } @else if (ticketSlotsLoadState() === 'error') {
-          <button class="ticket-strip-retry" type="button" (click)="loadTicketSlots()">No se pudieron consultar los tickets · Reintentar</button>
-        }
-      </nav>
 
       @if (priceListUnavailable()) {
         <p class="live-data-notice" role="alert">{{ catalogNotice() ?? liveDataProblem() }}</p>

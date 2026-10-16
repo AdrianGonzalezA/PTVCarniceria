@@ -325,9 +325,9 @@
 .shift-gate { color: var(--pos-ink); }
 .ticket-panel { grid-column: 2; grid-row: 1; padding: 13px; color: var(--nt-ink); background: var(--nt-panel); border: 1px solid var(--nt-border); border-radius: 9px; }
 .catalog-panel { grid-column: 1; grid-row: 1; min-width: 0; }
-.catalog-toolbar { min-height: 48px; flex-wrap: nowrap; padding: 0 0 8px; background: transparent; }
+.catalog-toolbar { min-height: 48px; flex-wrap: wrap; gap: 8px; padding: 0 0 8px; background: transparent; }
 .catalog-toolbar label.sr-only { width: 1px; margin: 0; }
-.search-control { width: min(100%, 29rem); }
+.search-control { flex: 1 1 240px; width: auto; max-width: 29rem; min-width: 170px; }
 .search-control input { height: 48px; padding: 0.65rem 2.2rem 0.65rem 0.75rem; color: var(--nt-ink); background: var(--nt-panel); border: 1px solid var(--nt-border); font-size: 1rem; }
 .search-control > span { color: var(--nt-muted); }
 .catalog-badge { color: var(--nt-muted); border-color: var(--nt-border); border-radius: 6px; }
@@ -392,7 +392,7 @@
 .total-field { min-width: 0; color: var(--nt-ink); background: var(--nt-panel); }
 .total-field span { color: var(--nt-muted); }
 .total-field strong { color: var(--nt-copper); font-size: 1.25rem; font-variant-numeric: tabular-nums; }
-.ticket-strip { display: grid; min-height: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; padding: 8px 0; background: transparent; border-top: 0; border-bottom: 1px solid var(--nt-border); }
+.ticket-strip { display: grid; flex: 0 0 244px; width: 244px; min-height: 48px; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; padding: 0; background: transparent; border: 0; }
 .ticket-tab { min-width: 0; min-height: 48px; padding: 0; color: var(--nt-ink); background: var(--nt-tile); border: 1px solid var(--nt-border); font-size: 1rem; touch-action: manipulation; }
 .ticket-tab.selected { color: var(--nt-copper); background: var(--nt-select); border-color: var(--nt-copper); }
 .ticket-tab-saved { display: inline; margin-left: 0.1rem; color: var(--nt-copper); font-size: 1rem; }

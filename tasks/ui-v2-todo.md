@@ -20,8 +20,8 @@
 
 ## 3. Ticket y editor
 
-- [ ] Mantener tickets A–D, lista, comprobante y cliente en el panel derecho; compactar renglones sin perder editar/quitar, pieza, descuentos o alertas. Total y cobro permanecen visibles con scroll independiente. Verificar: tests de tickets, borrador y controles; Electron con ticket lleno. Dependencia: Checkpoint A. Archivos: `pos-page.html`, `pos-page.scss`, `pos-page.spec.ts`.
-  - Avance: detalle convertido en tabla semántica de cinco columnas; compra ensanchada a 540 px en Electron maximizado. Cinco renglones reales de La Rústica ocupan 76 px cada uno, sin desplazar total/cobro. Falta revisar tamaños menores y estados de error visuales.
+- [ ] Mantener tickets A–D junto a la búsqueda/lector y lista, comprobante y cliente en el panel derecho; compactar renglones sin perder editar/quitar, pieza, descuentos o alertas. Total y cobro permanecen visibles con scroll independiente. Verificar: tests de tickets, borrador y controles; Electron con ticket lleno. Dependencia: Checkpoint A. Archivos: `pos-page.html`, `pos-page.scss`, `pos-page.spec.ts`.
+  - Avance: detalle convertido en tabla semántica de cinco columnas; compra ensanchada a 540 px en Electron maximizado. Pestañas A–D trasladadas al catálogo: la tabla ganó 65 px de altura. Cinco renglones reales de La Rústica ocupan 76 px cada uno, sin desplazar total/cobro. Falta revisar tamaños menores y estados de error visuales.
 - [ ] Integrar editor inline en ticket con entrada manual táctil para kg/unidades, sin duplicar estado ni lectura de balanza. Conservar etiqueta trazable y sus kilos. Verificar: tests de cantidad inválida, balanza, lector, cancelar/cambiar ticket y foco; Electron. Dependencia: ticket compacto. Archivos: `pos-page.html`, `pos-page.scss`, `pos-page.ts`, `pos-page.spec.ts`.
 
 ### Checkpoint B

@@ -285,7 +285,8 @@ describe('PosPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('Asado');
-    expect(fixture.nativeElement.querySelector('.ticket-panel .ticket-strip')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.catalog-toolbar .search-control + .ticket-strip')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.ticket-panel .ticket-strip')).toBeNull();
 
     const choose = (id: string, value: string) => {
       const element = fixture.nativeElement.querySelector(`#${id}`) as HTMLSelectElement;

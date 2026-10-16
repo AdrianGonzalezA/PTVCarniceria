@@ -24,7 +24,7 @@ Rediseñar solamente la pantalla real del POS Angular/Electron para operar rápi
 1. Establecer pruebas de estructura/función existentes y un contrato visual automatizado para el nuevo layout.
 2. Adaptar encabezado, paleta y columnas; mantener los controles operativos.
 3. Compactar búsqueda y tarjetas con productos reales, unidades y estado de disponibilidad; mantener las categorías como botones en una columna vertical desplazable a la izquierda.
-4. Compactar ticket, controles fiscales, tickets A–D y scroll independiente; mantener total y cobro visibles.
+4. Compactar ticket y controles fiscales; ubicar tickets A–D junto al lector y mantener total y cobro visibles con scroll independiente.
 5. Llevar el editor de cantidad/peso al ticket sin alterar la lectura de balanza o etiqueta y con teclado manual táctil solo cuando corresponde.
 6. Ajustar responsive, foco, estados de error y contraste; medir el resultado real en Electron y corregir la densidad sin usar zoom CSS.
 7. Recorrer el flujo de venta y cobro existente, actualizar manual de usuarios y presentar capturas/medidas y límites pendientes.
@@ -33,9 +33,9 @@ Cada etapa se entrega en un incremento compilable, con prueba focalizada antes d
 
 ## Estado y medición en Electron (16/10/2026)
 
-Se aplicaron la identidad Nocturna, las tarjetas compactas del catálogo, las categorías verticales a la izquierda y el detalle de compra como tabla semántica de cinco columnas. Conserva producto y código/pieza, cantidad o peso editable, precio por unidad, descuento informativo, importe y acción de quitar. El cuerpo se desplaza sin mover total/cobro; el editor para agregar productos sigue en el diálogo existente.
+Se aplicaron la identidad Nocturna, las tarjetas compactas del catálogo, las categorías verticales a la izquierda y el detalle de compra como tabla semántica de cinco columnas. Conserva producto y código/pieza, cantidad o peso editable, precio por unidad, descuento informativo, importe y acción de quitar. Las pestañas A–D están junto a la búsqueda/lector, fuera de la compra. El cuerpo se desplaza sin mover total/cobro; el editor para agregar productos sigue en el diálogo existente.
 
-- Caja A de La Rústica en Electron maximizado, viewport 1920 × 992 CSS px: ticket a `x=1366`, ancho 540 px; tabla de 497 px sin desplazamiento horizontal. Cinco renglones reales ocupan 76 px de alto cada uno y se ven simultáneamente; total y cobro permanecen visibles. El catálogo mostró 35 artículos reales de la categoría Vacuno, sin ventas nuevas para esta verificación.
+- Caja A de La Rústica en Electron maximizado, viewport 1920 × 992 CSS px: ticket a `x=1366`, ancho 540 px; tabla de 497 px sin desplazamiento horizontal. Las pestañas ocupan `x=486–730` junto al lector; la tabla comienza en `y=323`, 65 px más arriba que antes del traslado. Cinco renglones reales ocupan 76 px de alto cada uno y se ven simultáneamente; total y cobro permanecen visibles. El catálogo mostró 35 artículos reales de la categoría Vacuno, sin ventas nuevas para esta verificación.
 - La columna de categorías mantiene `flex-direction: column` y `overflow-y: auto`. La tabla tiene ancho mínimo de 470 px y desplazamiento horizontal interno si el panel cae por debajo de ese ancho. La revisión de este nuevo diseño a 1366 × 768, 800 × 768 y DPI 125 %/150 % sigue pendiente; las mediciones anteriores correspondían al detalle en tarjetas.
 - Prueba focalizada primero en rojo y después en verde; suite Angular: 157/157; lint y build: correctos. Las capturas se revisaron dentro de Electron. No se crearon bases ni ventas para esta verificación.
 

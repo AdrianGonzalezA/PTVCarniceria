@@ -1,0 +1,9 @@
+RI NOCTURNA TOUCH — ENTREGA PARA CODEX
+
+1. Extraé el ZIP en una carpeta del proyecto.
+2. Abrí nocturna-touch.html para revisar la referencia.
+3. Adjuntá la carpeta a Codex o indicá su ruta local.
+4. Copiá el texto de PROMPT-PARA-CODEX.txt.
+
+El agente debe leer INTEGRAR-EN-CODEX.md y adaptar la UI al Angular/Electron existente.
+La referencia usa datos ficticios; no procesa pagos ni persiste ventas.

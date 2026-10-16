@@ -1,0 +1,9 @@
+Aplicá al POS existente el rediseño Nocturna Touch compacto de esta carpeta.
+
+Leé primero INTEGRAR-EN-CODEX.md y revisá nocturna-touch.html, nocturna-touch.scss y tokens.json.
+
+Ya elegí la identidad grafito/cobre, ticket a la izquierda y catálogo compacto a la derecha. Necesito ver muchos productos de una sola mirada y operar rápido con pantalla táctil. La referencia tiene 35 cortes y botones de producto de 64 px de alto.
+
+Inspeccioná el repositorio y trasladá el diseño a Angular/Electron respetando sus convenciones. Conservá todas las funciones, reglas, servicios, permisos e integraciones actuales. El HTML es una maqueta, no lo incrustes como iframe ni copies su lógica demo. Reemplazá los datos ficticios por bindings reales y mantené los controles originales aunque el ejemplo los haya simplificado.
+
+Implementá y validá los cambios; no te quedes solamente en un plan. Cualquier cambio de arquitectura consultámelo. Al terminar informá archivos cambiados, comprobaciones realizadas y capturas de la pantalla real. Medí la densidad en viewport CSS y no achiques todo con zoom para cumplirla.

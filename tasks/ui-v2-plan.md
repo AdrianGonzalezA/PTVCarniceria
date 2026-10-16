@@ -6,7 +6,7 @@
 
 ## Objetivo y contrato visual
 
-Rediseñar solamente la pantalla real del POS Angular/Electron para operar rápido en pantalla táctil: identidad grafito/cobre, categorías verticales en el extremo izquierdo, catálogo de productos a su derecha y compra/ticket amplio a la derecha (hasta 470 CSS px). Los botones de producto apuntan a 64–70 px de alto, con nombre, precio y unidad de venta cuando corresponda. El objetivo de densidad es mostrar los 35 cortes de referencia en 1366 × 768 CSS px al 100 %, con editor cerrado; es una meta que se debe medir en Electron, no una garantía tomada de la maqueta.
+Rediseñar solamente la pantalla real del POS Angular/Electron para operar rápido en pantalla táctil: identidad grafito/cobre, categorías verticales en el extremo izquierdo, catálogo de productos a su derecha y compra/ticket amplio a la derecha (hasta 540 CSS px). Los botones de producto apuntan a 64–70 px de alto, con nombre, precio y unidad de venta cuando corresponda. El objetivo de densidad es mostrar los 35 cortes de referencia en 1366 × 768 CSS px al 100 %, con editor cerrado; es una meta que se debe medir en Electron, no una garantía tomada de la maqueta.
 
 **Decisión de distribución (16/10/2026):** la referencia UI2 propone el ticket a la izquierda, pero el usuario prefirió expresamente conservar la distribución anterior del POS: catálogo a la izquierda y compra a la derecha. Luego precisó categorías verticales bien a la izquierda y más superficie para la compra; esta indicación reemplaza el pedido intermedio de categorías horizontales. Se mantiene la identidad, densidad y funcionalidad de UI2; sus archivos de referencia no se modifican.
 
@@ -33,14 +33,11 @@ Cada etapa se entrega en un incremento compilable, con prueba focalizada antes d
 
 ## Estado y medición en Electron (16/10/2026)
 
-Se aplicaron la identidad Nocturna, las tarjetas compactas, las categorías verticales a la izquierda, las pestañas A–D dentro de la compra, el detalle en renglones y el cuerpo desplazable con total/cobro fijos. El editor de peso/cantidad sigue en el diálogo existente. Las categorías son botones visibles con desplazamiento vertical; no se convierten en un combo.
+Se aplicaron la identidad Nocturna, las tarjetas compactas del catálogo, las categorías verticales a la izquierda y el detalle de compra como tabla semántica de cinco columnas. Conserva producto y código/pieza, cantidad o peso editable, precio por unidad, descuento informativo, importe y acción de quitar. El cuerpo se desplaza sin mover total/cobro; el editor para agregar productos sigue en el diálogo existente.
 
-- Ventana maximizada, viewport 1920 × 992 CSS px: catálogo a `x=14`, ancho 1408 px; categorías verticales a `x=14`, ancho 112 px; ticket a `x=1436`, ancho 470 px. Sin desborde horizontal de página ni del pie del ticket.
-- La columna de categorías en Electron tiene `flex-direction: column` y `overflow-y: auto`; muestra las cinco categorías reales de la lista activa. Con más categorías se desplazará verticalmente, sin ocultar opciones en un menú.
-- Ventana exterior 1366 × 768, viewport efectivo 1358 × 712 CSS px: catálogo a `x=14`, ancho 854 px; categorías de 112 px; ticket a `x=882`, ancho 462 px. El cuerpo del ticket conserva desplazamiento propio y total/cobro permanecen visibles.
-- Ventana exterior 800 × 768, viewport efectivo 792 × 712 CSS px: categorías de 82 px y ticket de 300 px, sin desborde horizontal. El ticket necesita desplazamiento vertical para leer el renglón completo.
-- Ventana exterior 560 × 800, viewport efectivo 552 × 744 CSS px: categorías de 80 px y compra debajo del catálogo; el encabezado se envuelve y la página no desborda horizontalmente.
-- Suite Angular: 157/157; lint y build: correctos. Las capturas se revisaron dentro de Electron. No se crearon bases ni ventas para esta verificación. El catálogo activo tenía solo dos artículos: la meta de 35 cortes y DPI 125 %/150 % siguen pendientes de medición.
+- Caja A de La Rústica en Electron maximizado, viewport 1920 × 992 CSS px: ticket a `x=1366`, ancho 540 px; tabla de 497 px sin desplazamiento horizontal. Cinco renglones reales ocupan 76 px de alto cada uno y se ven simultáneamente; total y cobro permanecen visibles. El catálogo mostró 35 artículos reales de la categoría Vacuno, sin ventas nuevas para esta verificación.
+- La columna de categorías mantiene `flex-direction: column` y `overflow-y: auto`. La tabla tiene ancho mínimo de 470 px y desplazamiento horizontal interno si el panel cae por debajo de ese ancho. La revisión de este nuevo diseño a 1366 × 768, 800 × 768 y DPI 125 %/150 % sigue pendiente; las mediciones anteriores correspondían al detalle en tarjetas.
+- Prueba focalizada primero en rojo y después en verde; suite Angular: 157/157; lint y build: correctos. Las capturas se revisaron dentro de Electron. No se crearon bases ni ventas para esta verificación.
 
 ## Validación
 
@@ -54,7 +51,7 @@ Se aplicaron la identidad Nocturna, las tarjetas compactas, las categorías vert
 
 | Riesgo | Mitigación |
 | --- | --- |
-| El ticket derecho no admite la tabla actual de seis columnas, aun con más ancho. | Convertir renglones a filas compactas sin quitar edición, eliminación ni información de pieza. |
+| La tabla necesita más ancho que el panel en ventanas estrechas. | Mantener el desplazamiento horizontal dentro del detalle, sin desbordar la página ni quitar edición, eliminación o información de pieza. |
 | El editor inline compite con renglones y controles fiscales. | Scroll independiente del cuerpo del ticket; total/cobro fijos; controles contextuales colapsables sin ocultar validaciones. |
 | Menos texto en tarjetas puede confundir productos semejantes o por unidad. | Mantener nombre distintivo y unidad visible, con código/stock en editor y estado explícito de no disponibilidad. |
 | Densidad objetivo imposible con DPI, nombres reales o múltiples controles. | Medir viewport efectivo, priorizar legibilidad y objetivos táctiles de 48 px; informar capacidad real sin escalar toda la interfaz. |

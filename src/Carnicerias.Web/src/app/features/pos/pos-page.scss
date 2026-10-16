@@ -320,7 +320,7 @@
 .account-menu { z-index: 4; background: var(--nt-panel); border: 1px solid var(--nt-border); }
 .account-menu a,.account-menu button { min-height: 48px; color: var(--nt-ink); background: var(--nt-panel); }
 .account-menu a:hover,.account-menu button:hover { background: var(--nt-select); }
-.pos-workspace { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(400px, 34vw, 470px); gap: 14px; padding: 14px; }
+.pos-workspace { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(510px, 38vw, 540px); gap: 14px; padding: 14px; }
 .shift-gate-workspace { grid-template-columns: 1fr; }
 .shift-gate { color: var(--pos-ink); }
 .ticket-panel { grid-column: 2; grid-row: 1; padding: 13px; color: var(--nt-ink); background: var(--nt-panel); border: 1px solid var(--nt-border); border-radius: 9px; }
@@ -364,21 +364,23 @@
 .sale-metadata label { color: var(--nt-muted); }
 .sale-metadata select,.sale-metadata input { min-height: 48px; }
 .sale-metadata select,.sale-metadata input,.quantity-input { color: var(--nt-ink); background: var(--nt-bg); border-color: var(--nt-border); }
-.ticket-lines-wrap { flex: none; min-height: 0; background: var(--nt-panel); }
-.ticket-lines { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
-.ticket-line { min-width: 0; padding: 9px; color: var(--nt-ink); background: var(--nt-tile); border: 1px solid var(--nt-border); border-radius: 7px; }
-.ticket-line-heading,.ticket-line-values,.ticket-line-pricing { display: flex; justify-content: space-between; gap: 8px; }
-.ticket-line-identity { min-width: 0; }
-.line-product-name { display: block; font-size: 0.85rem; line-height: 1.25; overflow-wrap: anywhere; }
-.ticket-line-identity small { display: block; margin-top: 2px; color: var(--nt-muted); font-size: 0.7rem; overflow-wrap: anywhere; }
-.remove-line-button { flex: 0 0 48px; width: 48px; height: 48px; color: var(--nt-ink); background: var(--nt-panel); border: 1px solid var(--nt-border); border-radius: 6px; touch-action: manipulation; }
-.ticket-line-values { align-items: end; margin-top: 5px; }
-.ticket-line-quantity { display: grid; min-width: 0; gap: 3px; color: var(--nt-muted); font-size: 0.7rem; }
-.quantity-input { width: 88px; min-height: 48px; color: var(--nt-ink); background: var(--nt-bg); border-color: var(--nt-border); font-size: 0.9rem; }
-.ticket-line-total { display: grid; min-width: 0; gap: 3px; text-align: right; }
-.ticket-line-total span { color: var(--nt-muted); font-size: 0.7rem; }
-.ticket-line-total strong { color: var(--nt-copper); font-size: 0.92rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.ticket-line-pricing { flex-wrap: wrap; margin-top: 7px; color: var(--nt-muted); font-size: 0.68rem; }
+.ticket-lines-wrap { flex: none; min-height: 0; overflow-x: auto; background: var(--nt-panel); }
+.ticket-lines { width: 100%; min-width: 470px; border-collapse: collapse; table-layout: fixed; color: var(--nt-ink); }
+.ticket-lines th,.ticket-lines td { padding: 6px 4px; border-bottom: 1px solid var(--nt-border); vertical-align: middle; }
+.ticket-lines thead th { color: var(--nt-muted); background: var(--nt-bg); font-size: 0.68rem; font-weight: 600; text-align: left; }
+.ticket-lines tr > :nth-child(2) { width: 74px; }
+.ticket-lines tr > :nth-child(3) { width: 96px; }
+.ticket-lines tr > :nth-child(4) { width: 100px; text-align: right; }
+.ticket-lines tr > :nth-child(5) { width: 56px; text-align: center; }
+.ticket-line { background: var(--nt-tile); }
+.ticket-line-identity { min-width: 0; text-align: left; }
+.line-product-name { display: block; font-size: 0.78rem; line-height: 1.2; overflow-wrap: anywhere; }
+.ticket-line-identity small,.ticket-line-quantity small,.ticket-line-price small { display: block; margin-top: 3px; color: var(--nt-muted); font-size: 0.65rem; line-height: 1.2; overflow-wrap: anywhere; }
+.ticket-line-quantity .quantity-input { width: 100%; min-height: 48px; color: var(--nt-ink); background: var(--nt-bg); border-color: var(--nt-border); font-size: 0.82rem; }
+.ticket-line-price span,.ticket-line-total strong { font-size: 0.78rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ticket-line-price small { white-space: normal; }
+.ticket-line-total strong { color: var(--nt-copper); }
+.remove-line-button { box-sizing: border-box; width: 48px; height: 48px; color: var(--nt-ink); background: var(--nt-panel); border: 1px solid var(--nt-border); border-radius: 6px; touch-action: manipulation; }
 .ticket-empty { color: var(--nt-ink); background: var(--nt-panel); }
 .ticket-empty p { color: var(--nt-muted); }
 .ticket-body-scroll .ticket-empty { min-height: 12rem; }

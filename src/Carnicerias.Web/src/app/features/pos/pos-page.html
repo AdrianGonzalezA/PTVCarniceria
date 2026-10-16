@@ -263,19 +263,24 @@
 
         @if (lines().length > 0) {
           <div class="ticket-lines-wrap">
-            <ul class="ticket-lines" aria-label="Productos en el ticket">
-              @for (line of lines(); track line.id) {
-                <li class="ticket-line">
-                  <div class="ticket-line-heading">
-                    <div class="ticket-line-identity">
+            <table class="ticket-lines" aria-label="Productos en el ticket">
+              <thead>
+                <tr>
+                  <th scope="col">Producto</th>
+                  <th scope="col">Cantidad</th>
+                  <th scope="col">Precio</th>
+                  <th scope="col">Importe</th>
+                  <th scope="col" aria-label="Quitar producto"></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (line of lines(); track line.id) {
+                  <tr class="ticket-line">
+                    <th scope="row" class="ticket-line-identity">
                       <strong class="line-product-name">{{ line.product.name }}</strong>
                       <small>{{ line.product.code }}@if (line.pieceIdentifier) { · Pieza {{ line.pieceIdentifier }} }</small>
-                    </div>
-                    <button class="remove-line-button" type="button" [disabled]="!isDemoPriceList() && !!liveDataProblem()" [attr.aria-label]="'Quitar ' + line.product.name + (line.pieceIdentifier ? ' pieza ' + line.pieceIdentifier : '')" (click)="removeLine(line.id)">×</button>
-                  </div>
-                  <div class="ticket-line-values">
-                    <label class="ticket-line-quantity">
-                      <span>{{ line.product.mode === 'weight' ? 'Peso (kg)' : 'Cantidad (' + unitLabel(line.product) + ')' }}</span>
+                    </th>
+                    <td class="ticket-line-quantity">
                       <input
                         class="quantity-input"
                         type="number"
@@ -287,16 +292,20 @@
                         [attr.aria-label]="line.product.mode === 'weight' ? 'Peso en kilogramos de ' + line.product.name : 'Cantidad de ' + unitLabel(line.product) + ' de ' + line.product.name"
                         (change)="updateLineQuantity(line.id, $event)"
                       />
-                    </label>
-                    <div class="ticket-line-total"><span>Total</span><strong>{{ formatMoney(lineTotal(line)) }}</strong></div>
-                  </div>
-                  <div class="ticket-line-pricing">
-                    <span>Precio {{ formatMoney(line.product.price) }} / {{ unitLabel(line.product) }}</span>
-                    <span>Desc. 0,00%</span>
-                  </div>
-                </li>
-              }
-            </ul>
+                      <small>{{ unitLabel(line.product) }}</small>
+                    </td>
+                    <td class="ticket-line-price">
+                      <span>{{ formatMoney(line.product.price) }}</span>
+                      <small>/ {{ unitLabel(line.product) }} · Desc. 0,00%</small>
+                    </td>
+                    <td class="ticket-line-total"><strong>{{ formatMoney(lineTotal(line)) }}</strong></td>
+                    <td class="ticket-line-action">
+                      <button class="remove-line-button" type="button" [disabled]="!isDemoPriceList() && !!liveDataProblem()" [attr.aria-label]="'Quitar ' + line.product.name + (line.pieceIdentifier ? ' pieza ' + line.pieceIdentifier : '')" (click)="removeLine(line.id)">×</button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
           </div>
         } @else {
           <div class="ticket-empty" role="status">

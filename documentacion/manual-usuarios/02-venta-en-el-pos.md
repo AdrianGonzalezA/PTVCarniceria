@@ -27,13 +27,13 @@ La lectura en venta **no crea stock**. La pieza debe haber ingresado antes por *
 
 ## Editar, descontar o cancelar
 
-En el detalle podés cambiar la cantidad de un renglón común o quitarlo con **×**. El peso de una pieza trazable no se modifica: quitá el renglón si fue una lectura equivocada. Si tu permiso lo permite, podés aplicar un **descuento del ticket en pesos** e indicar un motivo. El descuento se refleja en el total; no es un descuento individual por artículo.
+El detalle muestra una tabla con producto, cantidad o peso, precio e importe. Podés cambiar la cantidad de un renglón común o quitarlo con **×**. El peso de una pieza trazable no se modifica: quitá el renglón si fue una lectura equivocada. Si tu permiso lo permite, podés aplicar un **descuento del ticket en pesos** e indicar un motivo. El descuento se refleja en el total; no es un descuento individual por artículo.
 
 **Cancelar venta** libera la reserva de ese ticket y conserva su cancelación para auditoría. Un ticket borrador reserva stock disponible, pero **no descuenta existencia física**; el egreso ocurre al confirmar la venta. No confundas cancelar el ticket con anular una venta ya confirmada.
 
 ## Trabajar con tickets A–D
 
-Las pestañas inferiores permiten mantener hasta cuatro ventas en curso por caja, cajero y turno. Esperá a que termine **Guardando ticket…** antes de cambiar de pestaña. Cada pestaña marcada **Guardado** se recupera desde la base de datos al reiniciar Electron, junto con su reserva. Una edición que no llegó a guardarse antes de un corte de energía no se considera recuperada.
+Las pestañas A–D permiten mantener hasta cuatro ventas en curso por caja, cajero y turno. Esperá a que termine **Guardando ticket…** antes de cambiar de pestaña. Cada pestaña marcada **Guardado** se recupera desde la base de datos al reiniciar Electron, junto con su reserva. Una edición que no llegó a guardarse antes de un corte de energía no se considera recuperada.
 
 Confirmar o cancelar una venta afecta solo el ticket activo; los otros tickets continúan separados. Para cerrar el turno hay que resolverlos todos.
 

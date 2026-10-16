@@ -921,11 +921,18 @@ describe('PosPage', () => {
 
     expect((fixture.componentInstance as unknown as { selectedPriceListId: () => string }).selectedPriceListId()).toBe('list-id');
     expect(fixture.nativeElement.querySelector('.price-list-field select').textContent).toContain('Mayorista');
-    const compactLine = fixture.nativeElement.querySelector('.ticket-lines .ticket-line') as HTMLElement;
+    const ticketTable = fixture.nativeElement.querySelector('table.ticket-lines') as HTMLTableElement;
+    expect(ticketTable).not.toBeNull();
+    expect(Array.from(ticketTable.querySelectorAll('thead th')).map(header => header.textContent?.trim()))
+      .toEqual(['Producto', 'Cantidad', 'Precio', 'Importe', '']);
+    const compactLine = ticketTable.querySelector('tbody tr.ticket-line') as HTMLTableRowElement;
     expect(compactLine).not.toBeNull();
+    expect(compactLine.cells).toHaveLength(5);
     expect(compactLine.textContent).toContain('Corte guardado');
     expect(compactLine.textContent).toContain('CAR-01');
-    expect(compactLine.textContent).toContain('Precio');
+    expect(compactLine.cells[2].textContent).toContain('12.345,67');
+    expect(compactLine.cells[2].textContent).toContain('Desc. 0,00%');
+    expect(compactLine.cells[4].querySelector('.remove-line-button')).not.toBeNull();
     const ticketBody = fixture.nativeElement.querySelector('.ticket-body-scroll') as HTMLElement;
     expect(ticketBody.querySelector('.sale-metadata')).not.toBeNull();
     expect(ticketBody.querySelector('.ticket-line')).not.toBeNull();

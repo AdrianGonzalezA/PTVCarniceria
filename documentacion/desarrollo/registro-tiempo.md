@@ -46,5 +46,6 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 | 16/10/2026 | 12:40:19 | — | No cuantificable | Abrir la rama UI2 e iniciar el rediseño del POS | El turno se interrumpió antes de conservar una marca final; quedaron los commits `49de30a`, `fed06c6` y `2189782`. No se atribuye duración al intervalo. |
 | 16/10/2026 | 14:45:01 | 15:03:19 | 18 min | Restaurar catálogo izquierdo y compra derecha; compactar ticket | Prueba roja/verde, 157 pruebas Angular, lint, build y mediciones/capturas en Electron. Sin pausas conocidas ni cambios de base. |
 | 16/10/2026 | 15:03:19 | 15:04:39 | 1 min | Confirmar categorías horizontales y corregir el plan UI2 | Fila real verificada en Electron (`flex-direction: row`, desplazamiento horizontal automático); rama `feature/ui-v2` publicada. Sin pausas conocidas. |
+| 16/10/2026 | 15:08:18 | 15:14:00 | 6 min | Ubicar categorías verticales a la izquierda y ampliar la compra | CSS, plan y tareas actualizados; Electron revisado en 1920, 1366, 800 y 560 px; 157 pruebas Angular, lint y build correctos. Sin cambios de base ni pausas conocidas. |
 
-**Total activo registrado desde el 16/10/2026:** 67 min medidos, más tramos no cuantificables.
+**Total activo registrado desde el 16/10/2026:** 73 min medidos, más tramos no cuantificables.

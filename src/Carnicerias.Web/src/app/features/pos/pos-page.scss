@@ -320,7 +320,7 @@
 .account-menu { z-index: 4; background: var(--nt-panel); border: 1px solid var(--nt-border); }
 .account-menu a,.account-menu button { min-height: 48px; color: var(--nt-ink); background: var(--nt-panel); }
 .account-menu a:hover,.account-menu button:hover { background: var(--nt-select); }
-.pos-workspace { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(270px, 22vw, 310px); gap: 14px; padding: 14px; }
+.pos-workspace { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(400px, 34vw, 470px); gap: 14px; padding: 14px; }
 .shift-gate-workspace { grid-template-columns: 1fr; }
 .shift-gate { color: var(--pos-ink); }
 .ticket-panel { grid-column: 2; grid-row: 1; padding: 13px; color: var(--nt-ink); background: var(--nt-panel); border: 1px solid var(--nt-border); border-radius: 9px; }
@@ -331,11 +331,11 @@
 .search-control input { height: 48px; padding: 0.65rem 2.2rem 0.65rem 0.75rem; color: var(--nt-ink); background: var(--nt-panel); border: 1px solid var(--nt-border); font-size: 1rem; }
 .search-control > span { color: var(--nt-muted); }
 .catalog-badge { color: var(--nt-muted); border-color: var(--nt-border); border-radius: 6px; }
-.catalog-content { display: flex; min-height: 0; flex-direction: column; gap: 8px; padding: 0; }
-.category-rail { min-height: 48px; flex-direction: row; gap: 6px; overflow-x: auto; overflow-y: hidden; padding: 0; background: transparent; border-radius: 0; }
-.category-button { min-height: 48px; flex: 0 0 auto; grid-auto-flow: column; align-items: center; gap: 0.4rem; padding: 0.4rem 0.75rem; color: var(--nt-ink); background: var(--nt-tile); border: 1px solid var(--nt-border); border-radius: 6px; font-size: 0.78rem; touch-action: manipulation; }
+.catalog-content { display: grid; min-height: 0; grid-template-columns: 112px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 8px; padding: 0; }
+.category-rail { min-height: 0; flex-direction: column; gap: 6px; overflow-x: hidden; overflow-y: auto; padding: 5px; background: var(--nt-panel); border: 1px solid var(--nt-border); border-radius: 7px; }
+.category-button { min-height: 72px; flex: 0 0 auto; grid-auto-flow: row; align-content: center; justify-items: center; gap: 3px; padding: 6px 4px; color: var(--nt-ink); background: var(--nt-tile); border: 1px solid var(--nt-border); border-radius: 6px; font-size: 0.72rem; line-height: 1.15; text-align: center; overflow-wrap: anywhere; touch-action: manipulation; }
 .category-button.active { color: var(--nt-copper); background: var(--nt-select); border-color: var(--nt-copper); }
-.category-icon { color: inherit; filter: none; font-size: 1rem; }
+.category-icon { color: inherit; filter: none; font-size: 1.35rem; }
 .category-button.active .category-icon { color: inherit; filter: none; }
 .product-browser { min-height: 0; padding: 0; background: transparent; }
 .browser-heading { min-height: 27px; align-items: center; margin: 0 0 8px; color: var(--nt-muted); }
@@ -404,19 +404,24 @@
   .product-name { font-size: 0.94rem; }
 }
 @media (max-width: 850px) {
-  .pos-workspace { grid-template-columns: minmax(0, 1fr) 245px; gap: 10px; padding: 10px; }
+  .pos-workspace { grid-template-columns: minmax(0, 1fr) 300px; gap: 10px; padding: 10px; }
   .shift-gate-workspace { grid-template-columns: 1fr; }
   .ticket-panel { padding: 10px; }
+  .catalog-content { grid-template-columns: 82px minmax(0, 1fr); }
+  .category-button { min-height: 64px; font-size: 0.67rem; }
   .sale-metadata { grid-template-columns: 1fr; }
   .product-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; }
   .context-label { display: none; }
 }
 @media (max-width: 580px) {
   .pos-shell { height: auto; min-height: 100dvh; overflow: visible; }
+  .pos-header { flex-wrap: wrap; }
+  .pos-account { width: 100%; flex-wrap: wrap; justify-content: flex-start; gap: 6px; }
   .pos-workspace { display: flex; flex-direction: column; }
   .catalog-panel { min-height: 430px; order: 0; }
   .ticket-panel { min-height: 430px; order: 1; }
-  .product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .catalog-content { grid-template-columns: 80px minmax(0, 1fr); }
+  .product-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
   .catalog-toolbar { flex-wrap: wrap; }
   .search-control { flex: 1; min-width: 170px; }
 }

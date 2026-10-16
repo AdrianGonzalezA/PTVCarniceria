@@ -10,7 +10,7 @@
 ## 2. Shell y catálogo
 
 - [ ] Aplicar encabezado compacto, paleta grafito/cobre y columnas ticket/catálogo manteniendo turno, cuenta, stock y menú. Verificar: pruebas POS, build y Electron; foco visible. Dependencia: 1. Archivos: `pos-page.html`, `pos-page.scss`, `pos-page.spec.ts`.
-- [x] Mantener categorías reales en botones horizontales desplazables, conservando búsqueda y lector. Verificar: fila y overflow horizontal en Electron, pruebas de búsqueda y código. Decisión confirmada por el usuario el 16/10/2026. Archivos: `pos-page.html`, `pos-page.scss`, `pos-page.spec.ts`.
+- [x] Mantener categorías reales en botones verticales desplazables en el extremo izquierdo, conservando búsqueda y lector. Verificar: columna y overflow vertical en Electron, pruebas de búsqueda y código. La indicación posterior del usuario reemplazó la fila horizontal el 16/10/2026. Archivos: `pos-page.html`, `pos-page.scss`, `pos-page.spec.ts`.
 - [ ] Compactar tarjetas a 64–70 px, con nombre, precio/unidad y disponibilidad sin datos ficticios nuevos. Verificar: productos por peso/unidad, nombres largos, stock cero, tests y medición en Electron. Dependencia: 2. Archivos: `pos-page.html`, `pos-page.scss`, `pos-page.spec.ts`.
 
 ### Checkpoint A
@@ -21,7 +21,7 @@
 ## 3. Ticket y editor
 
 - [ ] Mantener tickets A–D, lista, comprobante y cliente en el panel derecho; compactar renglones sin perder editar/quitar, pieza, descuentos o alertas. Total y cobro permanecen visibles con scroll independiente. Verificar: tests de tickets, borrador y controles; Electron con ticket lleno. Dependencia: Checkpoint A. Archivos: `pos-page.html`, `pos-page.scss`, `pos-page.spec.ts`.
-  - Avance: pestañas A–D y renglones compactos implementados; cuerpo desplazable y total/cobro fijos comprobados con un artículo en Electron. Falta recorrer un ticket lleno y los estados de error visuales.
+  - Avance: pestañas A–D y renglones compactos implementados; compra ensanchada a 470 px en ventana maximizada y 462 px a 1366 × 768; cuerpo desplazable y total/cobro fijos comprobados con un artículo en Electron. Falta recorrer un ticket lleno y los estados de error visuales.
 - [ ] Integrar editor inline en ticket con entrada manual táctil para kg/unidades, sin duplicar estado ni lectura de balanza. Conservar etiqueta trazable y sus kilos. Verificar: tests de cantidad inválida, balanza, lector, cancelar/cambiar ticket y foco; Electron. Dependencia: ticket compacto. Archivos: `pos-page.html`, `pos-page.scss`, `pos-page.ts`, `pos-page.spec.ts`.
 
 ### Checkpoint B

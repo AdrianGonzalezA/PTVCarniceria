@@ -1,4 +1,4 @@
-# Arranque local: API, administración y Caja 1
+# Arranque local: POS, sucursales y central
 
 Estos comandos son para **PowerShell**: primero en este equipo y, al final, en otras PC de caja. Los comandos de desarrollo parten de `C:\Proyectos\Carnicerias`. Abrir una consola distinta para cada proceso. Usar únicamente la base de desarrollo existente `carnicerias_test_visual` en PostgreSQL Docker (`127.0.0.1:55433`); estos pasos no crean ni reinician bases.
 
@@ -128,3 +128,56 @@ cd C:\Carnicerias\Caja
 Ejecutar **solo la línea de esa PC**. `-Provision` solicita sin eco la credencial **distinta** de su caja; se usa únicamente en la primera vinculación. Para los siguientes arranques, repetir la misma línea **sin** `-Provision`. Cada PC puede usar sus propios COM1/COM6, porque sus puertos son independientes. Para la configuración de red, firewall y archivos de caja, seguir la [guía completa](guia-workshop-por-sucursal.md#7-preparar-cada-pc-de-caja).
 
 Para detener API o Angular, usar `Ctrl+C` en su consola. Para detener una caja, cerrar normalmente su ventana de Electron.
+
+## 6. Laboratorio local de sucursales y central
+
+Estos comandos complementan el POS compartido `:5197`; no lo reemplazan ni crean otra base. Funcionan **solo en esta computadora**, con los binarios publicados y el almacén DPAPI de la misma cuenta Windows. Los scripts comprueban el contenedor, la base `carnicerias_test_visual` y las identidades esperadas antes de arrancar. `Provision` no es un comando de arranque: no repetirlo para resolver un puerto ocupado o una API caída.
+
+Para iniciar las tres APIs de sucursal Visual (`5246`, `5247`, `5248`) y las dos APIs centrales habituales (`5245`, `5250`), con esos cinco puertos libres:
+
+```powershell
+cd C:\Proyectos\Carnicerias
+.\tools\Start-VisualCentralLab.ps1 -Action Check
+.\tools\Start-VisualCentralLab.ps1 -Action Start
+.\tools\Start-VisualCentralLab.ps1 -Action Verify
+```
+
+Para iniciar solo las centrales `5245` y `5250`, si las sucursales ya están activas y **ambos puertos centrales están libres**, usar `-Action StartCentral` en lugar de `Start`. Las APIs Visual `5246`–`5248` no incluyen la interfaz Angular de administración: sus URLs son endpoints de API.
+
+Para iniciar Alta Córdoba de La Rústica (`5249`), su central aislada (`5251`) y el portal `4302`, con esos tres puertos libres:
+
+```powershell
+cd C:\Proyectos\Carnicerias
+.\tools\Start-RusticaManagedLab.ps1 -Action Check
+.\tools\Start-RusticaManagedLab.ps1 -Action Start
+.\tools\Start-RusticaManagedLab.ps1 -Action Verify
+```
+
+Si únicamente hay que reiniciar la API de Alta Córdoba y el puerto `5249` está libre, usar `.\tools\Start-RusticaManagedLab.ps1 -Action StartBranch`. El script no detiene ni reemplaza procesos existentes. Si todos los servicios de un grupo ya responden, omitir su `Start` y ejecutar `Verify`; si solo responde una parte, diagnosticar qué puerto falta antes de intentar reiniciar. No iniciar duplicados. La guía de [administración central](administracion-central.md) detalla el alcance del laboratorio y del almacén protegido.
+
+## 7. Portales centrales y URLs
+
+El portal central habitual y el alternativo son dos servidores Angular. Abrir una consola por portal; no ejecutar una línea si su puerto ya está ocupado. El portal aislado `4302` se inicia con el `Start` de La Rústica del apartado anterior.
+
+```powershell
+cd C:\Proyectos\Carnicerias
+npm run start --prefix src/Carnicerias.Central.Web -- --host localhost --port 4300
+```
+
+```powershell
+cd C:\Proyectos\Carnicerias
+npm run start --prefix src/Carnicerias.Central.Web -- --host localhost --port 4301 --proxy-config proxy.superadmin.local.json
+```
+
+| Destino | URL local | Se conecta a |
+| --- | --- | --- |
+| Administración POS compartida | `http://localhost:4200/` · `http://localhost:4200/admin` | API POS `5197` |
+| API POS compartida | `http://localhost:5197/api/health` | PostgreSQL `127.0.0.1:55433/carnicerias_test_visual` |
+| Portal central habitual / SuperAdmin | `http://localhost:4300/` · `http://localhost:4300/superadmin` | API central `5245` |
+| Portal central alternativo / SuperAdmin | `http://localhost:4301/` · `http://localhost:4301/superadmin` | API central `5250` |
+| Portal central aislado La Rústica | `http://localhost:4302/` | API central `5251` |
+| APIs centrales | `http://127.0.0.1:5245/api/health` · `http://127.0.0.1:5250/api/health` · `http://127.0.0.1:5251/api/health` | Misma base PostgreSQL |
+| APIs sucursal Visual, Norte y Sur | `http://127.0.0.1:5246/api/health` · `http://127.0.0.1:5247/api/health` · `http://127.0.0.1:5248/api/health` | Misma base PostgreSQL de laboratorio |
+| Administración / API local Alta Córdoba | `http://localhost:5249/` · `http://127.0.0.1:5249/api/health` | API sucursal `5249` |
+
+En `4300` y `4301`, `/` es el acceso del administrador de empresa central y `/superadmin` es el del SuperAdmin central; no son cuentas del POS local. El portal `4302` es un entorno aislado de prueba, no el acceso central habitual. Todas estas URLs son loopback de laboratorio, no destinos de despliegue. El POS se revisa visualmente únicamente en Electron.

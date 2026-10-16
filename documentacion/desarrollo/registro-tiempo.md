@@ -43,5 +43,8 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 | 16/10/2026 | 11:30:06 | 11:30:29 | <1 min | Aclarar el alcance de los comandos Start | Visual y La Rústica levantan sus APIs de laboratorio; el administrador Angular `4200` requiere por separado la API POS `5197`. Sin pausas conocidas. |
 | 16/10/2026 | 11:36:28 | 11:37:08 | 1 min | Explicar la topología de APIs compartidas y sucursales aisladas | Se contrastaron las decisiones de despliegue, el contrato de central y el filtro de contexto operativo. Sin cambios de arquitectura ni pausas conocidas. |
 | 16/10/2026 | 11:43:21 | 11:44:19 | 1 min medido | Evaluar Electron POS en Raspberry Pi | Se revisaron versión, empaquetado y puertos seriales locales contra documentación oficial de Electron, Forge, SerialPort y Raspberry Pi. La investigación anterior a la primera marca horaria no se cuantifica. |
+| 16/10/2026 | 12:40:19 | — | No cuantificable | Abrir la rama UI2 e iniciar el rediseño del POS | El turno se interrumpió antes de conservar una marca final; quedaron los commits `49de30a`, `fed06c6` y `2189782`. No se atribuye duración al intervalo. |
+| 16/10/2026 | 14:45:01 | 15:03:19 | 18 min | Restaurar catálogo izquierdo y compra derecha; compactar ticket | Prueba roja/verde, 157 pruebas Angular, lint, build y mediciones/capturas en Electron. Sin pausas conocidas ni cambios de base. |
+| 16/10/2026 | 15:03:19 | 15:04:39 | 1 min | Confirmar categorías horizontales y corregir el plan UI2 | Fila real verificada en Electron (`flex-direction: row`, desplazamiento horizontal automático); rama `feature/ui-v2` publicada. Sin pausas conocidas. |
 
-**Total activo registrado desde el 16/10/2026:** 48 min medidos, más tramos no cuantificables.
+**Total activo registrado desde el 16/10/2026:** 67 min medidos, más tramos no cuantificables.

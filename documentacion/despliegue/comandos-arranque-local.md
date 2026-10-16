@@ -12,25 +12,20 @@ Comprobar que Docker Desktop y el contenedor PostgreSQL estén activos:
 docker ps
 ```
 
-Antes de iniciar otra API, comprobar si la actual responde:
-
-```powershell
-Invoke-RestMethod http://localhost:5197/api/health
-```
-
-Si devuelve `status: healthy`, **ya está levantada**: dejarla abierta y pasar al paso 2. Para ejecutar código nuevo, detener primero la instancia anterior con `Ctrl+C` en su consola. No intentar abrir dos API en el puerto 5197.
-
-Si no responde, configurar la cadena de conexión **en la consola de la API**, sin escribir la contraseña en el archivo ni en el historial de comandos:
+Si ya hay una API en el puerto 5197, detenerla primero con `Ctrl+C` en su consola. La respuesta de `/api/health` por sí sola no comprueba la conexión a PostgreSQL. Iniciar la API con este comando, sin completar usuarios, contraseñas ni cadenas de conexión:
 
 ```powershell
 cd C:\Proyectos\Carnicerias
-$cadenaPos = Read-Host 'Cadena PostgreSQL (Host=127.0.0.1;Port=55433;Database=carnicerias_test_visual;Username=...;Password=...)' -AsSecureString
-$env:CARNICERIAS_CONNECTION_STRING = [System.Net.NetworkCredential]::new('', $cadenaPos).Password
-Remove-Variable cadenaPos
-dotnet run --project src/Carnicerias.Api/Carnicerias.Api.csproj --configuration Release -- --urls http://localhost:5197
+.\tools\Start-LocalPosApi.ps1
 ```
 
-Dejar esa consola abierta. En otra consola, verificar nuevamente `/api/health` con el comando anterior. La cadena ingresada debe apuntar **solo** a `carnicerias_test_visual`.
+El script toma la contraseña del contenedor Docker existente, valida el puerto `55433` y la única base `carnicerias_test_visual`, y le pasa la conexión a la API sin mostrarla ni guardarla en Git. Dejar la consola abierta. En otra consola, verificar la conexión real con:
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code}" http://localhost:5197/api/sessions/current
+```
+
+Sin sesión iniciada, debe responder `401`. Si responde `500`, la API no quedó bien conectada; cerrar esa instancia y volver a ejecutar el comando de este apartado. No iniciar la API con `dotnet run` directamente.
 
 ## 2. Administración Angular (consola 2)
 
@@ -101,11 +96,11 @@ Los siguientes arranques usan la línea normal del perfil, sin volver a ingresar
 
 ## 5. Cajas en dos o tres computadoras distintas
 
-La API y PostgreSQL corren **solo en la PC servidora**; las otras PC llevan únicamente Electron. La API debe escuchar en una IP LAN accesible, no solo en `localhost`. Si hoy está levantada en `localhost:5197`, detenerla en su consola y volver a iniciarla allí con la misma cadena de conexión a `carnicerias_test_visual`, sustituyendo la IP de ejemplo por la real:
+La API y PostgreSQL corren **solo en la PC servidora**; las otras PC llevan únicamente Electron. La API debe escuchar en una IP LAN accesible, no solo en `localhost`. Si hoy está levantada en `localhost:5197`, detenerla en su consola y volver a iniciarla con el mismo script, sustituyendo la IP de ejemplo por la IP LAN real de esa PC:
 
 ```powershell
 cd C:\Proyectos\Carnicerias
-dotnet run --project src/Carnicerias.Api/Carnicerias.Api.csproj --configuration Release -- --urls http://192.168.10.20:5197
+.\tools\Start-LocalPosApi.ps1 -BindAddress '192.168.10.20'
 ```
 
 Habilitar el acceso al puerto 5197 **solo desde la LAN de prueba** en el firewall del servidor. En cada PC de caja, comprobar `Invoke-RestMethod 'http://192.168.10.20:5197/api/health'`. No exponer PostgreSQL (`55433`) a la LAN ni crear una base por caja.

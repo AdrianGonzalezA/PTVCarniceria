@@ -30,5 +30,6 @@ En cada turno de desarrollo se anota la primera marca horaria fiable, la última
 | --- | --- | --- | ---: | --- | --- |
 | 16/10/2026 | 07:49 | 07:52 | 3 min | Reconstruir actividad y crear registro de tiempo | Primera marca horaria fiable del turno; 137 commits y 12 bloques analizados. Sin pausas conocidas. |
 | 16/10/2026 | 08:11 | 08:15 | 4 min | Actualizar comandos locales de sucursales y central | Se cotejaron scripts, proxies y puertos; `Check` y `Verify` de ambos laboratorios pasaron. Sin pausas conocidas. |
+| 16/10/2026 | 09:29 | 09:48 | 19 min | Corregir arranque local de la API POS y documentar comando directo | Se reprodujo el HTTP 500 de `5197`, se probó el arranque en `5198` contra la base existente y `/api/sessions/current` respondió 401 sin sesión. Sin pausas conocidas. |
 
-**Total activo registrado desde el 16/10/2026:** 7 min.
+**Total activo registrado desde el 16/10/2026:** 26 min.

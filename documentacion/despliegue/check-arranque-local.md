@@ -4,16 +4,13 @@
 
    ```powershell
    cd C:\Proyectos\Carnicerias
-   $pgContainer = docker ps -q --filter 'publish=55433' | Select-Object -First 1
-   if (-not $pgContainer) { throw 'PostgreSQL en Docker (puerto 55433) no está activo' }
-   $pgEnv = docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' $pgContainer
-   $pgUser = ($pgEnv | Where-Object { $_ -like 'POSTGRES_USER=*' } | Select-Object -First 1) -replace '^POSTGRES_USER=', ''
-   if (-not $pgUser) { $pgUser = 'postgres' }
-   $pgPasswordEntry = $pgEnv | Where-Object { $_ -like 'POSTGRES_PASSWORD=*' } | Select-Object -First 1
-   if (-not $pgPasswordEntry) { throw 'No se encontró POSTGRES_PASSWORD en el contenedor' }
-   $pgPassword = $pgPasswordEntry.Substring('POSTGRES_PASSWORD='.Length)
-   $env:CARNICERIAS_CONNECTION_STRING = "Host=127.0.0.1;Port=55433;Database=carnicerias_test_visual;Username=$pgUser;Password=$pgPassword"
-   dotnet run --project src/Carnicerias.Api/Carnicerias.Api.csproj --configuration Release -- --urls http://localhost:5197
+   .\tools\Start-LocalPosApi.ps1
+   ```
+
+   El script usa las credenciales del contenedor existente sin pedir datos ni mostrarlas. Si el puerto `5197` está ocupado, cerrar primero la API anterior con `Ctrl+C` en su consola. Para comprobar que la conexión a la base funciona (sin sesión, resultado esperado `401`):
+
+   ```powershell
+   curl.exe -s -o NUL -w "%{http_code}" http://localhost:5197/api/sessions/current
    ```
 
 2. Admin — consola 2

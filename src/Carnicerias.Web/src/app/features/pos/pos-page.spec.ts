@@ -679,6 +679,8 @@ describe('PosPage', () => {
     expect(priceList.value).toBe('list-id');
     expect(search.disabled).toBe(false);
     expect(fixture.nativeElement.querySelector('.product-card').textContent).toContain('Pan rallado');
+    expect(fixture.nativeElement.querySelector('.product-card').textContent).toContain('/ unidad');
+    expect(fixture.nativeElement.querySelector('.product-card').textContent).not.toContain('Disponible:');
     expect(fixture.nativeElement.querySelector('.category-icon').textContent).toContain('🧺');
     search.dispatchEvent(new KeyboardEvent('keydown', { key: '8', bubbles: true }));
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -1578,14 +1580,14 @@ describe('PosPage', () => {
     setAvailable(0);
     window.dispatchEvent(new Event('focus'));
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.product-stock').textContent).toContain('0');
+    expect(fixture.nativeElement.querySelector('.product-availability').textContent).toContain('Sin stock');
     (fixture.nativeElement.querySelector('.product-card') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#product-dialog-title')).toBeNull();
     omitStock();
     window.dispatchEvent(new Event('focus'));
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.product-stock').textContent).toContain('0');
+    expect(fixture.nativeElement.querySelector('.product-availability').textContent).toContain('Sin stock');
     setAvailable(10);
     window.dispatchEvent(new Event('focus'));
     failStock();

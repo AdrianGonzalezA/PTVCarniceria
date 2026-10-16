@@ -298,3 +298,120 @@
   .product-facts { grid-template-columns: 1fr; }
   .payment-methods { grid-template-columns: 1fr; }
 }
+
+/* Nocturna Touch: solo el mostrador. Los diálogos conservan su contraste propio. */
+.pos-shell {
+  --nt-bg: #181b20;
+  --nt-panel: #24282e;
+  --nt-tile: #2d3239;
+  --nt-border: #414750;
+  --nt-ink: #f3efe9;
+  --nt-muted: #bbb8b3;
+  --nt-copper: #e5b27f;
+  --nt-dark: #2b2118;
+  --nt-select: #48392b;
+  box-sizing: border-box;
+  height: 100dvh;
+  overflow: hidden;
+  color: var(--nt-ink);
+  background: var(--nt-bg);
+  font-family: 'Segoe UI', sans-serif;
+}
+.pos-shell button,.pos-shell input,.pos-shell select { font-family: inherit; }
+.pos-shell button:focus-visible,.pos-shell input:focus-visible,.pos-shell select:focus-visible,.pos-shell a:focus-visible {
+  outline-color: var(--nt-copper);
+}
+.pos-header { box-sizing: border-box; min-height: 68px; gap: 1rem; padding: 8px 14px; background: var(--nt-bg); border-bottom: 1px solid var(--nt-border); }
+.pos-brand,.pos-account { gap: 0.65rem; }
+.brand-mark { width: auto; height: auto; color: var(--nt-copper); background: none; font-size: 23px; font-weight: 750; line-height: 1; }
+.brand-name { font-size: 0.92rem; font-weight: 650; white-space: nowrap; }
+.brand-name span { color: var(--nt-muted); font-size: inherit; }
+.context-label { max-width: 16rem; overflow: hidden; color: var(--nt-muted); text-overflow: ellipsis; white-space: nowrap; }
+.terminal-label { color: var(--nt-copper); border-color: var(--nt-border); }
+.cashier-name { font-size: 0.82rem; }
+.shift-status,.stock-manage-button { min-height: 48px; padding: 0.5rem 0.7rem; color: var(--nt-ink); background: var(--nt-tile); border: 1px solid var(--nt-border); font-size: 0.78rem; touch-action: manipulation; }
+.shift-status:hover,.stock-manage-button:hover { border-color: var(--nt-copper); }
+.menu-trigger { min-width: 48px; min-height: 48px; place-content: center; }
+.account-menu { z-index: 4; background: var(--nt-panel); border: 1px solid var(--nt-border); }
+.account-menu a,.account-menu button { min-height: 48px; color: var(--nt-ink); background: var(--nt-panel); }
+.account-menu a:hover,.account-menu button:hover { background: var(--nt-select); }
+.pos-workspace { flex: 1; min-height: 0; grid-template-columns: clamp(270px, 22vw, 310px) minmax(0, 1fr); gap: 14px; padding: 14px; }
+.shift-gate-workspace { grid-template-columns: 1fr; }
+.shift-gate { color: var(--pos-ink); }
+.ticket-panel { grid-column: 1; grid-row: 1; padding: 13px; color: var(--nt-ink); background: var(--nt-panel); border: 1px solid var(--nt-border); border-radius: 9px; }
+.catalog-panel { grid-column: 2; grid-row: 1; min-width: 0; }
+.catalog-toolbar { min-height: 48px; flex-wrap: nowrap; padding: 0 0 8px; background: transparent; }
+.catalog-toolbar label.sr-only { width: 1px; margin: 0; }
+.search-control { width: min(100%, 29rem); }
+.search-control input { height: 48px; padding: 0.65rem 2.2rem 0.65rem 0.75rem; color: var(--nt-ink); background: var(--nt-panel); border: 1px solid var(--nt-border); font-size: 1rem; }
+.search-control > span { color: var(--nt-muted); }
+.catalog-badge { color: var(--nt-muted); border-color: var(--nt-border); border-radius: 6px; }
+.catalog-content { display: flex; min-height: 0; flex-direction: column; gap: 8px; padding: 0; }
+.category-rail { min-height: 48px; flex-direction: row; gap: 6px; overflow-x: auto; overflow-y: hidden; padding: 0; background: transparent; border-radius: 0; }
+.category-button { min-height: 48px; flex: 0 0 auto; grid-auto-flow: column; align-items: center; gap: 0.4rem; padding: 0.4rem 0.75rem; color: var(--nt-ink); background: var(--nt-tile); border: 1px solid var(--nt-border); border-radius: 6px; font-size: 0.78rem; touch-action: manipulation; }
+.category-button.active { color: var(--nt-copper); background: var(--nt-select); border-color: var(--nt-copper); }
+.category-icon { color: inherit; filter: none; font-size: 1rem; }
+.category-button.active .category-icon { color: inherit; filter: none; }
+.product-browser { min-height: 0; padding: 0; background: transparent; }
+.browser-heading { min-height: 27px; align-items: center; margin: 0 0 8px; color: var(--nt-muted); }
+.browser-heading h1 { color: var(--nt-copper); font-size: 0.84rem; font-weight: 650; }
+.search-hint,.result-count { color: var(--nt-muted); }
+.product-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 7px; }
+.product-card { box-sizing: border-box; min-height: 64px; height: auto; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px; padding: 7px 9px; color: var(--nt-ink); background: var(--nt-tile); border: 1px solid var(--nt-border); border-radius: 7px; text-align: left; touch-action: manipulation; }
+.product-card:hover,.product-card:focus-visible { border-color: var(--nt-copper); outline-color: var(--nt-copper); }
+.product-card:active { background: var(--nt-select); }
+.product-card.unavailable { opacity: 0.68; }
+.product-name { font-size: 0.82rem; font-weight: 650; line-height: 1.15; overflow-wrap: anywhere; }
+.product-price { color: var(--nt-copper); font-size: 0.76rem; font-variant-numeric: tabular-nums; }
+.product-price small { color: var(--nt-muted); }
+.product-availability { color: var(--nt-ink); font-size: 0.7rem; }
+.catalog-empty { color: var(--nt-ink); }
+.catalog-empty p { color: var(--nt-muted); }
+.catalog-retry { min-height: 48px; color: var(--nt-dark); background: var(--nt-copper); }
+.ticket-toolbar { border-color: var(--nt-border); }
+.cancel-sale-button { min-height: 48px; color: var(--nt-ink); background: var(--nt-tile); border: 1px solid var(--nt-border); touch-action: manipulation; }
+.ticket-toolbar h2 { font-size: 1rem; }
+.eyebrow { color: var(--nt-copper); }
+.price-list-lock { color: var(--nt-muted); }
+.sale-metadata label { color: var(--nt-muted); }
+.sale-metadata select,.sale-metadata input,.quantity-input { color: var(--nt-ink); background: var(--nt-bg); border-color: var(--nt-border); }
+.line-table-wrap { background: var(--nt-panel); }
+.line-table th { color: var(--nt-ink); background: var(--nt-bg); }
+.line-table td { border-color: var(--nt-border); }
+.line-table td small { color: var(--nt-muted); }
+.remove-line-button { color: var(--nt-ink); }
+.ticket-empty { color: var(--nt-ink); background: var(--nt-panel); }
+.ticket-empty p { color: var(--nt-muted); }
+.sale-discount-fields { background: var(--nt-panel); border-color: var(--nt-border); }
+.sale-discount-fields input { color: var(--nt-ink); background: var(--nt-bg); border-color: var(--nt-border); }
+.sale-footer { background: var(--nt-panel); border-top: 1px solid var(--nt-border); }
+.finish-button { min-height: 48px; color: var(--nt-dark); background: var(--nt-copper); border-color: var(--nt-copper); touch-action: manipulation; }
+.total-field { color: var(--nt-ink); background: var(--nt-panel); }
+.total-field span { color: var(--nt-muted); }
+.total-field strong { color: var(--nt-copper); font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.ticket-strip { min-height: 48px; background: var(--nt-bg); border-top: 1px solid var(--nt-border); }
+.ticket-tab { min-height: 48px; color: var(--nt-ink); background: var(--nt-tile); border: 1px solid var(--nt-border); touch-action: manipulation; }
+.ticket-tab.selected { color: var(--nt-copper); background: var(--nt-select); border-color: var(--nt-copper); }
+.pos-dialog { color: var(--pos-ink); }
+
+@media (min-width: 1500px) {
+  .product-grid { grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); }
+  .product-card { min-height: 70px; }
+  .product-name { font-size: 0.94rem; }
+}
+@media (max-width: 850px) {
+  .pos-workspace { grid-template-columns: 245px minmax(0, 1fr); gap: 10px; padding: 10px; }
+  .shift-gate-workspace { grid-template-columns: 1fr; }
+  .ticket-panel { padding: 10px; }
+  .product-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; }
+  .context-label { display: none; }
+}
+@media (max-width: 580px) {
+  .pos-shell { height: auto; min-height: 100dvh; overflow: visible; }
+  .pos-workspace { display: flex; flex-direction: column; }
+  .catalog-panel { min-height: 430px; order: 0; }
+  .ticket-panel { min-height: 430px; order: 1; }
+  .product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .catalog-toolbar { flex-wrap: wrap; }
+  .search-control { flex: 1; min-width: 170px; }
+}

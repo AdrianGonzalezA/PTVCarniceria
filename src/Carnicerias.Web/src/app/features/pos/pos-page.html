@@ -1,8 +1,8 @@
 <div class="pos-shell">
   <header class="pos-header">
     <div class="pos-brand">
-      <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">Carnicerías <span>· Punto de venta</span></span>
+      <span class="brand-mark" aria-hidden="true">ri</span>
+      <span class="brand-name">NOCTURNA <span>· MOSTRADOR</span></span>
     </div>
     <div class="pos-account">
       <span class="context-label">{{ session()?.context?.branchName }}</span>
@@ -57,7 +57,7 @@
   <main class="pos-workspace">
     <section class="catalog-panel" aria-label="Catálogo de productos">
       <div class="catalog-toolbar">
-        <label for="product-search">Producto / lector</label>
+        <label class="sr-only" for="product-search">Producto / lector</label>
         <div class="search-control">
           <input
             #scanInput
@@ -144,10 +144,14 @@
           } @else if (visibleProducts().length > 0) {
             <div class="product-grid">
               @for (product of visibleProducts(); track product.id) {
-                <button class="product-card" type="button" [disabled]="!canSearchCatalog()" (click)="openProduct(product)">
+                <button class="product-card" type="button" [disabled]="!canSearchCatalog()"
+                  [class.unavailable]="!isDemoPriceList() && (availableStock(product) ?? 0) <= 0"
+                  (click)="openProduct(product)">
                   <span class="product-name">{{ product.name }}</span>
                   <span class="product-price">{{ formatMoney(product.price) }} <small>/ {{ unitLabel(product) }}</small></span>
-                  @if (!isDemoPriceList()) { <small class="product-stock">Disponible: {{ availableStock(product) ?? 0 }} {{ unitLabel(product) }}</small> }
+                  @if (!isDemoPriceList() && (availableStock(product) ?? 0) <= 0) {
+                    <small class="product-availability">Sin stock</small>
+                  }
                 </button>
               }
             </div>

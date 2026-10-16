@@ -37,5 +37,6 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 | 16/10/2026 | 10:39:50 | 10:40:50 | 1 min medido | Incorporar la regla de tiempo por petición a `AGENTS.md` | Primera marca fiable posterior al inicio del trabajo; el tramo previo no se cuantifica. Sin pausas conocidas en el intervalo medido. |
 | 16/10/2026 | 10:40:50 | 10:42:28 | 2 min | Diagnosticar error de `Start-RusticaManagedLab.ps1 -Action Verify` | Tras el arranque, las tres URLs terminaron respondiendo `healthy`; el fallo ocurrió antes de que el sitio Angular aceptara conexiones. El ajuste automático de espera quedó pendiente al cambiar la prioridad a apagar servicios. Sin pausas conocidas. |
 | 16/10/2026 | 10:42:28 | 10:43:35 | 1 min | Apagar APIs y Angular para prueba de arranque del usuario | Se detuvieron ocho procesos del laboratorio y se verificó que no quedan listeners ni procesos de API/Angular de Carnicerías. Sin pausas conocidas. |
+| 16/10/2026 | 10:46:43 | 10:49:23 | 3 min | Corregir `Verify` del laboratorio La Rústica | Prueba de espera en rojo y luego en verde; pasaron las pruebas PowerShell y `Verify` real con `5249`, `5251` y `4302` saludables. Los comandos de arranque no cambiaron. Sin pausas conocidas. |
 
-**Total activo registrado desde el 16/10/2026:** 30 min.
+**Total activo registrado desde el 16/10/2026:** 33 min.

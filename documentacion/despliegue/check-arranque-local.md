@@ -47,7 +47,7 @@
    .\tools\Start-VisualCentralLab.ps1 -Action Verify
    ```
 
-5. Laboratorio La Rústica: API de Alta Córdoba (`5249`), API central aislada (`5251`) y portal (`4302`) — consola 5. Ejecutar `Start` **solo si los tres puertos están libres**; si los tres servicios ya están activos, ejecutar únicamente `Verify`.
+5. Laboratorio La Rústica: API de Alta Córdoba (`5249`), API central aislada (`5251`) y portal (`4302`) — consola 5. Ejecutar `Start` **solo si los tres puertos están libres**; si los tres servicios ya están activos, ejecutar únicamente `Verify`. `Verify` espera hasta 90 segundos a que Angular y las APIs respondan, por lo que se puede ejecutar inmediatamente después de `Start`.
 
    ```powershell
    cd C:\Proyectos\Carnicerias

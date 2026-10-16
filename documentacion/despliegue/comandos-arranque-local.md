@@ -148,6 +148,8 @@ cd C:\Proyectos\Carnicerias
 .\tools\Start-RusticaManagedLab.ps1 -Action Verify
 ```
 
+En La Rústica, `Verify` espera hasta 90 segundos a que Angular y las APIs respondan; no hace falta introducir una pausa entre `Start` y `Verify`. Si vence ese plazo, informa la URL que no responde. No repetir `Start` si los puertos siguen ocupados: revisar el servicio indicado y ejecutar solo `Verify` otra vez.
+
 Si únicamente hay que reiniciar la API de Alta Córdoba y el puerto `5249` está libre, usar `.\tools\Start-RusticaManagedLab.ps1 -Action StartBranch`. El script no detiene ni reemplaza procesos existentes. Si todos los servicios de un grupo ya responden, omitir su `Start` y ejecutar `Verify`; si solo responde una parte, diagnosticar qué puerto falta antes de intentar reiniciar. No iniciar duplicados. La guía de [administración central](administracion-central.md) detalla el alcance del laboratorio y del almacén protegido.
 
 ## 7. Portales centrales y URLs

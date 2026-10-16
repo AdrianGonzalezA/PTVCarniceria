@@ -95,6 +95,38 @@ function New-BranchSettings($vaultData) {
     }
 }
 
+function Wait-HealthyUrls {
+    param(
+        [string[]]$Urls,
+        [ValidateRange(0, 300)] [int]$TimeoutSeconds = 90,
+        [ValidateRange(0, 10000)] [int]$RetryDelayMilliseconds = 1000
+    )
+
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    foreach ($url in $Urls) {
+        $announced = $false
+        while ($true) {
+            try {
+                $health = Invoke-RestMethod -Uri $url -TimeoutSec 5
+                if ($health.status -eq 'healthy') { break }
+            }
+            catch {
+                # Los servicios recién lanzados pueden rechazar conexiones mientras inician.
+            }
+            if ([DateTime]::UtcNow -ge $deadline) {
+                throw "No se pudo verificar $url en $TimeoutSeconds segundos. Revisá el servicio y su registro de arranque."
+            }
+            if (-not $announced) {
+                Write-Output "Esperando a $url..."
+                $announced = $true
+            }
+            if ($RetryDelayMilliseconds -gt 0) {
+                Start-Sleep -Milliseconds $RetryDelayMilliseconds
+            }
+        }
+    }
+}
+
 Assert-Lab
 $vault = Read-Vault
 if ($Action -eq 'Check') {
@@ -144,13 +176,10 @@ if ($Action -eq 'Start') {
         throw
     }
     Write-Output "Sucursal 5249 PID $($started[0].Id); central 5251 PID $($started[1].Id); sitio 4302 PID $($started[2].Id)."
-    Write-Output 'Esperar a que Angular compile y ejecutar -Action Verify.'
+    Write-Output 'Ejecutá -Action Verify; esperará hasta 90 segundos a que los servicios respondan.'
     return
 }
 
-foreach ($url in @('http://127.0.0.1:5249/api/health',
-    'http://127.0.0.1:5251/api/health', 'http://localhost:4302/api/health')) {
-    $health = Invoke-RestMethod -Uri $url -TimeoutSec 10
-    if ($health.status -ne 'healthy') { throw "Sin salud en $url" }
-}
+Wait-HealthyUrls -Urls @('http://127.0.0.1:5249/api/health',
+    'http://127.0.0.1:5251/api/health', 'http://localhost:4302/api/health')
 Write-Output 'Sucursal, central y proxy Angular saludables. El token no se lee ni se muestra.'

@@ -13,7 +13,7 @@ if (!companyCode || !username || !password) {
 }
 
 const route = process.argv[2] ?? '/admin';
-if (!/^\/admin(?:\/(?:configuracion|categories|taxes|products|price-lists))?$/.test(route)) {
+if (!/^\/admin(?:\/(?:configuracion|categories|taxes|products|price-lists|customers))?$/.test(route)) {
   throw new Error('Only the initial administration routes are supported.');
 }
 const viewport = /^--viewport=(\d{3,4})x(\d{3,4})$/.exec(
@@ -22,19 +22,21 @@ const viewport = /^--viewport=(\d{3,4})x(\d{3,4})$/.exec(
 if (!viewport) throw new Error('Use --viewport=WIDTHxHEIGHT.');
 const width = Number(viewport[1]);
 const height = Number(viewport[2]);
-const expectedTab = ['/admin/categories', '/admin/taxes', '/admin/products', '/admin/price-lists']
+const expectedTab = ['/admin/categories', '/admin/taxes', '/admin/products', '/admin/price-lists', '/admin/customers']
   .includes(route) ? '/admin/configuracion' : route;
 const inspectDialog = process.argv.includes('--dialog');
 const inspectImportDialog = process.argv.includes('--import-dialog');
 const inspectTaxDialog = process.argv.includes('--tax-dialog');
 const inspectProductDialog = process.argv.includes('--product-dialog');
 const inspectPricesDialog = process.argv.includes('--prices-dialog');
+const inspectCustomerDialog = process.argv.includes('--customer-dialog');
 if ((inspectDialog || inspectImportDialog) && route !== '/admin/categories') {
   throw new Error('Dialog checks require /admin/categories.');
 }
 if (inspectTaxDialog && route !== '/admin/taxes') throw new Error('--tax-dialog requires /admin/taxes.');
 if (inspectProductDialog && route !== '/admin/products') throw new Error('--product-dialog requires /admin/products.');
 if (inspectPricesDialog && route !== '/admin/price-lists') throw new Error('--prices-dialog requires /admin/price-lists.');
+if (inspectCustomerDialog && route !== '/admin/customers') throw new Error('--customer-dialog requires /admin/customers.');
 if (inspectDialog && inspectImportDialog) throw new Error('Choose one dialog check at a time.');
 const outputDirectory = process.argv.find((argument) => argument.startsWith('--output='))?.slice(9) ??
   path.join(tmpdir(), 'carnicerias-admin-theme');
@@ -138,6 +140,7 @@ try {
       route === '/admin/taxes' ? 'app-product-tax-page app-tax-catalog-panel .tax-catalog-form' :
       route === '/admin/products' ? 'app-products-page .category-panel tbody tr' :
       route === '/admin/price-lists' ? 'app-price-lists-page .category-panel tbody tr' :
+      route === '/admin/customers' ? 'app-customers-page .category-panel tbody tr' :
       'app-admin-page .module-panel')}
   ))`));
   if (route === '/admin/taxes') {
@@ -153,7 +156,7 @@ try {
     const styles = await evaluate(`(() => {
       document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
       const host = document.querySelector(
-        'app-admin-page, app-categories-page, app-product-tax-page, app-products-page, app-price-lists-page');
+        'app-admin-page, app-categories-page, app-product-tax-page, app-products-page, app-price-lists-page, app-customers-page');
       const header = host.querySelector('.app-header');
       const panel = host.querySelector('.module-panel, .category-panel');
       const brandMark = host.querySelector('.brand-mark');
@@ -250,6 +253,21 @@ try {
       })()`);
       if (styles.tableScroll.content <= styles.tableScroll.viewport || !styles.tableScroll.reachable) {
         throw new Error(`The ${theme} row actions are not reachable inside the mobile table.`);
+      }
+    }
+    if (['/admin/products', '/admin/price-lists', '/admin/customers'].includes(route) && width <= 560) {
+      styles.tableScroll = await evaluate(`(() => {
+        const wrap = document.querySelector('.category-panel > .table-wrap');
+        const before = wrap.scrollLeft;
+        wrap.scrollLeft = wrap.scrollWidth;
+        const lastAction = wrap.querySelector('tbody tr .row-actions button:last-child').getBoundingClientRect();
+        const bounds = wrap.getBoundingClientRect();
+        const reachable = lastAction.left >= bounds.left && lastAction.right <= bounds.right + 1;
+        wrap.scrollLeft = before;
+        return { viewport: wrap.clientWidth, content: wrap.scrollWidth, reachable };
+      })()`);
+      if (!styles.tableScroll.reachable) {
+        throw new Error(`The ${theme} last row action is not reachable inside the mobile table.`);
       }
     }
     if (styles.documentScrollWidth > styles.viewportWidth) {
@@ -565,6 +583,39 @@ try {
       const file = path.join(outputDirectory, `admin-price-history-${theme}-${width}x${height}.png`);
       await writeFile(file, Buffer.from(screenshot.data, 'base64'));
       console.log(JSON.stringify({ ...history, screenshot: file }));
+    }
+  }
+  if (inspectCustomerDialog) {
+    await evaluate(`(() => {
+      document.documentElement.dataset.visualTheme = 'original';
+      document.querySelector('app-customers-page tbody .row-actions button').click();
+      return true;
+    })()`);
+    await until(() => evaluate("Boolean(document.querySelector('.admin-detail-dialog[open] #customer-name'))"));
+    for (const theme of ['original', 'nocturno']) {
+      const editor = await evaluate(`(() => {
+        document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+        const dialog = document.querySelector('.admin-detail-dialog[open]');
+        const name = dialog.querySelector('#customer-name');
+        return {
+          theme: document.documentElement.dataset.visualTheme,
+          open: dialog.open,
+          title: dialog.querySelector('h3')?.textContent.trim(),
+          name: name.value,
+          surface: getComputedStyle(dialog).backgroundColor,
+          control: getComputedStyle(name).backgroundColor,
+        };
+      })()`);
+      if (!editor.open || !editor.name || editor.surface !==
+        (theme === 'nocturno' ? 'rgb(36, 40, 46)' : 'rgb(237, 237, 237)') ||
+        editor.control !== (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)')) {
+        throw new Error(`The ${theme} customer editor lost its data or theme.`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `admin-customers-dialog-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...editor, screenshot: file }));
     }
   }
 } finally {

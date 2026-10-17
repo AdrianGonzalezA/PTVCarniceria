@@ -97,10 +97,11 @@
   - Verificar: `products-page.spec.ts`, `price-lists-page.spec.ts` y ambas rutas con registros existentes.
   - Dependencias: T3.3–T3.5. Archivos previstos (4): `admin/products-page.scss`, `admin/products-page.spec.ts`, `admin/price-lists-page.scss`, `admin/price-lists-page.spec.ts`.
   - Evidencia 17/10/2026: pruebas focalizadas rojo/verde (13/13); ambas rutas revisadas con artículos y listas ficticias en Original/Nocturno a 1366 × 768 y 560 × 768. Editores de artículo, costo, códigos alternativos, detalle de lista, fijación de precio e historiales abiertos sin guardar. Tabla del modal de precios desplaza 571 px dentro de 487 px a 560 px y conserva la acción final; build correcto.
-- [ ] **T3.8 · Clientes.** Cubrir búsqueda, tabla y alta/edición de clientes.
+- [x] **T3.8 · Clientes.** Búsqueda, tabla y alta/edición de clientes cubiertas mediante estilos compartidos.
   - Aceptación: `/admin/customers` no deja superficies claras involuntarias y conserva todos los campos/acciones; el modal sigue el tema.
   - Verificar: `customers-page.spec.ts` y tabla/modal en ambos temas. Crear hoja propia solo si los estilos comunes no alcanzan.
   - Dependencias: T3.3 y T3.4. Archivos previstos (hasta 3): `admin/customers-page.ts`, `admin/customers-page.spec.ts`, `admin/customers-page.scss` (nuevo solo si hace falta).
+  - Evidencia 17/10/2026: 2/2 pruebas focalizadas; modal de edición conserva nombre y código al cambiar de tema, sin solicitudes de escritura. `/admin/customers` revisada con 3 clientes ficticios a 1366 × 768 y 560 × 768; tabla de 841 px desplazable en contenedor de 511 px, última acción alcanzable. No hizo falta agregar estilos propios.
 - [ ] **T3.9 · ARCA y pasarelas.** Tematizar certificados, estados de integración y formularios de cobro.
   - Aceptación: datos sensibles ya enmascarados, errores, botones y formularios siguen legibles; no se conecta ni emite nada para verificar colores.
   - Verificar: `arca-settings-page.spec.ts`, `payment-gateways-page.spec.ts` y ambas rutas en dos temas.

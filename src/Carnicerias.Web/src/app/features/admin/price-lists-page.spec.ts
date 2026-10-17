@@ -33,6 +33,34 @@ describe('PriceListsPage', () => {
     return { fixture, http, page: fixture.nativeElement as HTMLElement };
   }
 
+  it('keeps a list and current-price details open while changing visual theme', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const { fixture, http, page } = load();
+      expect(getComputedStyle(page).getPropertyValue('--admin-prices-panel').trim()).toBe('#ededed');
+      page.querySelector<HTMLButtonElement>('tbody .prices-button')!.click();
+      http.expectOne((request) => request.url === '/api/admin/price-lists/list-1/prices').flush({
+        items: [{ productId: 'product-1', code: 'VAC-001', name: 'Asado', unit: 'kg',
+          cost: 500, isActive: true, currentPrice: 600, effectiveFromUtc: '2026-10-08T00:00:00Z' }],
+        page: 1, pageSize: 20, totalItems: 1, totalPages: 1,
+      });
+      fixture.detectChanges();
+      expect(page.querySelector('dialog[open] .price-row')?.textContent).toContain('600.00');
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(page).getPropertyValue('--admin-prices-panel').trim()).toBe('#24282e');
+      expect(getComputedStyle(page).getPropertyValue('--admin-prices-nested').trim()).toBe('#2d3239');
+      expect(page.querySelector('dialog[open] .price-row')?.textContent).toContain('600.00');
+      http.expectNone((request) => request.method !== 'GET');
+      fixture.destroy();
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
   it('shows list status, branch count and price count', () => {
     const { page } = load();
     expect(page.querySelector('h1')?.textContent).toContain('Listas de precios');

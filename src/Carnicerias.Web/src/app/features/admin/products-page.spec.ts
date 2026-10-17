@@ -38,6 +38,32 @@ describe('ProductsPage', () => {
     return { fixture, http, page: fixture.nativeElement as HTMLElement };
   }
 
+  it('keeps an existing article editor and its values while changing visual theme', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const { fixture, http, page } = load();
+      expect(getComputedStyle(page).getPropertyValue('--admin-product-editor').trim()).toBe('#c5c5c5');
+      page.querySelector<HTMLButtonElement>('tbody .edit-button')!.click();
+      http.expectOne('/api/admin/products/product-1/codes').flush([]);
+      fixture.detectChanges();
+      const dialog = page.querySelector('dialog[open]') as HTMLDialogElement;
+      expect(dialog.querySelector<HTMLInputElement>('#product-name')?.value).toBe('Asado');
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(page).getPropertyValue('--admin-product-editor').trim()).toBe('#2d3239');
+      expect(getComputedStyle(page).getPropertyValue('--admin-product-alternates').trim()).toBe('#24282e');
+      expect(dialog.open).toBe(true);
+      expect(dialog.querySelector<HTMLInputElement>('#product-name')?.value).toBe('Asado');
+      http.expectNone((request) => request.method !== 'GET');
+      fixture.destroy();
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
   it('shows catalog properties including the unit and sale mode', () => {
     const { page } = load();
     expect(page.querySelector('h1')?.textContent).toContain('Artículos');

@@ -13,7 +13,7 @@ if (!companyCode || !username || !password) {
 }
 
 const route = process.argv[2] ?? '/admin';
-if (!/^\/admin(?:\/(?:configuracion|categories|taxes))?$/.test(route)) {
+if (!/^\/admin(?:\/(?:configuracion|categories|taxes|products|price-lists))?$/.test(route)) {
   throw new Error('Only the initial administration routes are supported.');
 }
 const viewport = /^--viewport=(\d{3,4})x(\d{3,4})$/.exec(
@@ -22,14 +22,19 @@ const viewport = /^--viewport=(\d{3,4})x(\d{3,4})$/.exec(
 if (!viewport) throw new Error('Use --viewport=WIDTHxHEIGHT.');
 const width = Number(viewport[1]);
 const height = Number(viewport[2]);
-const expectedTab = ['/admin/categories', '/admin/taxes'].includes(route) ? '/admin/configuracion' : route;
+const expectedTab = ['/admin/categories', '/admin/taxes', '/admin/products', '/admin/price-lists']
+  .includes(route) ? '/admin/configuracion' : route;
 const inspectDialog = process.argv.includes('--dialog');
 const inspectImportDialog = process.argv.includes('--import-dialog');
 const inspectTaxDialog = process.argv.includes('--tax-dialog');
+const inspectProductDialog = process.argv.includes('--product-dialog');
+const inspectPricesDialog = process.argv.includes('--prices-dialog');
 if ((inspectDialog || inspectImportDialog) && route !== '/admin/categories') {
   throw new Error('Dialog checks require /admin/categories.');
 }
 if (inspectTaxDialog && route !== '/admin/taxes') throw new Error('--tax-dialog requires /admin/taxes.');
+if (inspectProductDialog && route !== '/admin/products') throw new Error('--product-dialog requires /admin/products.');
+if (inspectPricesDialog && route !== '/admin/price-lists') throw new Error('--prices-dialog requires /admin/price-lists.');
 if (inspectDialog && inspectImportDialog) throw new Error('Choose one dialog check at a time.');
 const outputDirectory = process.argv.find((argument) => argument.startsWith('--output='))?.slice(9) ??
   path.join(tmpdir(), 'carnicerias-admin-theme');
@@ -130,7 +135,10 @@ try {
   await send('Page.navigate', { url: `http://localhost:4200${route}` });
   await until(() => evaluate(`Boolean(document.querySelector(
     ${JSON.stringify(route === '/admin/categories' ? 'app-categories-page .category-panel tbody tr' :
-      route === '/admin/taxes' ? 'app-product-tax-page app-tax-catalog-panel .tax-catalog-form' : 'app-admin-page .module-panel')}
+      route === '/admin/taxes' ? 'app-product-tax-page app-tax-catalog-panel .tax-catalog-form' :
+      route === '/admin/products' ? 'app-products-page .category-panel tbody tr' :
+      route === '/admin/price-lists' ? 'app-price-lists-page .category-panel tbody tr' :
+      'app-admin-page .module-panel')}
   ))`));
   if (route === '/admin/taxes') {
     await until(() => evaluate(`(() => {
@@ -144,7 +152,8 @@ try {
   for (const theme of ['original', 'nocturno']) {
     const styles = await evaluate(`(() => {
       document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
-      const host = document.querySelector('app-admin-page, app-categories-page, app-product-tax-page');
+      const host = document.querySelector(
+        'app-admin-page, app-categories-page, app-product-tax-page, app-products-page, app-price-lists-page');
       const header = host.querySelector('.app-header');
       const panel = host.querySelector('.module-panel, .category-panel');
       const brandMark = host.querySelector('.brand-mark');
@@ -153,6 +162,7 @@ try {
       const search = host.querySelector('#category-search');
       const taxCatalog = host.querySelector('app-tax-catalog-panel');
       const taxAssignment = host.querySelector('app-tax-assignment-panel');
+      const productFilter = host.querySelector('.product-filters select');
       return {
         theme: document.documentElement.dataset.visualTheme,
         route: location.pathname,
@@ -171,6 +181,7 @@ try {
         taxCatalogRows: taxCatalog?.querySelectorAll('tbody tr').length,
         taxAssignmentSelect: taxAssignment && getComputedStyle(taxAssignment.querySelector('#assignment-tax')).backgroundColor,
         taxAssignmentRows: taxAssignment?.querySelectorAll('tbody tr').length,
+        productFilter: productFilter && getComputedStyle(productFilter).backgroundColor,
         tableRows: host.querySelectorAll('tbody tr').length,
         documentScrollWidth: document.documentElement.scrollWidth,
         viewportWidth: window.innerWidth,
@@ -221,6 +232,10 @@ try {
       styles.taxAssignmentSelect !==
       (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)'))) {
       throw new Error(`The ${theme} tax catalog and assignment controls did not receive their theme.`);
+    }
+    if (route === '/admin/products' && styles.productFilter !==
+      (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)')) {
+      throw new Error(`The ${theme} article filters did not receive their theme.`);
     }
     if (route === '/admin/categories' && width <= 560) {
       styles.tableScroll = await evaluate(`(() => {
@@ -389,6 +404,167 @@ try {
       const file = path.join(outputDirectory, `admin-taxes-dialog-${theme}-${width}x${height}.png`);
       await writeFile(file, Buffer.from(screenshot.data, 'base64'));
       console.log(JSON.stringify({ ...dialogStyles, screenshot: file }));
+    }
+  }
+  if (inspectProductDialog) {
+    await evaluate(`(() => {
+      document.documentElement.dataset.visualTheme = 'original';
+      document.querySelector('app-products-page tbody .edit-button').click();
+      return true;
+    })()`);
+    await until(() => evaluate("Boolean(document.querySelector('.admin-detail-dialog[open] #product-name'))"));
+    for (const theme of ['original', 'nocturno']) {
+      const editorStyles = await evaluate(`(() => {
+        document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+        const dialog = document.querySelector('.admin-detail-dialog[open]');
+        const editor = dialog.querySelector('.product-editor');
+        return {
+          theme: document.documentElement.dataset.visualTheme,
+          open: dialog.open,
+          title: editor.querySelector('h3')?.textContent.trim(),
+          name: editor.querySelector('#product-name').value,
+          editor: getComputedStyle(editor).backgroundColor,
+          select: getComputedStyle(editor.querySelector('#product-category')).backgroundColor,
+          alternates: getComputedStyle(editor.querySelector('.alternate-codes')).backgroundColor,
+        };
+      })()`);
+      if (!editorStyles.open || !editorStyles.name || editorStyles.editor !==
+        (theme === 'nocturno' ? 'rgb(45, 50, 57)' : 'rgb(197, 197, 197)') ||
+        editorStyles.alternates !== (theme === 'nocturno' ? 'rgb(36, 40, 46)' : 'rgb(224, 224, 224)')) {
+        throw new Error(`The ${theme} article editor lost its data or theme.`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `admin-products-dialog-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...editorStyles, screenshot: file }));
+    }
+    await evaluate("document.querySelector('.product-editor button.secondary-button').click(); true");
+    await until(() => evaluate(`(() => {
+      const dialog = document.querySelector('#cost-history-title')?.closest('.admin-detail-dialog[open]');
+      return dialog && !dialog.querySelector('[role="status"]');
+    })()`));
+    for (const theme of ['original', 'nocturno']) {
+      const history = await evaluate(`(() => {
+        document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+        const title = document.querySelector('#cost-history-title');
+        const dialog = title.closest('.admin-detail-dialog');
+        return {
+          theme: document.documentElement.dataset.visualTheme,
+          title: title.textContent.trim(),
+          open: dialog.open,
+          surface: getComputedStyle(dialog).backgroundColor,
+          rows: dialog.querySelectorAll('li').length,
+        };
+      })()`);
+      if (!history.open || !history.title || history.surface !==
+        (theme === 'nocturno' ? 'rgb(36, 40, 46)' : 'rgb(237, 237, 237)')) {
+        throw new Error(`The ${theme} article cost history lost its state or surface.`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `admin-product-cost-history-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...history, screenshot: file }));
+    }
+  }
+  if (inspectPricesDialog) {
+    await evaluate(`(() => {
+      document.documentElement.dataset.visualTheme = 'original';
+      document.querySelector('app-price-lists-page tbody .prices-button').click();
+      return true;
+    })()`);
+    await until(() => evaluate(`(() => {
+      const panel = document.querySelector('.admin-detail-dialog[open] .detail-panel');
+      return panel && !panel.querySelector('[role="status"]') &&
+        (panel.querySelector('.price-row') || panel.textContent.includes('No se encontraron'));
+    })()`));
+    for (const theme of ['original', 'nocturno']) {
+      const details = await evaluate(`(() => {
+        document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+        const dialog = document.querySelector('.admin-detail-dialog[open]');
+        const panel = dialog.querySelector('.detail-panel');
+        const wrap = panel.querySelector('.table-wrap');
+        const scrollBefore = wrap?.scrollLeft ?? 0;
+        if (wrap) wrap.scrollLeft = wrap.scrollWidth;
+        const action = wrap?.querySelector('.price-row .row-actions button:last-child')?.getBoundingClientRect();
+        const bounds = wrap?.getBoundingClientRect();
+        const actionsReachable = !action || !bounds ||
+          (action.left >= bounds.left && action.right <= bounds.right + 1);
+        if (wrap) wrap.scrollLeft = scrollBefore;
+        return {
+          theme: document.documentElement.dataset.visualTheme,
+          open: dialog.open,
+          title: panel.querySelector('h2')?.textContent.trim(),
+          surface: getComputedStyle(panel).backgroundColor,
+          ink: getComputedStyle(panel).color,
+          rows: panel.querySelectorAll('.price-row').length,
+          firstPrice: panel.querySelector('.price-row td:nth-child(3)')?.textContent.trim(),
+          tableWidth: wrap?.scrollWidth ?? 0,
+          tableViewport: wrap?.clientWidth ?? 0,
+          actionsReachable,
+        };
+      })()`);
+      if (!details.open || !details.title || !details.actionsReachable || details.surface !==
+        (theme === 'nocturno' ? 'rgb(36, 40, 46)' : 'rgb(237, 237, 237)')) {
+        throw new Error(`The ${theme} price list details lost their state or surface.`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `admin-price-lists-dialog-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...details, screenshot: file }));
+    }
+    await evaluate("document.querySelector('.detail-panel .price-row .set-price-button').click(); true");
+    await until(() => evaluate("Boolean(document.querySelector('.admin-detail-dialog[open] .price-form #new-price'))"));
+    for (const theme of ['original', 'nocturno']) {
+      const editor = await evaluate(`(() => {
+        document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+        const form = document.querySelector('.admin-detail-dialog[open] .price-form');
+        return {
+          theme: document.documentElement.dataset.visualTheme,
+          title: form.querySelector('h3')?.textContent.trim(),
+          amount: form.querySelector('#new-price').value,
+          surface: getComputedStyle(form).backgroundColor,
+        };
+      })()`);
+      if (!editor.title || editor.surface !==
+        (theme === 'nocturno' ? 'rgb(45, 50, 57)' : 'rgb(220, 220, 220)')) {
+        throw new Error(`The ${theme} price editor lost its surface or article.`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `admin-price-editor-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...editor, screenshot: file }));
+    }
+    await evaluate("document.querySelector('.price-form .secondary-button').click(); true");
+    await until(() => evaluate("Boolean(document.querySelector('.detail-panel .price-row .history-button'))"));
+    await evaluate("document.querySelector('.detail-panel .price-row .history-button').click(); true");
+    await until(() => evaluate(`(() => {
+      const history = document.querySelector('.admin-detail-dialog[open] .price-history');
+      return history && !history.querySelector('[role="status"]');
+    })()`));
+    for (const theme of ['original', 'nocturno']) {
+      const history = await evaluate(`(() => {
+        document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+        const section = document.querySelector('.admin-detail-dialog[open] .price-history');
+        return {
+          theme: document.documentElement.dataset.visualTheme,
+          title: section.querySelector('h3')?.textContent.trim(),
+          surface: getComputedStyle(section).backgroundColor,
+          rows: section.querySelectorAll('tbody tr').length,
+        };
+      })()`);
+      if (!history.title || history.surface !==
+        (theme === 'nocturno' ? 'rgb(45, 50, 57)' : 'rgb(220, 220, 220)')) {
+        throw new Error(`The ${theme} price history lost its surface or article.`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `admin-price-history-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...history, screenshot: file }));
     }
   }
 } finally {

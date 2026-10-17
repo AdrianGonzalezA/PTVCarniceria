@@ -92,10 +92,11 @@
 
 **Checkpoint T3-B (17/10/2026):** diálogo, Excel e impuestos comprobados con tema cambiado en modales abiertos, sin modificar datos. Suite Angular 176/176, lint y build correctos. Persisten advertencias de presupuesto CSS en `admin-page.scss` y `categories-page.scss` y de `qrcode` CommonJS; no se relajó el presupuesto.
 
-- [ ] **T3.7 · Artículos y listas de precios.** Corregir estilos específicos que no hereden de los ABM comunes.
+- [x] **T3.7 · Artículos y listas de precios.** Corregidos los estilos específicos que no heredan de los ABM comunes.
   - Aceptación: tablas, precio/costo, vigencias, botones de fila y modales son legibles en Nocturno; Original no cambia.
   - Verificar: `products-page.spec.ts`, `price-lists-page.spec.ts` y ambas rutas con registros existentes.
   - Dependencias: T3.3–T3.5. Archivos previstos (4): `admin/products-page.scss`, `admin/products-page.spec.ts`, `admin/price-lists-page.scss`, `admin/price-lists-page.spec.ts`.
+  - Evidencia 17/10/2026: pruebas focalizadas rojo/verde (13/13); ambas rutas revisadas con artículos y listas ficticias en Original/Nocturno a 1366 × 768 y 560 × 768. Editores de artículo, costo, códigos alternativos, detalle de lista, fijación de precio e historiales abiertos sin guardar. Tabla del modal de precios desplaza 571 px dentro de 487 px a 560 px y conserva la acción final; build correcto.
 - [ ] **T3.8 · Clientes.** Cubrir búsqueda, tabla y alta/edición de clientes.
   - Aceptación: `/admin/customers` no deja superficies claras involuntarias y conserva todos los campos/acciones; el modal sigue el tema.
   - Verificar: `customers-page.spec.ts` y tabla/modal en ambos temas. Crear hoja propia solo si los estilos comunes no alcanzan.

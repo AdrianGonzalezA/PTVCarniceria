@@ -9,6 +9,7 @@
 - La prueba de pantalla comenzó en rojo antes de implementar el control y pasó después. Tras elegir Nocturno, un perfil nuevo de Chrome mantuvo la elección al recargar, pasar a Negocio y volver a Configuración. Se verificó foco visible del radio con teclado.
 - Capturas inspeccionadas en Chrome a 1920 × 992, 1366 × 768, 800 × 768 y 560 × 768 CSS px para ambos temas, sin desborde horizontal. El muestreo de contraste de texto visible encontró 0 fallas entre 47 elementos por tema a 1366 px. Las capturas de prueba quedan en la carpeta temporal local `carnicerias-admin-theme`, no en Git.
 - Mientras Chrome estaba en Nocturno, la caja POS existente se consultó **solo dentro de Electron**: antes y después siguió en Original, en `/pos`, con sus cinco líneas de borrador intactas. No se confirmó venta, se modificó stock ni se creó otra base.
+- El build nuevo se copió al bundle local de Electron y se recargó la caja abierta: pasó a la versión nueva y recuperó las mismas cinco líneas en Original. La sesión activa era la del cajero Juan, sin acceso a Configuración; no se cerró su sesión para forzar una prueba de selección dentro de ese perfil. La elección directa se verificó en el navegador administrativo y el aislamiento entre perfiles se midió contra este Electron.
 
 ## Comprobaciones automáticas
 

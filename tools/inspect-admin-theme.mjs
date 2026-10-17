@@ -13,15 +13,25 @@ if (!companyCode || !username || !password) {
 }
 
 const route = process.argv[2] ?? '/admin';
-if (!/^\/admin(?:\/configuracion)?$/.test(route)) throw new Error('Only admin landing routes are supported.');
-const outputDirectory = process.argv[3] ?? path.join(tmpdir(), 'carnicerias-admin-theme');
+if (!/^\/admin(?:\/(?:configuracion|categories))?$/.test(route)) {
+  throw new Error('Only the initial administration routes are supported.');
+}
+const viewport = /^--viewport=(\d{3,4})x(\d{3,4})$/.exec(
+  process.argv.find((argument) => argument.startsWith('--viewport=')) ?? '--viewport=1366x768',
+);
+if (!viewport) throw new Error('Use --viewport=WIDTHxHEIGHT.');
+const width = Number(viewport[1]);
+const height = Number(viewport[2]);
+const expectedTab = route === '/admin/categories' ? '/admin/configuracion' : route;
+const outputDirectory = process.argv.find((argument) => argument.startsWith('--output='))?.slice(9) ??
+  path.join(tmpdir(), 'carnicerias-admin-theme');
 const chromePath = process.env.CARNICERIAS_TEST_CHROME_PATH ??
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const profileDirectory = await mkdtemp(path.join(tmpdir(), 'carnicerias-theme-'));
 const chrome = spawn(chromePath, [
   '--headless=new', '--no-first-run', '--no-default-browser-check',
   '--disable-background-networking', '--remote-debugging-port=0',
-  `--user-data-dir=${profileDirectory}`, '--window-size=1366,768', 'about:blank',
+  `--user-data-dir=${profileDirectory}`, `--window-size=${width},${height}`, 'about:blank',
 ], { stdio: 'ignore', windowsHide: true });
 
 function pause(milliseconds) { return new Promise((resolve) => setTimeout(resolve, milliseconds)); }
@@ -73,7 +83,7 @@ try {
   }
   await send('Page.enable');
   await send('Emulation.setDeviceMetricsOverride', {
-    width: 1366, height: 768, deviceScaleFactor: 1, mobile: false,
+    width, height, deviceScaleFactor: 1, mobile: false,
   });
   await send('Page.navigate', { url: 'http://localhost:4200/' });
   await until(() => evaluate("Boolean(document.querySelector('.login-form'))"));
@@ -110,16 +120,20 @@ try {
   }
 
   await send('Page.navigate', { url: `http://localhost:4200${route}` });
-  await until(() => evaluate("Boolean(document.querySelector('app-admin-page .module-panel'))"));
+  await until(() => evaluate(`Boolean(document.querySelector(
+    ${JSON.stringify(route === '/admin/categories' ? 'app-categories-page .category-panel tbody tr' : 'app-admin-page .module-panel')}
+  ))`));
   await mkdir(outputDirectory, { recursive: true });
   for (const theme of ['original', 'nocturno']) {
     const styles = await evaluate(`(() => {
       document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
-      const host = document.querySelector('app-admin-page');
+      const host = document.querySelector('app-admin-page, app-categories-page');
       const header = host.querySelector('.app-header');
-      const panel = host.querySelector('.module-panel');
+      const panel = host.querySelector('.module-panel, .category-panel');
       const brandMark = host.querySelector('.brand-mark');
       const activeTab = host.querySelector('.area-tabs a[aria-current="page"]');
+      const tableHead = host.querySelector('thead th');
+      const search = host.querySelector('#category-search');
       return {
         theme: document.documentElement.dataset.visualTheme,
         route: location.pathname,
@@ -132,13 +146,18 @@ try {
         brandMarkWidth: brandMark.getBoundingClientRect().width,
         activeTab: activeTab?.getAttribute('href'),
         activeTabBorder: activeTab && getComputedStyle(activeTab).borderBottomColor,
+        tableHead: tableHead && getComputedStyle(tableHead).backgroundColor,
+        search: search && getComputedStyle(search).backgroundColor,
+        tableRows: host.querySelectorAll('tbody tr').length,
+        documentScrollWidth: document.documentElement.scrollWidth,
+        viewportWidth: window.innerWidth,
       };
     })()`);
     if (styles.brandMarkWidth !== 72 || styles.brandMark !==
       (theme === 'nocturno' ? 'rgb(229, 178, 127)' : 'rgb(245, 245, 245)')) {
       throw new Error(`The ${theme} administrative brand mark is overridden by another component.`);
     }
-    if (styles.activeTab !== route || styles.activeTabBorder !==
+    if (styles.activeTab !== expectedTab || styles.activeTabBorder !==
       (theme === 'nocturno' ? 'rgb(229, 178, 127)' : 'rgb(84, 194, 189)')) {
       throw new Error(`The ${theme} active administration tab lost its route or contrast.`);
     }
@@ -152,7 +171,7 @@ try {
     })()`;
     let keyboardFocus = await evaluate(keyboardFocusExpression);
     if (theme === 'original') {
-      for (let tabCount = 0; tabCount < 12 && keyboardFocus.href !== route; tabCount++) {
+      for (let tabCount = 0; tabCount < 12 && keyboardFocus.href !== expectedTab; tabCount++) {
         await send('Input.dispatchKeyEvent', {
           type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9,
         });
@@ -162,16 +181,43 @@ try {
         keyboardFocus = await evaluate(keyboardFocusExpression);
       }
     }
-    if (keyboardFocus.href !== route || !keyboardFocus.visible || keyboardFocus.outline !==
+    if (keyboardFocus.href !== expectedTab || !keyboardFocus.visible || keyboardFocus.outline !==
       (theme === 'nocturno' ? 'rgb(229, 178, 127)' : 'rgb(84, 194, 189)')) {
       throw new Error(`The ${theme} active administration tab has no keyboard-visible focus.`);
     }
     styles.keyboardFocus = keyboardFocus;
+    if (route === '/admin/categories' && (styles.tableHead !==
+      (theme === 'nocturno' ? 'rgb(72, 57, 43)' : 'rgb(0, 139, 139)') ||
+      styles.search !== (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)'))) {
+      throw new Error(`The ${theme} shared ABM controls did not receive their theme.`);
+    }
+    if (route === '/admin/categories' && width <= 560) {
+      styles.tableScroll = await evaluate(`(() => {
+        const wrap = document.querySelector('app-categories-page .table-wrap');
+        const before = wrap.scrollLeft;
+        wrap.scrollLeft = wrap.scrollWidth;
+        const lastAction = wrap.querySelector('tbody tr .row-actions button:last-child').getBoundingClientRect();
+        const bounds = wrap.getBoundingClientRect();
+        const reachable = lastAction.left >= bounds.left && lastAction.right <= bounds.right + 1;
+        wrap.scrollLeft = before;
+        return { viewport: wrap.clientWidth, content: wrap.scrollWidth, reachable };
+      })()`);
+      if (styles.tableScroll.content <= styles.tableScroll.viewport || !styles.tableScroll.reachable) {
+        throw new Error(`The ${theme} row actions are not reachable inside the mobile table.`);
+      }
+    }
+    if (styles.documentScrollWidth > styles.viewportWidth) {
+      throw new Error(`The ${theme} admin route overflows the ${styles.viewportWidth}px viewport.`);
+    }
     await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
     const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
-    const file = path.join(outputDirectory, `${route.slice(1).replaceAll('/', '-')}-${theme}.png`);
+    const file = path.join(outputDirectory, `${route.slice(1).replaceAll('/', '-')}-${theme}-${width}x${height}.png`);
     await writeFile(file, Buffer.from(screenshot.data, 'base64'));
     console.log(JSON.stringify({ ...styles, screenshot: file }));
+    if (route === '/admin/categories' && width <= 560) {
+      const fullPage = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+      await writeFile(file.replace(/\.png$/, '-full.png'), Buffer.from(fullPage.data, 'base64'));
+    }
   }
 } finally {
   try { if (send && socket?.readyState === WebSocket.OPEN) await send('Browser.close'); } catch { /* closing */ }

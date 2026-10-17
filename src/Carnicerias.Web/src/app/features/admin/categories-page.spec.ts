@@ -21,6 +21,68 @@ describe('CategoriesPage', () => {
 
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
+  it('changes shared ABM tokens without changing a populated category list or search input', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const fixture = TestBed.createComponent(CategoriesPage);
+      fixture.detectChanges();
+      const http = TestBed.inject(HttpTestingController);
+      http.expectOne('/api/sessions/current').flush(adminSession);
+      http.expectOne((request) => request.url === '/api/admin/categories').flush({
+        items: [{ id: 'cat-1', name: 'Vacuno', isActive: true, productCount: 4 }],
+        page: 1, pageSize: 20, totalItems: 1, totalPages: 1,
+      });
+      fixture.detectChanges();
+
+      const host = fixture.nativeElement as HTMLElement;
+      const search = host.querySelector('#category-search') as HTMLInputElement;
+      search.value = 'Vacu';
+      search.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      expect(getComputedStyle(host).getPropertyValue('--admin-abm-surface').trim()).toBe('#ededed');
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(host).getPropertyValue('--admin-abm-surface').trim()).toBe('#24282e');
+      expect(getComputedStyle(host).getPropertyValue('--admin-abm-table-head').trim()).toBe('#48392b');
+      expect(search.value).toBe('Vacu');
+      expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
+  it('keeps empty and load-error messages visible in Nocturno', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'nocturno';
+      const fixture = TestBed.createComponent(CategoriesPage);
+      fixture.detectChanges();
+      const http = TestBed.inject(HttpTestingController);
+      http.expectOne('/api/sessions/current').flush(adminSession);
+      http.expectOne((request) => request.url === '/api/admin/categories').flush({
+        items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0,
+      });
+      fixture.detectChanges();
+      const host = fixture.nativeElement as HTMLElement;
+      expect(host.querySelector('.state-message[role="status"]')?.textContent).toContain('Todavía no hay categorías');
+
+      host.querySelector<HTMLFormElement>('.search-form')!.dispatchEvent(new Event('submit'));
+      http.expectOne((request) => request.url === '/api/admin/categories').flush({}, {
+        status: 500, statusText: 'Server Error',
+      });
+      fixture.detectChanges();
+      expect(host.querySelector('.error-message[role="alert"]')?.textContent).toContain('No se pudieron cargar');
+      expect(getComputedStyle(host).getPropertyValue('--admin-abm-error-ink').trim()).toBe('#ffb4ab');
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
   it('lists active and inactive categories for the current company', () => {
     const fixture = TestBed.createComponent(CategoriesPage);
     fixture.detectChanges();

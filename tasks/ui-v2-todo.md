@@ -66,12 +66,13 @@
   - Verificar: `admin-area-navigation.spec.ts` y navegación por teclado en ambas áreas.
   - Dependencia: T3.1. Archivos previstos (2): `admin/admin-area-tabs.ts`, `admin/admin-area-navigation.spec.ts`.
   - Evidencia 17/10/2026: prueba focalizada rojo/verde (3/3); en `/admin` y `/admin/configuracion` el subrayado y contorno del foco de teclado son turquesa en Original y cobre en Nocturno, con `aria-current` y foco conservados durante el cambio sin recarga. Build y lint correctos.
-- [ ] **T3.3 · Superficies comunes de ABM.** Tematizar paneles, tablas, búsquedas, formularios y mensajes compartidos.
+- [x] **T3.3 · Superficies comunes de ABM.** Paneles, tablas, búsquedas, formularios y mensajes compartidos tematizados.
   - Aceptación: Categorías muestra tabla y formulario legibles, incluidos vacío/error; Original no cambia y otras páginas que importan el SCSS reciben los mismos tokens.
   - Verificar: `categories-page.spec.ts`, captura con tabla poblada y control de desborde a 800/560 px.
   - Dependencia: T3.1. Archivos previstos (2): `admin/categories-page.scss`, `admin/categories-page.spec.ts`.
+  - Evidencia 17/10/2026: prueba focalizada rojo/verde; Categorías con 10 registros reales de prueba revisada en Original y Nocturno a 1366 × 768, 800 × 768 y 560 × 768 en Chromium aislado. A 560 px, la tabla desplaza 623 px dentro de 511 px y la última acción es alcanzable sin desbordar el documento. Vacío y error cubiertos con HTTP simulado, sin alterar datos. Los controles de importación quedan para T3.5.
 
-**Checkpoint T3-A:** shell, pestañas y Categorías comprobados en dos temas; suite Angular, lint y build en verde. Si `:host-context()` no coincide con el atributo raíz en runtime, corregir el patrón antes de seguir.
+**Checkpoint T3-A (17/10/2026):** shell, pestañas y Categorías comprobados en dos temas; 170/170 pruebas Angular, lint y build correctos. `:host-context()` coincide con el atributo raíz en runtime. Build mantiene advertencias de presupuesto CSS para `admin-page.scss` y `categories-page.scss`, además de la advertencia preexistente de `qrcode` CommonJS; no se relajó el presupuesto.
 
 - [ ] **T3.4 · Diálogo compartido.** Dar a `AdminDetailDialog` superficie, borde, texto y foco Nocturno.
   - Aceptación: un modal abierto se actualiza al cambiar el tema sin cerrarse ni perder valores; título, cierre, error y scroll interno son legibles.

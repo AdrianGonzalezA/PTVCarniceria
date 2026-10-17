@@ -12,6 +12,38 @@ describe('BarcodeLayoutPage', () => {
 
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
+  it('themes saved layouts and editable barcode fields without previewing or saving', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const fixture = TestBed.createComponent(BarcodeLayoutPage);
+      fixture.detectChanges();
+      const http = TestBed.inject(HttpTestingController);
+      http.expectOne('/api/sessions/current').flush({ userId: 'admin-id', username: 'admin', expiresAtUtc: '',
+        context: { userId: 'admin-id', companyId: 'company-id', companyName: 'Empresa Visual',
+          branchId: 'branch-id', branchName: 'Sucursal Visual',
+          permissions: ['inventory.stock.manage'], sessionId: 'session-id' } });
+      http.expectOne('/api/admin/barcode-layouts').flush([{ id: 'profile-id', name: 'Ciclo 2',
+        revision: 1, formula: 'pro_identif(6) peso(5)', weightField: 'peso',
+        weightDecimals: 3, createdAtUtc: '2026-10-08T13:00:00Z' }]);
+      fixture.detectChanges();
+      const page = fixture.nativeElement as HTMLElement;
+      expect(getComputedStyle(page).getPropertyValue('--admin-barcode-profile').trim()).toBe('#fff');
+      expect(page.querySelector('.saved-profile')?.textContent).toContain('Ciclo 2');
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(page).getPropertyValue('--admin-barcode-profile').trim()).toBe('#2d3239');
+      expect(getComputedStyle(page).getPropertyValue('--admin-barcode-result').trim()).toBe('#2d3239');
+      expect(page.querySelector('.saved-profile')?.textContent).toContain('Ciclo 2');
+      http.expectNone((request) => request.method !== 'GET');
+      fixture.destroy();
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
   it('previews configured fields and weight without adding stock', () => {
     const fixture = TestBed.createComponent(BarcodeLayoutPage);
     fixture.detectChanges();

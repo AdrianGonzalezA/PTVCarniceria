@@ -15,6 +15,49 @@ describe('ProductTaxPage', () => {
     vi.restoreAllMocks();
   });
 
+  it('themes the IVA editor without changing an existing rule', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const fixture = TestBed.createComponent(ProductTaxPage);
+      fixture.detectChanges();
+      const http = TestBed.inject(HttpTestingController);
+      http.expectOne('/api/sessions/current').flush({ userId: 'admin-id', username: 'admin', expiresAtUtc: '',
+        context: { userId: 'admin-id', companyId: 'company-id', companyName: 'Empresa Visual',
+          branchId: 'branch-id', branchName: 'Sucursal Visual',
+          permissions: ['catalog.manage'], sessionId: 'session-id' } });
+      const product = { id: 'product-id', code: 'ASADO', name: 'Asado', isActive: true, currentRule: null };
+      http.match((request) => request.url === '/api/admin/product-tax-rules').forEach((request) =>
+        request.flush({ page: 1, pageSize: 25, total: 1, items: [product] }));
+      http.expectOne((request) => request.url === '/api/admin/taxes').flush({
+        page: 1, pageSize: 25, total: 0, items: [],
+      });
+      http.expectOne('/api/admin/taxes/active').flush([]);
+      http.expectOne('/api/admin/tax-assignments/count').flush({ total: 1 });
+      fixture.detectChanges();
+      const page = fixture.nativeElement as HTMLElement;
+      expect(getComputedStyle(page).getPropertyValue('--admin-product-tax-control').trim()).toBe('#fff');
+      page.querySelector<HTMLButtonElement>('.history-panel tbody tr button')!.click();
+      http.expectOne('/api/admin/product-tax-rules/product-id').flush([]);
+      http.expectOne('/api/admin/taxes/options').flush([
+        { id: 'iva-id', code: 'IVA_21_00', name: 'IVA 21 %', ratePercent: 21 },
+      ]);
+      fixture.detectChanges();
+      expect(page.querySelector<HTMLSelectElement>('#tax-catalog-entry')?.options.length).toBe(2);
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(page).getPropertyValue('--admin-product-tax-control').trim()).toBe('#181b20');
+      expect(getComputedStyle(page).getPropertyValue('--admin-product-tax-heading').trim()).toBe('#e5b27f');
+      expect(page.querySelector('dialog[open] .product-tax-editor')).not.toBeNull();
+      http.expectNone((request) => request.method !== 'GET');
+      fixture.destroy();
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
   it('keeps an unconfigured article explicit and saves a rule without treating it as an invoice', () => {
     const fixture = TestBed.createComponent(ProductTaxPage);
     fixture.detectChanges();

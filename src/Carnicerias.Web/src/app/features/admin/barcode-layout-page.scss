@@ -1,16 +1,33 @@
+:host {
+  --admin-barcode-profile: #fff;
+  --admin-barcode-result: #f6f8f7;
+  --admin-barcode-ink: #202322;
+  --admin-barcode-border: #ddd;
+  --admin-barcode-accent: #008b8b;
+  --admin-barcode-focus: #9a4f39;
+}
+:host-context(html[data-visual-theme='nocturno']) {
+  --admin-barcode-profile: #2d3239;
+  --admin-barcode-result: #2d3239;
+  --admin-barcode-ink: #f3efe9;
+  --admin-barcode-border: #414750;
+  --admin-barcode-accent: #e5b27f;
+  --admin-barcode-focus: #e5b27f;
+}
 .barcode-panel { max-width: 54rem; }
 .ean13-example-button { margin: 0 1rem; }
 .barcode-form { display: grid; gap: 0.5rem; padding: 1rem; }
 .barcode-form input { width: 100%; }
 .barcode-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .barcode-options > div { display: grid; gap: 0.5rem; }
-.barcode-result { margin: 1rem; padding: 1rem; background: #f6f8f7; border-left: 0.25rem solid var(--color-teal); }
+.barcode-result { margin: 1rem; padding: 1rem; color: var(--admin-barcode-ink); background: var(--admin-barcode-result); border-left: 0.25rem solid var(--admin-barcode-accent); }
 .barcode-result h3 { margin-top: 0; }
 .barcode-result dl { display: grid; gap: 0.5rem; }
 .barcode-result dl div { display: flex; gap: 1rem; }
 .barcode-result dt { min-width: 9rem; font-weight: 700; }
-.barcode-result dd { margin: 0; font-family: monospace; }
+.barcode-result dd { margin: 0; overflow-wrap: anywhere; font-family: monospace; }
 @media (max-width: 36rem) { .barcode-options { grid-template-columns: 1fr; } }
-.saved-profile { display: flex; flex-wrap: wrap; align-items: center; gap: 0.7rem; width: 100%; padding: 0.7rem; margin-top: 0.5rem; border: 1px solid #ddd; border-radius: 0.5rem; background: #fff; text-align: left; cursor: pointer; }
-.saved-profile:hover, .saved-profile:focus-visible { border-color: #9a4f39; }
+.saved-profile { display: flex; flex-wrap: wrap; align-items: center; gap: 0.7rem; width: 100%; padding: 0.7rem; margin-top: 0.5rem; border: 1px solid var(--admin-barcode-border); border-radius: 0.5rem; color: var(--admin-barcode-ink); background: var(--admin-barcode-profile); text-align: left; cursor: pointer; }
+.saved-profile:hover, .saved-profile:focus-visible { border-color: var(--admin-barcode-focus); }
+.saved-profile:focus-visible { outline: 3px solid var(--admin-barcode-focus); outline-offset: 2px; }
 .saved-profile code { overflow-wrap: anywhere; }

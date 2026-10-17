@@ -13,7 +13,7 @@ if (!companyCode || !username || !password) {
 }
 
 const route = process.argv[2] ?? '/admin';
-if (!/^\/admin(?:\/(?:configuracion|categories|taxes|products|price-lists|customers|arca|payment-gateways|organization|central-connection))?$/.test(route)) {
+if (!/^\/admin(?:\/(?:configuracion|categories|taxes|products|price-lists|customers|arca|payment-gateways|organization|central-connection|barcode-layouts))?$/.test(route)) {
   throw new Error('Only the initial administration routes are supported.');
 }
 const viewport = /^--viewport=(\d{3,4})x(\d{3,4})$/.exec(
@@ -24,7 +24,7 @@ const width = Number(viewport[1]);
 const height = Number(viewport[2]);
 const expectedTab = ['/admin/categories', '/admin/taxes', '/admin/products', '/admin/price-lists',
   '/admin/customers', '/admin/arca', '/admin/payment-gateways', '/admin/organization',
-  '/admin/central-connection']
+  '/admin/central-connection', '/admin/barcode-layouts']
   .includes(route) ? '/admin/configuracion' : route;
 const inspectDialog = process.argv.includes('--dialog');
 const inspectImportDialog = process.argv.includes('--import-dialog');
@@ -35,6 +35,8 @@ const inspectCustomerDialog = process.argv.includes('--customer-dialog');
 const inspectGatewayDialog = process.argv.includes('--gateway-dialog');
 const inspectOrganizationDialog = process.argv.includes('--organization-dialog');
 const mockCentral = process.argv.includes('--mock-central');
+const inspectTaxEditor = process.argv.includes('--tax-editor');
+const inspectBarcodePreview = process.argv.includes('--barcode-preview');
 if ((inspectDialog || inspectImportDialog) && route !== '/admin/categories') {
   throw new Error('Dialog checks require /admin/categories.');
 }
@@ -50,6 +52,10 @@ if (inspectOrganizationDialog && route !== '/admin/organization') {
 }
 if (mockCentral && route !== '/admin/central-connection') {
   throw new Error('--mock-central requires /admin/central-connection.');
+}
+if (inspectTaxEditor && route !== '/admin/taxes') throw new Error('--tax-editor requires /admin/taxes.');
+if (inspectBarcodePreview && route !== '/admin/barcode-layouts') {
+  throw new Error('--barcode-preview requires /admin/barcode-layouts.');
 }
 if (inspectDialog && inspectImportDialog) throw new Error('Choose one dialog check at a time.');
 const outputDirectory = process.argv.find((argument) => argument.startsWith('--output='))?.slice(9) ??
@@ -185,6 +191,7 @@ try {
       route === '/admin/payment-gateways' ? 'app-payment-gateways-page .category-panel #mp-title' :
       route === '/admin/organization' ? 'app-organization-page .company-row' :
       route === '/admin/central-connection' ? 'app-central-connection-page #identity-title, app-central-connection-page .central-error' :
+      route === '/admin/barcode-layouts' ? 'app-barcode-layout-page .barcode-form' :
       'app-admin-page .module-panel')}
   ))`));
   if (route === '/admin/taxes') {
@@ -200,7 +207,7 @@ try {
     const styles = await evaluate(`(() => {
       document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
       const host = document.querySelector(
-        'app-admin-page, app-categories-page, app-product-tax-page, app-products-page, app-price-lists-page, app-customers-page, app-arca-settings-page, app-payment-gateways-page, app-organization-page, app-central-connection-page');
+        'app-admin-page, app-categories-page, app-product-tax-page, app-products-page, app-price-lists-page, app-customers-page, app-arca-settings-page, app-payment-gateways-page, app-organization-page, app-central-connection-page, app-barcode-layout-page');
       const header = host.querySelector('.app-header');
       const panel = host.querySelector('.module-panel, .category-panel, .central-error');
       const brandMark = host.querySelector('.brand-mark');
@@ -214,6 +221,7 @@ try {
       const certificateState = host.querySelector('.certificate-state');
       const gatewayCard = host.querySelector('.gateway-register');
       const centralControl = host.querySelector('#central-destination-url');
+      const savedProfile = host.querySelector('.saved-profile');
       return {
         theme: document.documentElement.dataset.visualTheme,
         route: location.pathname,
@@ -239,6 +247,8 @@ try {
         gatewayCards: host.querySelectorAll('.gateway-register').length,
         centralControl: centralControl && getComputedStyle(centralControl).backgroundColor,
         centralAvailable: Boolean(centralControl),
+        savedProfile: savedProfile && getComputedStyle(savedProfile).backgroundColor,
+        savedProfiles: host.querySelectorAll('.saved-profile').length,
         tableRows: host.querySelectorAll('tbody tr').length,
         documentScrollWidth: document.documentElement.scrollWidth,
         viewportWidth: window.innerWidth,
@@ -310,6 +320,10 @@ try {
     if (route === '/admin/central-connection' && styles.centralAvailable && styles.centralControl !==
       (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)')) {
       throw new Error(`The ${theme} central connection controls did not receive their theme.`);
+    }
+    if (route === '/admin/barcode-layouts' && styles.savedProfile && styles.savedProfile !==
+      (theme === 'nocturno' ? 'rgb(45, 50, 57)' : 'rgb(255, 255, 255)')) {
+      throw new Error(`The ${theme} saved barcode profiles did not receive their theme.`);
     }
     if (route === '/admin/categories' && width <= 560) {
       styles.tableScroll = await evaluate(`(() => {
@@ -774,6 +788,64 @@ try {
       const file = path.join(outputDirectory, `admin-organization-dialog-${theme}-${width}x${height}.png`);
       await writeFile(file, Buffer.from(screenshot.data, 'base64'));
       console.log(JSON.stringify({ ...branches, screenshot: file }));
+    }
+  }
+  if (inspectTaxEditor) {
+    await until(() => evaluate("Boolean(document.querySelector('.history-panel tbody tr button'))"));
+    await evaluate(`(() => {
+      document.documentElement.dataset.visualTheme = 'original';
+      document.querySelector('.history-panel tbody tr button').click();
+      return true;
+    })()`);
+    await until(() => evaluate("Boolean(document.querySelector('.admin-detail-dialog[open] #tax-treatment'))"));
+    for (const theme of ['original', 'nocturno']) {
+      const editor = await evaluate(`(() => {
+        document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+        const section = document.querySelector('.admin-detail-dialog[open] .product-tax-editor');
+        return {
+          theme: document.documentElement.dataset.visualTheme,
+          title: section.querySelector('h2')?.textContent.trim(),
+          surface: getComputedStyle(section).backgroundColor,
+          control: getComputedStyle(section.querySelector('#tax-treatment')).backgroundColor,
+          treatment: section.querySelector('#tax-treatment').value,
+        };
+      })()`);
+      if (!editor.title || editor.control !==
+        (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)')) {
+        throw new Error(`The ${theme} tax editor lost its treatment or control theme.`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `admin-tax-editor-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...editor, screenshot: file }));
+    }
+  }
+  if (inspectBarcodePreview) {
+    await evaluate("document.querySelector('.barcode-form').requestSubmit(); true");
+    await until(() => evaluate("Boolean(document.querySelector('.barcode-result h3'))"));
+    for (const theme of ['original', 'nocturno']) {
+      const result = await evaluate(`(() => {
+        document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+        const output = document.querySelector('.barcode-result:has(h3)');
+        return {
+          theme: document.documentElement.dataset.visualTheme,
+          weight: output.querySelector('strong')?.textContent.trim(),
+          surface: getComputedStyle(output).backgroundColor,
+          fields: output.querySelectorAll('dl div').length,
+          savedProfiles: document.querySelectorAll('.saved-profile').length,
+        };
+      })()`);
+      if (!result.weight || result.fields < 3 || result.surface !==
+        (theme === 'nocturno' ? 'rgb(45, 50, 57)' : 'rgb(246, 248, 247)')) {
+        throw new Error(`The ${theme} barcode preview lost its data or result theme.`);
+      }
+      await evaluate("document.querySelector('.barcode-result:has(h3)').scrollIntoView({ block: 'center' }); true");
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `admin-barcode-preview-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...result, screenshot: file }));
     }
   }
 } finally {

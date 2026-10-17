@@ -115,10 +115,11 @@
   - Verificar: `organization-page.spec.ts`, `central-connection-page.spec.ts` y ambas rutas en dos temas.
   - Dependencia: T3.3. Archivos previstos (4): `admin/organization-page.scss`, `admin/organization-page.spec.ts`, `admin/central-connection-page.scss`, `admin/central-connection-page.spec.ts`.
   - Evidencia 17/10/2026: pruebas focalizadas rojo/verde (14/14) y build correcto. Organización revisada con 4 sucursales ficticias y modal abierto en ambos temas a 1366 × 768 y 560 × 768; formularios seriales, selección y aviso de credencial reciben tokens. La instalación Visual responde «no vinculada» en `/admin/central-connection`; además se comprobó la vista configurada con respuesta GET ficticia interceptada solo en Chromium aislado. No se emitió, rotó ni mostró una credencial real.
-- [ ] **T3.11 · Impuestos por artículo y formatos de códigos.** Cubrir dos pantallas con tablas y editores especializados.
+- [x] **T3.11 · Impuestos por artículo y formatos de códigos.** Tablas y editores especializados cubiertos.
   - Aceptación: asociaciones tributarias, layouts de barra y validaciones son legibles sin alterar las reglas de negocio.
   - Verificar: `product-tax-page.spec.ts`, `barcode-layout-page.spec.ts` y `/admin/taxes`, `/admin/barcode-layouts`.
   - Dependencias: T3.3 y T3.6. Archivos previstos (4): `admin/product-tax-page.scss`, `admin/product-tax-page.spec.ts`, `admin/barcode-layout-page.scss`, `admin/barcode-layout-page.spec.ts`.
+  - Evidencia 17/10/2026: pruebas focalizadas rojo/verde (8/8), build correcto. Editor de IVA e historial, perfiles guardados y lectura interpretada comprobados en Original/Nocturno a 1366 × 768 y 560 × 768. La previsualización EAN-13 devolvió 51,60 kg y cuatro campos sin ingreso de stock; no se guardaron reglas ni revisiones.
 - [ ] **T3.12 · Existencias y recepción de piezas.** Cubrir ajustes, importación de stock y trazabilidad.
   - Aceptación: tablas, cantidades y errores se leen en ambos temas; se pueden abrir modales sin guardar movimientos.
   - Verificar: `stock-page.spec.ts`, `piece-receipt-page.spec.ts` y ambas rutas en dos temas.

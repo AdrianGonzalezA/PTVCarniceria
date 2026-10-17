@@ -1,7 +1,26 @@
+:host {
+  --admin-product-tax-control: #fff;
+  --admin-product-tax-border: #929b99;
+  --admin-product-tax-ink: #191919;
+  --admin-product-tax-heading: #005f60;
+  --admin-product-tax-focus: #71b8da;
+  --admin-product-tax-note: #5b625d;
+}
+:host-context(html[data-visual-theme='nocturno']) {
+  --admin-product-tax-control: #181b20;
+  --admin-product-tax-border: #414750;
+  --admin-product-tax-ink: #f3efe9;
+  --admin-product-tax-heading: #e5b27f;
+  --admin-product-tax-focus: #e5b27f;
+  --admin-product-tax-note: #bbb8b3;
+}
 .product-tax-editor .tax-editor-body { padding: 20px; }
-.product-tax-editor .tax-editor-body > h3 { margin-top: 28px; color: #005f60; }
+.product-tax-editor .account-note { color: var(--admin-product-tax-note); }
+.product-tax-editor .tax-editor-body > h3 { margin-top: 28px; color: var(--admin-product-tax-heading); }
 .tax-editor-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 260px)); gap: 16px; margin: 18px 0; }
 .tax-editor-fields label { display: block; margin-bottom: 6px; font-weight: 700; }
-.tax-editor-fields select, .tax-editor-fields input { width: 100%; min-height: 42px; padding: 8px; border: 1px solid #929b99; background: white; color: #191919; }
-.tax-success { color: #005f60; font-weight: 700; }
+.tax-editor-fields select, .tax-editor-fields input { box-sizing: border-box; width: 100%; min-height: 42px; padding: 8px; border: 1px solid var(--admin-product-tax-border); background: var(--admin-product-tax-control); color: var(--admin-product-tax-ink); font: inherit; }
+.tax-editor-fields select:focus-visible, .tax-editor-fields input:focus-visible { outline: 3px solid var(--admin-product-tax-focus); outline-offset: 2px; }
+.tax-success { color: var(--admin-product-tax-heading); font-weight: 700; }
+:host-context(html[data-visual-theme='nocturno']) .tax-editor-fields select { color-scheme: dark; }
 @media (max-width: 600px) { .tax-editor-fields { grid-template-columns: 1fr; } }

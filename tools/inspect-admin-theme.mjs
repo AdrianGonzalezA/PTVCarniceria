@@ -13,7 +13,7 @@ if (!companyCode || !username || !password) {
 }
 
 const route = process.argv[2] ?? '/admin';
-if (!/^\/admin(?:\/(?:configuracion|categories|taxes|products|price-lists|customers|arca|payment-gateways|organization|central-connection|barcode-layouts|stock|pieces|history|accounts))?$/.test(route)) {
+if (!/^(?:\/admin(?:\/(?:configuracion|categories|taxes|products|price-lists|customers|arca|payment-gateways|organization|central-connection|barcode-layouts|stock|pieces|history|accounts))?|\/users|\/superadmin)$/.test(route)) {
   throw new Error('Only the initial administration routes are supported.');
 }
 const viewport = /^--viewport=(\d{3,4})x(\d{3,4})$/.exec(
@@ -25,7 +25,7 @@ const height = Number(viewport[2]);
 const expectedTab = ['/admin/categories', '/admin/taxes', '/admin/products', '/admin/price-lists',
   '/admin/customers', '/admin/arca', '/admin/payment-gateways', '/admin/organization',
   '/admin/central-connection', '/admin/barcode-layouts']
-  .includes(route) ? '/admin/configuracion' : ['/admin/stock', '/admin/pieces', '/admin/history', '/admin/accounts'].includes(route) ? '/admin' : route;
+  .includes(route) || route === '/users' ? '/admin/configuracion' : ['/admin/stock', '/admin/pieces', '/admin/history', '/admin/accounts'].includes(route) ? '/admin' : route;
 const inspectDialog = process.argv.includes('--dialog');
 const inspectImportDialog = process.argv.includes('--import-dialog');
 const inspectTaxDialog = process.argv.includes('--tax-dialog');
@@ -40,6 +40,9 @@ const inspectBarcodePreview = process.argv.includes('--barcode-preview');
 const inspectStockDialog = process.argv.includes('--stock-dialog');
 const inspectHistoryDialog = process.argv.includes('--history-dialog');
 const inspectAccountsDialog = process.argv.includes('--accounts-dialog');
+const inspectUsersDialog = process.argv.includes('--users-dialog');
+const inspectSuperadmin = process.argv.includes('--superadmin-login');
+const inspectContrast = process.argv.includes('--contrast');
 if ((inspectDialog || inspectImportDialog) && route !== '/admin/categories') {
   throw new Error('Dialog checks require /admin/categories.');
 }
@@ -63,6 +66,8 @@ if (inspectBarcodePreview && route !== '/admin/barcode-layouts') {
 if (inspectStockDialog && route !== '/admin/stock') throw new Error('--stock-dialog requires /admin/stock.');
 if (inspectHistoryDialog && route !== '/admin/history') throw new Error('--history-dialog requires /admin/history.');
 if (inspectAccountsDialog && route !== '/admin/accounts') throw new Error('--accounts-dialog requires /admin/accounts.');
+if (inspectUsersDialog && route !== '/users') throw new Error('--users-dialog requires /users.');
+if (inspectSuperadmin && route !== '/superadmin') throw new Error('--superadmin-login requires /superadmin.');
 if (inspectDialog && inspectImportDialog) throw new Error('Choose one dialog check at a time.');
 const outputDirectory = process.argv.find((argument) => argument.startsWith('--output='))?.slice(9) ??
   path.join(tmpdir(), 'carnicerias-admin-theme');
@@ -104,8 +109,15 @@ try {
   });
   let nextId = 0;
   const pending = new Map();
+  const browserErrors = [];
   socket.addEventListener('message', (event) => {
     const message = JSON.parse(event.data);
+    if (message.method === 'Runtime.exceptionThrown') {
+      browserErrors.push(message.params.exceptionDetails.text);
+    }
+    if (message.method === 'Runtime.consoleAPICalled' && message.params.type === 'error') {
+      browserErrors.push(message.params.args.map((item) => item.value ?? item.description ?? '').join(' ').slice(0, 240));
+    }
     if (message.method === 'Fetch.requestPaused' && mockCentral) {
       const request = message.params;
       if (request.request.method !== 'GET') {
@@ -143,6 +155,7 @@ try {
     return result.result.value;
   }
   await send('Page.enable');
+  await send('Runtime.enable');
   await send('Emulation.setDeviceMetricsOverride', {
     width, height, deviceScaleFactor: 1, mobile: false,
   });
@@ -202,6 +215,8 @@ try {
       route === '/admin/pieces' ? 'app-piece-receipt-page .piece-form' :
       route === '/admin/history' ? 'app-history-page .history-tabs' :
       route === '/admin/accounts' ? 'app-accounts-page .account-search' :
+      route === '/users' ? 'app-users-page .search-form' :
+      route === '/superadmin' ? 'app-manufacturer-page .manufacturer-login' :
       'app-admin-page .module-panel')}
   ))`));
   if (route === '/admin/taxes') {
@@ -224,14 +239,18 @@ try {
   if (route === '/admin/accounts') {
     await until(() => evaluate("document.querySelector('app-accounts-page .history-panel')?.getAttribute('aria-busy') === 'false'"));
   }
+  if (route === '/users') {
+    await until(() => evaluate("document.querySelector('app-users-page .users-panel')?.getAttribute('aria-busy') === 'false'"));
+  }
   await mkdir(outputDirectory, { recursive: true });
   for (const theme of ['original', 'nocturno']) {
     const styles = await evaluate(`(() => {
       document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
-      const host = document.querySelector(
-        'app-admin-page, app-categories-page, app-product-tax-page, app-products-page, app-price-lists-page, app-customers-page, app-arca-settings-page, app-payment-gateways-page, app-organization-page, app-central-connection-page, app-barcode-layout-page, app-stock-page, app-piece-receipt-page, app-history-page, app-accounts-page');
+      let host = document.querySelector(
+        'app-admin-page, app-categories-page, app-product-tax-page, app-products-page, app-customers-page, app-arca-settings-page, app-payment-gateways-page, app-organization-page, app-central-connection-page, app-barcode-layout-page, app-stock-page, app-piece-receipt-page, app-history-page, app-accounts-page, app-users-page');
+      host ??= document.querySelector('app-price-lists-page, app-manufacturer-page');
       const header = host.querySelector('.app-header');
-      const panel = host.querySelector('.module-panel, .category-panel, .central-error');
+      const panel = host.querySelector('.module-panel, .category-panel, .central-error, .users-panel');
       const brandMark = host.querySelector('.brand-mark');
       const activeTab = host.querySelector('.area-tabs a[aria-current="page"]');
       const tableHead = host.querySelector('thead th');
@@ -250,6 +269,9 @@ try {
       const historyTab = host.querySelector('.history-tabs button[aria-current="page"]');
       const historyDate = host.querySelector('#history-from');
       const accountSearch = host.querySelector('#account-search-input');
+      const userSearch = host.querySelector('#user-search');
+      const userStatus = host.querySelector('.status-active');
+      const manufacturerControl = host.querySelector('#manufacturer-credential');
       return {
         theme: document.documentElement.dataset.visualTheme,
         route: location.pathname,
@@ -284,6 +306,9 @@ try {
         historyTab: historyTab && getComputedStyle(historyTab).backgroundColor,
         historyDateWidth: historyDate?.getBoundingClientRect().width,
         accountSearch: accountSearch && getComputedStyle(accountSearch).backgroundColor,
+        userSearch: userSearch && getComputedStyle(userSearch).backgroundColor,
+        userStatus: userStatus && getComputedStyle(userStatus).backgroundColor,
+        manufacturerControl: manufacturerControl && getComputedStyle(manufacturerControl).backgroundColor,
         tableRows: host.querySelectorAll('tbody tr').length,
         documentScrollWidth: document.documentElement.scrollWidth,
         viewportWidth: window.innerWidth,
@@ -294,13 +319,14 @@ try {
       (theme === 'nocturno' ? 'rgb(229, 178, 127)' : 'rgb(245, 245, 245)')) {
       throw new Error(`The ${theme} administrative brand mark is overridden by another component.`);
     }
-    if (styles.activeTab !== expectedTab || styles.activeTabBorder !==
-      (theme === 'nocturno' ? 'rgb(229, 178, 127)' : 'rgb(84, 194, 189)')) {
+    if (route !== '/superadmin' && (styles.activeTab !== expectedTab || styles.activeTabBorder !==
+      (theme === 'nocturno' ? 'rgb(229, 178, 127)' : 'rgb(84, 194, 189)'))) {
       throw new Error(`The ${theme} active administration tab lost its route or contrast.`);
     }
     const keyboardFocusExpression = `(() => {
       const focused = document.activeElement;
       return {
+        id: focused?.id,
         href: focused?.getAttribute('href'),
         visible: focused?.matches(':focus-visible'),
         outline: getComputedStyle(focused).outlineColor,
@@ -308,7 +334,9 @@ try {
     })()`;
     let keyboardFocus = await evaluate(keyboardFocusExpression);
     if (theme === 'original') {
-      for (let tabCount = 0; tabCount < 12 && keyboardFocus.href !== expectedTab; tabCount++) {
+      for (let tabCount = 0; tabCount < 12 &&
+        (route === '/superadmin' ? keyboardFocus.id !== 'manufacturer-credential' : keyboardFocus.href !== expectedTab);
+        tabCount++) {
         await send('Input.dispatchKeyEvent', {
           type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9,
         });
@@ -320,13 +348,18 @@ try {
     }
     const allowedFocus = theme === 'nocturno' ? ['rgb(229, 178, 127)'] :
       ['rgb(84, 194, 189)', 'rgb(113, 184, 218)'];
-    if (keyboardFocus.href !== expectedTab || !keyboardFocus.visible ||
-      !allowedFocus.includes(keyboardFocus.outline)) {
+    if (route !== '/superadmin' && (keyboardFocus.href !== expectedTab || !keyboardFocus.visible ||
+      !allowedFocus.includes(keyboardFocus.outline))) {
       throw new Error(`The ${theme} active administration tab has no keyboard-visible focus: ${JSON.stringify(keyboardFocus)}`);
+    }
+    if (route === '/superadmin' && (keyboardFocus.id !== 'manufacturer-credential' ||
+      !keyboardFocus.visible || keyboardFocus.outline !==
+      (theme === 'nocturno' ? 'rgb(229, 178, 127)' : 'rgb(38, 125, 157)'))) {
+      throw new Error(`The ${theme} SuperAdmin login has no keyboard-visible focus: ${JSON.stringify(keyboardFocus)}`);
     }
     styles.keyboardFocus = keyboardFocus;
     if (route === '/admin/categories' && (styles.tableHead !==
-      (theme === 'nocturno' ? 'rgb(72, 57, 43)' : 'rgb(0, 139, 139)') ||
+      (theme === 'nocturno' ? 'rgb(72, 57, 43)' : 'rgb(0, 128, 128)') ||
       styles.search !== (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)'))) {
       throw new Error(`The ${theme} shared ABM controls did not receive their theme.`);
     }
@@ -370,7 +403,7 @@ try {
     }
     if (route === '/admin/history' && (styles.historyFilter !==
       (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)') ||
-      styles.historyTab !== (theme === 'nocturno' ? 'rgb(229, 178, 127)' : 'rgb(0, 139, 139)'))) {
+      styles.historyTab !== (theme === 'nocturno' ? 'rgb(229, 178, 127)' : 'rgb(0, 128, 128)'))) {
       throw new Error(`The ${theme} history filters or selected tab lost their theme.`);
     }
     if (route === '/admin/history' && width <= 560 && styles.historyDateWidth < 200) {
@@ -379,6 +412,16 @@ try {
     if (route === '/admin/accounts' && styles.accountSearch !==
       (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)')) {
       throw new Error(`The ${theme} accounts search lost its theme.`);
+    }
+    if (route === '/users' && (styles.userSearch !==
+      (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)') ||
+      styles.userStatus !== (theme === 'nocturno' ? 'rgb(37, 64, 54)' : 'rgb(198, 232, 227)'))) {
+      throw new Error(`The ${theme} users search or status lost its theme.`);
+    }
+    if (route === '/superadmin' && (styles.panel !==
+      (theme === 'nocturno' ? 'rgb(36, 40, 46)' : 'rgb(255, 255, 255)') ||
+      styles.manufacturerControl !== (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)'))) {
+      throw new Error(`The ${theme} SuperAdmin login lost its panel or control theme.`);
     }
     if (route === '/admin/categories' && width <= 560) {
       styles.tableScroll = await evaluate(`(() => {
@@ -410,8 +453,95 @@ try {
         throw new Error(`The ${theme} last row action is not reachable inside the mobile table.`);
       }
     }
+    if (route === '/users' && width <= 560) {
+      styles.tableScroll = await evaluate(`(() => {
+        const wrap = document.querySelector('app-users-page .table-wrap');
+        const before = wrap.scrollLeft;
+        wrap.scrollLeft = wrap.scrollWidth;
+        const action = wrap.querySelector('tbody tr .row-actions button:last-child').getBoundingClientRect();
+        const bounds = wrap.getBoundingClientRect();
+        const reachable = action.left >= bounds.left && action.right <= bounds.right + 1;
+        wrap.scrollLeft = before;
+        return { viewport: wrap.clientWidth, content: wrap.scrollWidth, reachable };
+      })()`);
+      if (!styles.tableScroll.reachable) {
+        throw new Error(`The ${theme} last user action is not reachable inside the mobile table.`);
+      }
+    }
+    if (width <= 560) {
+      styles.tableAccess = await evaluate(`(() => Array.from(document.querySelectorAll('.table-wrap'))
+        .filter((wrap) => wrap.getClientRects().length)
+        .map((wrap) => {
+          const buttons = wrap.querySelector('tbody tr')?.querySelectorAll('button');
+          const action = buttons?.[buttons.length - 1];
+          if (!action) return null;
+          const before = wrap.scrollLeft;
+          wrap.scrollLeft = wrap.scrollWidth;
+          const buttonBounds = action.getBoundingClientRect();
+          const bounds = wrap.getBoundingClientRect();
+          const reachable = buttonBounds.left >= bounds.left && buttonBounds.right <= bounds.right + 1;
+          wrap.scrollLeft = before;
+          return { reachable, viewport: wrap.clientWidth, content: wrap.scrollWidth };
+        }).filter(Boolean))()`);
+      if (styles.tableAccess.some((table) => !table.reachable)) {
+        throw new Error(`The ${theme} table has an unreachable action at 560px.`);
+      }
+    }
     if (styles.documentScrollWidth > styles.viewportWidth) {
       throw new Error(`The ${theme} admin route overflows the ${styles.viewportWidth}px viewport.`);
+    }
+    if (inspectContrast) {
+      styles.contrast = await evaluate(`(() => {
+        const parse = (value) => {
+          const match = value.match(/^rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)(?:,\\s*([\\d.]+))?\\)$/);
+          return match && [Number(match[1]), Number(match[2]), Number(match[3]),
+            match[4] === undefined ? 1 : Number(match[4])];
+        };
+        const luminance = (color) => {
+          const channels = color.slice(0, 3).map((channel) => {
+            const value = channel / 255;
+            return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+          });
+          return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+        };
+        const ratio = (first, second) => {
+          const light = Math.max(luminance(first), luminance(second));
+          const dark = Math.min(luminance(first), luminance(second));
+          return (light + 0.05) / (dark + 0.05);
+        };
+        const nearestBackground = (element) => {
+          for (let current = element; current; current = current.parentElement) {
+            const color = parse(getComputedStyle(current).backgroundColor);
+            if (color && color[3] === 1) return color;
+          }
+          return [255, 255, 255, 1];
+        };
+        const host = document.querySelector('app-manufacturer-page, app-users-page, app-accounts-page, app-history-page, app-piece-receipt-page, app-stock-page, app-barcode-layout-page, app-central-connection-page, app-organization-page, app-payment-gateways-page, app-arca-settings-page, app-customers-page, app-price-lists-page, app-products-page, app-product-tax-page, app-categories-page, app-admin-page');
+        const failures = new Map();
+        let scanned = 0;
+        for (const element of host.querySelectorAll('*')) {
+          if (!Array.from(element.childNodes).some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim())) continue;
+          if (!element.getClientRects().length || element.closest('[aria-hidden="true"]')) continue;
+          const style = getComputedStyle(element);
+          if (style.visibility !== 'visible' || style.display === 'none' ||
+            element.closest(':disabled') || element.closest('option')) continue;
+          const ink = parse(style.color);
+          if (!ink || ink[3] !== 1) continue;
+          const background = nearestBackground(element);
+          const size = Number.parseFloat(style.fontSize);
+          const weight = Number.parseInt(style.fontWeight, 10) || 400;
+          const minimum = size >= 24 || (size >= 18.66 && weight >= 700) ? 3 : 4.5;
+          const value = ratio(ink, background);
+          scanned++;
+          if (value >= minimum) continue;
+          const selector = element.tagName.toLowerCase() +
+            (element.classList.length ? '.' + Array.from(element.classList).slice(0, 2).join('.') : '');
+          const key = [selector, style.color, background.join(','), minimum].join('|');
+          failures.set(key, { selector, ratio: Math.round(value * 100) / 100,
+            minimum, ink: style.color, background: background.slice(0, 3).join(',') });
+        }
+        return { scanned, failures: Array.from(failures.values()).sort((a, b) => a.ratio - b.ratio).slice(0, 20) };
+      })()`);
     }
     await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
     const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
@@ -483,6 +613,7 @@ try {
       await evaluate('window.scrollTo(0, 0); true');
     }
   }
+  if (browserErrors.length) console.log(JSON.stringify({ route, browserErrors: [...new Set(browserErrors)] }));
   if (inspectDialog) {
     await evaluate(`(() => {
       document.documentElement.dataset.visualTheme = 'original';
@@ -1035,6 +1166,180 @@ try {
       const file = path.join(outputDirectory, `admin-accounts-dialog-${theme}-${width}x${height}.png`);
       await writeFile(file, Buffer.from(screenshot.data, 'base64'));
       console.log(JSON.stringify({ ...account, screenshot: file }));
+    }
+  }
+  if (inspectUsersDialog) {
+    await evaluate("document.querySelector('app-users-page .create-user-button').click(); true");
+    await until(() => evaluate("Boolean(document.querySelector('app-users-page dialog[open] #create-role'))"));
+    for (const theme of ['original', 'nocturno']) {
+      const editor = await evaluate(`(() => {
+        document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+        const dialog = document.querySelector('app-users-page dialog[open]');
+        return {
+          theme: document.documentElement.dataset.visualTheme,
+          title: dialog.querySelector('h3')?.textContent.trim(),
+          roleControl: getComputedStyle(dialog.querySelector('#create-role')).backgroundColor,
+          passwordEntered: dialog.querySelector('#create-password').value.length,
+          branchChoices: dialog.querySelectorAll('.branch-choice').length,
+        };
+      })()`);
+      if (editor.title !== 'Nuevo usuario' || editor.passwordEntered !== 0 ||
+        editor.roleControl !== (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)')) {
+        throw new Error(`The ${theme} user editor lost its role control or empty state.`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `users-create-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...editor, screenshot: file }));
+    }
+    await evaluate("document.querySelector('app-users-page dialog[open] .secondary-button').click(); true");
+    await evaluate(`(() => {
+      const row = document.querySelector('app-users-page tbody tr');
+      Array.from(row.querySelectorAll('button')).find((button) => button.textContent.includes('Rol y sucursales')).click();
+      return true;
+    })()`);
+    await until(() => evaluate("Boolean(document.querySelector('app-users-page dialog[open] #assignment-role'))"));
+    for (const theme of ['original', 'nocturno']) {
+      const assignments = await evaluate(`(() => {
+        document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+        const dialog = document.querySelector('app-users-page dialog[open]');
+        return {
+          theme: document.documentElement.dataset.visualTheme,
+          title: dialog.querySelector('h3')?.textContent.trim(),
+          role: dialog.querySelector('#assignment-role').value,
+          control: getComputedStyle(dialog.querySelector('#assignment-role')).backgroundColor,
+          branchChoices: dialog.querySelectorAll('.branch-choice').length,
+        };
+      })()`);
+      if (!assignments.title || assignments.control !==
+        (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)')) {
+        throw new Error(`The ${theme} user assignments lost their theme.`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `users-assignments-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...assignments, screenshot: file }));
+    }
+    await evaluate("document.querySelector('app-users-page dialog[open] .secondary-button').click(); true");
+    await evaluate(`(() => {
+      const row = document.querySelector('app-users-page tbody tr');
+      Array.from(row.querySelectorAll('button')).find((button) => button.textContent.includes('Contraseña')).click();
+      return true;
+    })()`);
+    await until(() => evaluate("Boolean(document.querySelector('app-users-page dialog[open] #reset-password'))"));
+    for (const theme of ['original', 'nocturno']) {
+      const reset = await evaluate(`(() => {
+        document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+        const dialog = document.querySelector('app-users-page dialog[open]');
+        return {
+          theme: document.documentElement.dataset.visualTheme,
+          title: dialog.querySelector('h3')?.textContent.trim(),
+          control: getComputedStyle(dialog.querySelector('#reset-password')).backgroundColor,
+          passwordEntered: dialog.querySelector('#reset-password').value.length,
+        };
+      })()`);
+      if (!reset.title || reset.passwordEntered !== 0 || reset.control !==
+        (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)')) {
+        throw new Error(`The ${theme} password reset form lost its theme or empty state.`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `users-password-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...reset, screenshot: file }));
+    }
+  }
+  if (inspectSuperadmin) {
+    const superadminUsername = process.env.CARNICERIAS_TEST_SUPERADMIN_USERNAME;
+    const superadminPassword = process.env.CARNICERIAS_TEST_SUPERADMIN_PASSWORD;
+    if (!superadminUsername || !superadminPassword) {
+      throw new Error('Set CARNICERIAS_TEST_SUPERADMIN_USERNAME and CARNICERIAS_TEST_SUPERADMIN_PASSWORD.');
+    }
+    await evaluate(`(() => {
+      for (const [selector, value] of ${JSON.stringify([
+        ['#manufacturer-credential', superadminUsername],
+        ['#manufacturer-password', superadminPassword],
+      ])}) {
+        const field = document.querySelector(selector);
+        field.value = value;
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      document.querySelector('.manufacturer-login form').requestSubmit();
+      return true;
+    })()`);
+    const loginStatus = await until(() => evaluate(`(() => {
+      if (document.querySelector('app-manufacturer-page .create-company-button')) return 'ready';
+      if (document.querySelector('app-manufacturer-page .manufacturer-login + .error-message')) return 'error';
+      return null;
+    })()`));
+    if (loginStatus === 'error') throw new Error('Local SuperAdmin login failed.');
+    await until(() => evaluate("Boolean(document.querySelector('app-manufacturer-page tbody tr'))"));
+    for (const theme of ['original', 'nocturno']) {
+      const companies = await evaluate(`(() => {
+        document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+        const host = document.querySelector('app-manufacturer-page');
+        const panel = host.querySelector('.category-panel');
+        const wrap = panel.querySelector('.table-wrap');
+        const before = wrap.scrollLeft;
+        wrap.scrollLeft = wrap.scrollWidth;
+        const action = wrap.querySelector('tbody tr button:last-child').getBoundingClientRect();
+        const bounds = wrap.getBoundingClientRect();
+        const actionReachable = action.left >= bounds.left && action.right <= bounds.right + 1;
+        wrap.scrollLeft = before;
+        return {
+          theme: document.documentElement.dataset.visualTheme,
+          rows: panel.querySelectorAll('tbody tr').length,
+          active: panel.querySelectorAll('.manufacturer-status--active').length,
+          surface: getComputedStyle(panel).backgroundColor,
+          tableHead: getComputedStyle(panel.querySelector('th')).backgroundColor,
+          actionReachable,
+          scrollWidth: document.documentElement.scrollWidth,
+        };
+      })()`);
+      if (!companies.rows || !companies.actionReachable || companies.scrollWidth > width ||
+        companies.surface !== (theme === 'nocturno' ? 'rgb(36, 40, 46)' : 'rgb(255, 255, 255)')) {
+        throw new Error(`The ${theme} SuperAdmin company table lost its theme or mobile access.`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `superadmin-companies-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...companies, screenshot: file }));
+    }
+    for (const [kind, openSelector, fieldSelector, closeSelector] of [
+      ['create', '.create-company-button', '#new-company-name', '.manufacturer-form .secondary-button'],
+      ['edit', 'tbody tr button[aria-label^="Editar"]', '#edit-company-name', '.manufacturer-form > .manufacturer-actions .secondary-button'],
+      ['status', 'tbody tr button[aria-label^="Inactivar"]', '#manufacturer-status-title', '.manufacturer-form .secondary-button'],
+    ]) {
+      await evaluate(`document.querySelector(${JSON.stringify(openSelector)}).click(); true`);
+      await until(() => evaluate(`Boolean(document.querySelector('app-manufacturer-page dialog[open] ${fieldSelector}'))`));
+      for (const theme of ['original', 'nocturno']) {
+        const dialog = await evaluate(`(() => {
+          document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+          const element = document.querySelector('app-manufacturer-page dialog[open]');
+          return {
+            theme: document.documentElement.dataset.visualTheme,
+            kind: ${JSON.stringify(kind)},
+            title: element.querySelector('h2')?.textContent.trim(),
+            surface: getComputedStyle(element).backgroundColor,
+            control: element.querySelector('input') && getComputedStyle(element.querySelector('input')).backgroundColor,
+            passwordEntered: Array.from(element.querySelectorAll('input[type=password]')).some((input) => input.value.length),
+          };
+        })()`);
+        if (!dialog.title || dialog.passwordEntered || dialog.surface !==
+          (theme === 'nocturno' ? 'rgb(36, 40, 46)' : 'rgb(237, 237, 237)')) {
+          throw new Error(`The ${theme} SuperAdmin ${kind} dialog lost its empty state or theme.`);
+        }
+        await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+        const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+        const file = path.join(outputDirectory, `superadmin-${kind}-${theme}-${width}x${height}.png`);
+        await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+        console.log(JSON.stringify({ ...dialog, screenshot: file }));
+      }
+      await evaluate(`document.querySelector(${JSON.stringify(`app-manufacturer-page dialog[open] ${closeSelector}`)}).click(); true`);
+      await until(() => evaluate("!document.querySelector('app-manufacturer-page dialog[open]')"));
     }
   }
 } finally {

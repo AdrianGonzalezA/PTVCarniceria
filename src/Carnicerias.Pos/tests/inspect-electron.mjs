@@ -50,9 +50,31 @@ try {
   } else if (process.argv[2] === '--screenshot') {
     const targetPath = process.argv[3];
     if (!targetPath) throw new Error('Provide a screenshot output path.');
-    const result = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
-    await writeFile(targetPath, Buffer.from(result.data, 'base64'));
-    console.log(`Electron screenshot saved: ${targetPath}`);
+    const theme = process.argv.find((argument) => argument.startsWith('--theme='))?.slice(8);
+    if (theme && !['original', 'nocturno'].includes(theme)) throw new Error('Use --theme=original|nocturno.');
+    let previousTheme;
+    try {
+      if (theme) {
+        const previous = await send('Runtime.evaluate', {
+          expression: "document.documentElement.getAttribute('data-visual-theme')", returnByValue: true,
+        });
+        previousTheme = previous.result.value ?? null;
+        await send('Runtime.evaluate', { expression: `(() => {
+          document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+          return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        })()`, awaitPromise: true });
+      }
+      const result = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      await writeFile(targetPath, Buffer.from(result.data, 'base64'));
+      console.log(`Electron screenshot saved: ${targetPath}`);
+    } finally {
+      if (theme && previousTheme !== undefined) {
+        const restore = previousTheme === null ?
+          "document.documentElement.removeAttribute('data-visual-theme')" :
+          `document.documentElement.setAttribute('data-visual-theme', ${JSON.stringify(previousTheme)})`;
+        await send('Runtime.evaluate', { expression: restore });
+      }
+    }
   } else {
     const expression = process.argv[2] ?? 'document.body.innerText.slice(0, 1500)';
     const result = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });

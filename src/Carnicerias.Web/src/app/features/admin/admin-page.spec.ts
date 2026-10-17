@@ -11,6 +11,35 @@ describe('AdminPage', () => {
   }));
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
+  it('updates administrative shell tokens with the root theme without recreating the page', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const fixture = TestBed.createComponent(AdminPage);
+      fixture.detectChanges();
+      TestBed.inject(HttpTestingController).expectOne('/api/sessions/current').flush({
+        userId: 'admin-id', username: 'visual-admin', expiresAtUtc: '2026-10-08T00:00:00Z',
+        context: { userId: 'admin-id', companyId: 'company-id', companyName: 'Empresa Visual',
+          branchId: 'branch-id', branchName: 'Sucursal Visual',
+          permissions: ['platform.users.manage'], sessionId: 'session-id' },
+      });
+      fixture.detectChanges();
+      const host = fixture.nativeElement as HTMLElement;
+      expect(getComputedStyle(host).getPropertyValue('--admin-stage').trim()).toBe('#111');
+      expect(getComputedStyle(host).getPropertyValue('--admin-brand-mark').trim()).toBe('#f5f5f5');
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(host).getPropertyValue('--admin-stage').trim()).toBe('#181b20');
+      expect(getComputedStyle(host).getPropertyValue('--admin-surface').trim()).toBe('#24282e');
+      expect(getComputedStyle(host).getPropertyValue('--admin-brand-mark').trim()).toBe('#e5b27f');
+      expect(fixture.nativeElement).toBe(host);
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
   it('shows the current company and branch on the business landing', () => {
     const fixture = TestBed.createComponent(AdminPage);
     fixture.detectChanges();

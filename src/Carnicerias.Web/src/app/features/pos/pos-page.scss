@@ -324,7 +324,7 @@
 }
 
 /* Nocturna Touch: solo el mostrador. Los diálogos conservan su contraste propio. */
-html[data-visual-theme='nocturno'] {
+html[data-visual-theme='nocturno'] app-pos-page {
 .pos-shell {
   --nt-bg: #181b20;
   --nt-panel: #24282e;

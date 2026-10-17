@@ -84,12 +84,13 @@
   - Verificar: `admin-excel-import-actions.spec.ts` y modal de importación abierto en una página de catálogo.
   - Dependencias: T3.3 y T3.4. Archivos previstos (2): `admin/admin-excel-import-actions.scss`, `admin/admin-excel-import-actions.spec.ts`.
   - Evidencia 17/10/2026: prueba focalizada rojo/verde (3/3), sin solicitudes de importación; modal abierto con selector vacío y confirmación deshabilitada en ambos temas a 1366 × 768 y 560 × 768. Texto, botones y foco del selector comprobados en Chromium aislado; build correcto. La previsualización y los resultados conservan sus estados y recibieron tokens, pero no se ejecutó una carga real para probar colores.
-- [ ] **T3.6 · Paneles de impuestos reutilizables.** Tematizar catálogo y asignación de gravámenes.
+- [x] **T3.6 · Paneles de impuestos reutilizables.** Catálogo y asignación de gravámenes tematizados.
   - Aceptación: filas, selección, validación y estados vacíos/error de ambos paneles se distinguen; Original se conserva.
   - Verificar: `tax-catalog-panel.spec.ts`, `tax-assignment-panel.spec.ts` y modal/tabla de `/admin/taxes`.
   - Dependencias: T3.3 y T3.4. Archivos previstos (4): `admin/tax-catalog-panel.scss`, `admin/tax-catalog-panel.spec.ts`, `admin/tax-assignment-panel.scss`, `admin/tax-assignment-panel.spec.ts`.
+  - Evidencia 17/10/2026: pruebas focalizadas rojo/verde (8/8) con filas, selección, validación y estados vacío/error HTTP simulados. `/admin/taxes` revisada con 2 gravámenes y 15 artículos ficticios en Original/Nocturno a 1366 × 768 y 560 × 768; selectores, nota, tabla horizontal y modal de inactivación abiertos sin guardar cambios.
 
-**Checkpoint T3-B:** diálogo, Excel e impuestos comprobados con tema cambiado en un modal abierto; suite Angular, lint y build en verde.
+**Checkpoint T3-B (17/10/2026):** diálogo, Excel e impuestos comprobados con tema cambiado en modales abiertos, sin modificar datos. Suite Angular 176/176, lint y build correctos. Persisten advertencias de presupuesto CSS en `admin-page.scss` y `categories-page.scss` y de `qrcode` CommonJS; no se relajó el presupuesto.
 
 - [ ] **T3.7 · Artículos y listas de precios.** Corregir estilos específicos que no hereden de los ABM comunes.
   - Aceptación: tablas, precio/costo, vigencias, botones de fila y modales son legibles en Nocturno; Original no cambia.

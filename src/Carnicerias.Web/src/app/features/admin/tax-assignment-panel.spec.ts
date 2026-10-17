@@ -14,6 +14,63 @@ describe('TaxAssignmentPanel', () => {
     vi.restoreAllMocks();
   });
 
+  it('themes selection controls and empty state without applying assignments', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const fixture = TestBed.createComponent(TaxAssignmentPanel);
+      fixture.detectChanges();
+      const http = TestBed.inject(HttpTestingController);
+      http.expectOne('/api/admin/taxes/active').flush([]);
+      http.expectOne('/api/admin/tax-assignments/count').flush({ total: 0 });
+      http.expectOne((request) => request.url === '/api/admin/product-tax-rules').flush({
+        page: 1, pageSize: 25, total: 0, items: [],
+      });
+      fixture.detectChanges();
+      const host = fixture.nativeElement as HTMLElement;
+      expect(getComputedStyle(host).getPropertyValue('--admin-assignment-control').trim()).toBe('#fff');
+      expect(host.textContent).toContain('No hay artículos');
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(host).getPropertyValue('--admin-assignment-control').trim()).toBe('#181b20');
+      expect(getComputedStyle(host).getPropertyValue('--admin-assignment-accent').trim()).toBe('#e5b27f');
+      expect(host.textContent).toContain('No hay artículos');
+      host.querySelector<HTMLButtonElement>('#assignment-apply')!.click();
+      fixture.detectChanges();
+      expect(host.querySelector('[role="alert"]')?.textContent).toContain('Elegí');
+      http.expectNone('/api/admin/tax-assignments');
+      fixture.destroy();
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
+  it('keeps failed product queries readable without applying assignments', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'nocturno';
+      const fixture = TestBed.createComponent(TaxAssignmentPanel);
+      fixture.detectChanges();
+      const http = TestBed.inject(HttpTestingController);
+      http.expectOne('/api/admin/taxes/active').flush([]);
+      http.expectOne('/api/admin/tax-assignments/count').flush({ total: 0 });
+      http.expectOne((request) => request.url === '/api/admin/product-tax-rules')
+        .flush({}, { status: 500, statusText: 'test' });
+      fixture.detectChanges();
+      const host = fixture.nativeElement as HTMLElement;
+      expect(host.querySelector('[role="alert"]')?.textContent).toContain('No se pudieron consultar');
+      expect(getComputedStyle(host).getPropertyValue('--admin-abm-error-ink').trim()).toBe('#ffb4ab');
+      http.expectNone('/api/admin/tax-assignments');
+      fixture.destroy();
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
   it('confirms the server count before applying an additional levy to all existing articles', () => {
     const fixture = TestBed.createComponent(TaxAssignmentPanel);
     fixture.detectChanges();

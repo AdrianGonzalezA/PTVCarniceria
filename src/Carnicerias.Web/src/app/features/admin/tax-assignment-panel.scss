@@ -1,3 +1,17 @@
+:host {
+  --admin-assignment-control: #fff;
+  --admin-assignment-border: #b2b2b2;
+  --admin-assignment-ink: #202322;
+  --admin-assignment-note: #005f60;
+  --admin-assignment-accent: #007f86;
+}
+:host-context(html[data-visual-theme='nocturno']) {
+  --admin-assignment-control: #181b20;
+  --admin-assignment-border: #414750;
+  --admin-assignment-ink: #f3efe9;
+  --admin-assignment-note: #e5b27f;
+  --admin-assignment-accent: #e5b27f;
+}
 .assignment-controls {
   display: grid;
   grid-template-columns: minmax(180px, 2fr) minmax(120px, 1fr) minmax(260px, 2fr) auto;
@@ -6,26 +20,32 @@
   padding: 1.25rem;
 }
 .assignment-controls label { display: block; margin-bottom: 0.35rem; font-weight: 700; }
-.assignment-controls select { box-sizing: border-box; width: 100%; min-height: 2.75rem; padding: 0.625rem; border: 1px solid #b2b2b2; background: #fff; }
+.assignment-controls select { box-sizing: border-box; width: 100%; min-height: 2.75rem; padding: 0.625rem; color: var(--admin-assignment-ink); border: 1px solid var(--admin-assignment-border); background: var(--admin-assignment-control); }
+.assignment-controls select:focus-visible { outline: 3px solid var(--admin-assignment-accent); outline-offset: 2px; }
 .refresh-taxes { min-height: 2.25rem; margin-top: 0.35rem; }
-.assignment-controls fieldset { display: flex; gap: 0.75rem; min-height: 2.75rem; border: 1px solid #b2b2b2; }
+.assignment-controls fieldset { display: flex; gap: 0.75rem; min-height: 2.75rem; border: 1px solid var(--admin-assignment-border); }
 .assignment-controls legend { font-weight: 700; }
 .assignment-controls fieldset label { display: flex; align-items: center; gap: 0.3rem; margin: 0; font-weight: 400; }
-.assignment-controls input[type='radio'] { min-height: auto; flex: none; }
+.assignment-controls input[type='radio'] { min-height: auto; flex: none; accent-color: var(--admin-assignment-accent); }
+.assignment-controls input[type='radio']:focus-visible, .table-wrap input[type='checkbox']:focus-visible { outline: 3px solid var(--admin-assignment-accent); outline-offset: 2px; }
+.table-wrap input[type='checkbox'] { accent-color: var(--admin-assignment-accent); }
 .assignment-submit button { white-space: nowrap; }
-.assignment-note { margin: 0; padding: 0 1.25rem 1rem; color: #005f60; }
+.assignment-note { margin: 0; padding: 0 1.25rem 1rem; color: var(--admin-assignment-note); }
 .assignment-history { padding: 1rem 1.25rem; }
 .assignment-history header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.75rem; }
-.assignment-history h2 { margin: 0; color: #005f60; }
+.assignment-history h2 { margin: 0; color: var(--admin-assignment-note); }
 .account-search { display: flex; align-items: end; gap: 0.5rem; padding: 0 1.25rem 1rem; }
 .account-search label { font-weight: 700; }
 .account-search input { max-width: 18rem; }
 .table-wrap td small { display: block; margin-top: 0.15rem; }
+:host-context(html[data-visual-theme='nocturno']) .assignment-controls select { color-scheme: dark; }
 @media (max-width: 1050px) {
   .assignment-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
   .assignment-controls { grid-template-columns: 1fr; }
   .assignment-controls fieldset { display: grid; }
-  .account-search { flex-wrap: wrap; }
+  .account-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .account-search label { grid-column: 1 / -1; }
+  .account-search input { min-width: 0; max-width: none; }
 }

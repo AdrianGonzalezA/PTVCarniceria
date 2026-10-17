@@ -13,7 +13,7 @@ if (!companyCode || !username || !password) {
 }
 
 const route = process.argv[2] ?? '/admin';
-if (!/^\/admin(?:\/(?:configuracion|categories))?$/.test(route)) {
+if (!/^\/admin(?:\/(?:configuracion|categories|taxes))?$/.test(route)) {
   throw new Error('Only the initial administration routes are supported.');
 }
 const viewport = /^--viewport=(\d{3,4})x(\d{3,4})$/.exec(
@@ -22,12 +22,14 @@ const viewport = /^--viewport=(\d{3,4})x(\d{3,4})$/.exec(
 if (!viewport) throw new Error('Use --viewport=WIDTHxHEIGHT.');
 const width = Number(viewport[1]);
 const height = Number(viewport[2]);
-const expectedTab = route === '/admin/categories' ? '/admin/configuracion' : route;
+const expectedTab = ['/admin/categories', '/admin/taxes'].includes(route) ? '/admin/configuracion' : route;
 const inspectDialog = process.argv.includes('--dialog');
 const inspectImportDialog = process.argv.includes('--import-dialog');
+const inspectTaxDialog = process.argv.includes('--tax-dialog');
 if ((inspectDialog || inspectImportDialog) && route !== '/admin/categories') {
   throw new Error('Dialog checks require /admin/categories.');
 }
+if (inspectTaxDialog && route !== '/admin/taxes') throw new Error('--tax-dialog requires /admin/taxes.');
 if (inspectDialog && inspectImportDialog) throw new Error('Choose one dialog check at a time.');
 const outputDirectory = process.argv.find((argument) => argument.startsWith('--output='))?.slice(9) ??
   path.join(tmpdir(), 'carnicerias-admin-theme');
@@ -127,19 +129,30 @@ try {
 
   await send('Page.navigate', { url: `http://localhost:4200${route}` });
   await until(() => evaluate(`Boolean(document.querySelector(
-    ${JSON.stringify(route === '/admin/categories' ? 'app-categories-page .category-panel tbody tr' : 'app-admin-page .module-panel')}
+    ${JSON.stringify(route === '/admin/categories' ? 'app-categories-page .category-panel tbody tr' :
+      route === '/admin/taxes' ? 'app-product-tax-page app-tax-catalog-panel .tax-catalog-form' : 'app-admin-page .module-panel')}
   ))`));
+  if (route === '/admin/taxes') {
+    await until(() => evaluate(`(() => {
+      const catalog = document.querySelector('app-tax-catalog-panel .category-panel');
+      const assignment = document.querySelector('app-tax-assignment-panel .category-panel');
+      return catalog?.getAttribute('aria-busy') === 'false' && assignment &&
+        !assignment.querySelector('.state-message[role="status"]');
+    })()`));
+  }
   await mkdir(outputDirectory, { recursive: true });
   for (const theme of ['original', 'nocturno']) {
     const styles = await evaluate(`(() => {
       document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
-      const host = document.querySelector('app-admin-page, app-categories-page');
+      const host = document.querySelector('app-admin-page, app-categories-page, app-product-tax-page');
       const header = host.querySelector('.app-header');
       const panel = host.querySelector('.module-panel, .category-panel');
       const brandMark = host.querySelector('.brand-mark');
       const activeTab = host.querySelector('.area-tabs a[aria-current="page"]');
       const tableHead = host.querySelector('thead th');
       const search = host.querySelector('#category-search');
+      const taxCatalog = host.querySelector('app-tax-catalog-panel');
+      const taxAssignment = host.querySelector('app-tax-assignment-panel');
       return {
         theme: document.documentElement.dataset.visualTheme,
         route: location.pathname,
@@ -154,6 +167,10 @@ try {
         activeTabBorder: activeTab && getComputedStyle(activeTab).borderBottomColor,
         tableHead: tableHead && getComputedStyle(tableHead).backgroundColor,
         search: search && getComputedStyle(search).backgroundColor,
+        taxCatalogSelect: taxCatalog && getComputedStyle(taxCatalog.querySelector('#new-tax-kind')).backgroundColor,
+        taxCatalogRows: taxCatalog?.querySelectorAll('tbody tr').length,
+        taxAssignmentSelect: taxAssignment && getComputedStyle(taxAssignment.querySelector('#assignment-tax')).backgroundColor,
+        taxAssignmentRows: taxAssignment?.querySelectorAll('tbody tr').length,
         tableRows: host.querySelectorAll('tbody tr').length,
         documentScrollWidth: document.documentElement.scrollWidth,
         viewportWidth: window.innerWidth,
@@ -187,15 +204,23 @@ try {
         keyboardFocus = await evaluate(keyboardFocusExpression);
       }
     }
-    if (keyboardFocus.href !== expectedTab || !keyboardFocus.visible || keyboardFocus.outline !==
-      (theme === 'nocturno' ? 'rgb(229, 178, 127)' : 'rgb(84, 194, 189)')) {
-      throw new Error(`The ${theme} active administration tab has no keyboard-visible focus.`);
+    const allowedFocus = theme === 'nocturno' ? ['rgb(229, 178, 127)'] :
+      ['rgb(84, 194, 189)', 'rgb(113, 184, 218)'];
+    if (keyboardFocus.href !== expectedTab || !keyboardFocus.visible ||
+      !allowedFocus.includes(keyboardFocus.outline)) {
+      throw new Error(`The ${theme} active administration tab has no keyboard-visible focus: ${JSON.stringify(keyboardFocus)}`);
     }
     styles.keyboardFocus = keyboardFocus;
     if (route === '/admin/categories' && (styles.tableHead !==
       (theme === 'nocturno' ? 'rgb(72, 57, 43)' : 'rgb(0, 139, 139)') ||
       styles.search !== (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)'))) {
       throw new Error(`The ${theme} shared ABM controls did not receive their theme.`);
+    }
+    if (route === '/admin/taxes' && (styles.taxCatalogSelect !==
+      (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)') ||
+      styles.taxAssignmentSelect !==
+      (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)'))) {
+      throw new Error(`The ${theme} tax catalog and assignment controls did not receive their theme.`);
     }
     if (route === '/admin/categories' && width <= 560) {
       styles.tableScroll = await evaluate(`(() => {
@@ -223,6 +248,38 @@ try {
     if (route === '/admin/categories' && width <= 560) {
       const fullPage = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
       await writeFile(file.replace(/\.png$/, '-full.png'), Buffer.from(fullPage.data, 'base64'));
+    }
+    if (route === '/admin/taxes') {
+      const assignment = await evaluate(`(() => {
+        const panel = document.querySelector('app-tax-assignment-panel');
+        panel.scrollIntoView({ block: 'start' });
+        const wrap = panel.querySelector('.table-wrap');
+        const before = wrap?.scrollLeft ?? 0;
+        if (wrap) wrap.scrollLeft = wrap.scrollWidth;
+        const action = wrap?.querySelector('tbody tr button')?.getBoundingClientRect();
+        const bounds = wrap?.getBoundingClientRect();
+        const actionReachable = !action || !bounds ||
+          (action.left >= bounds.left && action.right <= bounds.right + 1);
+        if (wrap) wrap.scrollLeft = before;
+        return {
+          title: panel.querySelector('h2')?.textContent.trim(),
+          note: getComputedStyle(panel.querySelector('.assignment-note')).color,
+          selection: getComputedStyle(panel.querySelector('#assignment-selected')).accentColor,
+          tableWidth: wrap?.scrollWidth ?? 0,
+          tableViewport: wrap?.clientWidth ?? 0,
+          actionReachable,
+        };
+      })()`);
+      if (assignment.note !== (theme === 'nocturno' ? 'rgb(229, 178, 127)' : 'rgb(0, 95, 96)') ||
+        !assignment.actionReachable) {
+        throw new Error(`The ${theme} tax assignment panel lost contrast or table access.`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const detail = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const detailFile = file.replace(/\.png$/, '-assignment.png');
+      await writeFile(detailFile, Buffer.from(detail.data, 'base64'));
+      console.log(JSON.stringify({ theme, ...assignment, screenshot: detailFile }));
+      await evaluate('window.scrollTo(0, 0); true');
     }
   }
   if (inspectDialog) {
@@ -301,6 +358,37 @@ try {
       const file = path.join(outputDirectory, `admin-categories-import-${theme}-${width}x${height}.png`);
       await writeFile(file, Buffer.from(screenshot.data, 'base64'));
       console.log(JSON.stringify({ ...importStyles, screenshot: file }));
+    }
+  }
+  if (inspectTaxDialog) {
+    await evaluate(`(() => {
+      document.documentElement.dataset.visualTheme = 'original';
+      document.querySelector('app-tax-catalog-panel tbody button').click();
+      return true;
+    })()`);
+    await until(() => evaluate("Boolean(document.querySelector('.admin-detail-dialog[open] #tax-action-title'))"));
+    for (const theme of ['original', 'nocturno']) {
+      const dialogStyles = await evaluate(`(() => {
+        document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+        const dialog = document.querySelector('.admin-detail-dialog[open]');
+        return {
+          theme: document.documentElement.dataset.visualTheme,
+          open: dialog.open,
+          title: dialog.querySelector('#tax-action-title')?.textContent.trim(),
+          surface: getComputedStyle(dialog).backgroundColor,
+          ink: getComputedStyle(dialog).color,
+          confirmDisabled: dialog.querySelector('.confirm-tax-action').disabled,
+        };
+      })()`);
+      if (!dialogStyles.open || dialogStyles.title !== 'Inactivar impuesto o gravamen' ||
+        dialogStyles.surface !== (theme === 'nocturno' ? 'rgb(36, 40, 46)' : 'rgb(237, 237, 237)')) {
+        throw new Error(`The ${theme} tax action dialog lost its state or surface.`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `admin-taxes-dialog-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...dialogStyles, screenshot: file }));
     }
   }
 } finally {

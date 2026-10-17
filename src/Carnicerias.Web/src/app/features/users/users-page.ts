@@ -11,7 +11,7 @@ import { OperationalBranchOption, SessionClient } from '../../core/session/sessi
   selector: 'app-users-page',
   imports: [DatePipe, RouterLink, AdminAreaTabs, AdminDetailDialog],
   templateUrl: './users-page.html',
-  styleUrl: './users-page.scss',
+  styleUrls: ['./users-theme.scss', './users-page.scss'],
 })
 export class UsersPage implements OnInit {
   private readonly usersClient = inject(UserDirectoryClient);

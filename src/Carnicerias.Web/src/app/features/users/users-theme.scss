@@ -1,0 +1,80 @@
+:host {
+  --color-charcoal: #3d3d3d;
+  --color-stage: #111;
+  --color-surface: #ededed;
+  --color-surface-muted: #d9d9d9;
+  --color-raised: #fff;
+  --color-text: #202322;
+  --color-muted: #60665b;
+  --color-border: #b2b2b2;
+  --color-teal: #008b8b;
+  --color-table-head: #008080;
+  --color-teal-dark: #005e60;
+  --color-lime: #d3ff00;
+  --color-action-border: #badf00;
+  --color-button-ink: #202322;
+  --color-danger: #a32929;
+  --color-brand: #f5f5f5;
+  --color-back: #eee;
+  --color-eyebrow: #54c2bd;
+  --color-heading-note: #3d5554;
+  --color-table-border: #d1d1d1;
+  --color-table-head-ink: #fff;
+  --color-status-ink: #4b4b4b;
+  --color-status-bg: #dedede;
+  --color-success-ink: #064f4f;
+  --color-success-bg: #c6e8e3;
+  --color-focus: #71b8da;
+
+  display: block;
+  min-height: 100dvh;
+  color: var(--color-text);
+  background: var(--color-stage);
+}
+
+:host-context(html[data-visual-theme='nocturno']) {
+  --color-charcoal: #24282e;
+  --color-stage: #181b20;
+  --color-surface: #24282e;
+  --color-surface-muted: #2d3239;
+  --color-raised: #181b20;
+  --color-text: #f3efe9;
+  --color-muted: #bbb8b3;
+  --color-border: #414750;
+  --color-teal: #e5b27f;
+  --color-table-head: #e5b27f;
+  --color-teal-dark: #e5b27f;
+  --color-lime: #e5b27f;
+  --color-action-border: #e5b27f;
+  --color-button-ink: #171a1e;
+  --color-danger: #ffb4ab;
+  --color-brand: #e5b27f;
+  --color-back: #f3efe9;
+  --color-eyebrow: #e5b27f;
+  --color-heading-note: #d5cec4;
+  --color-table-border: #414750;
+  --color-table-head-ink: #171a1e;
+  --color-status-ink: #d5cec4;
+  --color-status-bg: #3b4148;
+  --color-success-ink: #c0e6d2;
+  --color-success-bg: #254036;
+  --color-focus: #e5b27f;
+}
+
+.app-header {
+  display: flex;
+  min-height: 3.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 1.25rem;
+  color: #fff;
+  background: var(--color-charcoal);
+}
+
+.brand-mark {
+  display: block;
+  width: 4.5rem;
+  height: 1.75rem;
+  background: var(--color-brand);
+}

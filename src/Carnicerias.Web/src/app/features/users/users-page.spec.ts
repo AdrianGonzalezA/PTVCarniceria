@@ -37,6 +37,31 @@ describe('UsersPage', () => {
     return { fixture, http, page: fixture.nativeElement as HTMLElement };
   }
 
+  it('themes users, statuses and the access editor without changing a user', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const { fixture, http, page } = load();
+      expect(getComputedStyle(page).getPropertyValue('--color-stage').trim()).toBe('#111');
+      expect(page.querySelector('.status-active')?.textContent).toContain('Activo');
+      page.querySelector<HTMLButtonElement>('.create-user-button')!.click();
+      fixture.detectChanges();
+      expect(page.querySelector('dialog[open] #create-role')).not.toBeNull();
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(page).getPropertyValue('--color-stage').trim()).toBe('#181b20');
+      expect(getComputedStyle(page).getPropertyValue('--color-surface').trim()).toBe('#24282e');
+      expect(getComputedStyle(page).getPropertyValue('--color-teal').trim()).toBe('#e5b27f');
+      expect(page.querySelector('dialog[open] #create-password')).not.toBeNull();
+      http.expectNone((request) => request.method !== 'GET');
+      fixture.destroy();
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
   it('creates a cashier scoped to selected branches', () => {
     const { fixture, http, page } = load();
     page.querySelector<HTMLButtonElement>('.create-user-button')!.click();

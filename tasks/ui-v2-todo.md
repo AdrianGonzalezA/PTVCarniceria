@@ -61,10 +61,11 @@
   - Verificar: `admin-page.spec.ts`, build y color calculado/captura de ambas rutas con ambos temas.
   - Dependencias: T1, T2 y plan T3 aprobado. Archivos previstos (2): `admin/admin-page.scss`, `admin/admin-page.spec.ts`.
   - Evidencia 17/10/2026: Original `#111`/cabecera `#3d3d3d`/panel `#ededed`; Nocturno `#181b20`/`#24282e`/`#24282e`, medidos en Chromium aislado a 1366 × 768. Capturas de ambas rutas revisadas. La prueba de colisión de marca falló antes y pasó después; el POS Nocturno se inspeccionó en Electron con cinco renglones y total $47.554,00, luego se restauró Original. Suite Angular 167/167, pruebas POS 39/39, lint y build correctos. Sin cambios de venta o base.
-- [ ] **T3.2 · Navegación entre áreas.** Tematizar las pestañas Negocio/Configuración y su foco.
+- [x] **T3.2 · Navegación entre áreas.** Pestañas Negocio/Configuración y foco tematizados sin cambiar su navegación.
   - Aceptación: área activa y foco se distinguen en ambos temas; las rutas y `aria-current` se conservan.
   - Verificar: `admin-area-navigation.spec.ts` y navegación por teclado en ambas áreas.
   - Dependencia: T3.1. Archivos previstos (2): `admin/admin-area-tabs.ts`, `admin/admin-area-navigation.spec.ts`.
+  - Evidencia 17/10/2026: prueba focalizada rojo/verde (3/3); en `/admin` y `/admin/configuracion` el subrayado y contorno del foco de teclado son turquesa en Original y cobre en Nocturno, con `aria-current` y foco conservados durante el cambio sin recarga. Build y lint correctos.
 - [ ] **T3.3 · Superficies comunes de ABM.** Tematizar paneles, tablas, búsquedas, formularios y mensajes compartidos.
   - Aceptación: Categorías muestra tabla y formulario legibles, incluidos vacío/error; Original no cambia y otras páginas que importan el SCSS reciben los mismos tokens.
   - Verificar: `categories-page.spec.ts`, captura con tabla poblada y control de desborde a 800/560 px.

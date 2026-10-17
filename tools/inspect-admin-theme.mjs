@@ -119,6 +119,7 @@ try {
       const header = host.querySelector('.app-header');
       const panel = host.querySelector('.module-panel');
       const brandMark = host.querySelector('.brand-mark');
+      const activeTab = host.querySelector('.area-tabs a[aria-current="page"]');
       return {
         theme: document.documentElement.dataset.visualTheme,
         route: location.pathname,
@@ -129,12 +130,43 @@ try {
         panel: getComputedStyle(panel).backgroundColor,
         brandMark: getComputedStyle(brandMark).backgroundColor,
         brandMarkWidth: brandMark.getBoundingClientRect().width,
+        activeTab: activeTab?.getAttribute('href'),
+        activeTabBorder: activeTab && getComputedStyle(activeTab).borderBottomColor,
       };
     })()`);
     if (styles.brandMarkWidth !== 72 || styles.brandMark !==
       (theme === 'nocturno' ? 'rgb(229, 178, 127)' : 'rgb(245, 245, 245)')) {
       throw new Error(`The ${theme} administrative brand mark is overridden by another component.`);
     }
+    if (styles.activeTab !== route || styles.activeTabBorder !==
+      (theme === 'nocturno' ? 'rgb(229, 178, 127)' : 'rgb(84, 194, 189)')) {
+      throw new Error(`The ${theme} active administration tab lost its route or contrast.`);
+    }
+    const keyboardFocusExpression = `(() => {
+      const focused = document.activeElement;
+      return {
+        href: focused?.getAttribute('href'),
+        visible: focused?.matches(':focus-visible'),
+        outline: getComputedStyle(focused).outlineColor,
+      };
+    })()`;
+    let keyboardFocus = await evaluate(keyboardFocusExpression);
+    if (theme === 'original') {
+      for (let tabCount = 0; tabCount < 12 && keyboardFocus.href !== route; tabCount++) {
+        await send('Input.dispatchKeyEvent', {
+          type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9,
+        });
+        await send('Input.dispatchKeyEvent', {
+          type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9,
+        });
+        keyboardFocus = await evaluate(keyboardFocusExpression);
+      }
+    }
+    if (keyboardFocus.href !== route || !keyboardFocus.visible || keyboardFocus.outline !==
+      (theme === 'nocturno' ? 'rgb(229, 178, 127)' : 'rgb(84, 194, 189)')) {
+      throw new Error(`The ${theme} active administration tab has no keyboard-visible focus.`);
+    }
+    styles.keyboardFocus = keyboardFocus;
     await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
     const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     const file = path.join(outputDirectory, `${route.slice(1).replaceAll('/', '-')}-${theme}.png`);

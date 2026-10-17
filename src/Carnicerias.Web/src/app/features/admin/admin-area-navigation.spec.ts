@@ -64,4 +64,27 @@ describe('administrator areas', () => {
     expect(page.querySelector('a[href="/admin/history"]')).toBeNull();
     expect(page.querySelector('a[href="/admin/configuracion"]')?.getAttribute('aria-current')).toBe('page');
   });
+
+  it('changes area-tab contrast with the local theme while retaining navigation and focus', async () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const page = await open('/admin/configuracion');
+      const tabs = page.querySelector('app-admin-area-tabs') as HTMLElement;
+      const active = tabs.querySelector('a[aria-current="page"]') as HTMLAnchorElement;
+      expect(getComputedStyle(tabs).getPropertyValue('--admin-tab-accent').trim()).toBe('#54c2bd');
+      active.focus();
+      expect(document.activeElement).toBe(active);
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(tabs).getPropertyValue('--admin-tab-accent').trim()).toBe('#e5b27f');
+      expect(active.getAttribute('href')).toBe('/admin/configuracion');
+      expect(active.getAttribute('aria-current')).toBe('page');
+      expect(document.activeElement).toBe(active);
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
 });

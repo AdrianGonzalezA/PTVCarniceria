@@ -19,6 +19,34 @@ describe('AdminExcelImportActions', () => {
     return file;
   }
 
+  it('changes template, file picker and import dialog colors without starting an import', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const fixture = TestBed.createComponent(AdminExcelImportActions);
+      fixture.componentRef.setInput('kind', 'categories');
+      fixture.detectChanges();
+      const host = fixture.nativeElement as HTMLElement;
+      expect(getComputedStyle(host).getPropertyValue('--admin-import-link').trim()).toBe('#254b46');
+      host.querySelector<HTMLButtonElement>('.import-open')!.click();
+      fixture.detectChanges();
+      const dialog = host.querySelector('dialog') as HTMLDialogElement;
+      expect(dialog.open).toBe(true);
+      expect(host.querySelector<HTMLInputElement>('.import-file input')?.files).toHaveLength(0);
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(host).getPropertyValue('--admin-import-link').trim()).toBe('#e5b27f');
+      expect(getComputedStyle(host).getPropertyValue('--admin-import-dialog-ink').trim()).toBe('#f3efe9');
+      expect(dialog.open).toBe(true);
+      expect(host.querySelector<HTMLButtonElement>('.import-footer button:nth-child(3)')?.disabled).toBe(true);
+      fixture.destroy();
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
   it('previews before applying and reuses one idempotency key for the selected file', () => {
     const fixture = TestBed.createComponent(AdminExcelImportActions);
     fixture.componentRef.setInput('kind', 'categories');

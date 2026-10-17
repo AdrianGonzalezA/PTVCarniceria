@@ -24,7 +24,11 @@ const width = Number(viewport[1]);
 const height = Number(viewport[2]);
 const expectedTab = route === '/admin/categories' ? '/admin/configuracion' : route;
 const inspectDialog = process.argv.includes('--dialog');
-if (inspectDialog && route !== '/admin/categories') throw new Error('--dialog requires /admin/categories.');
+const inspectImportDialog = process.argv.includes('--import-dialog');
+if ((inspectDialog || inspectImportDialog) && route !== '/admin/categories') {
+  throw new Error('Dialog checks require /admin/categories.');
+}
+if (inspectDialog && inspectImportDialog) throw new Error('Choose one dialog check at a time.');
 const outputDirectory = process.argv.find((argument) => argument.startsWith('--output='))?.slice(9) ??
   path.join(tmpdir(), 'carnicerias-admin-theme');
 const chromePath = process.env.CARNICERIAS_TEST_CHROME_PATH ??
@@ -257,6 +261,46 @@ try {
       const file = path.join(outputDirectory, `admin-categories-modal-${theme}-${width}x${height}.png`);
       await writeFile(file, Buffer.from(screenshot.data, 'base64'));
       console.log(JSON.stringify({ ...dialogStyles, screenshot: file }));
+    }
+  }
+  if (inspectImportDialog) {
+    await evaluate(`(() => {
+      document.documentElement.dataset.visualTheme = 'original';
+      document.querySelector('.import-open').click();
+      return true;
+    })()`);
+    await until(() => evaluate("Boolean(document.querySelector('.admin-detail-dialog[open] .import-file input'))"));
+    for (const theme of ['original', 'nocturno']) {
+      const importStyles = await evaluate(`(() => {
+        document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+        const dialog = document.querySelector('.admin-detail-dialog[open]');
+        const picker = dialog.querySelector('.import-file input');
+        return {
+          theme: document.documentElement.dataset.visualTheme,
+          open: dialog.open,
+          title: dialog.querySelector('h2')?.textContent.trim(),
+          templateInk: getComputedStyle(document.querySelector('.import-template')).color,
+          openButton: getComputedStyle(document.querySelector('.import-open')).backgroundColor,
+          dialogInk: getComputedStyle(dialog.querySelector('.import-dialog')).color,
+          picker: getComputedStyle(picker).backgroundColor,
+          pickerFocused: picker.matches(':focus-visible'),
+          pickerOutline: getComputedStyle(picker).outlineColor,
+          selectedFiles: picker.files.length,
+          confirmDisabled: dialog.querySelector('.import-footer button:last-child').disabled,
+        };
+      })()`);
+      if (!importStyles.open || importStyles.title !== 'Importar desde Excel' ||
+        importStyles.selectedFiles !== 0 || !importStyles.confirmDisabled ||
+        importStyles.templateInk !== (theme === 'nocturno' ? 'rgb(229, 178, 127)' : 'rgb(37, 75, 70)') ||
+        importStyles.dialogInk !== (theme === 'nocturno' ? 'rgb(243, 239, 233)' : 'rgb(39, 56, 61)') ||
+        (theme === 'nocturno' && importStyles.pickerFocused && importStyles.pickerOutline !== 'rgb(229, 178, 127)')) {
+        throw new Error(`The ${theme} Excel import dialog lost its visual or disabled state.`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `admin-categories-import-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...importStyles, screenshot: file }));
     }
   }
 } finally {

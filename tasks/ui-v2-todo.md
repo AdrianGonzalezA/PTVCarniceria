@@ -79,10 +79,11 @@
   - Verificar: `admin-detail-dialog.spec.ts` y prueba visual de alta/edición en un ABM.
   - Dependencias: T3.1 y T3.3. Archivos previstos (2): `admin/admin-detail-dialog.scss`, `admin/admin-detail-dialog.spec.ts`.
   - Evidencia 17/10/2026: prueba focalizada rojo/verde (4/4); el modal de nueva categoría se mantuvo abierto con título y valor escrito al alternar Original/Nocturno, comprobado a 1366 × 768 y 560 × 768 en Chromium aislado. No se guardó la categoría; build correcto.
-- [ ] **T3.5 · Importación Excel compartida.** Tematizar plantilla, selección de archivo, progreso y resultado.
+- [x] **T3.5 · Importación Excel compartida.** Plantilla, selección de archivo, progreso y resultado usan los tokens Original/Nocturno.
   - Aceptación: controles y mensajes de importación se leen en ambos temas sin ejecutar una importación de prueba; el comportamiento existente no cambia.
   - Verificar: `admin-excel-import-actions.spec.ts` y modal de importación abierto en una página de catálogo.
   - Dependencias: T3.3 y T3.4. Archivos previstos (2): `admin/admin-excel-import-actions.scss`, `admin/admin-excel-import-actions.spec.ts`.
+  - Evidencia 17/10/2026: prueba focalizada rojo/verde (3/3), sin solicitudes de importación; modal abierto con selector vacío y confirmación deshabilitada en ambos temas a 1366 × 768 y 560 × 768. Texto, botones y foco del selector comprobados en Chromium aislado; build correcto. La previsualización y los resultados conservan sus estados y recibieron tokens, pero no se ejecutó una carga real para probar colores.
 - [ ] **T3.6 · Paneles de impuestos reutilizables.** Tematizar catálogo y asignación de gravámenes.
   - Aceptación: filas, selección, validación y estados vacíos/error de ambos paneles se distinguen; Original se conserva.
   - Verificar: `tax-catalog-panel.spec.ts`, `tax-assignment-panel.spec.ts` y modal/tabla de `/admin/taxes`.

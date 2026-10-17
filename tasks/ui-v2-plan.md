@@ -45,6 +45,36 @@ El riesgo principal es que Original requiere estructura previa, no solo otra pal
 
 **Plan detallado de T2, aprobado como alcance el 17/10/2026:** `SPEC-pos-visual-themes.md` toma `eb9292b` como referencia Original. Primero se separan los estilos en una base Original y una capa Nocturno limitada por el atributo de tema; `styles.scss` importa el SCSS del POS globalmente, por lo que el selector usa `html[data-visual-theme='nocturno']` y no `:host-context`. Después se recuperan marca, información de stock y sexta columna del ticket en Original con una sola tabla y un solo control visible A–D. Por último se verifica responsive, estados y flujo en Electron. Cada corte conserva pruebas y build correctos; no se toca `pos-page.ts`, API o base salvo que una prueba evidencie una necesidad real. La ubicación de A–D es el mayor riesgo de layout porque Original usa pie completo y Nocturno pie del catálogo; se medirá en ambos tamaños antes de considerar T2 cerrado.
 
+## Plan técnico propuesto de T3: administración Original/Nocturno
+
+**Especificación aprobada:** [`SPEC-admin-visual-themes.md`](../SPEC-admin-visual-themes.md), limitada a `Carnicerias.Web`. El portal `Carnicerias.Central.Web` queda fuera de este corte. Esta sección es el plan para revisión; la lista T3 detallada en `tasks/ui-v2-todo.md` se descompondrá después de aprobar el orden. No se modifica `tasks/plan.md` ni `tasks/todo.md`, que conservan pendientes históricos de *platform access*.
+
+**Dependencias:** el atributo raíz y la preferencia local de T1 ya funcionan; el POS T2 ya interpreta ese atributo. La administración no tendrá otra fuente de estado. El grafo de presentación es:
+
+```text
+visual-theme-selection (atributo raíz)
+    └── estilos de host compartidos (admin-page.scss)
+          ├── navegación, paneles, tablas, formularios y diálogo común
+          ├── páginas específicas de Configuración y Negocio
+          └── Usuarios y SuperAdmin local
+                └── revisión visual por ruta y habilitación posterior del selector (T4)
+```
+
+**Decisión técnica:** conservar Original como estilos base. Introducir tokens `--admin-*` para superficies, texto, bordes, acento, estados y foco; aplicar la variante Nocturno solo a componentes administrativos. En los SCSS declarados en `styleUrl`/`styleUrls`, Angular usa encapsulación emulada y compila `:host-context()`; [la documentación oficial](https://angular.dev/guide/components/styling#viewencapsulationemulated) advierte que el pseudoselector nativo está deprecado, pero confirma soporte del compilador. Se comprobará el CSS generado y el color calculado en el primer corte antes de extender ese patrón. No usar `::ng-deep`, un selector global sin prefijo ni una segunda vista por tema. El POS es distinto: su SCSS está importado globalmente y ya usa `html[data-visual-theme='nocturno']`.
+
+**Orden de cortes verificables (cada corte de implementación se dividirá en tareas de hasta cinco archivos):**
+
+1. **Prueba del alcance y base común.** Capturar Original en `/admin` y `/admin/configuracion`; aplicar el atributo Nocturno al host compartido, comprobar tokens y estilo computado, y probar que POS, `/` y Original no cambian. Priorizar este riesgo de encapsulación antes de invertir en páginas específicas.
+2. **Controles reutilizados.** Adaptar pestañas de áreas, paneles/listas/tablas/formularios comunes, `AdminDetailDialog`, importación Excel y paneles de impuestos. Verificar un diálogo abierto durante el cambio de tema, foco, estados de carga/error y un formulario con valores sin pérdida de estado. Separar navegación, superficies y diálogo en incrementos pequeños.
+3. **Configuración por familias.** Recorrer catálogos y precios; luego impuestos/ARCA/pasarelas; después organización, conexión central, clientes y códigos de barras. Ajustar solo estilos especializados que no hereden correctamente los tokens compartidos. Cada familia se valida con tabla poblada, estado vacío y modal representativo.
+4. **Negocio por familias.** Cubrir existencias, recepción de piezas, historial y cuentas corrientes; revisar filtros, paginación, importes, alertas y acciones de fila. Los colores de estado no dependen solo del color para transmitir significado.
+5. **Accesos locales.** Cubrir `/users` y `/superadmin`, que tienen SCSS propios; incluir el formulario de acceso contenido en SuperAdmin, tablas y modales sin cambiar roles, permisos o manejo de sesiones.
+6. **Auditoría final.** Revisar las 18 entradas de `SPEC-admin-visual-themes.md` en Original y Nocturno, navegador administrativo y Electron cuando corresponda. Medir 1920 × 992, 1366 × 768, 800 × 768 y 560 px; verificar contraste, foco, scroll horizontal solo dentro de tablas, consola, suite Angular, lint y build. Mantener selector oculto hasta T4 y `main` intacto hasta aceptación del usuario.
+
+**Checkpoints:** tras 1–2, confirmar tokens/encapsulación y controles comunes con pruebas/build; tras 3–4, confirmar Configuración y Negocio por ruta sin regresión Original; tras 5–6, confirmar accesos, estados, tamaños y ausencia de cambios en POS. Los cortes de páginas especializadas pueden avanzar independientemente **después** de estabilizar la base compartida, pero cualquier cambio al mismo SCSS común se hace secuencialmente. No se prevén migraciones, API, dependencias ni otra base.
+
+**Riesgos y mitigación:** los muchos colores literales pueden dejar islas claras u ocultar estados en Nocturno (inventario por ruta y estilo calculado); las hojas compartidas importadas por numerosas páginas pueden filtrar cambios a Original (pruebas y capturas de ambos temas en cada checkpoint); los diálogos nativos se dibujan en capa superior (probarlos abiertos en runtime); las tablas amplias pueden desbordar a 560 px (scroll interno y acciones accesibles). Si el patrón de encapsulación no se confirma en el primer corte, detener la propagación y ajustar el plan antes de tematizar las demás páginas.
+
 ## Estado y medición en Electron (16/10/2026)
 
 Se aplicaron la identidad Nocturna, las tarjetas compactas del catálogo, las categorías verticales a la izquierda y el detalle de compra como tabla semántica de cinco columnas. Conserva producto y código/pieza, cantidad o peso editable, precio por unidad, descuento informativo, importe y acción de quitar. Por pedido posterior, las pestañas A–D quedaron en una barra gris al pie del catálogo, con botones más grandes y la marca visible «Guardado» para cada borrador persistido. El cuerpo se desplaza sin mover total/cobro; el editor para agregar productos sigue en el diálogo existente.

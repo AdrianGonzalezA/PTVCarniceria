@@ -2,7 +2,8 @@
   <header class="pos-header">
     <div class="pos-brand">
       <span class="brand-mark" aria-hidden="true">ri</span>
-      <span class="brand-name">NOCTURNA <span>· MOSTRADOR</span></span>
+      <span class="brand-name brand-original">Carnicerías <span>· Punto de venta</span></span>
+      <span class="brand-name brand-nocturno">NOCTURNA <span>· MOSTRADOR</span></span>
     </div>
     <div class="pos-account">
       <span class="context-label">{{ session()?.context?.branchName }}</span>
@@ -149,6 +150,9 @@
                   (click)="openProduct(product)">
                   <span class="product-name">{{ product.name }}</span>
                   <span class="product-price">{{ formatMoney(product.price) }} <small>/ {{ unitLabel(product) }}</small></span>
+                  @if (!isDemoPriceList() && (availableStock(product) ?? 0) > 0) {
+                    <small class="product-stock">Disponible: {{ availableStock(product) ?? 0 }} {{ unitLabel(product) }}</small>
+                  }
                   @if (!isDemoPriceList() && (availableStock(product) ?? 0) <= 0) {
                     <small class="product-availability">Sin stock</small>
                   }
@@ -177,7 +181,7 @@
               [attr.aria-current]="activeTicketSlot() === slot ? 'page' : null"
               [attr.aria-label]="'Ticket ' + slot + (ticketSlotsLoadState() === 'ready' && savedTicketSlots().has(slot) ? ', guardado' : '')"
               [disabled]="activeTicketSlot() !== slot && !canSwitchTicket()"
-              (click)="switchTicket(slot)">{{ slot }}@if (ticketSlotsLoadState() === 'ready' && savedTicketSlots().has(slot)) { <span class="ticket-tab-saved" aria-hidden="true">Guardado</span> }</button>
+              (click)="switchTicket(slot)"><span class="ticket-tab-prefix" aria-hidden="true">Ticket </span>{{ slot }}@if (ticketSlotsLoadState() === 'ready' && savedTicketSlots().has(slot)) { <span class="ticket-tab-saved" aria-hidden="true">Guardado</span> }</button>
           }
           @if (ticketSlotsLoadState() === 'loading') {
             <span class="ticket-strip-status" role="status">Consultando tickets…</span>
@@ -201,7 +205,7 @@
             <p class="price-list-lock" role="alert">{{ errorMessage() ?? 'No se pudo guardar el ticket. Revisá el detalle e intentá nuevamente.' }} <button class="draft-retry" type="button" (click)="retryDraftSave()">Reintentar</button></p>
           }
         </div>
-        <button class="cancel-sale-button" type="button" aria-label="Cancelar venta" title="Cancelar venta" (click)="cancelSale()">⊘</button>
+        <button class="cancel-sale-button" type="button" aria-label="Cancelar venta" title="Cancelar venta" (click)="cancelSale()">⊘ <span class="cancel-sale-label" aria-hidden="true">Cancelar venta</span></button>
       </div>
 
       @if (priceListUnavailable()) {
@@ -268,9 +272,10 @@
               <thead>
                 <tr>
                   <th scope="col">Producto</th>
-                  <th scope="col">Cantidad</th>
+                  <th scope="col" class="ticket-line-quantity-heading"><span class="heading-original">Peso / Cant.</span><span class="heading-nocturno">Cantidad</span></th>
                   <th scope="col">Precio</th>
-                  <th scope="col">Importe</th>
+                  <th scope="col" class="ticket-line-discount-heading">Desc.</th>
+                  <th scope="col" class="ticket-line-total-heading"><span class="heading-original">Total</span><span class="heading-nocturno">Importe</span></th>
                   <th scope="col" aria-label="Quitar producto"></th>
                 </tr>
               </thead>
@@ -299,6 +304,7 @@
                       <span>{{ formatMoney(line.product.price) }}</span>
                       <small>/ {{ unitLabel(line.product) }} · Desc. 0,00%</small>
                     </td>
+                    <td class="ticket-line-discount">0,00%</td>
                     <td class="ticket-line-total"><strong>{{ formatMoney(lineTotal(line)) }}</strong></td>
                     <td class="ticket-line-action">
                       <button class="remove-line-button" type="button" [disabled]="!isDemoPriceList() && !!liveDataProblem()" [attr.aria-label]="'Quitar ' + line.product.name + (line.pieceIdentifier ? ' pieza ' + line.pieceIdentifier : '')" (click)="removeLine(line.id)">×</button>

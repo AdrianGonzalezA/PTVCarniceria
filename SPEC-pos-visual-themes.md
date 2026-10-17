@@ -25,7 +25,7 @@ La caja ofrece dos presentaciones del **mismo** flujo de venta. **Original** rec
 
 - Angular 22.2, TypeScript y SCSS existentes, sin dependencias, API, migraciones ni archivos de imagen nuevos.
 - `src/Carnicerias.Web/src/app/features/pos/pos-page.html`: una vista con la misma lógica y controles; se permite marcado de presentación específico cuando CSS solo no pueda expresar ambas estructuras, sin duplicar lógica de venta.
-- `src/Carnicerias.Web/src/app/features/pos/pos-page.scss`: estilos limitados por el identificador aplicado al elemento raíz, con variables separadas por tema y reglas responsive explícitas. El SCSS previo a UI2 en `eb9292b` y el SCSS UI2 actual son las dos referencias.
+- `src/Carnicerias.Web/src/app/features/pos/pos-page.scss`: estilos limitados por el identificador aplicado al elemento raíz, con variables separadas por tema y reglas responsive explícitas. `styles.scss` importa este archivo globalmente; la capa Nocturno usa el selector `html[data-visual-theme='nocturno']`. El SCSS previo a UI2 en `eb9292b` y el SCSS UI2 actual son las dos referencias.
 - `src/Carnicerias.Web/src/app/features/pos/pos-page.spec.ts`: pruebas cercanas de estructura y comportamiento. `core/theme/visual-theme.ts` sigue siendo la fuente única de IDs; `pos-page.ts` no guarda una segunda preferencia.
 
 Ejemplo de convención de nombres, no una segunda fuente de estado:

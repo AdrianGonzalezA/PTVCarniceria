@@ -31,6 +31,19 @@ function send(method, params = {}) {
 }
 
 try {
+  const viewport = process.argv.find((argument) => argument.startsWith('--viewport='))?.slice(11);
+  if (viewport) {
+    const dimensions = /^(\d{3,4})x(\d{3,4})$/.exec(viewport);
+    if (!dimensions) throw new Error('Use --viewport=WIDTHxHEIGHT.');
+    await send('Emulation.setDeviceMetricsOverride', {
+      width: Number(dimensions[1]), height: Number(dimensions[2]), deviceScaleFactor: 1, mobile: false,
+    });
+  }
+  const scroll = process.argv.find((argument) => argument.startsWith('--scroll='))?.slice(9);
+  if (scroll !== undefined) {
+    if (!/^\d{1,5}$/.test(scroll)) throw new Error('Use --scroll=PIXELS.');
+    await send('Runtime.evaluate', { expression: `scrollTo(0, ${Number(scroll)})` });
+  }
   if (process.argv[2] === '--accept-dialog') {
     await send('Page.handleJavaScriptDialog', { accept: true });
     console.log('Electron dialog accepted.');

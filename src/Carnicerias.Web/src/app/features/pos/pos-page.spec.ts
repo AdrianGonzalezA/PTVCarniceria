@@ -685,7 +685,7 @@ describe('PosPage', () => {
     expect(search.disabled).toBe(false);
     expect(fixture.nativeElement.querySelector('.product-card').textContent).toContain('Pan rallado');
     expect(fixture.nativeElement.querySelector('.product-card').textContent).toContain('/ unidad');
-    expect(fixture.nativeElement.querySelector('.product-card').textContent).not.toContain('Disponible:');
+    expect(fixture.nativeElement.querySelector('.product-card').textContent).toContain('Disponible: 40 unidad');
     expect(fixture.nativeElement.querySelector('.category-icon').textContent).toContain('🧺');
     search.dispatchEvent(new KeyboardEvent('keydown', { key: '8', bubbles: true }));
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -926,16 +926,23 @@ describe('PosPage', () => {
     expect(fixture.nativeElement.querySelector('.price-list-field select').textContent).toContain('Mayorista');
     const ticketTable = fixture.nativeElement.querySelector('table.ticket-lines') as HTMLTableElement;
     expect(ticketTable).not.toBeNull();
-    expect(Array.from(ticketTable.querySelectorAll('thead th')).map(header => header.textContent?.trim()))
-      .toEqual(['Producto', 'Cantidad', 'Precio', 'Importe', '']);
+    expect(ticketTable.querySelectorAll('thead th')).toHaveLength(6);
+    expect(ticketTable.querySelector('.ticket-line-quantity-heading .heading-original')?.textContent)
+      .toContain('Peso / Cant.');
+    expect(ticketTable.querySelector('.ticket-line-quantity-heading .heading-nocturno')?.textContent)
+      .toContain('Cantidad');
+    expect(ticketTable.querySelector('.ticket-line-total-heading .heading-original')?.textContent)
+      .toContain('Total');
+    expect(ticketTable.querySelector('.ticket-line-total-heading .heading-nocturno')?.textContent)
+      .toContain('Importe');
     const compactLine = ticketTable.querySelector('tbody tr.ticket-line') as HTMLTableRowElement;
     expect(compactLine).not.toBeNull();
-    expect(compactLine.cells).toHaveLength(5);
+    expect(compactLine.cells).toHaveLength(6);
     expect(compactLine.textContent).toContain('Corte guardado');
     expect(compactLine.textContent).toContain('CAR-01');
     expect(compactLine.cells[2].textContent).toContain('12.345,67');
     expect(compactLine.cells[2].textContent).toContain('Desc. 0,00%');
-    expect(compactLine.cells[4].querySelector('.remove-line-button')).not.toBeNull();
+    expect(compactLine.cells[5].querySelector('.remove-line-button')).not.toBeNull();
     const ticketBody = fixture.nativeElement.querySelector('.ticket-body-scroll') as HTMLElement;
     expect(ticketBody.querySelector('.sale-metadata')).not.toBeNull();
     expect(ticketBody.querySelector('.ticket-line')).not.toBeNull();
@@ -1569,6 +1576,47 @@ describe('PosPage', () => {
       failLists: () => { listsFail = true; } };
   }
 
+  it('provides both visual identities without duplicating the ticket switcher', async () => {
+    const { fixture } = await liveCatalogFixture();
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('.brand-original')?.textContent).toContain('Carnicerías');
+    expect(page.querySelector('.brand-nocturno')?.textContent).toContain('NOCTURNA');
+    expect(page.querySelectorAll('.ticket-strip')).toHaveLength(1);
+    expect(page.querySelectorAll('.ticket-strip .ticket-tab')).toHaveLength(4);
+  });
+
+  it('keeps the Original stock amount and a separate discount column in the ticket', async () => {
+    const { fixture } = await liveCatalogFixture();
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('.product-stock')?.textContent).toContain('Disponible: 10 unidad');
+
+    page.querySelector<HTMLButtonElement>('.product-card')!.click();
+    fixture.detectChanges();
+    page.querySelector<HTMLButtonElement>('.pos-dialog .finish-button')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector('.ticket-line-discount-heading')?.textContent).toContain('Desc.');
+    expect(page.querySelector('.ticket-line-discount')?.textContent).toContain('0,00%');
+  });
+
+  it('preserves the active ticket when the theme identifier changes', async () => {
+    const { fixture } = await liveCatalogFixture();
+    const page = fixture.nativeElement as HTMLElement;
+    page.querySelector<HTMLButtonElement>('.product-card')!.click();
+    fixture.detectChanges();
+    page.querySelector<HTMLButtonElement>('.pos-dialog .finish-button')!.click();
+    fixture.detectChanges();
+    const originalTotal = page.querySelector('.total-field strong')?.textContent;
+    try {
+      document.documentElement.dataset['visualTheme'] = 'nocturno';
+      fixture.detectChanges();
+      expect(page.querySelectorAll('.ticket-line')).toHaveLength(1);
+      expect(page.querySelector('.total-field strong')?.textContent).toBe(originalTotal);
+      expect(page.querySelectorAll('.ticket-strip')).toHaveLength(1);
+    } finally {
+      delete document.documentElement.dataset['visualTheme'];
+    }
+  });
+
   it('refreshes stock and price lists every five seconds, on focus and on reconnect, then stops on destroy', async () => {
     vi.useFakeTimers();
     let fixture: { destroy(): void } | undefined;
@@ -1602,6 +1650,7 @@ describe('PosPage', () => {
     window.dispatchEvent(new Event('focus'));
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.product-availability').textContent).toContain('Sin stock');
+    expect(fixture.nativeElement.querySelector('.product-stock')).toBeNull();
     (fixture.nativeElement.querySelector('.product-card') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#product-dialog-title')).toBeNull();

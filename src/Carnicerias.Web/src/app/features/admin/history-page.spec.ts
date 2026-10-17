@@ -34,6 +34,32 @@ describe('HistoryPage', () => {
     return { fixture, http, page: fixture.nativeElement as HTMLElement };
   }
 
+  it('themes filters, tabs and a read-only ticket in place', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const { fixture, http, page } = load();
+      expect(getComputedStyle(page).getPropertyValue('--admin-history-control').trim()).toBe('#fff');
+      page.querySelector<HTMLButtonElement>('tbody button')!.click();
+      http.expectOne('/api/admin/history/sales/sale-1').flush({ id: 'sale-1',
+        confirmedAtUtc: '2026-10-08T10:00:00Z', total: 200,
+        lines: [], payments: [] });
+      fixture.detectChanges();
+      expect(page.querySelector('dialog[open] .ticket-detail')).not.toBeNull();
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(page).getPropertyValue('--admin-history-control').trim()).toBe('#181b20');
+      expect(getComputedStyle(page).getPropertyValue('--admin-history-detail').trim()).toBe('#24282e');
+      expect(page.querySelector('dialog[open]')?.textContent).toContain('Ticket sale-1');
+      http.expectNone((request) => request.method !== 'GET');
+      fixture.destroy();
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
   it('shows persisted sales and loads a read-only ticket with payments', () => {
     const { fixture, http, page } = load();
     expect(page.querySelector('tbody')?.textContent).toContain('Caja 1');

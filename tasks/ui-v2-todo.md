@@ -128,10 +128,11 @@
 
 **Checkpoint T3-D (17/10/2026):** Organización, conexión, impuestos, códigos, existencias y piezas comprobados; 187/187 pruebas Angular, lint y build en verde. Persisten solo los avisos de presupuesto SCSS preexistentes y `qrcode` CommonJS.
 
-- [ ] **T3.13 · Historial y cuentas corrientes.** Tematizar resúmenes, importes, filtros y estados.
+- [x] **T3.13 · Historial y cuentas corrientes.** Tematizar resúmenes, importes, filtros y estados.
   - Aceptación: historial, movimientos y saldos conservan jerarquía y signos legibles en ambos temas; no se registra ningún cobro.
   - Verificar: `history-page.spec.ts`, `accounts-page.spec.ts` y ambas rutas con datos existentes.
   - Dependencia: T3.3. Archivos previstos (4): `admin/history-page.scss`, `admin/history-page.spec.ts`, `admin/accounts-page.scss`, `admin/accounts-page.spec.ts`.
+  - Evidencia 17/10/2026: pruebas focalizadas rojo/verde (4/4). Ventas, turnos, caja/pagos y movimientos de stock con datos existentes, detalle de ticket y estado de cuenta abiertos en Original/Nocturno a 1366 × 768 y 560 × 768; sin cobros ni movimientos nuevos. El filtro de fechas móvil se amplió tras detectar un campo inutilizable.
 - [ ] **T3.14 · Usuarios de empresa.** Tematizar listado, búsqueda, roles y modales de acceso.
   - Aceptación: estados activo/inactivo, errores y foco son legibles; no cambia autorización ni se crea/resetea un usuario para probar colores.
   - Verificar: `users-page.spec.ts` y `/users` con modal abierto en ambos temas.

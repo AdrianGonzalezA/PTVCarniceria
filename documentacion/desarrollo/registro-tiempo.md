@@ -54,5 +54,6 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 | 16/10/2026 | 15:54:14 | — | No cuantificable | Analizar temas visuales antes de pausa solicitada | Se inspeccionaron rutas, estilos y configuración; el usuario pidió detenerse para reiniciar. No hubo cambios de código ni se atribuye duración sin marca final. |
 | 17/10/2026 | 10:24:31 | 10:27:15 | 3 min | Definir temas Original y Nocturno por perfil local | Se confirmó Original con apariencia y distribución previas, posibilidad de futuros temas y almacenamiento separado de Electron/navegador. Se aprobó el mapa de capacidades y se redactó la especificación del selector. Sin cambios de API o base. |
 | 17/10/2026 | 10:44:57 | 10:47:11 | 2 min | Planificar temas visuales en la rama UI2 | Se registró la aprobación de la especificación, se extendieron plan y tareas con activación del selector tras completar ambos temas y se pidió revisión del orden. Sin código, base ni pruebas de integración. |
+| 17/10/2026 | 10:51:17 | 10:55:20 | 4 min | Implementar la preferencia local de tema visual (T1) | Prueba roja/verde; 6 pruebas focalizadas, 163 Angular, lint y build correctos. Tema Original seguro ante almacenamiento ausente o inválido. Sin selector visible ni cambios de API o base. |
 
-**Total activo registrado desde el 16/10/2026:** 94 min medidos, más tramos no cuantificables.
+**Total activo registrado desde el 16/10/2026:** 98 min medidos, más tramos no cuantificables.

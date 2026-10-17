@@ -3,6 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { PaymentGatewaysPage } from './payment-gateways-page';
+import { MercadoPagoRegister } from '../../core/admin/admin-payment-gateway-client';
 
 describe('PaymentGatewaysPage Clover sandbox', () => {
   beforeEach(() => TestBed.configureTestingModule({
@@ -11,7 +12,8 @@ describe('PaymentGatewaysPage Clover sandbox', () => {
   }));
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
-  function load(cloverConnected = false, accessExpiry = '2026-10-14T00:00:00Z') {
+  function load(cloverConnected = false, accessExpiry = '2026-10-14T00:00:00Z',
+    registers: readonly MercadoPagoRegister[] = []) {
     const fixture = TestBed.createComponent(PaymentGatewaysPage);
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
@@ -23,7 +25,7 @@ describe('PaymentGatewaysPage Clover sandbox', () => {
     });
     http.expectOne('/api/admin/payment-gateways/mercado-pago').flush({
       provider: 'mercadoPago', environment: 'test', sellerUserId: '123',
-      hasAccessToken: false, hasWebhookSecret: false, registers: [],
+      hasAccessToken: false, hasWebhookSecret: false, registers,
     });
     http.expectOne('/api/admin/payment-gateways/clover').flush({
       provider: 'clover', environment: 'sandbox', clientId: 'APP_123', merchantId: 'MERCHANT_123',
@@ -34,6 +36,33 @@ describe('PaymentGatewaysPage Clover sandbox', () => {
     fixture.detectChanges();
     return { fixture, http, page: fixture.nativeElement as HTMLElement };
   }
+
+  it('themes gateway credentials and register editor without saving or connecting', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const { fixture, http, page } = load(false, '2026-10-14T00:00:00Z', [
+        { id: 'register-1', name: 'Caja A', branchId: 'branch-1', branchName: 'Centro',
+          isActive: true, qrExternalPosId: 'CAJA_A', pointTerminalId: null },
+      ]);
+      expect(getComputedStyle(page).getPropertyValue('--admin-gateway-card').trim()).toBe('#fff');
+      page.querySelector<HTMLButtonElement>('.gateway-register button')!.click();
+      fixture.detectChanges();
+      expect(page.querySelector<HTMLInputElement>('.gateway-dialog input')?.value).toBe('CAJA_A');
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(page).getPropertyValue('--admin-gateway-card').trim()).toBe('#2d3239');
+      expect(getComputedStyle(page).getPropertyValue('--admin-gateway-dialog').trim()).toBe('#24282e');
+      expect(page.querySelector<HTMLInputElement>('.gateway-dialog input')?.value).toBe('CAJA_A');
+      expect(page.querySelector<HTMLInputElement>('input[formcontrolname="clientSecret"]')?.value).toBe('');
+      http.expectNone((request) => request.method !== 'GET');
+      fixture.destroy();
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
 
   it('shows credential status but never echoes the App Secret', () => {
     const { page } = load();

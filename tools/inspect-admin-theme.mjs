@@ -13,7 +13,7 @@ if (!companyCode || !username || !password) {
 }
 
 const route = process.argv[2] ?? '/admin';
-if (!/^\/admin(?:\/(?:configuracion|categories|taxes|products|price-lists|customers))?$/.test(route)) {
+if (!/^\/admin(?:\/(?:configuracion|categories|taxes|products|price-lists|customers|arca|payment-gateways))?$/.test(route)) {
   throw new Error('Only the initial administration routes are supported.');
 }
 const viewport = /^--viewport=(\d{3,4})x(\d{3,4})$/.exec(
@@ -22,7 +22,8 @@ const viewport = /^--viewport=(\d{3,4})x(\d{3,4})$/.exec(
 if (!viewport) throw new Error('Use --viewport=WIDTHxHEIGHT.');
 const width = Number(viewport[1]);
 const height = Number(viewport[2]);
-const expectedTab = ['/admin/categories', '/admin/taxes', '/admin/products', '/admin/price-lists', '/admin/customers']
+const expectedTab = ['/admin/categories', '/admin/taxes', '/admin/products', '/admin/price-lists',
+  '/admin/customers', '/admin/arca', '/admin/payment-gateways']
   .includes(route) ? '/admin/configuracion' : route;
 const inspectDialog = process.argv.includes('--dialog');
 const inspectImportDialog = process.argv.includes('--import-dialog');
@@ -30,6 +31,7 @@ const inspectTaxDialog = process.argv.includes('--tax-dialog');
 const inspectProductDialog = process.argv.includes('--product-dialog');
 const inspectPricesDialog = process.argv.includes('--prices-dialog');
 const inspectCustomerDialog = process.argv.includes('--customer-dialog');
+const inspectGatewayDialog = process.argv.includes('--gateway-dialog');
 if ((inspectDialog || inspectImportDialog) && route !== '/admin/categories') {
   throw new Error('Dialog checks require /admin/categories.');
 }
@@ -37,6 +39,9 @@ if (inspectTaxDialog && route !== '/admin/taxes') throw new Error('--tax-dialog 
 if (inspectProductDialog && route !== '/admin/products') throw new Error('--product-dialog requires /admin/products.');
 if (inspectPricesDialog && route !== '/admin/price-lists') throw new Error('--prices-dialog requires /admin/price-lists.');
 if (inspectCustomerDialog && route !== '/admin/customers') throw new Error('--customer-dialog requires /admin/customers.');
+if (inspectGatewayDialog && route !== '/admin/payment-gateways') {
+  throw new Error('--gateway-dialog requires /admin/payment-gateways.');
+}
 if (inspectDialog && inspectImportDialog) throw new Error('Choose one dialog check at a time.');
 const outputDirectory = process.argv.find((argument) => argument.startsWith('--output='))?.slice(9) ??
   path.join(tmpdir(), 'carnicerias-admin-theme');
@@ -141,6 +146,8 @@ try {
       route === '/admin/products' ? 'app-products-page .category-panel tbody tr' :
       route === '/admin/price-lists' ? 'app-price-lists-page .category-panel tbody tr' :
       route === '/admin/customers' ? 'app-customers-page .category-panel tbody tr' :
+      route === '/admin/arca' ? 'app-arca-settings-page .category-panel #issuer-title' :
+      route === '/admin/payment-gateways' ? 'app-payment-gateways-page .category-panel #mp-title' :
       'app-admin-page .module-panel')}
   ))`));
   if (route === '/admin/taxes') {
@@ -156,7 +163,7 @@ try {
     const styles = await evaluate(`(() => {
       document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
       const host = document.querySelector(
-        'app-admin-page, app-categories-page, app-product-tax-page, app-products-page, app-price-lists-page, app-customers-page');
+        'app-admin-page, app-categories-page, app-product-tax-page, app-products-page, app-price-lists-page, app-customers-page, app-arca-settings-page, app-payment-gateways-page');
       const header = host.querySelector('.app-header');
       const panel = host.querySelector('.module-panel, .category-panel');
       const brandMark = host.querySelector('.brand-mark');
@@ -166,6 +173,9 @@ try {
       const taxCatalog = host.querySelector('app-tax-catalog-panel');
       const taxAssignment = host.querySelector('app-tax-assignment-panel');
       const productFilter = host.querySelector('.product-filters select');
+      const arcaControl = host.querySelector('.arca-form input');
+      const certificateState = host.querySelector('.certificate-state');
+      const gatewayCard = host.querySelector('.gateway-register');
       return {
         theme: document.documentElement.dataset.visualTheme,
         route: location.pathname,
@@ -185,6 +195,10 @@ try {
         taxAssignmentSelect: taxAssignment && getComputedStyle(taxAssignment.querySelector('#assignment-tax')).backgroundColor,
         taxAssignmentRows: taxAssignment?.querySelectorAll('tbody tr').length,
         productFilter: productFilter && getComputedStyle(productFilter).backgroundColor,
+        arcaControl: arcaControl && getComputedStyle(arcaControl).backgroundColor,
+        certificateState: certificateState && getComputedStyle(certificateState).backgroundColor,
+        gatewayCard: gatewayCard && getComputedStyle(gatewayCard).backgroundColor,
+        gatewayCards: host.querySelectorAll('.gateway-register').length,
         tableRows: host.querySelectorAll('tbody tr').length,
         documentScrollWidth: document.documentElement.scrollWidth,
         viewportWidth: window.innerWidth,
@@ -239,6 +253,18 @@ try {
     if (route === '/admin/products' && styles.productFilter !==
       (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)')) {
       throw new Error(`The ${theme} article filters did not receive their theme.`);
+    }
+    if (['/admin/arca', '/admin/payment-gateways'].includes(route) && styles.arcaControl !==
+      (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)')) {
+      throw new Error(`The ${theme} integration form controls did not receive their theme.`);
+    }
+    if (route === '/admin/arca' && styles.certificateState && styles.certificateState !==
+      (theme === 'nocturno' ? 'rgb(72, 57, 43)' : 'rgb(198, 232, 227)')) {
+      throw new Error(`The ${theme} certificate status lost its palette.`);
+    }
+    if (route === '/admin/payment-gateways' && styles.gatewayCard && styles.gatewayCard !==
+      (theme === 'nocturno' ? 'rgb(45, 50, 57)' : 'rgb(255, 255, 255)')) {
+      throw new Error(`The ${theme} gateway register card lost its palette.`);
     }
     if (route === '/admin/categories' && width <= 560) {
       styles.tableScroll = await evaluate(`(() => {
@@ -312,6 +338,16 @@ try {
       const detailFile = file.replace(/\.png$/, '-assignment.png');
       await writeFile(detailFile, Buffer.from(detail.data, 'base64'));
       console.log(JSON.stringify({ theme, ...assignment, screenshot: detailFile }));
+      await evaluate('window.scrollTo(0, 0); true');
+    }
+    if (route === '/admin/arca' || route === '/admin/payment-gateways') {
+      const target = route === '/admin/arca' ? '#certificate-title' : '#clover-title';
+      await evaluate(`document.querySelector(${JSON.stringify(target)}).scrollIntoView({ block: 'start' }); true`);
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const detail = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const detailFile = file.replace(/\.png$/, '-details.png');
+      await writeFile(detailFile, Buffer.from(detail.data, 'base64'));
+      console.log(JSON.stringify({ theme, route, screenshot: detailFile }));
       await evaluate('window.scrollTo(0, 0); true');
     }
   }
@@ -614,6 +650,40 @@ try {
       await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
       const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
       const file = path.join(outputDirectory, `admin-customers-dialog-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...editor, screenshot: file }));
+    }
+  }
+  if (inspectGatewayDialog) {
+    const hasRegister = await evaluate("Boolean(document.querySelector('.gateway-register button'))");
+    if (!hasRegister) throw new Error('The visual test company has no gateway register to inspect.');
+    await evaluate(`(() => {
+      document.documentElement.dataset.visualTheme = 'original';
+      document.querySelector('.gateway-register button').click();
+      return true;
+    })()`);
+    await until(() => evaluate("Boolean(document.querySelector('.gateway-dialog input'))"));
+    for (const theme of ['original', 'nocturno']) {
+      const editor = await evaluate(`(() => {
+        document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+        const dialog = document.querySelector('.gateway-dialog');
+        return {
+          theme: document.documentElement.dataset.visualTheme,
+          title: dialog.querySelector('h2')?.textContent.trim(),
+          surface: getComputedStyle(dialog).backgroundColor,
+          ink: getComputedStyle(dialog).color,
+          control: getComputedStyle(dialog.querySelector('input')).backgroundColor,
+          fields: dialog.querySelectorAll('input').length,
+        };
+      })()`);
+      if (!editor.title || editor.fields !== 2 || editor.surface !==
+        (theme === 'nocturno' ? 'rgb(36, 40, 46)' : 'rgb(255, 255, 255)') ||
+        editor.control !== (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)')) {
+        throw new Error(`The ${theme} gateway register editor lost its theme.`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `admin-gateway-dialog-${theme}-${width}x${height}.png`);
       await writeFile(file, Buffer.from(screenshot.data, 'base64'));
       console.log(JSON.stringify({ ...editor, screenshot: file }));
     }

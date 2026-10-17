@@ -1,20 +1,49 @@
+:host {
+  --admin-gateway-card: #fff;
+  --admin-gateway-dialog: #fff;
+  --admin-gateway-ink: #202322;
+  --admin-gateway-muted: #52615d;
+  --admin-gateway-border: #b8c6c2;
+  --admin-gateway-state: #205c54;
+  --admin-gateway-control: #fff;
+  --admin-gateway-control-border: #b2b2b2;
+  --admin-gateway-link: #005e60;
+  --admin-gateway-focus: #71b8da;
+  --admin-gateway-backdrop: #10231fbb;
+  --admin-gateway-heading: #202322;
+}
+:host-context(html[data-visual-theme='nocturno']) {
+  --admin-gateway-card: #2d3239;
+  --admin-gateway-dialog: #24282e;
+  --admin-gateway-ink: #f3efe9;
+  --admin-gateway-muted: #bbb8b3;
+  --admin-gateway-border: #414750;
+  --admin-gateway-state: #e5b27f;
+  --admin-gateway-control: #181b20;
+  --admin-gateway-control-border: #414750;
+  --admin-gateway-link: #e5b27f;
+  --admin-gateway-focus: #e5b27f;
+  --admin-gateway-backdrop: #090b0dcc;
+  --admin-gateway-heading: #e5b27f;
+}
 .gateway-state { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; align-items: end; }
-.gateway-state strong { color: #205c54; }
+.gateway-state strong { color: var(--admin-gateway-state); }
 .gateway-hint { padding: 0 1.25rem 1.25rem; margin: 0; }
 .gateway-registers { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 1rem; padding: 1.25rem; }
-.gateway-register { border: 1px solid #b8c6c2; border-radius: .4rem; padding: 1rem; background: #fff; }
+.gateway-register { color: var(--admin-gateway-ink); border: 1px solid var(--admin-gateway-border); border-radius: .4rem; padding: 1rem; background: var(--admin-gateway-card); }
 .gateway-register div { display: flex; justify-content: space-between; gap: .5rem; }
-.gateway-register small { color: #52615d; }
+.gateway-register small { color: var(--admin-gateway-muted); }
 .gateway-register p { margin: .55rem 0; overflow-wrap: anywhere; }
-.gateway-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 1rem; background: #10231fbb; }
-.gateway-dialog { width: min(100%, 35rem); padding: 1.5rem; background: #fff; border-radius: .6rem; box-shadow: 0 1rem 3rem #0005; }
-.gateway-dialog h2 { margin-top: 0; }
+.gateway-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 1rem; background: var(--admin-gateway-backdrop); }
+.gateway-dialog { box-sizing: border-box; width: min(100%, 35rem); max-height: calc(100vh - 2rem); overflow: auto; padding: 1.5rem; color: var(--admin-gateway-ink); background: var(--admin-gateway-dialog); border: 1px solid var(--admin-gateway-border); border-radius: .6rem; box-shadow: 0 1rem 3rem #0005; }
+.gateway-dialog h2 { margin-top: 0; color: var(--admin-gateway-heading); }
 .gateway-dialog form, .gateway-dialog label { display: grid; gap: .6rem; }
 .gateway-dialog form { gap: 1rem; }
-.gateway-dialog input { min-height: 2.75rem; padding: .5rem .7rem; font: inherit; }
+.gateway-dialog input { box-sizing: border-box; min-width: 0; min-height: 2.75rem; padding: .5rem .7rem; color: var(--admin-gateway-ink); background: var(--admin-gateway-control); border: 1px solid var(--admin-gateway-control-border); border-radius: .25rem; font: inherit; }
+.gateway-dialog input:focus-visible, .gateway-oauth-link input:focus-visible, .gateway-oauth-link a:focus-visible { outline: 3px solid var(--admin-gateway-focus); outline-offset: 2px; }
 .gateway-actions { display: flex; justify-content: flex-end; gap: .6rem; }
 .gateway-clover-actions { display: flex; flex-wrap: wrap; gap: .6rem; padding: 0 1.25rem 1.25rem; }
-.gateway-oauth-link { display: grid; gap: .6rem; margin: 0 1.25rem 1.25rem; padding: 1rem; border: 1px solid #b8c6c2; border-radius: .4rem; background: #fff; }
+.gateway-oauth-link { display: grid; gap: .6rem; margin: 0 1.25rem 1.25rem; padding: 1rem; color: var(--admin-gateway-ink); border: 1px solid var(--admin-gateway-border); border-radius: .4rem; background: var(--admin-gateway-card); }
 .gateway-oauth-link p { margin: 0; }
-.gateway-oauth-link input { width: 100%; min-width: 0; padding: .55rem; font: inherit; }
-.gateway-oauth-link a { overflow-wrap: anywhere; }
+.gateway-oauth-link input { box-sizing: border-box; width: 100%; min-width: 0; padding: .55rem; color: var(--admin-gateway-ink); background: var(--admin-gateway-control); border: 1px solid var(--admin-gateway-control-border); border-radius: .25rem; font: inherit; }
+.gateway-oauth-link a { color: var(--admin-gateway-link); overflow-wrap: anywhere; }

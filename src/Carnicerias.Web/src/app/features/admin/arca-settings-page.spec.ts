@@ -43,6 +43,28 @@ describe('ArcaSettingsPage', () => {
     expect(page.querySelector<HTMLInputElement>('#arca-pfx-password')?.value).toBe('');
   });
 
+  it('themes issuer controls and certificate status without exposing or uploading the PFX', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const { fixture, http, page } = load();
+      expect(getComputedStyle(page).getPropertyValue('--admin-arca-control').trim()).toBe('#fff');
+      expect(page.querySelector('.certificate-state')?.textContent).toContain('Vigente');
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(page).getPropertyValue('--admin-arca-control').trim()).toBe('#181b20');
+      expect(getComputedStyle(page).getPropertyValue('--admin-arca-state-bg').trim()).toBe('#48392b');
+      expect(page.querySelector<HTMLInputElement>('#arca-pfx-password')?.value).toBe('');
+      expect(page.querySelector('.certificate-state')?.textContent).toContain('Vigente');
+      http.expectNone((request) => request.method !== 'GET');
+      fixture.destroy();
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
   it('sends issuer metadata without certificate bytes or password', () => {
     const { fixture, http, page } = load();
     page.querySelector<HTMLButtonElement>('.arca-actions button')!.click();

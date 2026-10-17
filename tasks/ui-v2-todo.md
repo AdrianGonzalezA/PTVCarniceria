@@ -102,12 +102,13 @@
   - Verificar: `customers-page.spec.ts` y tabla/modal en ambos temas. Crear hoja propia solo si los estilos comunes no alcanzan.
   - Dependencias: T3.3 y T3.4. Archivos previstos (hasta 3): `admin/customers-page.ts`, `admin/customers-page.spec.ts`, `admin/customers-page.scss` (nuevo solo si hace falta).
   - Evidencia 17/10/2026: 2/2 pruebas focalizadas; modal de edición conserva nombre y código al cambiar de tema, sin solicitudes de escritura. `/admin/customers` revisada con 3 clientes ficticios a 1366 × 768 y 560 × 768; tabla de 841 px desplazable en contenedor de 511 px, última acción alcanzable. No hizo falta agregar estilos propios.
-- [ ] **T3.9 · ARCA y pasarelas.** Tematizar certificados, estados de integración y formularios de cobro.
+- [x] **T3.9 · ARCA y pasarelas.** Certificados, estados de integración y formularios de cobro tematizados.
   - Aceptación: datos sensibles ya enmascarados, errores, botones y formularios siguen legibles; no se conecta ni emite nada para verificar colores.
   - Verificar: `arca-settings-page.spec.ts`, `payment-gateways-page.spec.ts` y ambas rutas en dos temas.
   - Dependencia: T3.3. Archivos previstos (4): `admin/arca-settings-page.scss`, `admin/arca-settings-page.spec.ts`, `admin/payment-gateways-page.scss`, `admin/payment-gateways-page.spec.ts`.
+  - Evidencia 17/10/2026: pruebas focalizadas rojo/verde (9/9) sin subir PFX ni invocar OAuth, conexión o cobros. `/admin/arca` y `/admin/payment-gateways` revisadas a 1366 × 768 y 560 × 768; vigencia, selector PFX, estados MP/Clover y modal de caja abiertos en Original/Nocturno, con campos sensibles vacíos/ocultos. No se modificó configuración.
 
-**Checkpoint T3-C:** Artículos, Precios, Clientes, ARCA y Pasarelas comprobados en Original/Nocturno; suite Angular, lint y build en verde.
+**Checkpoint T3-C (17/10/2026):** Artículos, Precios, Clientes, ARCA y Pasarelas comprobados en Original/Nocturno; suite Angular 181/181, lint y build correctos. Persisten solo las advertencias conocidas de presupuesto CSS en `admin-page.scss` y `categories-page.scss` y de `qrcode` CommonJS.
 
 - [ ] **T3.10 · Organización y conexión central de la sucursal.** Tematizar empresas/cajas y paquete de conexión sin cambiar la integración.
   - Aceptación: formularios, estados y credenciales ya ocultas se leen en ambas rutas sin revelar secretos ni cambiar datos.

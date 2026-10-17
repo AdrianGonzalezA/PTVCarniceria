@@ -49,17 +49,18 @@
   - [x] **T2a · Estilos aislados:** Original usa la base anterior y Nocturno la capa global `html[data-visual-theme="nocturno"]`; ambos medidos en Electron. Dependencia: T1. Archivos: `pos-page.scss`, `pos-page.spec.ts` (2).
   - [x] **T2b · Contenido y detalle:** marca, stock visible y tabla de seis columnas en Original; Nocturno mantiene tabla compacta. Una sola barra A–D cambia de ubicación por CSS. Pruebas POS, lint y build correctos. Dependencia: T2a. Archivos: `pos-page.html`, `pos-page.scss`, `pos-page.spec.ts` (3).
   - [x] **T2c · Electron y regresión:** ticket vacío y cinco líneas revisados a 1366 × 768 y 1920 × 992 CSS px; ambos temas comprobados también a 800 × 768 y 560 × 768 con paneles apilados, A–D y cobro accesibles. Stock cero explícito en Original, scroll interno y menú Nocturno corregidos. La prueba de DPI físico 125 %/150 % queda en la tarea general de acabado UI2. Dependencia: T2b. Archivos: `pos-page.scss`, `pos-page.spec.ts`, `tests/inspect-electron.mjs`, `tasks/ui-v2-plan.md` (4).
-- [ ] **T3 · Administración Original/Nocturno:** especificación y plan aprobados para la aplicación de sucursal/empresa y SuperAdmin local; el portal Central queda fuera. La lista T3.1–T3.16 siguiente está propuesta para revisión antes de implementar. Dependencia: T1 y T2. El selector permanece oculto hasta T4.
+- [ ] **T3 · Administración Original/Nocturno:** especificación, plan y lista T3.1–T3.16 aprobados para la aplicación de sucursal/empresa y SuperAdmin local; el portal Central queda fuera. Dependencia: T1 y T2. El selector permanece oculto hasta T4.
 - [ ] **T4 · Selector en Configuración:** mostrar opciones y alcance local; cambio inmediato sin recargar ni tocar ticket, persistencia tras reinicio. Dependencias: T1–T3. Verificar: prueba de la pantalla administrativa y prueba en Electron/navegador como perfiles separados; suite Angular, lint y build. Archivos previstos: `admin-page.html`, `admin-page.ts`, `admin-page.scss`, `admin-page.spec.ts` (4).
 
-### T3 · Lista ejecutable propuesta
+### T3 · Lista ejecutable aprobada
 
 **Base de archivos:** `src/Carnicerias.Web/src/app/features/`. Las rutas de archivos de cada tarea son relativas a esa carpeta. Se ejecutará `npm test --prefix src/Carnicerias.Web -- --watch=false --include=**/NOMBRE.spec.ts` para la prueba focalizada indicada; en cada checkpoint se ejecutarán además `npm test --prefix src/Carnicerias.Web -- --watch=false`, `npm run lint --prefix src/Carnicerias.Web` y `npm run build --prefix src/Carnicerias.Web`. La inspección del administrador puede hacerse en navegador o Electron; cualquier inspección visual del POS será **solo en Electron**. No se crean ni reinician bases.
 
-- [ ] **T3.1 · Shell de Negocio y Configuración.** Aplicar tokens Nocturno al host compartido y verificar el alcance real del selector compilado.
+- [x] **T3.1 · Shell de Negocio y Configuración.** Tokens Nocturno en el host compartido y alcance del selector compilado comprobados en ambas rutas. El SCSS global Nocturno del POS se acotó a `app-pos-page` tras detectar que ocultaba la marca administrativa.
   - Aceptación: `/admin` y `/admin/configuracion` cambian superficies, texto y cabecera sin recargar; Original, POS y `/` no cambian.
   - Verificar: `admin-page.spec.ts`, build y color calculado/captura de ambas rutas con ambos temas.
   - Dependencias: T1, T2 y plan T3 aprobado. Archivos previstos (2): `admin/admin-page.scss`, `admin/admin-page.spec.ts`.
+  - Evidencia 17/10/2026: Original `#111`/cabecera `#3d3d3d`/panel `#ededed`; Nocturno `#181b20`/`#24282e`/`#24282e`, medidos en Chromium aislado a 1366 × 768. Capturas de ambas rutas revisadas. La prueba de colisión de marca falló antes y pasó después; el POS Nocturno se inspeccionó en Electron con cinco renglones y total $47.554,00, luego se restauró Original. Suite Angular 167/167, pruebas POS 39/39, lint y build correctos. Sin cambios de venta o base.
 - [ ] **T3.2 · Navegación entre áreas.** Tematizar las pestañas Negocio/Configuración y su foco.
   - Aceptación: área activa y foco se distinguen en ambos temas; las rutas y `aria-current` se conservan.
   - Verificar: `admin-area-navigation.spec.ts` y navegación por teclado en ambas áreas.

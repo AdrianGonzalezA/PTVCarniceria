@@ -45,9 +45,9 @@ El riesgo principal es que Original requiere estructura previa, no solo otra pal
 
 **Plan detallado de T2, aprobado como alcance el 17/10/2026:** `SPEC-pos-visual-themes.md` toma `eb9292b` como referencia Original. Primero se separan los estilos en una base Original y una capa Nocturno limitada por el atributo de tema; `styles.scss` importa el SCSS del POS globalmente, por lo que el selector usa `html[data-visual-theme='nocturno']` y no `:host-context`. Después se recuperan marca, información de stock y sexta columna del ticket en Original con una sola tabla y un solo control visible A–D. Por último se verifica responsive, estados y flujo en Electron. Cada corte conserva pruebas y build correctos; no se toca `pos-page.ts`, API o base salvo que una prueba evidencie una necesidad real. La ubicación de A–D es el mayor riesgo de layout porque Original usa pie completo y Nocturno pie del catálogo; se medirá en ambos tamaños antes de considerar T2 cerrado.
 
-## Plan técnico propuesto de T3: administración Original/Nocturno
+## Plan técnico aprobado de T3: administración Original/Nocturno
 
-**Especificación aprobada:** [`SPEC-admin-visual-themes.md`](../SPEC-admin-visual-themes.md), limitada a `Carnicerias.Web`. El portal `Carnicerias.Central.Web` queda fuera de este corte. Esta sección es el plan para revisión; la lista T3 detallada en `tasks/ui-v2-todo.md` se descompondrá después de aprobar el orden. No se modifica `tasks/plan.md` ni `tasks/todo.md`, que conservan pendientes históricos de *platform access*.
+**Especificación y orden aprobados por el usuario el 17/10/2026:** [`SPEC-admin-visual-themes.md`](../SPEC-admin-visual-themes.md), limitada a `Carnicerias.Web`. El portal `Carnicerias.Central.Web` queda fuera de este corte. La lista ejecutable T3 está en `tasks/ui-v2-todo.md` y requiere su propia revisión antes de implementar. No se modifica `tasks/plan.md` ni `tasks/todo.md`, que conservan pendientes históricos de *platform access*.
 
 **Dependencias:** el atributo raíz y la preferencia local de T1 ya funcionan; el POS T2 ya interpreta ese atributo. La administración no tendrá otra fuente de estado. El grafo de presentación es:
 

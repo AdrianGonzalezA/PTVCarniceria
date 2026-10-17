@@ -58,5 +58,6 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 | 17/10/2026 | 11:03:54 | 11:27:02 | 23 min | Implementar y verificar temas visuales del POS (T2) | Original y Nocturno revisados en Electron a 1366 × 768, 1920 × 992, 800 × 768 y 560 × 768 CSS px con cinco líneas de borrador; A–B–A y recarga conservaron el ticket. 166 pruebas Angular, 88 Electron, lint y build correctos. Sin ventas confirmadas ni nuevas bases. |
 | 17/10/2026 | 11:27:02 | 11:29:13 | 2 min | Especificar temas visuales de administración (T3) | Se inventariaron rutas y estilos de la aplicación de sucursal y se explicitó el límite con el portal Central independiente. Especificación pendiente de aprobación; sin cambios de aplicación ni de base. |
 | 17/10/2026 | 12:14:34 | 12:16:03 | 1 min medido | Planificar temas visuales de administración (T3) | Primera marca fiable posterior a la aprobación del usuario. Se confirmó el alcance, se contrastó el mecanismo de estilos con la documentación oficial de Angular y se propuso el orden técnico; sin cambios de aplicación ni de base. |
+| 17/10/2026 | 12:24:06 | 12:25:27 | 1 min medido | Descomponer T3 en tareas verificables | Primera marca fiable posterior a la aprobación del plan. Se definieron 16 cortes de hasta cinco archivos con dependencias, criterios y checkpoints; sin cambios de aplicación ni de base. |
 
-**Total activo registrado desde el 16/10/2026:** 124 min medidos, más tramos no cuantificables.
+**Total activo registrado desde el 16/10/2026:** 125 min medidos, más tramos no cuantificables.

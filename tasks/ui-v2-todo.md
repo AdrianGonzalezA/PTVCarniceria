@@ -39,3 +39,19 @@
 - [ ] Todas las funciones previas siguen accesibles y la venta no utiliza el estado demo de `UI2`.
 - [ ] Capturas y medidas de Electron documentadas; límites de hardware y DPI no probado declarados.
 - [ ] Revisión de diff antes de integrar `feature/ui-v2` a `main`.
+
+## 5. Temas por perfil local — plan propuesto
+
+**Fuente:** `CAPABILITY-MAP-visual-themes.md` y `SPEC-visual-theme-selection.md`. Esta sección extiende el trabajo UI2 en la **misma rama**; no sustituye las tareas anteriores. No habilitar el selector al público hasta que Original y Nocturno se rendericen correctamente.
+
+- [ ] **T1 · Preferencia local y registro:** IDs Original/Nocturno, lectura y escritura por perfil, valor Original ante ausencia, ID inválido o error de almacenamiento. Aplicar el ID antes del primer render sin tocar sesión ni ventas. Dependencia: ninguna. Verificar: pruebas unitarias focalizadas, Angular completo, lint y build. Archivos previstos: `core/theme/visual-theme.ts`, `core/theme/visual-theme.spec.ts`, `main.ts` (3).
+- [ ] **T2 · POS Original/Nocturno:** redactar y aprobar `SPEC-pos-visual-themes.md`; reconstruir la distribución anterior para Original y conservar UI2 para Nocturno con un solo estado de venta. Dependencia: T1. Verificar: pruebas POS y capturas en Electron de ambos temas con ticket persistido. Subdividir en cortes de hasta cinco archivos al especificar.
+- [ ] **T3 · Administración Original/Nocturno:** redactar y aprobar `SPEC-admin-visual-themes.md`; aplicar Nocturno a Configuración, Negocio, ABM, Usuarios y SuperAdmin sin perder Original. Dependencia: T1. Verificar: pruebas de navegación, tablas/modales y revisión visual de cada ruta. Subdividir por familias de pantallas de hasta cinco archivos al especificar.
+- [ ] **T4 · Selector en Configuración:** mostrar opciones y alcance local; cambio inmediato sin recargar ni tocar ticket, persistencia tras reinicio. Dependencias: T1–T3. Verificar: prueba de la pantalla administrativa y prueba en Electron/navegador como perfiles separados; suite Angular, lint y build. Archivos previstos: `admin-page.html`, `admin-page.ts`, `admin-page.scss`, `admin-page.spec.ts` (4).
+
+### Checkpoint de temas
+
+- [ ] Original reproduce la interfaz anterior y Nocturno la actual; ambos preservan la venta y los tickets A–D.
+- [ ] Las pantallas administrativas, sus diálogos y estados de error son legibles en ambos temas y funcionan con teclado.
+- [ ] Un equipo puede conservar su elección sin cambiar la de otro; una preferencia inválida vuelve a Original.
+- [ ] El usuario revisó y aceptó las dos variantes antes de integrar esta rama a `main`.

@@ -6,9 +6,11 @@
 
 ## Objetivo y contrato visual
 
-Rediseñar solamente la pantalla real del POS Angular/Electron para operar rápido en pantalla táctil: identidad grafito/cobre, categorías verticales en el extremo izquierdo, catálogo de productos a su derecha y compra/ticket amplio a la derecha (hasta 540 CSS px). Los botones de producto apuntan a 64–70 px de alto, con nombre, precio y unidad de venta cuando corresponda. El objetivo de densidad es mostrar los 35 cortes de referencia en 1366 × 768 CSS px al 100 %, con editor cerrado; es una meta que se debe medir en Electron, no una garantía tomada de la maqueta.
+El primer alcance rediseña la pantalla real del POS Angular/Electron para operar rápido en pantalla táctil: identidad grafito/cobre, categorías verticales en el extremo izquierdo, catálogo de productos a su derecha y compra/ticket amplio a la derecha (hasta 540 CSS px). Los botones de producto apuntan a 64–70 px de alto, con nombre, precio y unidad de venta cuando corresponda. El objetivo de densidad es mostrar los 35 cortes de referencia en 1366 × 768 CSS px al 100 %, con editor cerrado; es una meta que se debe medir en Electron, no una garantía tomada de la maqueta. El alcance posterior aprobado incorpora temas visuales por perfil local y la variante Nocturno de todas las pantallas administrativas, sin crear otra rama por estilo.
 
 **Decisión de distribución (16/10/2026):** la referencia UI2 propone el ticket a la izquierda, pero el usuario prefirió expresamente conservar la distribución anterior del POS: catálogo a la izquierda y compra a la derecha. Luego precisó categorías verticales bien a la izquierda y más superficie para la compra; esta indicación reemplaza el pedido intermedio de categorías horizontales. Se mantiene la identidad, densidad y funcionalidad de UI2; sus archivos de referencia no se modifican.
+
+**Ampliación aprobada (17/10/2026):** [mapa de temas](../CAPABILITY-MAP-visual-themes.md) y [selector local](../SPEC-visual-theme-selection.md). Original debe recuperar aspecto **y distribución** anteriores; Nocturno es la versión UI2 actual. Cada perfil Electron o navegador elige por separado. Se trabajará íntegramente en `feature/ui-v2`; no se integra a `main` hasta probar ambas variantes y recibir acuerdo del usuario. Los temas siguientes reutilizarán el registro sin ramas por estilo.
 
 ## Alcance y límites
 
@@ -30,6 +32,16 @@ Rediseñar solamente la pantalla real del POS Angular/Electron para operar rápi
 7. Recorrer el flujo de venta y cobro existente, actualizar manual de usuarios y presentar capturas/medidas y límites pendientes.
 
 Cada etapa se entrega en un incremento compilable, con prueba focalizada antes de pasar a la siguiente. Los criterios detallados y checkpoints están en `tasks/ui-v2-todo.md`.
+
+## Extensión: temas visuales configurables (plan propuesto)
+
+1. Construir y probar el registro tipado y la preferencia local con valor predeterminado Original, tratamiento de IDs desconocidos y almacenamiento inaccesible. Preparar la aplicación temprana del identificador sin exponer todavía un selector que prometa una apariencia no implementada.
+2. Especificar y construir `pos-visual-themes` sobre un único estado de venta. Verificar Original frente a la versión anterior a UI2 y Nocturno frente a la caja actual, ambos en Electron, incluyendo borrador A–D y tamaños de pantalla.
+3. Especificar y construir `admin-visual-themes`: estilos Nocturno para Negocio, Configuración, ABM, Usuarios y SuperAdmin, incluidos modales, tablas, estados vacíos/error y navegación; Original sigue disponible.
+4. Habilitar «Tema visual» en Configuración solo cuando ambas variantes estén listas. El cambio debe ser inmediato y persistente por perfil, sin recargar ni alterar el ticket. Probar Electron y navegador como perfiles independientes.
+5. Ejecutar regresión completa y revisión visual por ruta; corregir contraste, foco y responsive; actualizar manual. Mantener la rama sin integrar a `main` hasta la aceptación del usuario.
+
+El riesgo principal es que Original requiere estructura previa, no solo otra paleta. Se reutilizarán señales y servicios del POS y se variará únicamente presentación. El selector no será visible en una versión intermedia que muestre «Original» con aspecto Nocturno. No hay migración ni otra base.
 
 ## Estado y medición en Electron (16/10/2026)
 

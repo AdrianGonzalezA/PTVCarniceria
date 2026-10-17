@@ -12,6 +12,47 @@ describe('PieceReceiptPage', () => {
 
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
+  it('themes profile/product selection and piece history without receiving a piece', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const fixture = TestBed.createComponent(PieceReceiptPage);
+      fixture.detectChanges();
+      const http = TestBed.inject(HttpTestingController);
+      http.expectOne('/api/sessions/current').flush({ userId: 'admin-id', username: 'admin', expiresAtUtc: '',
+        context: { userId: 'admin-id', companyId: 'company-id', companyName: 'Empresa Visual',
+          branchId: 'branch-id', branchName: 'Sucursal Visual',
+          permissions: ['inventory.stock.manage'], sessionId: 'session-id' } });
+      http.expectOne('/api/admin/barcode-layouts').flush([{ id: 'profile-id', name: 'Ciclo 2',
+        revision: 1, formula: 'pro_identif(6) peso(5)', weightField: 'peso',
+        weightDecimals: 3, createdAtUtc: '2026-10-08T13:00:00Z' }]);
+      http.expectOne('/api/inventory/stock').flush([{ productId: 'product-id', code: '2546',
+        name: 'CORTITO C/FALDA EXP', unit: 'kg', saleMode: 'weight',
+        onHand: 0, reserved: 0, available: 0 }]);
+      http.expectOne('/api/inventory/pieces?page=1&pageSize=20').flush({
+        items: [{ id: 'piece-id', productId: 'product-id', productCode: '2546',
+          productName: 'CORTITO C/FALDA EXP', sourceSystem: 'Frigorífico',
+          externalIdentifier: '250661', receivedWeightKg: 51.6, rawBarcode: '2250661516008',
+          receivedAtUtc: '2026-10-08T14:00:00Z' }], page: 1, pageSize: 20, total: 1,
+      });
+      fixture.detectChanges();
+      const page = fixture.nativeElement as HTMLElement;
+      expect(getComputedStyle(page).getPropertyValue('--admin-piece-control').trim()).toBe('#fff');
+      expect(page.textContent).toContain('250661');
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(page).getPropertyValue('--admin-piece-control').trim()).toBe('#181b20');
+      expect(getComputedStyle(page).getPropertyValue('--admin-piece-muted').trim()).toBe('#bbb8b3');
+      expect(page.textContent).toContain('250661');
+      http.expectNone((request) => request.method !== 'GET');
+      fixture.destroy();
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
   it('receives one scanned piece against a saved profile and selected weight product', () => {
     const fixture = TestBed.createComponent(PieceReceiptPage);
     fixture.detectChanges();

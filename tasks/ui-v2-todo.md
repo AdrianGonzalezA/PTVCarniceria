@@ -120,12 +120,13 @@
   - Verificar: `product-tax-page.spec.ts`, `barcode-layout-page.spec.ts` y `/admin/taxes`, `/admin/barcode-layouts`.
   - Dependencias: T3.3 y T3.6. Archivos previstos (4): `admin/product-tax-page.scss`, `admin/product-tax-page.spec.ts`, `admin/barcode-layout-page.scss`, `admin/barcode-layout-page.spec.ts`.
   - Evidencia 17/10/2026: pruebas focalizadas rojo/verde (8/8), build correcto. Editor de IVA e historial, perfiles guardados y lectura interpretada comprobados en Original/Nocturno a 1366 × 768 y 560 × 768. La previsualización EAN-13 devolvió 51,60 kg y cuatro campos sin ingreso de stock; no se guardaron reglas ni revisiones.
-- [ ] **T3.12 · Existencias y recepción de piezas.** Cubrir ajustes, importación de stock y trazabilidad.
+- [x] **T3.12 · Existencias y recepción de piezas.** Cubrir ajustes, importación de stock y trazabilidad.
   - Aceptación: tablas, cantidades y errores se leen en ambos temas; se pueden abrir modales sin guardar movimientos.
   - Verificar: `stock-page.spec.ts`, `piece-receipt-page.spec.ts` y ambas rutas en dos temas.
   - Dependencias: T3.3 y T3.4. Archivos previstos (4): `admin/stock-page.scss`, `admin/stock-page.spec.ts`, `admin/piece-receipt-page.scss`, `admin/piece-receipt-page.spec.ts`.
+  - Evidencia 17/10/2026: pruebas focalizadas rojo/verde (8/8). Existencias, modal de ajuste sin guardar y dos piezas existentes revisados en Original/Nocturno a 1366 × 768 y 560 × 768. Campos de recepción y tabla reciente legibles; no se registraron ajustes ni piezas.
 
-**Checkpoint T3-D:** Organización, conexión, impuestos, códigos, existencias y piezas comprobados; suite Angular, lint y build en verde.
+**Checkpoint T3-D (17/10/2026):** Organización, conexión, impuestos, códigos, existencias y piezas comprobados; 187/187 pruebas Angular, lint y build en verde. Persisten solo los avisos de presupuesto SCSS preexistentes y `qrcode` CommonJS.
 
 - [ ] **T3.13 · Historial y cuentas corrientes.** Tematizar resúmenes, importes, filtros y estados.
   - Aceptación: historial, movimientos y saldos conservan jerarquía y signos legibles en ambos temas; no se registra ningún cobro.

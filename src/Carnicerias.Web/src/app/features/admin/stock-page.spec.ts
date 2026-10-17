@@ -29,6 +29,28 @@ describe('StockPage', () => {
     return { fixture, http, page: fixture.nativeElement as HTMLElement };
   }
 
+  it('themes stock quantities and adjustment modal without writing an adjustment', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const { fixture, http, page } = load();
+      expect(getComputedStyle(page).getPropertyValue('--admin-stock-muted').trim()).toBe('#655d52');
+      page.querySelector<HTMLButtonElement>('.stock-row button')!.click();
+      fixture.detectChanges();
+      expect(page.querySelector('#stock-adjustment-title')?.textContent).toContain('Asado');
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(page).getPropertyValue('--admin-stock-muted').trim()).toBe('#bbb8b3');
+      expect(page.querySelector('dialog[open] #stock-delta')).not.toBeNull();
+      http.expectNone('/api/inventory/adjustments');
+      fixture.destroy();
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
   it('shows branch stock and persists a positive adjustment with an operation id', () => {
     const { fixture, http, page } = load();
     expect(page.textContent).toContain('Centro');

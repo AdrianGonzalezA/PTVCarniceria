@@ -13,7 +13,7 @@ if (!companyCode || !username || !password) {
 }
 
 const route = process.argv[2] ?? '/admin';
-if (!/^\/admin(?:\/(?:configuracion|categories|taxes|products|price-lists|customers|arca|payment-gateways|organization|central-connection|barcode-layouts))?$/.test(route)) {
+if (!/^\/admin(?:\/(?:configuracion|categories|taxes|products|price-lists|customers|arca|payment-gateways|organization|central-connection|barcode-layouts|stock|pieces))?$/.test(route)) {
   throw new Error('Only the initial administration routes are supported.');
 }
 const viewport = /^--viewport=(\d{3,4})x(\d{3,4})$/.exec(
@@ -25,7 +25,7 @@ const height = Number(viewport[2]);
 const expectedTab = ['/admin/categories', '/admin/taxes', '/admin/products', '/admin/price-lists',
   '/admin/customers', '/admin/arca', '/admin/payment-gateways', '/admin/organization',
   '/admin/central-connection', '/admin/barcode-layouts']
-  .includes(route) ? '/admin/configuracion' : route;
+  .includes(route) ? '/admin/configuracion' : ['/admin/stock', '/admin/pieces'].includes(route) ? '/admin' : route;
 const inspectDialog = process.argv.includes('--dialog');
 const inspectImportDialog = process.argv.includes('--import-dialog');
 const inspectTaxDialog = process.argv.includes('--tax-dialog');
@@ -37,6 +37,7 @@ const inspectOrganizationDialog = process.argv.includes('--organization-dialog')
 const mockCentral = process.argv.includes('--mock-central');
 const inspectTaxEditor = process.argv.includes('--tax-editor');
 const inspectBarcodePreview = process.argv.includes('--barcode-preview');
+const inspectStockDialog = process.argv.includes('--stock-dialog');
 if ((inspectDialog || inspectImportDialog) && route !== '/admin/categories') {
   throw new Error('Dialog checks require /admin/categories.');
 }
@@ -57,6 +58,7 @@ if (inspectTaxEditor && route !== '/admin/taxes') throw new Error('--tax-editor 
 if (inspectBarcodePreview && route !== '/admin/barcode-layouts') {
   throw new Error('--barcode-preview requires /admin/barcode-layouts.');
 }
+if (inspectStockDialog && route !== '/admin/stock') throw new Error('--stock-dialog requires /admin/stock.');
 if (inspectDialog && inspectImportDialog) throw new Error('Choose one dialog check at a time.');
 const outputDirectory = process.argv.find((argument) => argument.startsWith('--output='))?.slice(9) ??
   path.join(tmpdir(), 'carnicerias-admin-theme');
@@ -192,6 +194,8 @@ try {
       route === '/admin/organization' ? 'app-organization-page .company-row' :
       route === '/admin/central-connection' ? 'app-central-connection-page #identity-title, app-central-connection-page .central-error' :
       route === '/admin/barcode-layouts' ? 'app-barcode-layout-page .barcode-form' :
+      route === '/admin/stock' ? 'app-stock-page .stock-row' :
+      route === '/admin/pieces' ? 'app-piece-receipt-page .piece-form' :
       'app-admin-page .module-panel')}
   ))`));
   if (route === '/admin/taxes') {
@@ -202,12 +206,18 @@ try {
         !assignment.querySelector('.state-message[role="status"]');
     })()`));
   }
+  if (route === '/admin/barcode-layouts') {
+    await until(() => evaluate("Boolean(document.querySelector('app-barcode-layout-page .saved-profile'))"));
+  }
+  if (route === '/admin/pieces') {
+    await until(() => evaluate("Boolean(document.querySelector('app-piece-receipt-page .table-wrap tbody tr'))"));
+  }
   await mkdir(outputDirectory, { recursive: true });
   for (const theme of ['original', 'nocturno']) {
     const styles = await evaluate(`(() => {
       document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
       const host = document.querySelector(
-        'app-admin-page, app-categories-page, app-product-tax-page, app-products-page, app-price-lists-page, app-customers-page, app-arca-settings-page, app-payment-gateways-page, app-organization-page, app-central-connection-page, app-barcode-layout-page');
+        'app-admin-page, app-categories-page, app-product-tax-page, app-products-page, app-price-lists-page, app-customers-page, app-arca-settings-page, app-payment-gateways-page, app-organization-page, app-central-connection-page, app-barcode-layout-page, app-stock-page, app-piece-receipt-page');
       const header = host.querySelector('.app-header');
       const panel = host.querySelector('.module-panel, .category-panel, .central-error');
       const brandMark = host.querySelector('.brand-mark');
@@ -222,6 +232,8 @@ try {
       const gatewayCard = host.querySelector('.gateway-register');
       const centralControl = host.querySelector('#central-destination-url');
       const savedProfile = host.querySelector('.saved-profile');
+      const pieceProfile = host.querySelector('#piece-profile');
+      const stockCode = host.querySelector('.stock-row td small');
       return {
         theme: document.documentElement.dataset.visualTheme,
         route: location.pathname,
@@ -249,6 +261,9 @@ try {
         centralAvailable: Boolean(centralControl),
         savedProfile: savedProfile && getComputedStyle(savedProfile).backgroundColor,
         savedProfiles: host.querySelectorAll('.saved-profile').length,
+        pieceProfile: pieceProfile && getComputedStyle(pieceProfile).backgroundColor,
+        pieceRows: host.querySelectorAll('#recent-pieces-title ~ .table-wrap tbody tr').length,
+        stockCode: stockCode && getComputedStyle(stockCode).color,
         tableRows: host.querySelectorAll('tbody tr').length,
         documentScrollWidth: document.documentElement.scrollWidth,
         viewportWidth: window.innerWidth,
@@ -324,6 +339,14 @@ try {
     if (route === '/admin/barcode-layouts' && styles.savedProfile && styles.savedProfile !==
       (theme === 'nocturno' ? 'rgb(45, 50, 57)' : 'rgb(255, 255, 255)')) {
       throw new Error(`The ${theme} saved barcode profiles did not receive their theme.`);
+    }
+    if (route === '/admin/pieces' && styles.pieceProfile !==
+      (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)')) {
+      throw new Error(`The ${theme} piece receipt selectors did not receive their theme.`);
+    }
+    if (route === '/admin/stock' && styles.stockCode !==
+      (theme === 'nocturno' ? 'rgb(187, 184, 179)' : 'rgb(101, 93, 82)')) {
+      throw new Error(`The ${theme} stock item metadata lost its contrast.`);
     }
     if (route === '/admin/categories' && width <= 560) {
       styles.tableScroll = await evaluate(`(() => {
@@ -416,6 +439,15 @@ try {
       const detailFile = file.replace(/\.png$/, '-package.png');
       await writeFile(detailFile, Buffer.from(detail.data, 'base64'));
       console.log(JSON.stringify({ theme, route, simulated: mockCentral, screenshot: detailFile }));
+      await evaluate('window.scrollTo(0, 0); true');
+    }
+    if (route === '/admin/pieces') {
+      await evaluate("document.querySelector('#recent-pieces-title').scrollIntoView({ block: 'start' }); true");
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const detail = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const detailFile = file.replace(/\.png$/, '-history.png');
+      await writeFile(detailFile, Buffer.from(detail.data, 'base64'));
+      console.log(JSON.stringify({ theme, route, screenshot: detailFile }));
       await evaluate('window.scrollTo(0, 0); true');
     }
   }
@@ -846,6 +878,36 @@ try {
       const file = path.join(outputDirectory, `admin-barcode-preview-${theme}-${width}x${height}.png`);
       await writeFile(file, Buffer.from(screenshot.data, 'base64'));
       console.log(JSON.stringify({ ...result, screenshot: file }));
+    }
+  }
+  if (inspectStockDialog) {
+    await evaluate(`(() => {
+      document.documentElement.dataset.visualTheme = 'original';
+      document.querySelector('.stock-row button').click();
+      return true;
+    })()`);
+    await until(() => evaluate("Boolean(document.querySelector('.admin-detail-dialog[open] #stock-delta'))"));
+    for (const theme of ['original', 'nocturno']) {
+      const adjustment = await evaluate(`(() => {
+        document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+        const dialog = document.querySelector('.admin-detail-dialog[open]');
+        return {
+          theme: document.documentElement.dataset.visualTheme,
+          title: dialog.querySelector('h2')?.textContent.trim(),
+          surface: getComputedStyle(dialog).backgroundColor,
+          amount: dialog.querySelector('#stock-delta').value,
+          optionalReason: !dialog.querySelector('#stock-reason').required,
+        };
+      })()`);
+      if (!adjustment.title || !adjustment.optionalReason || adjustment.surface !==
+        (theme === 'nocturno' ? 'rgb(36, 40, 46)' : 'rgb(237, 237, 237)')) {
+        throw new Error(`The ${theme} stock adjustment dialog lost its state or theme.`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `admin-stock-dialog-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...adjustment, screenshot: file }));
     }
   }
 } finally {

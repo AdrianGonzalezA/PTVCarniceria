@@ -30,6 +30,30 @@ describe('OrganizationPage', () => {
     return { fixture, http, page: fixture.nativeElement as HTMLElement };
   }
 
+  it('themes organization selection and branch details without changing entities', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const { fixture, http, page } = load();
+      expect(getComputedStyle(page).getPropertyValue('--admin-org-selected').trim()).toBe('#dceeed');
+      page.querySelector<HTMLButtonElement>('.company-row button')!.click();
+      http.expectOne('/api/admin/companies/company-1/branches').flush([branch]);
+      fixture.detectChanges();
+      expect(page.querySelector('dialog[open] .branch-row')?.textContent).toContain('Centro');
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(page).getPropertyValue('--admin-org-selected').trim()).toBe('#48392b');
+      expect(getComputedStyle(page).getPropertyValue('--admin-org-notice').trim()).toBe('#2d3239');
+      expect(page.querySelector('dialog[open] .branch-row')?.textContent).toContain('Centro');
+      http.expectNone((request) => request.method !== 'GET');
+      fixture.destroy();
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
   it('shows the current company and prevents inactivating its active branch', () => {
     const { fixture, http, page } = load();
     expect(page.querySelector('h1')?.textContent).toContain('Organización');

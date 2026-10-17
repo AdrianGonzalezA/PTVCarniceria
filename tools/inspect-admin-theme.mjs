@@ -13,7 +13,7 @@ if (!companyCode || !username || !password) {
 }
 
 const route = process.argv[2] ?? '/admin';
-if (!/^\/admin(?:\/(?:configuracion|categories|taxes|products|price-lists|customers|arca|payment-gateways))?$/.test(route)) {
+if (!/^\/admin(?:\/(?:configuracion|categories|taxes|products|price-lists|customers|arca|payment-gateways|organization|central-connection))?$/.test(route)) {
   throw new Error('Only the initial administration routes are supported.');
 }
 const viewport = /^--viewport=(\d{3,4})x(\d{3,4})$/.exec(
@@ -23,7 +23,8 @@ if (!viewport) throw new Error('Use --viewport=WIDTHxHEIGHT.');
 const width = Number(viewport[1]);
 const height = Number(viewport[2]);
 const expectedTab = ['/admin/categories', '/admin/taxes', '/admin/products', '/admin/price-lists',
-  '/admin/customers', '/admin/arca', '/admin/payment-gateways']
+  '/admin/customers', '/admin/arca', '/admin/payment-gateways', '/admin/organization',
+  '/admin/central-connection']
   .includes(route) ? '/admin/configuracion' : route;
 const inspectDialog = process.argv.includes('--dialog');
 const inspectImportDialog = process.argv.includes('--import-dialog');
@@ -32,6 +33,8 @@ const inspectProductDialog = process.argv.includes('--product-dialog');
 const inspectPricesDialog = process.argv.includes('--prices-dialog');
 const inspectCustomerDialog = process.argv.includes('--customer-dialog');
 const inspectGatewayDialog = process.argv.includes('--gateway-dialog');
+const inspectOrganizationDialog = process.argv.includes('--organization-dialog');
+const mockCentral = process.argv.includes('--mock-central');
 if ((inspectDialog || inspectImportDialog) && route !== '/admin/categories') {
   throw new Error('Dialog checks require /admin/categories.');
 }
@@ -41,6 +44,12 @@ if (inspectPricesDialog && route !== '/admin/price-lists') throw new Error('--pr
 if (inspectCustomerDialog && route !== '/admin/customers') throw new Error('--customer-dialog requires /admin/customers.');
 if (inspectGatewayDialog && route !== '/admin/payment-gateways') {
   throw new Error('--gateway-dialog requires /admin/payment-gateways.');
+}
+if (inspectOrganizationDialog && route !== '/admin/organization') {
+  throw new Error('--organization-dialog requires /admin/organization.');
+}
+if (mockCentral && route !== '/admin/central-connection') {
+  throw new Error('--mock-central requires /admin/central-connection.');
 }
 if (inspectDialog && inspectImportDialog) throw new Error('Choose one dialog check at a time.');
 const outputDirectory = process.argv.find((argument) => argument.startsWith('--output='))?.slice(9) ??
@@ -85,6 +94,26 @@ try {
   const pending = new Map();
   socket.addEventListener('message', (event) => {
     const message = JSON.parse(event.data);
+    if (message.method === 'Fetch.requestPaused' && mockCentral) {
+      const request = message.params;
+      if (request.request.method !== 'GET') {
+        void send('Fetch.failRequest', { requestId: request.requestId, errorReason: 'BlockedByClient' });
+        return;
+      }
+      const sample = {
+        companyId: '00000000-0000-4000-8000-000000000001', companyName: 'Empresa de prueba',
+        branchId: '00000000-0000-4000-8000-000000000002', branchName: 'Sucursal de prueba',
+        installationId: '00000000-0000-4000-8000-000000000003',
+        destinationUrl: 'http://127.0.0.1:5197/', isActive: false, hasCredential: false,
+        hasPreviousCredential: false, previousCredentialExpiresAtUtc: null, revision: 1,
+      };
+      void send('Fetch.fulfillRequest', {
+        requestId: request.requestId, responseCode: 200,
+        responseHeaders: [{ name: 'Content-Type', value: 'application/json; charset=utf-8' }],
+        body: Buffer.from(JSON.stringify(sample)).toString('base64'),
+      });
+      return;
+    }
     const completion = pending.get(message.id);
     if (!completion) return;
     pending.delete(message.id);
@@ -139,6 +168,12 @@ try {
     await until(() => evaluate("Boolean(document.querySelector('a[href=\"/admin\"]'))"));
   }
 
+  if (mockCentral) {
+    await send('Fetch.enable', {
+      patterns: [{ urlPattern: '*api/admin/central-connection', requestStage: 'Request' }],
+    });
+  }
+
   await send('Page.navigate', { url: `http://localhost:4200${route}` });
   await until(() => evaluate(`Boolean(document.querySelector(
     ${JSON.stringify(route === '/admin/categories' ? 'app-categories-page .category-panel tbody tr' :
@@ -148,6 +183,8 @@ try {
       route === '/admin/customers' ? 'app-customers-page .category-panel tbody tr' :
       route === '/admin/arca' ? 'app-arca-settings-page .category-panel #issuer-title' :
       route === '/admin/payment-gateways' ? 'app-payment-gateways-page .category-panel #mp-title' :
+      route === '/admin/organization' ? 'app-organization-page .company-row' :
+      route === '/admin/central-connection' ? 'app-central-connection-page #identity-title, app-central-connection-page .central-error' :
       'app-admin-page .module-panel')}
   ))`));
   if (route === '/admin/taxes') {
@@ -163,9 +200,9 @@ try {
     const styles = await evaluate(`(() => {
       document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
       const host = document.querySelector(
-        'app-admin-page, app-categories-page, app-product-tax-page, app-products-page, app-price-lists-page, app-customers-page, app-arca-settings-page, app-payment-gateways-page');
+        'app-admin-page, app-categories-page, app-product-tax-page, app-products-page, app-price-lists-page, app-customers-page, app-arca-settings-page, app-payment-gateways-page, app-organization-page, app-central-connection-page');
       const header = host.querySelector('.app-header');
-      const panel = host.querySelector('.module-panel, .category-panel');
+      const panel = host.querySelector('.module-panel, .category-panel, .central-error');
       const brandMark = host.querySelector('.brand-mark');
       const activeTab = host.querySelector('.area-tabs a[aria-current="page"]');
       const tableHead = host.querySelector('thead th');
@@ -176,6 +213,7 @@ try {
       const arcaControl = host.querySelector('.arca-form input');
       const certificateState = host.querySelector('.certificate-state');
       const gatewayCard = host.querySelector('.gateway-register');
+      const centralControl = host.querySelector('#central-destination-url');
       return {
         theme: document.documentElement.dataset.visualTheme,
         route: location.pathname,
@@ -199,11 +237,14 @@ try {
         certificateState: certificateState && getComputedStyle(certificateState).backgroundColor,
         gatewayCard: gatewayCard && getComputedStyle(gatewayCard).backgroundColor,
         gatewayCards: host.querySelectorAll('.gateway-register').length,
+        centralControl: centralControl && getComputedStyle(centralControl).backgroundColor,
+        centralAvailable: Boolean(centralControl),
         tableRows: host.querySelectorAll('tbody tr').length,
         documentScrollWidth: document.documentElement.scrollWidth,
         viewportWidth: window.innerWidth,
       };
     })()`);
+    if (mockCentral) styles.simulated = true;
     if (styles.brandMarkWidth !== 72 || styles.brandMark !==
       (theme === 'nocturno' ? 'rgb(229, 178, 127)' : 'rgb(245, 245, 245)')) {
       throw new Error(`The ${theme} administrative brand mark is overridden by another component.`);
@@ -265,6 +306,10 @@ try {
     if (route === '/admin/payment-gateways' && styles.gatewayCard && styles.gatewayCard !==
       (theme === 'nocturno' ? 'rgb(45, 50, 57)' : 'rgb(255, 255, 255)')) {
       throw new Error(`The ${theme} gateway register card lost its palette.`);
+    }
+    if (route === '/admin/central-connection' && styles.centralAvailable && styles.centralControl !==
+      (theme === 'nocturno' ? 'rgb(24, 27, 32)' : 'rgb(255, 255, 255)')) {
+      throw new Error(`The ${theme} central connection controls did not receive their theme.`);
     }
     if (route === '/admin/categories' && width <= 560) {
       styles.tableScroll = await evaluate(`(() => {
@@ -348,6 +393,15 @@ try {
       const detailFile = file.replace(/\.png$/, '-details.png');
       await writeFile(detailFile, Buffer.from(detail.data, 'base64'));
       console.log(JSON.stringify({ theme, route, screenshot: detailFile }));
+      await evaluate('window.scrollTo(0, 0); true');
+    }
+    if (route === '/admin/central-connection' && styles.centralAvailable) {
+      await evaluate("document.querySelector('#package-title').scrollIntoView({ block: 'start' }); true");
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const detail = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const detailFile = file.replace(/\.png$/, '-package.png');
+      await writeFile(detailFile, Buffer.from(detail.data, 'base64'));
+      console.log(JSON.stringify({ theme, route, simulated: mockCentral, screenshot: detailFile }));
       await evaluate('window.scrollTo(0, 0); true');
     }
   }
@@ -686,6 +740,40 @@ try {
       const file = path.join(outputDirectory, `admin-gateway-dialog-${theme}-${width}x${height}.png`);
       await writeFile(file, Buffer.from(screenshot.data, 'base64'));
       console.log(JSON.stringify({ ...editor, screenshot: file }));
+    }
+  }
+  if (inspectOrganizationDialog) {
+    await evaluate(`(() => {
+      document.documentElement.dataset.visualTheme = 'original';
+      document.querySelector('app-organization-page .company-row button').click();
+      return true;
+    })()`);
+    await until(() => evaluate(`(() => {
+      const panel = document.querySelector('.admin-detail-dialog[open] .branches-panel');
+      return panel && panel.getAttribute('aria-busy') === 'false';
+    })()`));
+    for (const theme of ['original', 'nocturno']) {
+      const branches = await evaluate(`(() => {
+        document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+        const panel = document.querySelector('.admin-detail-dialog[open] .branches-panel');
+        const selected = document.querySelector('.company-row.selected-row');
+        return {
+          theme: document.documentElement.dataset.visualTheme,
+          title: panel.querySelector('h2')?.textContent.trim(),
+          surface: getComputedStyle(panel).backgroundColor,
+          selected: selected && getComputedStyle(selected).backgroundColor,
+          rows: panel.querySelectorAll('.branch-row').length,
+        };
+      })()`);
+      if (branches.title !== 'Sucursales' || branches.selected !==
+        (theme === 'nocturno' ? 'rgb(72, 57, 43)' : 'rgb(220, 238, 237)')) {
+        throw new Error(`The ${theme} branch detail or selection lost its theme.`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `admin-organization-dialog-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...branches, screenshot: file }));
     }
   }
 } finally {

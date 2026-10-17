@@ -36,6 +36,30 @@ describe('CentralConnectionPage', () => {
     return { fixture, http, page: fixture.nativeElement as HTMLElement };
   }
 
+  it('themes branch identity and connection controls without issuing a credential', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const { fixture, http, page } = load();
+      expect(getComputedStyle(page).getPropertyValue('--admin-central-control').trim()).toBe('#fff');
+      expect(page.querySelector<HTMLInputElement>('#central-destination-url')?.value)
+        .toBe('http://127.0.0.1:5249/');
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(page).getPropertyValue('--admin-central-control').trim()).toBe('#181b20');
+      expect(getComputedStyle(page).getPropertyValue('--admin-central-panel').trim()).toBe('#2d3239');
+      expect(page.querySelector<HTMLInputElement>('#central-destination-url')?.value)
+        .toBe('http://127.0.0.1:5249/');
+      expect(page.querySelector('#central-connection-bundle')).toBeNull();
+      http.expectNone((request) => request.method !== 'GET');
+      fixture.destroy();
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
   it('shows the branch identity and saves its central URL with CSRF protection', () => {
     const { fixture, http, page } = load();
     expect(page.textContent).toContain('Alta Córdoba');

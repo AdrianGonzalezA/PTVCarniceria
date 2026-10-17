@@ -1,13 +1,40 @@
+:host {
+  --admin-org-selected: #dceeed;
+  --admin-org-notice: #c6e8e3;
+  --admin-org-notice-ink: #003b3b;
+  --admin-org-notice-border: #008b8b;
+  --admin-org-heading: #005e60;
+  --admin-org-error: #a32222;
+  --admin-org-control: #fff;
+  --admin-org-control-border: #b2b2b2;
+  --admin-org-ink: #202322;
+  --admin-org-focus: #71b8da;
+}
+:host-context(html[data-visual-theme='nocturno']) {
+  --admin-org-selected: #48392b;
+  --admin-org-notice: #2d3239;
+  --admin-org-notice-ink: #f3efe9;
+  --admin-org-notice-border: #e5b27f;
+  --admin-org-heading: #e5b27f;
+  --admin-org-error: #ffb4ab;
+  --admin-org-control: #181b20;
+  --admin-org-control-border: #414750;
+  --admin-org-ink: #f3efe9;
+  --admin-org-focus: #e5b27f;
+}
 .branches-panel,.terminals-panel { margin: 0; }
 .header-actions { display: flex; gap: 0.5rem; }
-.credential-notice { display: grid; gap: 0.5rem; margin: 1rem; padding: 1rem; color: #003b3b; background: #c6e8e3; border: 2px solid #008b8b; }
+.credential-notice { display: grid; gap: 0.5rem; margin: 1rem; padding: 1rem; color: var(--admin-org-notice-ink); background: var(--admin-org-notice); border: 2px solid var(--admin-org-notice-border); }
 .credential-notice code { overflow-wrap: anywhere; font-size: 1.15rem; }
 .credential-notice button { justify-self: start; }
-.panel-eyebrow { margin: 0 0 0.25rem !important; color: #005e60; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; }
-.selected-row { background: #dceeed; }
-.field-error { margin: 0; color: #a32222; }
-.secondary-button { background: #fff; border-color: #b2b2b2; }
+.panel-eyebrow { margin: 0 0 0.25rem !important; color: var(--admin-org-heading); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; }
+.selected-row { background: var(--admin-org-selected); }
+.field-error { margin: 0; color: var(--admin-org-error); }
+.secondary-button { color: var(--admin-org-ink); background: var(--admin-org-control); border-color: var(--admin-org-control-border); }
 .editor-form { max-width: 40rem; }
+.terminal-devices-form select { box-sizing: border-box; width: 100%; min-height: 2.75rem; padding: .625rem .75rem; color: var(--admin-org-ink); background: var(--admin-org-control); border: 1px solid var(--admin-org-control-border); border-radius: .25rem; font: inherit; }
+.terminal-devices-form select:focus-visible { outline: 3px solid var(--admin-org-focus); outline-offset: 2px; }
+:host-context(html[data-visual-theme='nocturno']) .terminal-devices-form select { color-scheme: dark; }
 
 @media (max-width: 42rem) {
   .panel-heading { align-items: stretch; flex-direction: column; }

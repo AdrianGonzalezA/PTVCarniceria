@@ -110,10 +110,11 @@
 
 **Checkpoint T3-C (17/10/2026):** Artículos, Precios, Clientes, ARCA y Pasarelas comprobados en Original/Nocturno; suite Angular 181/181, lint y build correctos. Persisten solo las advertencias conocidas de presupuesto CSS en `admin-page.scss` y `categories-page.scss` y de `qrcode` CommonJS.
 
-- [ ] **T3.10 · Organización y conexión central de la sucursal.** Tematizar empresas/cajas y paquete de conexión sin cambiar la integración.
+- [x] **T3.10 · Organización y conexión central de la sucursal.** Empresas/cajas y paquete de conexión tematizados sin cambiar la integración.
   - Aceptación: formularios, estados y credenciales ya ocultas se leen en ambas rutas sin revelar secretos ni cambiar datos.
   - Verificar: `organization-page.spec.ts`, `central-connection-page.spec.ts` y ambas rutas en dos temas.
   - Dependencia: T3.3. Archivos previstos (4): `admin/organization-page.scss`, `admin/organization-page.spec.ts`, `admin/central-connection-page.scss`, `admin/central-connection-page.spec.ts`.
+  - Evidencia 17/10/2026: pruebas focalizadas rojo/verde (14/14) y build correcto. Organización revisada con 4 sucursales ficticias y modal abierto en ambos temas a 1366 × 768 y 560 × 768; formularios seriales, selección y aviso de credencial reciben tokens. La instalación Visual responde «no vinculada» en `/admin/central-connection`; además se comprobó la vista configurada con respuesta GET ficticia interceptada solo en Chromium aislado. No se emitió, rotó ni mostró una credencial real.
 - [ ] **T3.11 · Impuestos por artículo y formatos de códigos.** Cubrir dos pantallas con tablas y editores especializados.
   - Aceptación: asociaciones tributarias, layouts de barra y validaciones son legibles sin alterar las reglas de negocio.
   - Verificar: `product-tax-page.spec.ts`, `barcode-layout-page.spec.ts` y `/admin/taxes`, `/admin/barcode-layouts`.

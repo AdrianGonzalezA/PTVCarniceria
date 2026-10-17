@@ -10,6 +10,65 @@ describe('ManufacturerPage', () => {
   }));
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
+  it('themes the separate SuperAdmin login without attempting authentication', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const fixture = TestBed.createComponent(ManufacturerPage);
+      fixture.detectChanges();
+      const http = TestBed.inject(HttpTestingController);
+      http.expectOne('/api/manufacturer/sessions/current').flush(null,
+        { status: 401, statusText: 'Unauthorized' });
+      fixture.detectChanges();
+      const page = fixture.nativeElement as HTMLElement;
+      expect(getComputedStyle(page).getPropertyValue('--manufacturer-surface').trim()).toBe('#fff');
+      expect(page.querySelector('#manufacturer-password')).not.toBeNull();
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(page).getPropertyValue('--manufacturer-surface').trim()).toBe('#24282e');
+      expect(getComputedStyle(page).getPropertyValue('--manufacturer-control').trim()).toBe('#181b20');
+      http.expectNone('/api/manufacturer/sessions');
+      fixture.destroy();
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
+  it('themes the company list and editor without mutating a company', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      const fixture = TestBed.createComponent(ManufacturerPage);
+      fixture.detectChanges();
+      const http = TestBed.inject(HttpTestingController);
+      http.expectOne('/api/manufacturer/sessions/current').flush({
+        userId: 'manufacturer-id', username: 'superadmin', expiresAtUtc: '2026-10-14T00:00:00Z',
+      });
+      http.expectOne('/api/manufacturer/companies').flush([{
+        id: 'company-id', code: 'VISUAL', name: 'Empresa Visual', activeBranchCount: 1, isActive: true,
+      }]);
+      fixture.detectChanges();
+      const page = fixture.nativeElement as HTMLElement;
+      expect(page.querySelector('.manufacturer-status--active')?.textContent).toContain('Activa');
+      page.querySelector<HTMLButtonElement>('button[aria-label="Editar Empresa Visual"]')!.click();
+      fixture.detectChanges();
+      expect(page.querySelector('dialog[open] #edit-company-name')).not.toBeNull();
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(page).getPropertyValue('--manufacturer-surface').trim()).toBe('#24282e');
+      expect(getComputedStyle(page).getPropertyValue('--manufacturer-teal').trim()).toBe('#e5b27f');
+      expect(page.querySelector('dialog[open] #company-admin-password')).not.toBeNull();
+      http.expectNone((request) => request.method !== 'GET');
+      fixture.destroy();
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
   it('uses a separate manufacturer login and then offers company creation', () => {
     const fixture = TestBed.createComponent(ManufacturerPage);
     fixture.detectChanges();

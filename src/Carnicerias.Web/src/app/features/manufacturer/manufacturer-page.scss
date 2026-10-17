@@ -1,13 +1,3 @@
-:host {
-  --manufacturer-ink: #202322;
-  --manufacturer-muted: #46514f;
-  --manufacturer-teal: #005e60;
-  --manufacturer-border: #c8d4d0;
-
-  color: var(--manufacturer-ink);
-  background: #f3f6f4;
-}
-
 .manufacturer-workspace {
   max-width: 1100px;
   margin: 0 auto;
@@ -25,44 +15,8 @@
   line-height: 1.5;
 }
 
-.category-panel {
-  margin-top: 1.5rem;
-  overflow: hidden;
-  background: #fff;
-  border: 1px solid var(--manufacturer-border);
-  border-radius: 0.35rem;
-}
-
-.panel-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
-  background: #e5ece9;
-}
-
-.panel-heading h2,
-.manufacturer-login h2,
-.manufacturer-form h2 {
-  margin: 0;
-  color: var(--manufacturer-teal);
-  font-size: 1.3rem;
-}
-
-.panel-heading p {
-  margin: 0.25rem 0 0;
-  color: var(--manufacturer-muted);
-  line-height: 1.4;
-}
-
 .manufacturer-login {
   max-width: 28rem;
-}
-
-.manufacturer-login h2 {
-  padding: 1rem 1.25rem;
-  background: #e5ece9;
 }
 
 .manufacturer-login form,
@@ -88,8 +42,8 @@
   min-height: 2.75rem;
   padding: 0.625rem 0.75rem;
   color: var(--manufacturer-ink);
-  background: #fff;
-  border: 1px solid #9aaca6;
+  background: var(--manufacturer-control);
+  border: 1px solid var(--manufacturer-control-border);
   border-radius: 0.25rem;
   font: inherit;
 }
@@ -97,9 +51,9 @@
 button {
   min-height: 2.75rem;
   padding: 0.625rem 1rem;
-  color: var(--manufacturer-ink);
-  background: #d3ff00;
-  border: 1px solid #a5c900;
+  color: var(--manufacturer-action-ink);
+  background: var(--manufacturer-action);
+  border: 1px solid var(--manufacturer-action-border);
   border-radius: 0.25rem;
   font: inherit;
   font-weight: 700;
@@ -107,7 +61,7 @@ button {
 }
 
 button:hover:not(:disabled) {
-  background: #c5ee00;
+  background: var(--manufacturer-action-hover);
 }
 
 button:disabled {
@@ -117,12 +71,12 @@ button:disabled {
 
 .secondary-button {
   color: var(--manufacturer-teal);
-  background: #fff;
-  border-color: #8da7a0;
+  background: var(--manufacturer-surface);
+  border-color: var(--manufacturer-control-border);
 }
 
 .secondary-button:hover:not(:disabled) {
-  background: #e9f4f0;
+  background: var(--manufacturer-secondary-hover);
 }
 
 .manufacturer-login form button {
@@ -183,20 +137,20 @@ button:disabled {
 .manufacturer-workspace th,
 .manufacturer-workspace td {
   padding: 0.875rem 1rem;
-  border-bottom: 1px solid #d7dfdc;
+  border-bottom: 1px solid var(--manufacturer-table-border);
   text-align: left;
   vertical-align: middle;
 }
 
 .manufacturer-workspace th {
-  color: #fff;
-  background: #006f70;
+  color: var(--manufacturer-table-head-ink);
+  background: var(--manufacturer-table-head);
   font-size: 0.875rem;
   font-weight: 700;
 }
 
 .manufacturer-workspace tbody tr:hover {
-  background: #f3faf7;
+  background: var(--manufacturer-row-hover);
 }
 
 .manufacturer-workspace tbody tr:last-child td {
@@ -204,7 +158,7 @@ button:disabled {
 }
 
 .manufacturer-workspace td code {
-  color: #38524e;
+  color: var(--manufacturer-code);
   font-size: 0.8125rem;
   white-space: nowrap;
 }
@@ -212,16 +166,16 @@ button:disabled {
 .manufacturer-status {
   display: inline-block;
   padding: 0.3rem 0.625rem;
-  color: #394340;
-  background: #e5e9e7;
+  color: var(--manufacturer-status-ink);
+  background: var(--manufacturer-status-bg);
   border-radius: 0.25rem;
   font-size: 0.8125rem;
   font-weight: 700;
 }
 
 .manufacturer-status--active {
-  color: #064f4f;
-  background: #c6e8e3;
+  color: var(--manufacturer-success-ink);
+  background: var(--manufacturer-success-bg);
 }
 
 .manufacturer-workspace .success-message,
@@ -232,14 +186,14 @@ button:disabled {
 }
 
 .manufacturer-workspace .success-message {
-  color: #064f4f;
-  background: #c6e8e3;
+  color: var(--manufacturer-success-ink);
+  background: var(--manufacturer-success-bg);
 }
 
 .manufacturer-workspace .error-message,
 .manufacturer-form .error-message {
-  color: #842525;
-  background: #fbe8e7;
+  color: var(--manufacturer-error-ink);
+  background: var(--manufacturer-error-bg);
 }
 
 .manufacturer-form .error-message {
@@ -250,7 +204,7 @@ button:disabled {
 .manufacturer-login input:focus-visible,
 .manufacturer-form input:focus-visible,
 button:focus-visible {
-  outline: 3px solid #267d9d;
+  outline: 3px solid var(--manufacturer-focus);
   outline-offset: 2px;
 }
 

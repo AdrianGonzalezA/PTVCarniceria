@@ -8,7 +8,7 @@ import { ManufacturerClient, ManufacturerCompany, ManufacturerSession } from '..
   selector: 'app-manufacturer-page',
   imports: [ReactiveFormsModule, AdminDetailDialog],
   templateUrl: './manufacturer-page.html',
-  styleUrls: ['../admin/admin-page.scss', './manufacturer-page.scss'],
+  styleUrls: ['../admin/admin-page.scss', './manufacturer-theme.scss', './manufacturer-page.scss'],
 })
 export class ManufacturerPage implements OnInit {
   private readonly client = inject(ManufacturerClient);

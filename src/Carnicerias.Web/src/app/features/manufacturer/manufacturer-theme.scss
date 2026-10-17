@@ -1,0 +1,97 @@
+:host {
+  --manufacturer-ink: #202322;
+  --manufacturer-muted: #46514f;
+  --manufacturer-teal: #005e60;
+  --manufacturer-border: #c8d4d0;
+  --manufacturer-surface: #fff;
+  --manufacturer-heading-surface: #e5ece9;
+  --manufacturer-control: #fff;
+  --manufacturer-control-border: #9aaca6;
+  --manufacturer-action: #d3ff00;
+  --manufacturer-action-hover: #c5ee00;
+  --manufacturer-action-border: #a5c900;
+  --manufacturer-action-ink: #202322;
+  --manufacturer-secondary-hover: #e9f4f0;
+  --manufacturer-table-head: #006f70;
+  --manufacturer-table-head-ink: #fff;
+  --manufacturer-table-border: #d7dfdc;
+  --manufacturer-row-hover: #f3faf7;
+  --manufacturer-code: #38524e;
+  --manufacturer-status-ink: #394340;
+  --manufacturer-status-bg: #e5e9e7;
+  --manufacturer-success-ink: #064f4f;
+  --manufacturer-success-bg: #c6e8e3;
+  --manufacturer-error-ink: #842525;
+  --manufacturer-error-bg: #fbe8e7;
+  --manufacturer-focus: #267d9d;
+
+  color: var(--manufacturer-ink);
+  background: #f3f6f4;
+}
+
+:host-context(html[data-visual-theme='nocturno']) {
+  --manufacturer-ink: #f3efe9;
+  --manufacturer-muted: #bbb8b3;
+  --manufacturer-teal: #e5b27f;
+  --manufacturer-border: #414750;
+  --manufacturer-surface: #24282e;
+  --manufacturer-heading-surface: #2d3239;
+  --manufacturer-control: #181b20;
+  --manufacturer-control-border: #414750;
+  --manufacturer-action: #e5b27f;
+  --manufacturer-action-hover: #f0c497;
+  --manufacturer-action-border: #e5b27f;
+  --manufacturer-action-ink: #171a1e;
+  --manufacturer-secondary-hover: #333942;
+  --manufacturer-table-head: #48392b;
+  --manufacturer-table-head-ink: #f3efe9;
+  --manufacturer-table-border: #414750;
+  --manufacturer-row-hover: #31363d;
+  --manufacturer-code: #d5cec4;
+  --manufacturer-status-ink: #d5cec4;
+  --manufacturer-status-bg: #3b4148;
+  --manufacturer-success-ink: #c0e6d2;
+  --manufacturer-success-bg: #254036;
+  --manufacturer-error-ink: #ffb4ab;
+  --manufacturer-error-bg: #492b2d;
+  --manufacturer-focus: #e5b27f;
+
+  color-scheme: dark;
+  background: #181b20;
+}
+
+.category-panel {
+  margin-top: 1.5rem;
+  overflow: hidden;
+  background: var(--manufacturer-surface);
+  border: 1px solid var(--manufacturer-border);
+  border-radius: 0.35rem;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: var(--manufacturer-heading-surface);
+}
+
+.panel-heading h2,
+.manufacturer-login h2,
+.manufacturer-form h2 {
+  margin: 0;
+  color: var(--manufacturer-teal);
+  font-size: 1.3rem;
+}
+
+.panel-heading p {
+  margin: 0.25rem 0 0;
+  color: var(--manufacturer-muted);
+  line-height: 1.4;
+}
+
+.manufacturer-login h2 {
+  padding: 1rem 1.25rem;
+  background: var(--manufacturer-heading-surface);
+}

@@ -16,7 +16,42 @@ class NestedDialogHost {
   innerClosed = 0;
 }
 
+@Component({
+  imports: [AdminDetailDialog],
+  template: `<app-admin-detail-dialog labelledBy="theme-title">
+    <h2 id="theme-title">Editar categoría</h2>
+    <label for="theme-name">Nombre</label><input id="theme-name" value="Vacuno" />
+  </app-admin-detail-dialog>`,
+})
+class ThemedDialogHost {}
+
 describe('AdminDetailDialog', () => {
+  it('changes an open dialog theme without losing its value or accessible title', () => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-visual-theme');
+    try {
+      root.dataset['visualTheme'] = 'original';
+      TestBed.configureTestingModule({ imports: [ThemedDialogHost] });
+      const fixture = TestBed.createComponent(ThemedDialogHost);
+      fixture.detectChanges();
+      const host = fixture.nativeElement.querySelector('app-admin-detail-dialog') as HTMLElement;
+      const dialog = host.querySelector('dialog') as HTMLDialogElement;
+      const name = dialog.querySelector('input') as HTMLInputElement;
+      name.value = 'Cortes vacunos';
+      expect(getComputedStyle(host).getPropertyValue('--admin-dialog-surface').trim()).toBe('#ededed');
+
+      root.dataset['visualTheme'] = 'nocturno';
+      expect(getComputedStyle(host).getPropertyValue('--admin-dialog-surface').trim()).toBe('#24282e');
+      expect(dialog.open).toBe(true);
+      expect(dialog.getAttribute('aria-labelledby')).toBe('theme-title');
+      expect(name.value).toBe('Cortes vacunos');
+      fixture.destroy();
+    } finally {
+      if (previousTheme === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', previousTheme);
+    }
+  });
+
   it('opens as a dialog and closes with Escape when allowed', () => {
     TestBed.configureTestingModule({ imports: [AdminDetailDialog] });
     const fixture = TestBed.createComponent(AdminDetailDialog);

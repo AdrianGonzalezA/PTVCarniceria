@@ -23,6 +23,8 @@ if (!viewport) throw new Error('Use --viewport=WIDTHxHEIGHT.');
 const width = Number(viewport[1]);
 const height = Number(viewport[2]);
 const expectedTab = route === '/admin/categories' ? '/admin/configuracion' : route;
+const inspectDialog = process.argv.includes('--dialog');
+if (inspectDialog && route !== '/admin/categories') throw new Error('--dialog requires /admin/categories.');
 const outputDirectory = process.argv.find((argument) => argument.startsWith('--output='))?.slice(9) ??
   path.join(tmpdir(), 'carnicerias-admin-theme');
 const chromePath = process.env.CARNICERIAS_TEST_CHROME_PATH ??
@@ -217,6 +219,44 @@ try {
     if (route === '/admin/categories' && width <= 560) {
       const fullPage = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
       await writeFile(file.replace(/\.png$/, '-full.png'), Buffer.from(fullPage.data, 'base64'));
+    }
+  }
+  if (inspectDialog) {
+    await evaluate(`(() => {
+      document.documentElement.dataset.visualTheme = 'original';
+      document.querySelector('.create-button').click();
+      return true;
+    })()`);
+    await until(() => evaluate("Boolean(document.querySelector('.admin-detail-dialog[open] #category-name'))"));
+    await evaluate(`(() => {
+      const field = document.querySelector('#category-name');
+      field.value = 'Cortes de prueba sin guardar';
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    })()`);
+    for (const theme of ['original', 'nocturno']) {
+      const dialogStyles = await evaluate(`(() => {
+        document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};
+        const dialog = document.querySelector('.admin-detail-dialog[open]');
+        return {
+          theme: document.documentElement.dataset.visualTheme,
+          open: dialog?.open,
+          title: document.getElementById(dialog?.getAttribute('aria-labelledby'))?.textContent.trim(),
+          value: dialog?.querySelector('#category-name')?.value,
+          surface: getComputedStyle(dialog).backgroundColor,
+          ink: getComputedStyle(dialog).color,
+        };
+      })()`);
+      if (!dialogStyles.open || dialogStyles.title !== 'Nueva categoría' ||
+        dialogStyles.value !== 'Cortes de prueba sin guardar' || dialogStyles.surface !==
+        (theme === 'nocturno' ? 'rgb(36, 40, 46)' : 'rgb(237, 237, 237)')) {
+        throw new Error(`The ${theme} category editor did not preserve its open state and colors.`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `admin-categories-modal-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...dialogStyles, screenshot: file }));
     }
   }
 } finally {

@@ -1,4 +1,18 @@
-:host { display: contents; }
+:host {
+  --admin-dialog-surface: #ededed;
+  --admin-dialog-ink: #202322;
+  --admin-dialog-border: #859b94;
+  --admin-dialog-backdrop: #0b191bb8;
+  --admin-dialog-focus: #71b8da;
+  display: contents;
+}
+:host-context(html[data-visual-theme='nocturno']) {
+  --admin-dialog-surface: #24282e;
+  --admin-dialog-ink: #f3efe9;
+  --admin-dialog-border: #414750;
+  --admin-dialog-backdrop: #090c10cc;
+  --admin-dialog-focus: #e5b27f;
+}
 .admin-detail-dialog {
   box-sizing: border-box;
   width: min(72rem, calc(100vw - 2rem));
@@ -6,13 +20,15 @@
   max-height: calc(100dvh - 2rem);
   overflow: auto;
   padding: 0;
-  border: 1px solid #859b94;
+  border: 1px solid var(--admin-dialog-border);
   border-radius: 0.35rem;
-  background: #ededed;
-  color: #202322;
+  background: var(--admin-dialog-surface);
+  color: var(--admin-dialog-ink);
   box-shadow: 0 1rem 3rem #0006;
 }
-.admin-detail-dialog::backdrop { background: #0b191bb8; }
+.admin-detail-dialog::backdrop { background: var(--admin-dialog-backdrop); }
+.admin-detail-dialog:focus-visible { outline: 3px solid var(--admin-dialog-focus); outline-offset: 2px; }
+:host-context(html[data-visual-theme='nocturno']) .admin-detail-dialog { color-scheme: dark; }
 .admin-detail-dialog-compact { width: min(38rem, calc(100vw - 2rem)); }
 @media (max-width: 40rem) {
   .admin-detail-dialog { width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); }

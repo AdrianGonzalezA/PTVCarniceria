@@ -1,0 +1,73 @@
+.theme-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem 2rem;
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  background: var(--admin-surface);
+  border-radius: 0.35rem;
+}
+
+.theme-panel-copy { flex: 1 1 16rem; }
+.theme-kicker {
+  margin: 0 0 0.25rem;
+  color: var(--admin-accent-strong);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.theme-panel h2 { margin: 0; color: var(--admin-accent-strong); font-size: 1.3rem; }
+.theme-panel-copy > p:last-child { max-width: 36rem; margin: 0.4rem 0 0; color: var(--admin-muted); }
+
+.theme-options {
+  display: grid;
+  flex: 1 1 30rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.theme-options legend { margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 700; }
+.theme-choice {
+  display: flex;
+  min-width: 0;
+  min-height: 4.5rem;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem;
+  background: var(--admin-surface-raised);
+  border: 2px solid var(--admin-border);
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+.theme-choice.is-selected { border-color: var(--admin-accent-strong); }
+.theme-choice:focus-within { outline: 3px solid var(--admin-focus); outline-offset: 2px; }
+.theme-choice input { flex: none; margin: 0; accent-color: var(--admin-accent-strong); }
+.theme-choice-name { font-weight: 700; }
+.theme-active { margin-left: auto; color: var(--admin-accent-strong); font-size: 0.8rem; font-weight: 700; white-space: nowrap; }
+.theme-swatch {
+  display: grid;
+  flex: none;
+  width: 2.5rem;
+  height: 2.25rem;
+  grid-template-columns: 0.7rem 1fr;
+  gap: 0.15rem;
+  padding: 0.2rem;
+  background: #ededed;
+  border: 1px solid #b9c4c2;
+  border-radius: 0.2rem;
+}
+.theme-swatch span:first-child { background: #54c2bd; }
+.theme-swatch span:last-child { background: #fff; }
+.theme-choice--nocturno .theme-swatch { background: #181b20; border-color: #414750; }
+.theme-choice--nocturno .theme-swatch span:first-child { background: #e5b27f; }
+.theme-choice--nocturno .theme-swatch span:last-child { background: #2d3239; }
+
+:host-context(html[data-visual-theme='nocturno']) .theme-panel { border: 1px solid var(--admin-border); }
+
+@media (max-width: 30rem) {
+  .theme-options { grid-template-columns: 1fr; }
+}

@@ -2,6 +2,10 @@
 
 Ingresá en **Administración → Configuración**. Los maestros se editan en formularios o ventanas de detalle, con búsqueda y paginación según la pantalla. Las altas y cambios se aplican a la empresa del contexto; verificá la sucursal antes de configurar cajas o habilitar listas.
 
+## Tema visual
+
+En **Administración → Configuración → Tema visual**, elegí **Original** o **Nocturno**. El cambio se ve al instante y queda guardado en el perfil local de ese Electron o navegador, incluso al recargar. No modifica ventas, borradores ni datos de la empresa. La caja usa el tema elegido desde **ese mismo perfil de Electron**; cambiarlo desde Chrome o Edge no cambia la caja Electron ni otras computadoras. Si todavía no hay una elección, se usa **Original**.
+
 ## Catálogo y precios
 
 - **Categorías:** crear, editar, activar o inactivar familias para ordenar el catálogo del POS.

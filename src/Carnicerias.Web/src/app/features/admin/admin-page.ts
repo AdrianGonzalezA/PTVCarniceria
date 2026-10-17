@@ -5,12 +5,13 @@ import { AdminAreaTabs } from './admin-area-tabs';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { AdminBranch, AdminOrganizationClient } from '../../core/admin/admin-organization-client';
 import { AdminHistoryClient, BusinessSummary } from '../../core/admin/admin-history-client';
+import { defaultVisualThemeId, selectVisualTheme, visualThemes, VisualThemeId } from '../../core/theme/visual-theme';
 
 @Component({
   selector: 'app-admin-page',
   imports: [RouterLink, AdminAreaTabs],
   templateUrl: './admin-page.html',
-  styleUrl: './admin-page.scss',
+  styleUrls: ['./admin-page.scss', './admin-theme-picker.scss'],
 })
 export class AdminPage implements OnInit {
   private readonly sessions = inject(SessionClient);
@@ -24,6 +25,11 @@ export class AdminPage implements OnInit {
   private summaryRevision = 0;
 
   protected readonly isConfiguration = this.route.snapshot.data['area'] === 'configuration';
+  protected readonly visualThemes = visualThemes;
+  protected readonly selectedVisualTheme = signal<VisualThemeId>(
+    visualThemes.find((theme) => theme.id === document.documentElement.dataset['visualTheme'])?.id
+      ?? defaultVisualThemeId,
+  );
 
   protected readonly session = signal<CurrentSession | null>(null);
   protected readonly loadError = signal<string | null>(null);
@@ -64,6 +70,10 @@ export class AdminPage implements OnInit {
   protected selectSummaryBranch(event: Event): void {
     this.selectedBranchId.set((event.target as HTMLSelectElement).value);
     this.loadSummary();
+  }
+
+  protected chooseVisualTheme(themeId: VisualThemeId): void {
+    this.selectedVisualTheme.set(selectVisualTheme(themeId));
   }
 
   protected reloadSummary(): void { this.loadSummary(); }

@@ -1,9 +1,13 @@
-// Read-only visual smoke check for the local administrator. Credentials are supplied
-// through the process environment and never written to the repository or output.
-import { spawn } from 'node:child_process';
+// Visual smoke check for the local administrator in a disposable Chrome profile.
+// The theme-picker check writes only its local appearance preference, never business data.
+// Credentials are supplied through the environment and never written to the repository or output.
+import { execFile, spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 
 const companyCode = process.env.CARNICERIAS_TEST_COMPANY_CODE;
 const username = process.env.CARNICERIAS_TEST_USERNAME;
@@ -43,6 +47,8 @@ const inspectAccountsDialog = process.argv.includes('--accounts-dialog');
 const inspectUsersDialog = process.argv.includes('--users-dialog');
 const inspectSuperadmin = process.argv.includes('--superadmin-login');
 const inspectContrast = process.argv.includes('--contrast');
+const inspectThemePicker = process.argv.includes('--theme-picker');
+const compareElectron = process.argv.includes('--compare-electron');
 if ((inspectDialog || inspectImportDialog) && route !== '/admin/categories') {
   throw new Error('Dialog checks require /admin/categories.');
 }
@@ -68,6 +74,10 @@ if (inspectHistoryDialog && route !== '/admin/history') throw new Error('--histo
 if (inspectAccountsDialog && route !== '/admin/accounts') throw new Error('--accounts-dialog requires /admin/accounts.');
 if (inspectUsersDialog && route !== '/users') throw new Error('--users-dialog requires /users.');
 if (inspectSuperadmin && route !== '/superadmin') throw new Error('--superadmin-login requires /superadmin.');
+if (inspectThemePicker && route !== '/admin/configuracion') {
+  throw new Error('--theme-picker requires /admin/configuracion.');
+}
+if (compareElectron && !inspectThemePicker) throw new Error('--compare-electron requires --theme-picker.');
 if (inspectDialog && inspectImportDialog) throw new Error('Choose one dialog check at a time.');
 const outputDirectory = process.argv.find((argument) => argument.startsWith('--output='))?.slice(9) ??
   path.join(tmpdir(), 'carnicerias-admin-theme');
@@ -151,7 +161,9 @@ try {
   });
   async function evaluate(expression) {
     const result = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-    if (result.exceptionDetails) throw new Error(result.exceptionDetails.text);
+    if (result.exceptionDetails) {
+      throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text);
+    }
     return result.result.value;
   }
   await send('Page.enable');
@@ -243,6 +255,103 @@ try {
     await until(() => evaluate("document.querySelector('app-users-page .users-panel')?.getAttribute('aria-busy') === 'false'"));
   }
   await mkdir(outputDirectory, { recursive: true });
+  if (inspectThemePicker) {
+    async function electronProfile() {
+      const { stdout } = await execFileAsync(process.execPath, [
+        'src/Carnicerias.Pos/tests/inspect-electron.mjs',
+        "({theme: document.documentElement.dataset.visualTheme, stored: localStorage.getItem('carnicerias.visual-theme.v1'), ticketLines: document.querySelectorAll('.ticket-line').length, route: location.pathname})",
+      ], { cwd: process.cwd(), timeout: 5000 });
+      return JSON.parse(stdout);
+    }
+    const electronBefore = compareElectron ? await electronProfile() : null;
+    const pickerReady = await evaluate(`(() => ({
+      route: location.pathname,
+      title: document.querySelector('app-admin-page h1')?.textContent?.trim(),
+      section: Boolean(document.querySelector('.theme-panel')),
+      inputs: Array.from(document.querySelectorAll('.theme-choice input')).map((input) => input.value),
+    }))()`);
+    if (!pickerReady.inputs.includes('original')) {
+      throw new Error(`The theme picker is absent from the running administrator: ${JSON.stringify(pickerReady)}`);
+    }
+    let radioFocus;
+    for (let index = 0; index < 12; index++) {
+      await send('Input.dispatchKeyEvent', {
+        type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9,
+      });
+      await send('Input.dispatchKeyEvent', {
+        type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9,
+      });
+      radioFocus = await evaluate(`(() => ({
+        name: document.activeElement?.getAttribute('name'),
+        visible: document.activeElement?.matches(':focus-visible'),
+        outline: document.activeElement?.closest('label') ?
+          getComputedStyle(document.activeElement.closest('label')).outlineStyle : null,
+      }))()`);
+      if (radioFocus.name === 'visual-theme') break;
+    }
+    if (radioFocus?.name !== 'visual-theme' || !radioFocus.visible || radioFocus.outline !== 'solid') {
+      throw new Error(`The theme picker has no keyboard-visible focus: ${JSON.stringify(radioFocus)}`);
+    }
+    console.log(JSON.stringify({ keyboardFocus: radioFocus }));
+    await evaluate('document.activeElement.blur(); true');
+    for (const theme of ['original', 'nocturno']) {
+      const selection = await evaluate(`(() => {
+        document.querySelector(${JSON.stringify(`.theme-choice input[value="${theme}"]`)}).click();
+        const panel = document.querySelector('.theme-panel');
+        return {
+          route: location.pathname,
+          theme: document.documentElement.dataset.visualTheme,
+          stored: localStorage.getItem('carnicerias.visual-theme.v1'),
+          selected: document.querySelector('.theme-choice input:checked')?.value,
+          panel: getComputedStyle(panel).backgroundColor,
+          width: document.documentElement.scrollWidth,
+        };
+      })()`);
+      if (selection.route !== route || selection.theme !== theme ||
+        (theme === 'nocturno' && selection.stored !== theme) ||
+        (theme === 'original' && selection.stored !== null && selection.stored !== theme) ||
+        selection.selected !== theme || selection.width > width) {
+        throw new Error(`The theme picker did not apply ${theme}: ${JSON.stringify(selection)}`);
+      }
+      await evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      const file = path.join(outputDirectory, `theme-picker-${theme}-${width}x${height}.png`);
+      await writeFile(file, Buffer.from(screenshot.data, 'base64'));
+      console.log(JSON.stringify({ ...selection, screenshot: file }));
+    }
+    if (electronBefore) {
+      const electronAfter = await electronProfile();
+      if (JSON.stringify(electronAfter) !== JSON.stringify(electronBefore)) {
+        throw new Error(`Browser theme selection changed the Electron profile: ${JSON.stringify({ electronBefore, electronAfter })}`);
+      }
+      console.log(JSON.stringify({ electronBefore, electronAfter, browserTheme: 'nocturno' }));
+    }
+    await send('Page.reload', { ignoreCache: false });
+    await until(() => evaluate("Boolean(document.querySelector('.theme-choice input:checked'))"));
+    const afterReload = await evaluate(`(() => ({
+      theme: document.documentElement.dataset.visualTheme,
+      selected: document.querySelector('.theme-choice input:checked')?.value,
+      stored: localStorage.getItem('carnicerias.visual-theme.v1'),
+    }))()`);
+    if (Object.values(afterReload).some((value) => value !== 'nocturno')) {
+      throw new Error(`The selected theme did not survive reload: ${JSON.stringify(afterReload)}`);
+    }
+    await evaluate("document.querySelector('a[href=\"/admin\"]').click(); true");
+    await until(() => evaluate("location.pathname === '/admin' && Boolean(document.querySelector('.module-panel'))"));
+    const business = await evaluate(`(() => ({
+      theme: document.documentElement.dataset.visualTheme,
+      pickerVisible: Boolean(document.querySelector('.theme-panel')),
+    }))()`);
+    if (business.theme !== 'nocturno' || business.pickerVisible) {
+      throw new Error(`The theme or picker leaked to Negocio: ${JSON.stringify(business)}`);
+    }
+    await send('Page.navigate', { url: `http://localhost:4200${route}` });
+    await until(() => evaluate("Boolean(document.querySelector('.theme-choice input:checked'))"));
+    const afterNavigation = await evaluate("document.querySelector('.theme-choice input:checked').value");
+    if (afterNavigation !== 'nocturno') throw new Error('The selected theme did not survive navigation.');
+    await evaluate("document.querySelector('.theme-choice input[value=\"original\"]').click(); true");
+    console.log(JSON.stringify({ afterReload, business, afterNavigation, restored: 'original' }));
+  }
   for (const theme of ['original', 'nocturno']) {
     const styles = await evaluate(`(() => {
       document.documentElement.dataset.visualTheme = ${JSON.stringify(theme)};

@@ -1,8 +1,9 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { initializeVisualTheme, visualThemeStorageKey } from '../../core/theme/visual-theme';
 import { AdminPage } from './admin-page';
 
 describe('administrator areas', () => {
@@ -50,6 +51,7 @@ describe('administrator areas', () => {
     expect(page.querySelector('a[href="/admin/stock"]')).not.toBeNull();
     expect(page.querySelector('a[href="/admin/pieces"]')).not.toBeNull();
     expect(page.querySelector('a[href="/users"]')).toBeNull();
+    expect(page.querySelector('[aria-labelledby="visual-theme-title"]')).toBeNull();
     expect(page.querySelector('a[href="/admin"]')?.getAttribute('aria-current')).toBe('page');
   });
 
@@ -63,6 +65,39 @@ describe('administrator areas', () => {
     expect(page.querySelector('a[href="/users"]')).not.toBeNull();
     expect(page.querySelector('a[href="/admin/history"]')).toBeNull();
     expect(page.querySelector('a[href="/admin/configuracion"]')?.getAttribute('aria-current')).toBe('page');
+    expect(page.querySelector('[aria-labelledby="visual-theme-title"]')).not.toBeNull();
+  });
+
+  it('selects the local theme immediately without navigation or business requests', async () => {
+    const root = document.documentElement;
+    const originalAttribute = root.getAttribute('data-visual-theme');
+    const originalStorage = localStorage.getItem(visualThemeStorageKey);
+    try {
+      localStorage.setItem(visualThemeStorageKey, 'original');
+      initializeVisualTheme();
+      const page = await open('/admin/configuracion');
+      const original = page.querySelector('input[value="original"]') as HTMLInputElement;
+      const nocturno = page.querySelector('input[value="nocturno"]') as HTMLInputElement;
+      expect(original.checked).toBe(true);
+      expect(nocturno.checked).toBe(false);
+      expect(page.textContent).toContain('este perfil');
+
+      nocturno.click();
+      expect(root.dataset['visualTheme']).toBe('nocturno');
+      expect(localStorage.getItem(visualThemeStorageKey)).toBe('nocturno');
+      expect(TestBed.inject(Router).url).toBe('/admin/configuracion');
+      TestBed.inject(HttpTestingController).expectNone(() => true);
+
+      original.click();
+      expect(root.dataset['visualTheme']).toBe('original');
+      expect(localStorage.getItem(visualThemeStorageKey)).toBe('original');
+      expect(initializeVisualTheme()).toBe('original');
+    } finally {
+      if (originalStorage === null) localStorage.removeItem(visualThemeStorageKey);
+      else localStorage.setItem(visualThemeStorageKey, originalStorage);
+      if (originalAttribute === null) root.removeAttribute('data-visual-theme');
+      else root.setAttribute('data-visual-theme', originalAttribute);
+    }
   });
 
   it('changes area-tab contrast with the local theme while retaining navigation and focus', async () => {

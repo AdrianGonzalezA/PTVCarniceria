@@ -50,7 +50,7 @@
   - [x] **T2b · Contenido y detalle:** marca, stock visible y tabla de seis columnas en Original; Nocturno mantiene tabla compacta. Una sola barra A–D cambia de ubicación por CSS. Pruebas POS, lint y build correctos. Dependencia: T2a. Archivos: `pos-page.html`, `pos-page.scss`, `pos-page.spec.ts` (3).
   - [x] **T2c · Electron y regresión:** ticket vacío y cinco líneas revisados a 1366 × 768 y 1920 × 992 CSS px; ambos temas comprobados también a 800 × 768 y 560 × 768 con paneles apilados, A–D y cobro accesibles. Stock cero explícito en Original, scroll interno y menú Nocturno corregidos. La prueba de DPI físico 125 %/150 % queda en la tarea general de acabado UI2. Dependencia: T2b. Archivos: `pos-page.scss`, `pos-page.spec.ts`, `tests/inspect-electron.mjs`, `tasks/ui-v2-plan.md` (4).
 - [x] **T3 · Administración Original/Nocturno:** especificación, plan y lista T3.1–T3.16 implementados y auditados para la aplicación de sucursal/empresa y SuperAdmin local; el portal Central queda fuera. Dependencia: T1 y T2. El selector permanece oculto hasta T4.
-- [ ] **T4 · Selector en Configuración:** mostrar opciones y alcance local; cambio inmediato sin recargar ni tocar ticket, persistencia tras reinicio. Dependencias: T1–T3. Verificar: prueba de la pantalla administrativa y prueba en Electron/navegador como perfiles separados; suite Angular, lint y build. Archivos previstos: `admin-page.html`, `admin-page.ts`, `admin-page.scss`, `admin-page.spec.ts` (4).
+- [x] **T4 · Selector en Configuración:** Original/Nocturno y alcance local visibles solo en Configuración; cambio inmediato sin navegar ni tocar el ticket, persistencia local al recargar y reinicializar la aplicación. Dependencias: T1–T3. Verificación 17/10/2026: prueba roja/verde de pantalla; Chrome aislado a 1366 × 768 y 560 × 768 con ambos temas, foco, contraste y recarga; Electron separado mantuvo Original y cinco líneas mientras Chrome cambió a Nocturno. 192 Angular, 88 Electron, lint y build correctos. [Evidencia](ui-v2-auditoria-t4.md). Archivos efectivos: `admin-page.html`, `admin-page.ts`, `admin-theme-picker.scss`, `admin-area-navigation.spec.ts`, `tools/inspect-admin-theme.mjs`, manual y documentación. No se fusiona a `main` sin aceptación visual.
 
 ### T3 · Lista ejecutable aprobada
 
@@ -157,6 +157,6 @@
 ### Checkpoint de temas
 
 - [ ] Original reproduce la interfaz anterior y Nocturno la actual; ambos preservan la venta y los tickets A–D.
-- [ ] Las pantallas administrativas, sus diálogos y estados de error son legibles en ambos temas y funcionan con teclado.
-- [ ] Un equipo puede conservar su elección sin cambiar la de otro; una preferencia inválida vuelve a Original.
+- [x] Las pantallas administrativas, sus diálogos y estados de error son legibles en ambos temas y funcionan con teclado; ver auditorías T3 y T4.
+- [x] Un perfil puede conservar su elección sin cambiar la de otro; una preferencia inválida vuelve a Original.
 - [ ] El usuario revisó y aceptó las dos variantes antes de integrar esta rama a `main`.

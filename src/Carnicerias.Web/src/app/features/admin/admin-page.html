@@ -30,6 +30,27 @@
         <a routerLink="/">Cambiar contexto</a>
       </section>
 
+      @if (isConfiguration) {
+        <section class="theme-panel" aria-labelledby="visual-theme-title">
+          <div class="theme-panel-copy">
+            <p class="theme-kicker">APARIENCIA LOCAL</p>
+            <h2 id="visual-theme-title">Tema visual</h2>
+            <p>Se guarda en este perfil de Electron o navegador. No cambia otras cajas ni otros equipos.</p>
+          </div>
+          <fieldset class="theme-options">
+            <legend>Elegí la apariencia</legend>
+            @for (theme of visualThemes; track theme.id) {
+              <label class="theme-choice" [class.theme-choice--nocturno]="theme.id === 'nocturno'" [class.is-selected]="selectedVisualTheme() === theme.id">
+                <input type="radio" name="visual-theme" [value]="theme.id" [checked]="selectedVisualTheme() === theme.id" (change)="chooseVisualTheme(theme.id)">
+                <span class="theme-swatch" aria-hidden="true"><span></span><span></span></span>
+                <span class="theme-choice-name">{{ theme.label }}</span>
+                @if (selectedVisualTheme() === theme.id) { <span class="theme-active">En uso</span> }
+              </label>
+            }
+          </fieldset>
+        </section>
+      }
+
       @if (!isConfiguration && context.permissions.includes('organization.manage')) {
         <section class="summary-panel" aria-labelledby="summary-title" [attr.aria-busy]="summaryLoading()">
           <header class="summary-heading">

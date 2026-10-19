@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('All', 'Pos', 'Portals', 'Visual', 'VisualCentral', 'Rustica', 'RusticaBranch')]
+    [ValidateSet('All', 'Apis', 'Pos', 'Portals', 'Visual', 'VisualCentral', 'Rustica', 'RusticaBranch')]
     [string]$Group = 'All'
 )
 
@@ -142,6 +142,10 @@ $rusticaTargets = @(
 
 $targets = switch ($Group) {
     'All' { @($posTargets) + @($portalTargets) + @($visualTargets) + @($rusticaTargets) }
+    'Apis' {
+        $apiCandidates = @($posTargets) + @($visualTargets) + @($rusticaTargets)
+        @($apiCandidates | Where-Object { $_.Kind -eq 'Api' })
+    }
     'Pos' { $posTargets }
     'Portals' { $portalTargets }
     'Visual' { $visualTargets }

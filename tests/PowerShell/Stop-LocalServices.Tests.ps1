@@ -117,6 +117,39 @@ if ($script:stopped.Count -ne 0) {
     throw 'Stop debe validar todo el grupo antes de terminar el primer proceso.'
 }
 
+$rusticaExecutable = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\.local-backups\runtime\branch-managed-alta-v2\Carnicerias.Api.exe'))
+$rusticaProcess = [pscustomobject]@{
+    ProcessId = 84
+    Name = 'Carnicerias.Api.exe'
+    ExecutablePath = $rusticaExecutable
+    CommandLine = "`"$rusticaExecutable`" --urls http://127.0.0.1:5249"
+    CreationDate = [datetime]'2026-10-16T11:00:00'
+}
+$rusticaListener = [pscustomobject]@{ LocalPort = 5249; LocalAddress = '127.0.0.1'; OwningProcess = 84 }
+$angularListener = [pscustomobject]@{ LocalPort = 4200; LocalAddress = '127.0.0.1'; OwningProcess = 77 }
+$global:stopLocalServicesTestStopped = @()
+function Get-NetTCPConnection {
+    [CmdletBinding()]
+    param([int]$LocalPort, [string]$State)
+    if ($LocalPort -eq 5249 -and 84 -notin $global:stopLocalServicesTestStopped) { return $rusticaListener }
+    if ($LocalPort -eq 4200) { return $angularListener }
+}
+function Get-CimInstance {
+    param([string]$ClassName, [string]$Filter)
+    if ($Filter -eq 'ProcessId=84') { return $rusticaProcess }
+    if ($Filter -eq 'ProcessId=77') { return $webProcess }
+}
+function Stop-Process {
+    [CmdletBinding()]
+    param([int]$Id)
+    $global:stopLocalServicesTestStopped += $Id
+}
+$null = & $scriptPath -Group Apis
+if ($global:stopLocalServicesTestStopped.Count -ne 1 -or
+    $global:stopLocalServicesTestStopped[0] -ne 84) {
+    throw 'Apis debe detener la API de La Rústica sin tocar Angular.'
+}
+
 function Get-NetTCPConnection {
     [CmdletBinding()]
     param([int]$LocalPort, [string]$State)

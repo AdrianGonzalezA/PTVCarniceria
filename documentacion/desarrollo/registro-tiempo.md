@@ -83,4 +83,6 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 
 | 19/10/2026 | 14:45:52 | 14:46:26 | Menos de 1 min medido | Confirmar URL del SuperAdmin POS local | Se verificó la ruta `/superadmin` en Angular `:4200` y respuesta HTTP 200 del sitio y de la API POS `:5197`. Sin cambios de aplicación, servicios ni base. |
 
-**Total activo registrado desde el 16/10/2026:** 262 min medidos, más cinco tramos menores a 1 min y tramos no cuantificables.
+| 19/10/2026 | 16:15:26 | 16:16:42 | 1 min medido | Publicar cambios pendientes en GitHub | Se inspeccionó `feature/ui-v2`, se revisaron documentos, formato y ausencia de credenciales embebidas; se publicaron el commit pendiente de apagado selectivo de APIs y la documentación de arquitectura/arranque. Sin modificar servicios ni base; sin pausas conocidas. |
+
+**Total activo registrado desde el 16/10/2026:** 263 min medidos, más cinco tramos menores a 1 min y tramos no cuantificables.

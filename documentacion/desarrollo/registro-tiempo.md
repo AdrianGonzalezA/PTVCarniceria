@@ -61,5 +61,26 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 | 17/10/2026 | 12:24:06 | 12:25:27 | 1 min medido | Descomponer T3 en tareas verificables | Primera marca fiable posterior a la aprobación del plan. Se definieron 16 cortes de hasta cinco archivos con dependencias, criterios y checkpoints; sin cambios de aplicación ni de base. |
 | 17/10/2026 | 12:46:57 | 14:14:46 | 88 min | Completar temas visuales de administración y auditoría T3 | Se cerraron T3.1–T3.16 en `feature/ui-v2`; 18 rutas × 4 tamaños × 2 temas, POS inspeccionado solo en Electron, 191 pruebas Angular, 88 Electron, lint y build correctos. No se crearon bases ni movimientos de negocio. Sin pausas conocidas; compilaciones y verificaciones supervisadas incluidas. |
 | 17/10/2026 | 14:15 | 14:47 | 17 min | Implementar selector local de tema en Configuración (T4) | Prueba roja/verde, 4 tamaños en ambos temas, perfil Chrome frente a Electron con borrador intacto, 192 pruebas Angular, 88 Electron, lint y build correctos. El build nuevo se cargó en el Electron de Juan sin cerrar su sesión. Se descuentan aproximadamente 15 min de espera de autorización para reiniciar solo el `ng serve` que servía código viejo. Sin cambios de base ni ventas. |
+| 17/10/2026 | — | 14:59 | No cuantificable | Aclarar cuál es el administrador referido | Se verificó que `:4200` es administración POS local y `:4300` es el portal Central independiente, hoy apagado; `:5249` corresponde al admin servido por la sucursal Alta Córdoba. No hubo marca inicial fiable de esta petición; no se asigna duración inventada. No se modificó la aplicación. |
 
-**Total activo registrado desde el 16/10/2026:** 230 min medidos, más tramos no cuantificables.
+| 17/10/2026 | 18:07:06 | 18:07:31 | Menos de 1 min | Ubicar selector de tema | Se aclaró que está en Configuración de la administración POS local y no en el portal Central; sin cambios de aplicación ni de base. |
+
+| 17/10/2026 | 18:09:51 | 18:13:04 | 3 min medidos | Habilitar cambio de estilo en administrador de sucursal | Se diagnosticó `:5249` apagado y paquete web anterior al selector; se inició solo Alta Córdoba y se actualizó su `wwwroot` con el build vigente. Salud, ruta de configuración y recurso del selector respondieron `200`; navegador de inspección no disponible. Sin cambios de base ni del código fuente. |
+
+| 17/10/2026 | 18:52:15 | 18:54:10 | 2 min medidos | Diagnosticar rechazo de ingreso en administrador de sucursal | La API `:5249` respondió saludable; se cotejaron el contrato de login, los registros sin nueva sesión y las cuentas activas de La Rústica. Se identificó que el código POS de la empresa difiere del código `LARUSTICA` del portal Central. No se modificaron credenciales, sesiones ni datos de negocio. |
+
+| 17/10/2026 | 18:57:07 | 18:57:47 | Menos de 1 min | Explicar aplicación del tema en una caja Electron | Se verificó almacenamiento por perfil de Electron y acceso al selector desde la administración abierta en ese mismo perfil; no se modificó código ni datos. |
+
+| 17/10/2026 | 18:59:30 | 19:00:01 | Menos de 1 min medido | Abrir Caja A de La Rústica | Se confirmó que no había otra instancia Electron, que el perfil y credencial local existían, y se abrió `caja-rustica-a` sin aprovisionar ni modificar datos. Ventana creada y API `localhost:5197` saludable. |
+
+| 19/10/2026 | 08:09:37 | 08:10:11 | Menos de 1 min medido | Reabrir Caja A de La Rústica | No había instancia Electron de ese perfil. Se confirmó la API saludable y se abrió la ventana usando el perfil y la credencial existentes, sin modificar la base ni datos de negocio. |
+
+| 19/10/2026 | 09:20:35 | 09:26:39 | 6 min medidos | Documentar la arquitectura actual para desarrollo e implementación | Se contrastaron código, ADR y guías de despliegue; se creó una fuente autocontenida con componentes, fronteras, datos, flujos, estado de integraciones y mapas sugeridos. Se verificaron 18 enlaces y el diff; sin cambios de base ni pausas conocidas. El tramo anterior a la primera marca fiable no se cuantifica. |
+
+| 19/10/2026 | 10:12:01 | 10:20:00 | 8 min medidos | Anexar metodología, conectividad, tecnologías y seguridad | Se contrastaron programas, rutas, contratos, configuraciones protegidas, pruebas, planes y ADR; se creó el anexo técnico junto a la arquitectura y se enlazó desde README. Se verificaron 21 enlaces y formato. Sin cambios de código, base ni pausas conocidas; el tramo previo a la primera marca fiable no se cuantifica. |
+
+| 19/10/2026 | 11:30:26 | 11:43:31 | 13 min medidos | Actualizar comandos locales para demo La Rústica y detener APIs | Documento centrado en Alta Córdoba y perfiles A/B/C; nuevo grupo `Apis` probado en rojo/verde y suite PowerShell 4/4 correcta. Se detuvieron `5197` y `5249`, se verificaron libres todos los puertos API y se preservó Angular `4200` (HTTP 200) y PostgreSQL. Se verificaron enlaces/formato; sin pausas conocidas. El «dale» del usuario confirmó continuar la misma petición. |
+
+| 19/10/2026 | 14:45:52 | 14:46:26 | Menos de 1 min medido | Confirmar URL del SuperAdmin POS local | Se verificó la ruta `/superadmin` en Angular `:4200` y respuesta HTTP 200 del sitio y de la API POS `:5197`. Sin cambios de aplicación, servicios ni base. |
+
+**Total activo registrado desde el 16/10/2026:** 262 min medidos, más cinco tramos menores a 1 min y tramos no cuantificables.

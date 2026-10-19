@@ -78,6 +78,8 @@ Las migraciones aditivas `20261013124143_AddCloverOAuth` y `20261013143200_AddCl
 
 ## Documentación
 
+- [Arquitectura de la solución — estado actual](documentacion/arquitectura/arquitectura-solucion-estado-actual.md): componentes, fronteras, despliegue por sucursal, central, flujos y mapa para documentación derivada.
+- [Anexo técnico de arquitectura](documentacion/arquitectura/anexo-tecnico-metodologia-conectividad-seguridad.md): metodología, tecnologías, conexiones y seguridad implementada y pendiente.
 - [Base del manual de usuarios](documentacion/manual-usuarios/README.md): acceso, POS, cobros, negocio, configuración y límites vigentes.
 - `REQUERIMIENTOS_MVP.md` y `CAPABILITY_MAP.md`: alcance y módulos.
 - `SPEC-pos-sales.md`, `SPEC-pos-checkout.md` y `SPEC-catalog-pricing.md`: contratos del POS.

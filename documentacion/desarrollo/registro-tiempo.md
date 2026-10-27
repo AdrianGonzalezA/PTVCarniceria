@@ -95,4 +95,6 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 
 | 27/10/2026 | 18:40:55 | 18:44:39 | 3 min 44 s medidos | Marcar cancelada localmente la orden QR de prueba pendiente | Se reiniciaron la API `5197` y Caja A para volver a consultar el proveedor; `GET /v1/orders/{id}` devolvió 404. Se verificó que no había recibo y se actualizó una sola intención de $10 en la base autorizada `carnicerias_test_visual` a `Canceled`, conservando ID y último estado externo `created`. Se limpió el borrador local mediante recuperación normal del POS y se comprobó que la lista pendiente quedó vacía, estado local 5 y cero recibos. Solo intervención de laboratorio solicitada por el usuario; sin pausas conocidas. |
 
-**Total activo registrado desde el 16/10/2026:** 319 min 15 s medidos, más seis tramos menores a 1 min y tramos no cuantificables.
+| 27/10/2026 | 18:48:37 | 18:49:38 | 1 min 1 s medidos | Explicar saldo a favor de Recursos Informáticos | Diagnóstico de solo lectura en `carnicerias_test_visual`: recibos 11 ($12,34) y 12 ($10) se registraron como crédito; una venta a cuenta posterior de $22,34 quedó saldada por el recibo 13 en efectivo, sin consumir ese crédito. Cargos e imputaciones totales coinciden en $35.437,34; crédito disponible $22,34 y aplicaciones de crédito cero. La orden QR cancelada localmente no generó recibo. Sin pausas conocidas ni cambios de datos. |
+
+**Total activo registrado desde el 16/10/2026:** 320 min 16 s medidos, más seis tramos menores a 1 min y tramos no cuantificables.

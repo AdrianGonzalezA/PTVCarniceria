@@ -166,7 +166,8 @@ public enum CashLedgerMovementKind
     SalePayment,
     Change,
     AccountCollection,
-    AccountCollectionRefund
+    AccountCollectionRefund,
+    AccountCollectionChange
 }
 
 public sealed class CashLedgerMovement

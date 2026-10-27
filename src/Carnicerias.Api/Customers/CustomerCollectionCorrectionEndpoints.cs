@@ -56,11 +56,17 @@ public static class CustomerCollectionCorrectionEndpoints
                 item.Status == CashierShiftStatus.Open, cancellationToken);
             if (shift is null) return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_REQUIRED");
 
-            var original = await db.CustomerCollectionReceipts.Include(item => item.Allocations)
+            var original = await db.CustomerCollectionReceipts
+                .Include(item => item.Allocations).Include(item => item.Payments)
                 .SingleOrDefaultAsync(item => item.CompanyId == context.CompanyId && item.Id == receiptId,
                     cancellationToken);
             if (original is null) return Results.NotFound();
             if (original.IsVoided) return Error(StatusCodes.Status409Conflict, "COLLECTION_ALREADY_CORRECTED");
+            if (original.Payments.Count == 0)
+                return Error(StatusCodes.Status409Conflict, "COLLECTION_PAYMENT_DETAILS_MISSING");
+            if (kind == CustomerCollectionCorrectionKind.Refund &&
+                original.Payments.Any(payment => payment.Method == PaymentMethod.MercadoPago))
+                return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_REFUND_REQUIRED");
 
             var availableCredit = await db.CustomerCollectionReceipts.AsNoTracking()
                 .Where(item => item.CompanyId == context.CompanyId &&
@@ -110,7 +116,9 @@ public static class CustomerCollectionCorrectionEndpoints
                 replacement = new CustomerCollectionReceipt(context.CompanyId, context.BranchId,
                     targetCustomerId, context.UserId, shift.Id, accessor.TerminalId, Guid.NewGuid(),
                     requestHash, original.Method, original.Amount, plan.CreditAmount, now,
-                    CollectionReceiptOrigin.Reallocation, original.Id);
+                    CollectionReceiptOrigin.Reallocation, original.Id,
+                    original.Payments.Select(payment => new AppliedPayment(payment.Method,
+                        payment.TenderedAmount, payment.AppliedAmount)).ToArray());
                 replacement.Allocations.AddRange(plan.Allocations.Select(item =>
                     new CustomerCollectionAllocation(context.CompanyId, targetCustomerId,
                         item.SaleId, item.Amount)));
@@ -118,10 +126,11 @@ public static class CustomerCollectionCorrectionEndpoints
             }
             else
             {
-                db.CashLedgerMovements.Add(new CashLedgerMovement(context.CompanyId, context.BranchId,
-                    shift.Id, context.UserId, request.OperationId, original.Method,
-                    CashLedgerMovementKind.AccountCollectionRefund, -original.Amount, now,
-                    posTerminalId: accessor.TerminalId));
+                foreach (var payment in original.Payments.Where(payment => payment.AppliedAmount > 0))
+                    db.CashLedgerMovements.Add(new CashLedgerMovement(context.CompanyId, context.BranchId,
+                        shift.Id, context.UserId, Guid.NewGuid(), payment.Method,
+                        CashLedgerMovementKind.AccountCollectionRefund, -payment.AppliedAmount, now,
+                        posTerminalId: accessor.TerminalId));
             }
 
             original.Void(now);

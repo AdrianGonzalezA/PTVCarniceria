@@ -114,7 +114,8 @@ export interface CashHistoryItem {
   readonly cashierName: string;
   readonly shiftId: string;
   readonly saleId: string | null;
-  readonly kind: 'opening' | 'salePayment' | 'change';
+  readonly kind: 'opening' | 'salePayment' | 'change' | 'accountCollection' |
+    'accountCollectionRefund' | 'accountCollectionChange';
   readonly method: string;
   readonly amountDelta: number;
 }

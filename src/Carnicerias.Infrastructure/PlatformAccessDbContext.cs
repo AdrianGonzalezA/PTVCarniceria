@@ -41,6 +41,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
     public DbSet<CustomerSaleCharge> CustomerSaleCharges => Set<CustomerSaleCharge>();
 
     public DbSet<CustomerCollectionReceipt> CustomerCollectionReceipts => Set<CustomerCollectionReceipt>();
+    public DbSet<CustomerCollectionPayment> CustomerCollectionPayments => Set<CustomerCollectionPayment>();
 
     public DbSet<CustomerCollectionAllocation> CustomerCollectionAllocations => Set<CustomerCollectionAllocation>();
 
@@ -426,6 +427,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(receipt => receipt.Origin).HasConversion<int>().IsRequired();
             entity.Property(receipt => receipt.Amount).HasPrecision(12, 2);
             entity.Property(receipt => receipt.CreditAmount).HasPrecision(12, 2);
+            entity.Ignore(receipt => receipt.ChangeAmount);
             entity.HasOne<CustomerAccount>().WithMany()
                 .HasForeignKey(receipt => new { receipt.CompanyId, receipt.CustomerId })
                 .HasPrincipalKey(customer => new { customer.CompanyId, customer.Id })
@@ -456,6 +458,26 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .HasForeignKey(allocation => new { allocation.CompanyId, allocation.ReceiptId })
                 .HasPrincipalKey(receipt => new { receipt.CompanyId, receipt.Id })
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(receipt => receipt.Payments).WithOne(payment => payment.Receipt)
+                .HasForeignKey(payment => payment.ReceiptId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CustomerCollectionPayment>(entity =>
+        {
+            entity.ToTable("collection_payments", "customers_credit", table =>
+            {
+                table.HasCheckConstraint("CK_collection_payments_tendered_positive", "\"TenderedAmount\" > 0");
+                table.HasCheckConstraint("CK_collection_payments_applied_valid",
+                    "\"AppliedAmount\" > 0 OR (\"Method\" = 0 AND \"AppliedAmount\" = 0)");
+                table.HasCheckConstraint("CK_collection_payments_applied_lte_tendered",
+                    "\"AppliedAmount\" <= \"TenderedAmount\"");
+            });
+            entity.HasKey(payment => payment.Id);
+            entity.Property(payment => payment.Method).HasConversion<int>().IsRequired();
+            entity.Property(payment => payment.TenderedAmount).HasPrecision(12, 2);
+            entity.Property(payment => payment.AppliedAmount).HasPrecision(12, 2);
+            entity.HasIndex(payment => new { payment.ReceiptId, payment.Method }).IsUnique();
         });
 
         modelBuilder.Entity<CustomerCollectionCorrection>(entity =>
@@ -1009,6 +1031,9 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 table.HasCheckConstraint("CK_point_payment_intents_amount_positive", "\"Amount\" > 0");
                 table.HasCheckConstraint("CK_point_payment_intents_status", "\"Status\" BETWEEN 0 AND 7");
                 table.HasCheckConstraint("CK_point_payment_intents_mode", "\"Mode\" BETWEEN 0 AND 2");
+                table.HasCheckConstraint("CK_point_payment_intents_owner",
+                    "(\"SaleDraftId\" IS NOT NULL AND \"CustomerCollectionOperationId\" IS NULL AND \"CustomerId\" IS NULL) OR " +
+                    "(\"SaleDraftId\" IS NULL AND \"CustomerCollectionOperationId\" IS NOT NULL AND \"CustomerId\" IS NOT NULL)");
             });
             entity.HasKey(intent => intent.Id);
             entity.Property(intent => intent.Amount).HasPrecision(12, 2);
@@ -1040,14 +1065,21 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasOne<ConfirmedSale>().WithMany()
                 .HasForeignKey(intent => intent.ConfirmedSaleId)
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CustomerCollectionReceipt>().WithMany()
+                .HasForeignKey(intent => intent.ConfirmedCollectionReceiptId)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(intent => intent.ConfirmedSaleId).IsUnique()
                 .HasFilter("\"ConfirmedSaleId\" IS NOT NULL");
+            entity.HasIndex(intent => intent.ConfirmedCollectionReceiptId).IsUnique()
+                .HasFilter("\"ConfirmedCollectionReceiptId\" IS NOT NULL");
             entity.HasIndex(intent => intent.IdempotencyKey).IsUnique();
             entity.HasIndex(intent => intent.ProviderOrderId).IsUnique()
                 .HasFilter("\"ProviderOrderId\" IS NOT NULL");
             entity.HasIndex(intent => new { intent.CompanyId, intent.SaleDraftId, intent.CreatedAtUtc });
             entity.HasIndex(intent => new { intent.CompanyId, intent.SaleDraftId })
-                .IsUnique().HasFilter("\"Status\" IN (0, 1, 2, 6)");
+                .IsUnique().HasFilter("\"SaleDraftId\" IS NOT NULL AND \"Status\" IN (0, 1, 2, 6)");
+            entity.HasIndex(intent => new { intent.CompanyId, intent.CustomerCollectionOperationId })
+                .IsUnique().HasFilter("\"CustomerCollectionOperationId\" IS NOT NULL AND \"Status\" IN (0, 1, 2, 6)");
         });
 
         modelBuilder.Entity<CashLedgerMovement>(entity =>
@@ -1055,7 +1087,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.ToTable("cash_ledger", "payments_cash", table =>
             {
                 table.HasCheckConstraint("CK_cash_ledger_amount_nonzero", "\"AmountDelta\" <> 0");
-                table.HasCheckConstraint("CK_cash_ledger_kind", "\"Kind\" IN (0, 1, 2, 3, 4)");
+                table.HasCheckConstraint("CK_cash_ledger_kind", "\"Kind\" IN (0, 1, 2, 3, 4, 5)");
             });
             entity.HasKey(movement => movement.Id);
             entity.Property(movement => movement.Method).HasConversion<int>().IsRequired();

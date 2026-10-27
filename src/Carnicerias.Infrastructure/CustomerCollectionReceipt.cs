@@ -16,7 +16,7 @@ public sealed class CustomerCollectionReceipt
         Guid cashierShiftId, Guid? posTerminalId, Guid operationId, string requestHash,
         PaymentMethod method, decimal amount, decimal creditAmount, DateTimeOffset createdAtUtc,
         CollectionReceiptOrigin origin = CollectionReceiptOrigin.CashReceived,
-        Guid? replacesReceiptId = null)
+        Guid? replacesReceiptId = null, IReadOnlyList<AppliedPayment>? payments = null)
     {
         if (companyId == Guid.Empty || branchId == Guid.Empty || customerId == Guid.Empty ||
             cashierId == Guid.Empty || cashierShiftId == Guid.Empty || operationId == Guid.Empty ||
@@ -32,6 +32,17 @@ public sealed class CustomerCollectionReceipt
         if (amount <= 0 || amount > 9_999_999_999.99m || decimal.Round(amount, 2) != amount ||
             creditAmount < 0 || creditAmount > amount || decimal.Round(creditAmount, 2) != creditAmount)
             throw new ArgumentOutOfRangeException(nameof(amount));
+        payments ??= [new AppliedPayment(method, amount, amount)];
+        if (payments.Count is < 1 or > 6 || !payments.Any(payment => payment.Method == method) ||
+            payments.Select(payment => payment.Method).Distinct().Count() != payments.Count ||
+            payments.Any(payment => !Enum.IsDefined(payment.Method) ||
+                payment.AppliedAmount < 0 || payment.TenderedAmount < payment.AppliedAmount ||
+                payment.Method != PaymentMethod.Cash && payment.AppliedAmount == 0 ||
+                payment.Method != PaymentMethod.Cash && payment.TenderedAmount != payment.AppliedAmount ||
+                decimal.Round(payment.AppliedAmount, 2) != payment.AppliedAmount ||
+                decimal.Round(payment.TenderedAmount, 2) != payment.TenderedAmount) ||
+            payments.Sum(payment => payment.AppliedAmount) != amount)
+            throw new ArgumentException("Collection payments must cover the exact receipt amount.", nameof(payments));
 
         Id = Guid.NewGuid();
         CompanyId = companyId;
@@ -48,6 +59,8 @@ public sealed class CustomerCollectionReceipt
         Origin = origin;
         ReplacesReceiptId = replacesReceiptId;
         CreatedAtUtc = createdAtUtc.ToUniversalTime();
+        Payments.AddRange(payments.Select(payment => new CustomerCollectionPayment(
+            payment.Method, payment.TenderedAmount, payment.AppliedAmount)));
     }
 
     public Guid Id { get; private set; }
@@ -69,6 +82,8 @@ public sealed class CustomerCollectionReceipt
     public DateTimeOffset? VoidedAtUtc { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; }
     public List<CustomerCollectionAllocation> Allocations { get; private set; } = [];
+    public List<CustomerCollectionPayment> Payments { get; private set; } = [];
+    public decimal ChangeAmount => Payments.Sum(payment => payment.TenderedAmount - payment.AppliedAmount);
 
     public void Void(DateTimeOffset atUtc)
     {
@@ -76,6 +91,33 @@ public sealed class CustomerCollectionReceipt
         IsVoided = true;
         VoidedAtUtc = atUtc.ToUniversalTime();
     }
+}
+
+public sealed class CustomerCollectionPayment
+{
+    private CustomerCollectionPayment() { }
+
+    public CustomerCollectionPayment(PaymentMethod method, decimal tenderedAmount, decimal appliedAmount)
+    {
+        if (!Enum.IsDefined(method) || tenderedAmount <= 0 || appliedAmount < 0 ||
+            appliedAmount > tenderedAmount ||
+            method != PaymentMethod.Cash && appliedAmount == 0 ||
+            (method != PaymentMethod.Cash && tenderedAmount != appliedAmount) ||
+            decimal.Round(tenderedAmount, 2) != tenderedAmount ||
+            decimal.Round(appliedAmount, 2) != appliedAmount)
+            throw new ArgumentException("A collection payment needs a valid method and amount.");
+        Id = Guid.NewGuid();
+        Method = method;
+        TenderedAmount = tenderedAmount;
+        AppliedAmount = appliedAmount;
+    }
+
+    public Guid Id { get; private set; }
+    public Guid ReceiptId { get; private set; }
+    public PaymentMethod Method { get; private set; }
+    public decimal TenderedAmount { get; private set; }
+    public decimal AppliedAmount { get; private set; }
+    public CustomerCollectionReceipt Receipt { get; private set; } = null!;
 }
 
 public sealed class CustomerCollectionAllocation

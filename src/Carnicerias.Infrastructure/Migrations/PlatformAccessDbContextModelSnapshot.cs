@@ -287,7 +287,7 @@ namespace Carnicerias.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_cash_ledger_amount_nonzero", "\"AmountDelta\" <> 0");
 
-                            t.HasCheckConstraint("CK_cash_ledger_kind", "\"Kind\" IN (0, 1, 2, 3, 4)");
+                            t.HasCheckConstraint("CK_cash_ledger_kind", "\"Kind\" IN (0, 1, 2, 3, 4, 5)");
                         });
                 });
 
@@ -851,6 +851,41 @@ namespace Carnicerias.Infrastructure.Migrations
                             t.HasCheckConstraint("CK_collection_corrections_amount", "\"Amount\" > 0");
 
                             t.HasCheckConstraint("CK_collection_corrections_kind", "\"Kind\" IN (0, 1) AND ((\"Kind\" = 0 AND \"ReplacementReceiptId\" IS NOT NULL) OR (\"Kind\" = 1 AND \"ReplacementReceiptId\" IS NULL))");
+                        });
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.CustomerCollectionPayment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("AppliedAmount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<int>("Method")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ReceiptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("TenderedAmount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReceiptId", "Method")
+                        .IsUnique();
+
+                    b.ToTable("collection_payments", "customers_credit", t =>
+                        {
+                            t.HasCheckConstraint("CK_collection_payments_applied_lte_tendered", "\"AppliedAmount\" <= \"TenderedAmount\"");
+
+                            t.HasCheckConstraint("CK_collection_payments_applied_valid", "\"AppliedAmount\" > 0 OR (\"Method\" = 0 AND \"AppliedAmount\" = 0)");
+
+                            t.HasCheckConstraint("CK_collection_payments_tendered_positive", "\"TenderedAmount\" > 0");
                         });
                 });
 
@@ -1420,11 +1455,20 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<Guid>("CompanyId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ConfirmedCollectionReceiptId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("ConfirmedSaleId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CustomerCollectionOperationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CustomerId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("IdempotencyKey")
                         .HasColumnType("uuid");
@@ -1459,7 +1503,7 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasMaxLength(4096)
                         .HasColumnType("character varying(4096)");
 
-                    b.Property<Guid>("SaleDraftId")
+                    b.Property<Guid?>("SaleDraftId")
                         .HasColumnType("uuid");
 
                     b.Property<int>("Status")
@@ -1477,6 +1521,10 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.HasIndex("CashierId");
 
+                    b.HasIndex("ConfirmedCollectionReceiptId")
+                        .IsUnique()
+                        .HasFilter("\"ConfirmedCollectionReceiptId\" IS NOT NULL");
+
                     b.HasIndex("ConfirmedSaleId")
                         .IsUnique()
                         .HasFilter("\"ConfirmedSaleId\" IS NOT NULL");
@@ -1490,9 +1538,13 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.HasIndex("CompanyId", "CashierShiftId");
 
+                    b.HasIndex("CompanyId", "CustomerCollectionOperationId")
+                        .IsUnique()
+                        .HasFilter("\"CustomerCollectionOperationId\" IS NOT NULL AND \"Status\" IN (0, 1, 2, 6)");
+
                     b.HasIndex("CompanyId", "SaleDraftId")
                         .IsUnique()
-                        .HasFilter("\"Status\" IN (0, 1, 2, 6)");
+                        .HasFilter("\"SaleDraftId\" IS NOT NULL AND \"Status\" IN (0, 1, 2, 6)");
 
                     b.HasIndex("CompanyId", "BranchId", "PosTerminalId");
 
@@ -1503,6 +1555,8 @@ namespace Carnicerias.Infrastructure.Migrations
                             t.HasCheckConstraint("CK_point_payment_intents_amount_positive", "\"Amount\" > 0");
 
                             t.HasCheckConstraint("CK_point_payment_intents_mode", "\"Mode\" BETWEEN 0 AND 2");
+
+                            t.HasCheckConstraint("CK_point_payment_intents_owner", "(\"SaleDraftId\" IS NOT NULL AND \"CustomerCollectionOperationId\" IS NULL AND \"CustomerId\" IS NULL) OR (\"SaleDraftId\" IS NULL AND \"CustomerCollectionOperationId\" IS NOT NULL AND \"CustomerId\" IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_point_payment_intents_status", "\"Status\" BETWEEN 0 AND 7");
                         });
@@ -2695,6 +2749,17 @@ namespace Carnicerias.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("Carnicerias.Infrastructure.CustomerCollectionPayment", b =>
+                {
+                    b.HasOne("Carnicerias.Infrastructure.CustomerCollectionReceipt", "Receipt")
+                        .WithMany("Payments")
+                        .HasForeignKey("ReceiptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Receipt");
+                });
+
             modelBuilder.Entity("Carnicerias.Infrastructure.CustomerCollectionReceipt", b =>
                 {
                     b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
@@ -2939,6 +3004,11 @@ namespace Carnicerias.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Carnicerias.Infrastructure.CustomerCollectionReceipt", null)
+                        .WithMany()
+                        .HasForeignKey("ConfirmedCollectionReceiptId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Carnicerias.Infrastructure.ConfirmedSale", null)
                         .WithMany()
                         .HasForeignKey("ConfirmedSaleId")
@@ -2955,8 +3025,7 @@ namespace Carnicerias.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("CompanyId", "SaleDraftId")
                         .HasPrincipalKey("CompanyId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Carnicerias.Infrastructure.PosTerminal", null)
                         .WithMany()
@@ -3280,6 +3349,8 @@ namespace Carnicerias.Infrastructure.Migrations
             modelBuilder.Entity("Carnicerias.Infrastructure.CustomerCollectionReceipt", b =>
                 {
                     b.Navigation("Allocations");
+
+                    b.Navigation("Payments");
                 });
 
             modelBuilder.Entity("Carnicerias.Infrastructure.SaleDraft", b =>

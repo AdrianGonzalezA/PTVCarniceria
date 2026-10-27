@@ -44,6 +44,9 @@ export interface AccountReceipt {
   readonly amount: number;
   readonly creditAmount: number;
   readonly method: string;
+  readonly payments: readonly { readonly method: string; readonly tenderedAmount: number;
+    readonly appliedAmount: number }[];
+  readonly changeAmount: number;
   readonly origin: 'cashReceived' | 'reallocation';
   readonly isVoided: boolean;
   readonly replacesReceiptId: string | null;

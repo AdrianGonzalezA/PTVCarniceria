@@ -109,7 +109,13 @@
               <tbody>@for (receipt of account.receipts.items; track receipt.id) {
                 <tr>
                   <td><strong>N.º {{ receipt.receiptNumber }}</strong><small>{{ receipt.createdAtUtc | date:'dd/MM/yyyy HH:mm' }}</small></td>
-                  <td>{{ receipt.method }}<small>{{ receipt.origin === 'reallocation' ? 'Reasignación · ' : '' }}turno {{ receipt.cashierShiftId.slice(0, 8) }}</small></td>
+                  <td>
+                    @for (payment of receipt.payments; track payment.method) {
+                      <span>{{ paymentLabel(payment.method) }}: {{ money(payment.appliedAmount) }}</span><br />
+                    }
+                    @if (receipt.changeAmount > 0) { <small>Vuelto: {{ money(receipt.changeAmount) }}</small> }
+                    <small>{{ receipt.origin === 'reallocation' ? 'Reasignación · ' : '' }}turno {{ receipt.cashierShiftId.slice(0, 8) }}</small>
+                  </td>
                   <td>{{ money(receipt.amount) }}</td>
                   <td><small>
                     @for (allocation of receipt.allocations; track allocation.saleId) {
@@ -170,8 +176,11 @@
           <label for="correction-kind">Tipo de corrección</label>
           <select id="correction-kind" [value]="correctionKind()" (change)="updateCorrectionKind($event)">
             <option value="reallocate">El dinero ingresó: reasignar cuenta, sin salida de caja</option>
-            <option value="refund">El dinero no ingresó o se devolvió: revertir caja</option>
+            <option value="refund" [disabled]="hasMercadoPagoPayment(receipt)">El dinero no ingresó o se devolvió: revertir caja</option>
           </select>
+          @if (hasMercadoPagoPayment(receipt)) {
+            <p>Los cobros de Mercado Pago necesitan una devolución confirmada en la pasarela antes de revertir el recibo.</p>
+          }
           @if (correctionKind() === 'reallocate') {
             <form class="account-search" (submit)="$event.preventDefault(); findTargets()">
               <label for="target-search">Cuenta de destino</label>

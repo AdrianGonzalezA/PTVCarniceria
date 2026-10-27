@@ -21,6 +21,8 @@ Buscá un cliente por código o nombre y abrí **Ver estado**. Se muestran deuda
 
 La corrección interna no ejecuta por sí sola un reintegro en un banco, tarjeta o pasarela. Revisá el hecho real antes de elegir el tipo.
 
+Cada recibo muestra los medios aplicados y el vuelto en efectivo. Una **reasignación** conserva ese desglose. Si el recibo incluye Mercado Pago, la opción **Revertir caja** queda deshabilitada: primero debe implementarse y confirmarse la devolución en la pasarela. La reasignación contable sigue disponible cuando corresponde.
+
 ## Existencias y recepción
 
 **Existencias** consulta por artículo la cantidad física, la reservada por tickets abiertos y la disponible en la sucursal. **Ajustar** abre un modal para ese artículo y registra una variación positiva o negativa. La descripción es opcional; si se deja vacía, el movimiento conserva «Ajuste manual» como motivo de auditoría. El sistema no permite dejar la existencia por debajo de lo reservado.

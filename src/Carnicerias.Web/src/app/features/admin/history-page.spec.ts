@@ -83,6 +83,29 @@ describe('HistoryPage', () => {
     expect(page.querySelector('tbody button')).toBe(trigger);
   });
 
+  it('labels account collections and their cash change separately from sales', () => {
+    const { fixture, http, page } = load();
+    const cashTab = Array.from(page.querySelectorAll<HTMLButtonElement>('.history-tabs button'))
+      .find((button) => button.textContent?.includes('Caja y pagos'))!;
+    cashTab.click();
+    http.expectOne((request) => request.url === '/api/admin/history/cash-movements').flush({
+      items: [
+        { id: 'cash-1', createdAtUtc: '2026-10-27T17:00:00Z', branchId: 'branch-1',
+          branchName: 'Centro', terminalId: 'terminal-1', terminalName: 'Caja 1',
+          cashierId: 'cashier-1', cashierName: 'Cajero', shiftId: 'shift-1', saleId: null,
+          kind: 'accountCollection', method: 'cash', amountDelta: 120 },
+        { id: 'cash-2', createdAtUtc: '2026-10-27T17:00:00Z', branchId: 'branch-1',
+          branchName: 'Centro', terminalId: 'terminal-1', terminalName: 'Caja 1',
+          cashierId: 'cashier-1', cashierName: 'Cajero', shiftId: 'shift-1', saleId: null,
+          kind: 'accountCollectionChange', method: 'cash', amountDelta: -20 },
+      ], page: 1, pageSize: 30, totalItems: 2,
+    });
+    fixture.detectChanges();
+    expect(page.querySelector('tbody')?.textContent).toContain('Cobro de cuenta');
+    expect(page.querySelector('tbody')?.textContent).toContain('Vuelto de cuenta');
+    fixture.destroy();
+  });
+
   it('filters by branch and changes to stock movements without a terminal filter', () => {
     const { fixture, http, page } = load();
     const branch = page.querySelector<HTMLSelectElement>('#history-branch')!;

@@ -38,7 +38,31 @@ export class MercadoPagoClient {
       { withCredentials: true });
   }
 
+  getCollection(operationId: string) {
+    return this.http.get<MercadoPagoIntent | null>(this.collectionUrl(operationId),
+      { withCredentials: true });
+  }
+
+  startCollection(operationId: string, customerId: string, mode: MercadoPagoMode, amount: number) {
+    return this.http.post<MercadoPagoIntent>(this.collectionUrl(operationId),
+      { customerId, mode, amount }, { withCredentials: true });
+  }
+
+  checkCollection(operationId: string, intentId: string) {
+    return this.http.post<MercadoPagoIntent>(`${this.collectionUrl(operationId)}/${intentId}/check`, {},
+      { withCredentials: true });
+  }
+
+  cancelCollection(operationId: string, intentId: string) {
+    return this.http.post<MercadoPagoIntent>(`${this.collectionUrl(operationId)}/${intentId}/cancel`, {},
+      { withCredentials: true });
+  }
+
   private url(draftId: string): string {
     return `/api/sales/drafts/${draftId}/mercado-pago`;
+  }
+
+  private collectionUrl(operationId: string): string {
+    return `/api/customers/collections/operations/${operationId}/mercado-pago`;
   }
 }

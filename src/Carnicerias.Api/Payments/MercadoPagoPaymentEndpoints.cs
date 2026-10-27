@@ -3,36 +3,99 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Carnicerias.Infrastructure;
 using Carnicerias.Api.Security;
+using Carnicerias.PlatformAccess;
 using Microsoft.EntityFrameworkCore;
 
 namespace Carnicerias.Api.Payments;
 
 public static class MercadoPagoPaymentEndpoints
 {
+    private static readonly Action<ILogger, Guid, string, int?, string, Exception?> LogCancelFailure =
+        LoggerMessage.Define<Guid, string, int?, string>(LogLevel.Warning,
+            new EventId(1001, "MercadoPagoCancelFailed"),
+            "MercadoPagoCancelFailed IntentId={IntentId} ErrorType={ErrorType} ProviderStatus={ProviderStatus} TraceId={TraceId}");
+
     public static IEndpointRouteBuilder MapMercadoPagoPaymentEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/sales/drafts/{draftId:guid}/mercado-pago");
-        group.MapGet("", GetAsync).RequireOperationalContext();
-        group.MapPost("", StartAsync).RequireOperationalContext();
-        group.MapPost("/{intentId:guid}/check", CheckAsync).RequireOperationalContext();
-        group.MapPost("/{intentId:guid}/cancel", CancelAsync).RequireOperationalContext();
+        group.MapGet("", (Guid draftId, PlatformAccessDbContext db,
+            OperationalContextAccessor accessor, CancellationToken cancellationToken) =>
+            GetAsync(draftId, null, db, accessor, cancellationToken)).RequireOperationalContext();
+        group.MapPost("", (Guid draftId, StartRequest? request, PlatformAccessDbContext db,
+            OperationalContextAccessor accessor, MercadoPagoSettingsResolver settings,
+            MercadoPagoPointClient point, MercadoPagoQrClient qr, MercadoPagoStaticQrClient staticQr,
+            MercadoPagoOrderLookupClient lookup, TimeProvider clock, HttpContext context,
+            CancellationToken cancellationToken) => StartAsync(draftId, null, request, db, accessor,
+                settings, point, qr, staticQr, lookup, clock, context, cancellationToken))
+            .RequireOperationalContext();
+        group.MapPost("/{intentId:guid}/check", (Guid draftId, Guid intentId,
+            PlatformAccessDbContext db, OperationalContextAccessor accessor,
+            MercadoPagoSettingsResolver settings, MercadoPagoPointClient point,
+            MercadoPagoQrClient qr, MercadoPagoOrderLookupClient lookup, TimeProvider clock,
+            HttpContext context, CancellationToken cancellationToken) =>
+            CheckAsync(draftId, null, intentId, db, accessor, settings, point, qr, lookup,
+                clock, context, cancellationToken)).RequireOperationalContext();
+        group.MapPost("/{intentId:guid}/cancel", (Guid draftId, Guid intentId,
+            PlatformAccessDbContext db, OperationalContextAccessor accessor,
+            MercadoPagoSettingsResolver settings, MercadoPagoPointClient point,
+            MercadoPagoQrClient qr, MercadoPagoOrderLookupClient lookup, TimeProvider clock,
+            HttpContext context, CancellationToken cancellationToken) =>
+            CancelAsync(draftId, null, intentId, db, accessor, settings, point, qr, lookup,
+                clock, context, cancellationToken)).RequireOperationalContext();
+
+        var collections = endpoints.MapGroup(
+            "/api/customers/collections/operations/{operationId:guid}/mercado-pago");
+        collections.MapGet("", (Guid operationId, PlatformAccessDbContext db,
+            OperationalContextAccessor accessor, CancellationToken cancellationToken) =>
+            GetAsync(null, operationId, db, accessor, cancellationToken))
+            .RequireOperationalPermission(PlatformPermissionCatalog.PosAccountCharge);
+        collections.MapPost("", (Guid operationId, StartRequest? request, PlatformAccessDbContext db,
+            OperationalContextAccessor accessor, MercadoPagoSettingsResolver settings,
+            MercadoPagoPointClient point, MercadoPagoQrClient qr, MercadoPagoStaticQrClient staticQr,
+            MercadoPagoOrderLookupClient lookup, TimeProvider clock, HttpContext context,
+            CancellationToken cancellationToken) => StartAsync(null, operationId, request, db, accessor,
+                settings, point, qr, staticQr, lookup, clock, context, cancellationToken))
+            .RequireOperationalPermission(PlatformPermissionCatalog.PosAccountCharge);
+        collections.MapPost("/{intentId:guid}/check", (Guid operationId, Guid intentId,
+            PlatformAccessDbContext db, OperationalContextAccessor accessor,
+            MercadoPagoSettingsResolver settings, MercadoPagoPointClient point,
+            MercadoPagoQrClient qr, MercadoPagoOrderLookupClient lookup, TimeProvider clock,
+            HttpContext context, CancellationToken cancellationToken) =>
+            CheckAsync(null, operationId, intentId, db, accessor, settings, point, qr, lookup,
+                clock, context, cancellationToken))
+            .RequireOperationalPermission(PlatformPermissionCatalog.PosAccountCharge);
+        collections.MapPost("/{intentId:guid}/cancel", (Guid operationId, Guid intentId,
+            PlatformAccessDbContext db, OperationalContextAccessor accessor,
+            MercadoPagoSettingsResolver settings, MercadoPagoPointClient point,
+            MercadoPagoQrClient qr, MercadoPagoOrderLookupClient lookup, TimeProvider clock,
+            HttpContext context, CancellationToken cancellationToken) =>
+            CancelAsync(null, operationId, intentId, db, accessor, settings, point, qr, lookup,
+                clock, context, cancellationToken))
+            .RequireOperationalPermission(PlatformPermissionCatalog.PosAccountCharge);
         return endpoints;
     }
 
-    private static async Task<IResult> GetAsync(Guid draftId, PlatformAccessDbContext db,
+    private static async Task<IResult> GetAsync(Guid? draftId, Guid? operationId,
+        PlatformAccessDbContext db,
         OperationalContextAccessor accessor, CancellationToken cancellationToken)
     {
-        if (!await OwnsDraftAsync(draftId, db, accessor, cancellationToken))
+        if (draftId is Guid saleDraftId &&
+            !await OwnsDraftAsync(saleDraftId, db, accessor, cancellationToken) ||
+            operationId is not null && accessor.TerminalId is null)
             return Error(404, "DRAFT_NOT_FOUND");
         var intent = await db.PointPaymentIntents.AsNoTracking()
-            .Where(item => item.CompanyId == accessor.Context.CompanyId && item.SaleDraftId == draftId &&
+            .Where(item => item.CompanyId == accessor.Context.CompanyId &&
+                item.BranchId == accessor.Context.BranchId &&
+                item.CashierId == accessor.Context.UserId && item.PosTerminalId == accessor.TerminalId &&
+                item.SaleDraftId == draftId && item.CustomerCollectionOperationId == operationId &&
                 item.Status != PointPaymentStatus.Rejected && item.Status != PointPaymentStatus.Expired &&
                 item.Status != PointPaymentStatus.Canceled && item.Status != PointPaymentStatus.Refunded)
             .OrderByDescending(item => item.CreatedAtUtc).FirstOrDefaultAsync(cancellationToken);
         return intent is null ? Results.NoContent() : Results.Ok(ToResponse(intent));
     }
 
-    private static async Task<IResult> StartAsync(Guid draftId, StartRequest? request,
+    private static async Task<IResult> StartAsync(Guid? draftId, Guid? operationId,
+        StartRequest? request,
         PlatformAccessDbContext db, OperationalContextAccessor accessor,
         MercadoPagoSettingsResolver settings, MercadoPagoPointClient point,
         MercadoPagoQrClient qr, MercadoPagoStaticQrClient staticQr,
@@ -43,18 +106,38 @@ public static class MercadoPagoPaymentEndpoints
         if (!AllowedOrigin(context)) return Error(403, "CSRF_REJECTED");
         if (request is null || request.Amount <= 0 || request.Amount > 999_999_999.99m ||
             decimal.Round(request.Amount, 2) != request.Amount ||
-            request.Mode is not "point" and not "qr" and not "qrStatic")
+            request.Mode is not "point" and not "qr" and not "qrStatic" ||
+            (draftId is null) == (operationId is null) ||
+            (draftId is null) != (request.CustomerId is not null) ||
+            request.CustomerId == Guid.Empty)
             return Error(400, "VALIDATION_ERROR");
         if (request.Mode == "point" && request.Amount < 15m)
             return Error(400, "MERCADO_PAGO_AMOUNT_TOO_SMALL");
         await using var dbTransaction = await db.Database.BeginTransactionAsync(
             IsolationLevel.Serializable, cancellationToken);
-        var draft = await OwnedDraftAsync(draftId, db, accessor, cancellationToken);
-        if (draft is null || draft.Lines.Count == 0 || draft.TotalAfterDiscount < request.Amount)
-            return Error(409, "DRAFT_NOT_CONFIRMABLE");
-        if (draft.CashierShiftId is not Guid shiftId || accessor.TerminalId is not Guid terminalId ||
-            !await db.CashierShifts.AnyAsync(item => item.Id == shiftId &&
-                item.Status == CashierShiftStatus.Open, cancellationToken))
+        SaleDraft? draft = null;
+        if (draftId is Guid saleDraftId)
+        {
+            draft = await OwnedDraftAsync(saleDraftId, db, accessor, cancellationToken);
+            if (draft is null || draft.Lines.Count == 0 || draft.TotalAfterDiscount < request.Amount)
+                return Error(409, "DRAFT_NOT_CONFIRMABLE");
+        }
+        else
+        {
+            if (await db.CustomerCollectionReceipts.AnyAsync(item =>
+                item.CompanyId == accessor.Context.CompanyId && item.OperationId == operationId,
+                cancellationToken)) return Error(409, "ACCOUNT_COLLECTION_ALREADY_CONFIRMED");
+            if (!await db.CustomerAccounts.AnyAsync(item =>
+                item.CompanyId == accessor.Context.CompanyId && item.Id == request.CustomerId,
+                cancellationToken)) return Error(404, "CUSTOMER_NOT_FOUND");
+        }
+        if (accessor.TerminalId is not Guid terminalId)
+            return Error(409, "CASHIER_SHIFT_REQUIRED");
+        var shift = await db.CashierShifts.AsNoTracking().SingleOrDefaultAsync(item =>
+            item.CompanyId == accessor.Context.CompanyId && item.BranchId == accessor.Context.BranchId &&
+            item.CashierId == accessor.Context.UserId && item.PosTerminalId == terminalId &&
+            item.Status == CashierShiftStatus.Open, cancellationToken);
+        if (shift is null || draft is not null && draft.CashierShiftId != shift.Id)
             return Error(409, "CASHIER_SHIFT_REQUIRED");
         var mapping = await db.MercadoPagoRegisterSettings.AsNoTracking().SingleOrDefaultAsync(item =>
             item.CompanyId == accessor.Context.CompanyId && item.BranchId == accessor.Context.BranchId &&
@@ -74,18 +157,26 @@ public static class MercadoPagoPaymentEndpoints
         };
         var intent = await db.PointPaymentIntents.Where(item =>
             item.CompanyId == accessor.Context.CompanyId && item.SaleDraftId == draftId &&
+            item.CustomerCollectionOperationId == operationId &&
             (item.Status == PointPaymentStatus.Prepared || item.Status == PointPaymentStatus.Pending ||
              item.Status == PointPaymentStatus.Approved || item.Status == PointPaymentStatus.NeedsReconciliation))
             .OrderByDescending(item => item.CreatedAtUtc).FirstOrDefaultAsync(cancellationToken);
         if (intent is not null && (intent.Amount != request.Amount || intent.Mode != mode ||
-            intent.TerminalId != deviceId)) return Error(409, "MERCADO_PAGO_ORDER_ACTIVE");
+            intent.TerminalId != deviceId || intent.CustomerId != request.CustomerId ||
+            intent.CashierShiftId != shift.Id || intent.CashierId != accessor.Context.UserId ||
+            intent.PosTerminalId != terminalId)) return Error(409, "MERCADO_PAGO_ORDER_ACTIVE");
         if (intent?.ProviderOrderId is not null) return Results.Ok(ToResponse(intent));
         var retry = intent is not null;
         if (intent is null)
         {
-            intent = new PointPaymentIntent(accessor.Context.CompanyId, accessor.Context.BranchId,
-                draftId, shiftId, accessor.Context.UserId, terminalId, deviceId,
-                request.Amount, clock.GetUtcNow(), mode);
+            intent = draftId is Guid ownedDraftId
+                ? new PointPaymentIntent(accessor.Context.CompanyId, accessor.Context.BranchId,
+                    ownedDraftId, shift.Id, accessor.Context.UserId, terminalId, deviceId,
+                    request.Amount, clock.GetUtcNow(), mode)
+                : PointPaymentIntent.ForCollection(accessor.Context.CompanyId,
+                    accessor.Context.BranchId, request.CustomerId!.Value, operationId!.Value,
+                    shift.Id, accessor.Context.UserId, terminalId, deviceId,
+                    request.Amount, clock.GetUtcNow(), mode);
             db.PointPaymentIntents.Add(intent);
             try { await db.SaveChangesAsync(cancellationToken); }
             catch (DbUpdateException) { return Error(409, "MERCADO_PAGO_ORDER_ACTIVE"); }
@@ -153,7 +244,7 @@ public static class MercadoPagoPaymentEndpoints
         }
     }
 
-    private static async Task<IResult> CheckAsync(Guid draftId, Guid intentId,
+    private static async Task<IResult> CheckAsync(Guid? draftId, Guid? operationId, Guid intentId,
         PlatformAccessDbContext db, OperationalContextAccessor accessor,
         MercadoPagoSettingsResolver settings, MercadoPagoPointClient point,
         MercadoPagoQrClient qr, MercadoPagoOrderLookupClient lookup,
@@ -161,11 +252,14 @@ public static class MercadoPagoPaymentEndpoints
         CancellationToken cancellationToken)
     {
         if (!AllowedOrigin(context)) return Error(403, "CSRF_REJECTED");
-        if (!await OwnsDraftAsync(draftId, db, accessor, cancellationToken))
+        if (draftId is Guid saleDraftId &&
+            !await OwnsDraftAsync(saleDraftId, db, accessor, cancellationToken) ||
+            operationId is not null && accessor.TerminalId is null)
             return Error(404, "DRAFT_NOT_FOUND");
         var intent = await db.PointPaymentIntents.SingleOrDefaultAsync(item =>
             item.Id == intentId && item.CompanyId == accessor.Context.CompanyId &&
             item.BranchId == accessor.Context.BranchId && item.SaleDraftId == draftId &&
+            item.CustomerCollectionOperationId == operationId &&
             item.CashierId == accessor.Context.UserId && item.PosTerminalId == accessor.TerminalId,
             cancellationToken);
         if (intent is null) return Error(404, "PAYMENT_NOT_FOUND");
@@ -206,7 +300,7 @@ public static class MercadoPagoPaymentEndpoints
         }
     }
 
-    private static async Task<IResult> CancelAsync(Guid draftId, Guid intentId,
+    private static async Task<IResult> CancelAsync(Guid? draftId, Guid? operationId, Guid intentId,
         PlatformAccessDbContext db, OperationalContextAccessor accessor,
         MercadoPagoSettingsResolver settings, MercadoPagoPointClient point,
         MercadoPagoQrClient qr, MercadoPagoOrderLookupClient lookup,
@@ -214,11 +308,14 @@ public static class MercadoPagoPaymentEndpoints
         CancellationToken cancellationToken)
     {
         if (!AllowedOrigin(context)) return Error(403, "CSRF_REJECTED");
-        if (!await OwnsDraftAsync(draftId, db, accessor, cancellationToken))
+        if (draftId is Guid saleDraftId &&
+            !await OwnsDraftAsync(saleDraftId, db, accessor, cancellationToken) ||
+            operationId is not null && accessor.TerminalId is null)
             return Error(404, "DRAFT_NOT_FOUND");
         var intent = await db.PointPaymentIntents.SingleOrDefaultAsync(item =>
             item.Id == intentId && item.CompanyId == accessor.Context.CompanyId &&
             item.BranchId == accessor.Context.BranchId && item.SaleDraftId == draftId &&
+            item.CustomerCollectionOperationId == operationId &&
             item.CashierId == accessor.Context.UserId && item.PosTerminalId == accessor.TerminalId,
             cancellationToken);
         if (intent is null) return Error(404, "PAYMENT_NOT_FOUND");
@@ -261,7 +358,13 @@ public static class MercadoPagoPaymentEndpoints
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or
             InvalidDataException or InvalidOperationException)
-        { return Error(503, "MERCADO_PAGO_RECONCILIATION_REQUIRED"); }
+        {
+            var logger = context.RequestServices.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("MercadoPagoPayment");
+            LogCancelFailure(logger, intent.Id, exception.GetType().Name,
+                (int?)(exception as HttpRequestException)?.StatusCode, context.TraceIdentifier, null);
+            return Error(503, "MERCADO_PAGO_RECONCILIATION_REQUIRED");
+        }
     }
 
     private static async Task<bool> TryReconcileUnknownOrderAsync(PointPaymentIntent intent,
@@ -333,5 +436,5 @@ public static class MercadoPagoPaymentEndpoints
         error = new { code, message = "No se pudo completar el cobro de Mercado Pago" }
     }, statusCode: status);
 
-    private sealed record StartRequest(string Mode, decimal Amount);
+    private sealed record StartRequest(string Mode, decimal Amount, Guid? CustomerId = null);
 }

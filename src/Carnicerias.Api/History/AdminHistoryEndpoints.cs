@@ -80,11 +80,13 @@ public static class AdminHistoryEndpoints
                 (!branchId.HasValue || item.BranchId == branchId) &&
                 item.CreatedAtUtc >= window.FromUtc && item.CreatedAtUtc < window.ToUtc &&
                 (item.Kind == CashLedgerMovementKind.AccountCollection ||
-                 item.Kind == CashLedgerMovementKind.AccountCollectionRefund))
+                 item.Kind == CashLedgerMovementKind.AccountCollectionRefund ||
+                 item.Kind == CashLedgerMovementKind.AccountCollectionChange))
             .GroupBy(_ => 1)
             .Select(group => new
             {
-                Received = group.Where(item => item.Kind == CashLedgerMovementKind.AccountCollection)
+                Received = group.Where(item => item.Kind == CashLedgerMovementKind.AccountCollection ||
+                    item.Kind == CashLedgerMovementKind.AccountCollectionChange)
                     .Sum(item => item.AmountDelta),
                 Refunded = group.Where(item => item.Kind == CashLedgerMovementKind.AccountCollectionRefund)
                     .Sum(item => -item.AmountDelta),
@@ -260,6 +262,7 @@ public static class AdminHistoryEndpoints
                 CashLedgerMovementKind.Change => "change",
                 CashLedgerMovementKind.AccountCollection => "accountCollection",
                 CashLedgerMovementKind.AccountCollectionRefund => "accountCollectionRefund",
+                CashLedgerMovementKind.AccountCollectionChange => "accountCollectionChange",
                 _ => "unknown"
             }, PaymentMethodName(row.Method), row.AmountDelta)).ToArray(), page, pageSize, total));
     }

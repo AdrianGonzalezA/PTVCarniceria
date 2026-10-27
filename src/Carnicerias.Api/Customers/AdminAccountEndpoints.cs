@@ -87,6 +87,7 @@ public static class AdminAccountEndpoints
             item.CompanyId == companyId && item.CustomerId == customerId);
         var receiptCount = await receipts.CountAsync(cancellationToken);
         var receiptRows = await receipts.Include(item => item.Allocations)
+            .Include(item => item.Payments)
             .OrderByDescending(item => item.CreatedAtUtc).ThenByDescending(item => item.Id)
             .Skip((receiptPage - 1) * PageSize).Take(PageSize)
             .ToArrayAsync(cancellationToken);
@@ -119,13 +120,17 @@ public static class AdminAccountEndpoints
                     corrections.TryGetValue(item.Id, out var correction);
                     return new ReceiptRow(item.Id, item.ReceiptNumber, item.BranchId,
                         item.CashierShiftId, item.CreatedAtUtc, item.Amount, item.CreditAmount,
-                        MethodName(item.Method), item.Origin == CollectionReceiptOrigin.CashReceived
+                        item.Payments.Count > 1 ? "mixed" : MethodName(item.Method),
+                        item.Origin == CollectionReceiptOrigin.CashReceived
                             ? "cashReceived" : "reallocation", item.IsVoided, item.ReplacesReceiptId,
                         correction is null ? null : new CorrectionRow(correction.CorrectionNumber,
                             correction.Kind == CustomerCollectionCorrectionKind.Refund ? "refund" : "reallocate",
                             correction.Reason, correction.ReplacementReceiptId, correction.CreatedAtUtc),
                         item.Allocations.Select(allocation => new AllocationRow(allocation.SaleId,
-                            allocation.Amount)).ToArray());
+                            allocation.Amount)).ToArray(),
+                        item.Payments.Select(payment => new ReceiptPaymentRow(MethodName(payment.Method),
+                            payment.TenderedAmount, payment.AppliedAmount)).ToArray(),
+                        item.ChangeAmount);
                 }).ToArray()),
             new AccountPage<CreditApplicationRow>(applicationPage, PageSize, applicationCount,
                 applicationRows)));
@@ -197,7 +202,9 @@ public static class AdminAccountEndpoints
     private sealed record ReceiptRow(Guid Id, long ReceiptNumber, Guid BranchId, Guid CashierShiftId,
         DateTimeOffset CreatedAtUtc, decimal Amount, decimal CreditAmount, string Method,
         string Origin, bool IsVoided, Guid? ReplacesReceiptId, CorrectionRow? Correction,
-        IReadOnlyList<AllocationRow> Allocations);
+        IReadOnlyList<AllocationRow> Allocations, IReadOnlyList<ReceiptPaymentRow> Payments,
+        decimal ChangeAmount);
+    private sealed record ReceiptPaymentRow(string Method, decimal TenderedAmount, decimal AppliedAmount);
     private sealed record AllocationRow(Guid SaleId, decimal Amount);
     private sealed record CorrectionRow(long CorrectionNumber, string Kind, string Reason,
         Guid? ReplacementReceiptId, DateTimeOffset CreatedAtUtc);

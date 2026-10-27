@@ -28,15 +28,20 @@ export interface CustomerCollectionReceipt {
   readonly amount: number;
   readonly creditAmount: number;
   readonly method: string;
+  readonly payments: readonly { readonly method: string; readonly tenderedAmount: number;
+    readonly appliedAmount: number }[];
+  readonly changeAmount: number;
   readonly createdAtUtc: string;
   readonly allocations: readonly { readonly saleId: string; readonly amount: number }[];
 }
 
 export interface CustomerCollectionRequest {
   readonly operationId: string;
-  readonly method: string;
+  readonly method?: string;
   readonly amount: number;
   readonly allocations?: readonly { readonly saleId: string; readonly amount: number }[];
+  readonly payments?: readonly { readonly method: string; readonly amount: number }[];
+  readonly mercadoPagoIntentId?: string;
 }
 
 @Injectable({ providedIn: 'root' })

@@ -5,6 +5,27 @@ namespace Carnicerias.IntegrationTests;
 public sealed class PointPaymentIntentTests
 {
     [Fact]
+    public void CollectionOrderCannotBeAppliedToASaleOrAnotherReceipt()
+    {
+        var customerId = Guid.NewGuid();
+        var operationId = Guid.NewGuid();
+        var intent = PointPaymentIntent.ForCollection(Guid.NewGuid(), Guid.NewGuid(),
+            customerId, operationId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            "SUC1CAJA1", 125m, DateTimeOffset.UtcNow, MercadoPagoOrderMode.DynamicQr);
+
+        Assert.Null(intent.SaleDraftId);
+        Assert.Equal(customerId, intent.CustomerId);
+        Assert.Equal(operationId, intent.CustomerCollectionOperationId);
+        intent.RecordProviderState("ORD1", "PAY1", "processed", "processed", "accredited",
+            true, DateTimeOffset.UtcNow);
+        Assert.Throws<InvalidOperationException>(() => intent.ApplyToSale(Guid.NewGuid()));
+        var receiptId = Guid.NewGuid();
+        intent.ApplyToCollection(receiptId);
+        Assert.Equal(receiptId, intent.ConfirmedCollectionReceiptId);
+        Assert.Throws<InvalidOperationException>(() => intent.ApplyToCollection(Guid.NewGuid()));
+    }
+
+    [Fact]
     public void DynamicQrCanBeAppliedOnceOnlyAfterAccreditation()
     {
         var intent = new PointPaymentIntent(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),

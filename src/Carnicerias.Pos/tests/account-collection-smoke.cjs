@@ -26,10 +26,13 @@ async function main() {
     socket.send(JSON.stringify({ id, method, params }));
   });
   const evaluate = async (expression) => {
-    const response = await send('Runtime.evaluate', { expression, returnByValue: true });
+    const response = await send('Runtime.evaluate', { expression, returnByValue: true,
+      awaitPromise: true });
     if (response.exceptionDetails) throw new Error(response.exceptionDetails.text);
     return response.result.value;
   };
+  let cancelResponse = null;
+  let shiftSummary = null;
   const waitFor = async (expression) => {
     for (let attempt = 0; attempt < 100; attempt++) {
       if (await evaluate(expression)) return;
@@ -122,15 +125,100 @@ async function main() {
     await waitFor("!!document.querySelector('.account-collection-dialog .shift-summary[role=status]') || !!document.querySelector('.account-collection-dialog [role=alert]')");
   }
 
+  if (process.argv.includes('--confirm-development-mixed-collection')) {
+    const cash = Number(process.env.CARNICERIAS_SMOKE_COLLECTION_CASH);
+    const debit = Number(process.env.CARNICERIAS_SMOKE_COLLECTION_DEBIT);
+    const amount = process.env.CARNICERIAS_SMOKE_COLLECTION_AMOUNT
+      ? Number(process.env.CARNICERIAS_SMOKE_COLLECTION_AMOUNT) : cash + debit;
+    if (!Number.isFinite(cash) || cash <= 0 || !Number.isFinite(debit) || debit <= 0 ||
+        !Number.isFinite(amount) || amount <= 0 || debit > amount || cash + debit < amount ||
+        !await evaluate("!!document.querySelector('.account-balance-summary')"))
+      throw new Error('Falta cuenta consultada o importes de prueba válidos.');
+    await evaluate(`(() => {
+      const amount = document.querySelector('#collection-amount');
+      amount.value = ${JSON.stringify(String(amount))};
+      amount.dispatchEvent(new Event('input', { bubbles: true }));
+      const cashInput = document.querySelector('.collection-payment-methods input[data-method=cash]');
+      cashInput.value = ${JSON.stringify(String(cash))};
+      cashInput.dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('.collection-payment-methods input[type=checkbox][value=debit]').click();
+    })()`);
+    await waitFor("!!document.querySelector('.collection-payment-methods input[data-method=debit]')");
+    await evaluate(`(() => {
+      const debitInput = document.querySelector('.collection-payment-methods input[data-method=debit]');
+      debitInput.value = ${JSON.stringify(String(debit))};
+      debitInput.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    if (await evaluate("document.querySelector('.account-collection-dialog .finish-button')?.disabled"))
+      throw new Error('El cobro combinado quedó inválido en la interfaz.');
+    await evaluate("document.querySelector('.account-collection-dialog .finish-button').click()");
+    await waitFor("!!document.querySelector('.account-collection-dialog .shift-summary[role=status]') || !!document.querySelector('.account-collection-dialog [role=alert]')");
+  }
+
+  if (process.argv.includes('--request-development-mercado-pago')) {
+    const amount = Number(process.env.CARNICERIAS_SMOKE_COLLECTION_AMOUNT);
+    const mercadoPago = Number(process.env.CARNICERIAS_SMOKE_COLLECTION_MP);
+    const cash = amount - mercadoPago;
+    if (!Number.isFinite(amount) || !Number.isFinite(mercadoPago) ||
+        mercadoPago <= 0 || cash <= 0 || !await evaluate("!!document.querySelector('.account-balance-summary')"))
+      throw new Error('Falta cuenta consultada o importes de prueba válidos.');
+    await evaluate(`(() => {
+      const amount = document.querySelector('#collection-amount');
+      amount.value = ${JSON.stringify(String(amount))};
+      amount.dispatchEvent(new Event('input', { bubbles: true }));
+      const cashInput = document.querySelector('.collection-payment-methods input[data-method=cash]');
+      cashInput.value = ${JSON.stringify(String(cash))};
+      cashInput.dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('.collection-payment-methods input[type=checkbox][value=mercadoPago]').click();
+    })()`);
+    await waitFor("!!document.querySelector('.collection-payment-methods input[data-method=mercadoPago]')");
+    await evaluate(`(() => {
+      const input = document.querySelector('.collection-payment-methods input[data-method=mercadoPago]');
+      input.value = ${JSON.stringify(String(mercadoPago))};
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    await waitFor("!!document.querySelector('.mercado-pago-actions button') && !document.querySelector('.mercado-pago-actions button').disabled");
+    await evaluate("document.querySelector('.mercado-pago-actions button').click()");
+    await waitFor("!!document.querySelector('.mercado-pago-state')");
+  }
+
+  if (process.argv.includes('--cancel-development-mercado-pago')) {
+    const cancel = "[...document.querySelectorAll('.mercado-pago-actions button')].find(item => item.textContent.trim() === 'Cancelar orden')";
+    await waitFor(`!!(${cancel})`);
+    await send('Network.enable');
+    const onNetwork = (event) => {
+      const message = JSON.parse(event.data);
+      if (message.method === 'Network.responseReceived' &&
+          message.params.response.url.endsWith('/cancel'))
+        cancelResponse = { status: message.params.response.status,
+          requestId: message.params.requestId };
+    };
+    socket.addEventListener('message', onNetwork);
+    await evaluate(`${cancel}.click()`);
+    for (let attempt = 0; attempt < 100 && !cancelResponse; attempt++)
+      await new Promise((done) => setTimeout(done, 100));
+    socket.removeEventListener('message', onNetwork);
+    if (!cancelResponse) throw new Error('La API no respondió a la cancelación.');
+    const body = await send('Network.getResponseBody', { requestId: cancelResponse.requestId });
+    cancelResponse = { status: cancelResponse.status, code: JSON.parse(body.body)?.error?.code ?? null };
+  }
+
+  if (process.argv.includes('--shift-summary')) {
+    shiftSummary = await evaluate(`fetch('/api/cashier-shifts/current', { credentials: 'include' })
+      .then(async response => ({ status: response.status, body: response.ok ?
+        await response.json() : null }))`);
+  }
+
   const state = await evaluate(`({ headings: [...document.querySelectorAll('h1,h2')]
     .map(item => item.textContent.trim()).slice(0, 10),
     text: document.body.innerText.slice(0, 1500),
-    errors: [...document.querySelectorAll('[role="alert"]')].map(item => item.textContent.trim()) })`);
+    errors: [...document.querySelectorAll('[role="alert"]')].map(item => item.textContent.trim()),
+    collection: document.querySelector('.account-collection-dialog')?.innerText.slice(0, 1500) })`);
   const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
   const path = join(tmpdir(), `carnicerias-account-collection-${port}.png`);
   writeFileSync(path, Buffer.from(screenshot.data, 'base64'));
   socket.close();
-  console.log(JSON.stringify({ state, screenshot: path }, null, 2));
+  console.log(JSON.stringify({ state, screenshot: path, cancelResponse, shiftSummary }, null, 2));
 }
 
 main().catch((error) => { console.error(error); process.exitCode = 1; });

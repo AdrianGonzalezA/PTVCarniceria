@@ -230,5 +230,12 @@ export class AccountsPage implements OnInit {
 
   protected money(value: number): string { return `$ ${value.toLocaleString('es-AR',
     { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
+  protected hasMercadoPagoPayment(receipt: AccountReceipt): boolean {
+    return receipt.payments.some((payment) => payment.method === 'mercadoPago');
+  }
+  protected paymentLabel(method: string): string {
+    return ({ cash: 'Efectivo', debit: 'Débito', credit: 'Crédito', transfer: 'Transferencia',
+      mercadoPago: 'Mercado Pago', cheque: 'Cheque' } as Record<string, string>)[method] ?? method;
+  }
   protected pageCount(total: number): number { return Math.ceil(total / 25); }
 }

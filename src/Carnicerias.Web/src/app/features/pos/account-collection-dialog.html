@@ -10,6 +10,13 @@
         <span>Importe recibido</span><strong>{{ formatMoney(result.amount) }}</strong>
         <span>Aplicado a ventas</span><strong>{{ formatMoney(result.amount - result.creditAmount) }}</strong>
         <span>Saldo a favor</span><strong>{{ formatMoney(result.creditAmount) }}</strong>
+        @for (payment of result.payments; track payment.method) {
+          <span>{{ paymentLabel(payment.method) }}</span>
+          <strong>{{ formatMoney(payment.appliedAmount) }}</strong>
+        }
+        @if (result.changeAmount > 0) {
+          <span>Vuelto en efectivo</span><strong>{{ formatMoney(result.changeAmount) }}</strong>
+        }
       </div>
       <p class="payment-guidance">Este recibo no es una factura ni un comprobante fiscal.</p>
       <div class="dialog-actions">
@@ -39,10 +46,12 @@
         </div>
       </div>
       <label class="quantity-field" for="collection-customer">Cliente
-        <select id="collection-customer" [value]="customer()?.id ?? ''" (change)="chooseCustomer($event)">
-          <option value="">Elegí un cliente</option>
+        <select id="collection-customer" [value]="customer()?.id ?? ''"
+          [disabled]="mercadoPagoOrderActive() || mercadoPagoLoadState() === 'loading' || mercadoPagoLoadState() === 'error'"
+          (change)="chooseCustomer($event)">
+          <option value="" [selected]="!customer()">Elegí un cliente</option>
           @for (option of options(); track option.id) {
-            <option [value]="option.id">{{ option.code }} · {{ option.name }}</option>
+            <option [value]="option.id" [selected]="option.id === customer()?.id">{{ option.code }} · {{ option.name }}</option>
           }
         </select>
       </label>
@@ -53,19 +62,78 @@
           <span>Saldo a favor previo</span><strong>{{ formatMoney(current.creditAvailable) }}</strong>
         </div>
         <p class="payment-guidance">Podés cobrar parcialmente. La propuesta aplica primero a las ventas más antiguas.</p>
-        <div class="account-collection-fields">
-          <label class="quantity-field" for="collection-amount">Importe recibido
-            <input id="collection-amount" type="text" inputmode="decimal" placeholder="0,00"
-              [value]="amount()" (input)="updateAmount($event)" />
-          </label>
-          <label class="quantity-field" for="collection-method">Medio de cobro
-            <select id="collection-method" [value]="method()" (change)="updateMethod($event)">
-              @for (item of methods; track item.id) {
-                <option [value]="item.id">{{ item.label }}</option>
+        <label class="quantity-field" for="collection-amount">Importe a cobrar
+          <input id="collection-amount" type="text" inputmode="decimal" placeholder="0,00"
+            [value]="amount()" [disabled]="mercadoPagoOrderActive()" (input)="updateAmount($event)" />
+        </label>
+        <h3 class="collection-payment-title">Medios de pago</h3>
+        <div class="payment-methods collection-payment-methods" role="group" aria-label="Medios de pago del cobro">
+          @for (item of visibleMethods(); track item.id) {
+            <label class="payment-option">
+              <span><input type="checkbox" [value]="item.id" [checked]="hasPayment(item.id)"
+                [disabled]="mercadoPagoOrderActive() || mercadoPagoLoadState() === 'loading' || mercadoPagoLoadState() === 'error'"
+                (change)="togglePayment(item.id, $event)" /> {{ item.label }}</span>
+              @if (hasPayment(item.id)) {
+                <input class="payment-amount" type="number" min="0.01" step="0.01"
+                  [attr.data-method]="item.id" [attr.aria-label]="'Importe en ' + item.label"
+                  [value]="paymentAmount(item.id)" [disabled]="item.id === 'mercadoPago' && mercadoPagoOrderActive()"
+                  (input)="updatePaymentAmount(item.id, $event)" />
               }
-            </select>
-          </label>
+            </label>
+          }
         </div>
+        @if (gatewayLoadState() === 'loading') {
+          <p class="payment-guidance" role="status">Consultando pasarelas de esta caja…</p>
+        }
+        @if (gatewayLoadState() === 'error') {
+          <p class="payment-guidance" role="alert">No se pudieron consultar las pasarelas. Los medios manuales siguen disponibles.</p>
+        }
+        @if (hasPayment('mercadoPago') || mercadoPagoIntent() || mercadoPagoLoadState() === 'error') {
+          <section class="mercado-pago-panel" aria-labelledby="collection-mercado-pago-title">
+            <h3 id="collection-mercado-pago-title">Cobro integrado · Mercado Pago</h3>
+            <p>La cuenta se cobra cuando Mercado Pago confirma la acreditación. El estado se consulta automáticamente cada 5 segundos.</p>
+            @if (hasPayment('mercadoPago')) {
+              <label for="collection-mercado-pago-mode">Modo de cobro</label>
+              <select id="collection-mercado-pago-mode" [value]="mercadoPagoMode()"
+                [disabled]="mercadoPagoBusy() || mercadoPagoOrderActive()"
+                (change)="selectMercadoPagoMode($event)">
+                @if (visibleMercadoPagoModes().includes('qr')) { <option value="qr">QR dinámico</option> }
+                @if (visibleMercadoPagoModes().includes('qrStatic')) { <option value="qrStatic">QR fijo de la caja</option> }
+                @if (visibleMercadoPagoModes().includes('point')) { <option value="point">Terminal Point</option> }
+              </select>
+              <div class="mercado-pago-actions">
+                <button type="button" [disabled]="mercadoPagoBusy() || mercadoPagoOrderActive() ||
+                  paymentAmount('mercadoPago') <= 0 || paymentAmount('mercadoPago') > (parsedAmount() ?? 0) ||
+                  !availableMercadoPagoModes().includes(mercadoPagoMode()) || mercadoPagoLoadState() === 'error' ||
+                  !!paymentSplitProblem()"
+                  (click)="startMercadoPago()">{{ mercadoPagoBusy() ? 'Consultando…' : 'Solicitar cobro' }}</button>
+                @if (mercadoPagoIntent()) {
+                  <button type="button" [disabled]="mercadoPagoBusy()" (click)="checkMercadoPago()">Consultar pago</button>
+                  @if (mercadoPagoOrderActive() && !mercadoPagoIntent()?.approved) {
+                    <button type="button" [disabled]="mercadoPagoBusy()" (click)="cancelMercadoPago()">Cancelar orden</button>
+                  }
+                }
+              </div>
+            }
+            @if (mercadoPagoLoadState() === 'error') {
+              <button type="button" (click)="retryMercadoPagoRecovery()">Reintentar consulta de orden</button>
+            }
+            @if (mercadoPagoIntent(); as intent) {
+              <p class="mercado-pago-state" role="status">Orden {{ intent.providerOrderId || 'pendiente de respuesta' }} ·
+                {{ intent.approved ? 'Acreditado' : intent.status === 'Canceled' ? 'Cancelado' : intent.status === 'Expired' ? 'Vencido' : intent.status === 'Rejected' ? 'Rechazado' : 'Pendiente' }}</p>
+              @if ((intent.mode === 'qr' || intent.mode === 'qrStatic') && intent.providerOrderId &&
+                mercadoPagoOrderActive() && !intent.approved && mercadoPagoQrImage(); as image) {
+                <img class="mercado-pago-qr" [src]="image" alt="QR de Mercado Pago para este cobro"
+                  width="240" height="240" />
+              } @else if (intent.mode === 'point' && intent.providerOrderId) {
+                <p>La orden se envió a la terminal Point configurada para esta caja.</p>
+              }
+            }
+            @if (mercadoPagoMessage(); as message) { <p class="mercado-pago-state" role="status">{{ message }}</p> }
+          </section>
+        }
+        <p class="payment-balance"><span>Falta cubrir</span><strong>{{ formatMoney(paymentBalance()) }}</strong></p>
+        @if (changePreview() > 0) { <p class="change-preview">Vuelto en efectivo: {{ formatMoney(changePreview()) }}</p> }
         <label class="account-allocation-toggle">
           <input type="checkbox" [checked]="manual()" (change)="setManual($event)" />
           Asignar importes a ventas manualmente

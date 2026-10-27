@@ -54,10 +54,29 @@ public sealed class PointPaymentIntent
         UpdatedAtUtc = CreatedAtUtc;
     }
 
+    public static PointPaymentIntent ForCollection(Guid companyId, Guid branchId, Guid customerId,
+        Guid operationId, Guid cashierShiftId, Guid cashierId, Guid posTerminalId,
+        string terminalId, decimal amount, DateTimeOffset now,
+        MercadoPagoOrderMode mode = MercadoPagoOrderMode.Point)
+    {
+        if (customerId == Guid.Empty || operationId == Guid.Empty)
+            throw new ArgumentException("A collection intent needs a customer and operation.");
+        var intent = new PointPaymentIntent(companyId, branchId, operationId, cashierShiftId,
+            cashierId, posTerminalId, terminalId, amount, now, mode)
+        {
+            SaleDraftId = null,
+            CustomerId = customerId,
+            CustomerCollectionOperationId = operationId
+        };
+        return intent;
+    }
+
     public Guid Id { get; private set; }
     public Guid CompanyId { get; private set; }
     public Guid BranchId { get; private set; }
-    public Guid SaleDraftId { get; private set; }
+    public Guid? SaleDraftId { get; private set; }
+    public Guid? CustomerId { get; private set; }
+    public Guid? CustomerCollectionOperationId { get; private set; }
     public Guid CashierShiftId { get; private set; }
     public Guid CashierId { get; private set; }
     public Guid PosTerminalId { get; private set; }
@@ -65,6 +84,7 @@ public sealed class PointPaymentIntent
     public MercadoPagoOrderMode Mode { get; private set; }
     public string? QrData { get; private set; }
     public Guid? ConfirmedSaleId { get; private set; }
+    public Guid? ConfirmedCollectionReceiptId { get; private set; }
     public decimal Amount { get; private set; }
     public Guid IdempotencyKey { get; private set; }
     public PointPaymentStatus Status { get; private set; }
@@ -88,10 +108,20 @@ public sealed class PointPaymentIntent
 
     public void ApplyToSale(Guid saleId)
     {
-        if (Status != PointPaymentStatus.Approved || saleId == Guid.Empty ||
+        if (SaleDraftId is null || ConfirmedCollectionReceiptId is not null ||
+            Status != PointPaymentStatus.Approved || saleId == Guid.Empty ||
             ConfirmedSaleId is not null && ConfirmedSaleId != saleId)
             throw new InvalidOperationException("Only one sale can use an accredited order.");
         ConfirmedSaleId = saleId;
+    }
+
+    public void ApplyToCollection(Guid receiptId)
+    {
+        if (CustomerCollectionOperationId is null || ConfirmedSaleId is not null ||
+            Status != PointPaymentStatus.Approved || receiptId == Guid.Empty ||
+            ConfirmedCollectionReceiptId is not null && ConfirmedCollectionReceiptId != receiptId)
+            throw new InvalidOperationException("Only one collection can use an accredited order.");
+        ConfirmedCollectionReceiptId = receiptId;
     }
 
     public void MarkUncertain(DateTimeOffset now)

@@ -168,7 +168,8 @@ public static class CashierShiftEndpoints
                     .Sum(movement => movement.AmountDelta),
                 CashCollections = group.Where(movement => movement.Method == PaymentMethod.Cash &&
                     (movement.Kind == CashLedgerMovementKind.AccountCollection ||
-                     movement.Kind == CashLedgerMovementKind.AccountCollectionRefund))
+                     movement.Kind == CashLedgerMovementKind.AccountCollectionRefund ||
+                     movement.Kind == CashLedgerMovementKind.AccountCollectionChange))
                     .Sum(movement => movement.AmountDelta),
                 NonCashCollections = group.Where(movement => movement.Method != PaymentMethod.Cash &&
                     (movement.Kind == CashLedgerMovementKind.AccountCollection ||

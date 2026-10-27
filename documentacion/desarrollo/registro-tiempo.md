@@ -85,4 +85,10 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 
 | 19/10/2026 | 16:15:26 | 16:16:42 | 1 min medido | Publicar cambios pendientes en GitHub | Se inspeccionó `feature/ui-v2`, se revisaron documentos, formato y ausencia de credenciales embebidas; se publicaron el commit pendiente de apagado selectivo de APIs y la documentación de arquitectura/arranque. Sin modificar servicios ni base; sin pausas conocidas. |
 
-**Total activo registrado desde el 16/10/2026:** 263 min medidos, más cinco tramos menores a 1 min y tramos no cuantificables.
+| 27/10/2026 | 13:46:38 | 15:34:14 | No cuantificable | Levantar demo La Rústica: API, administración y cajas A/B/C | Se inició el contenedor PostgreSQL autorizado ya existente; API `5197` (sesión sin autenticar `401`), Angular `4200/admin` (`200`) y tres ventanas Electron con perfiles separados quedaron activos. Se abrió el administrador en navegador. Hubo una espera prolongada de aprobación para abrirlo sin marcas exactas de inicio y fin; no se suma tiempo activo inventado. Sin crear bases, ventas ni credenciales. |
+
+| 27/10/2026 | 16:50:30 | 16:50:36 | Menos de 1 min medido | Confirmar actualización del registro de tiempo | Se comprobó la entrada de arranque de demo y el total vigente; sin pausas conocidas ni cambios en servicios o base. |
+
+| 27/10/2026 | 16:58:40 | 17:38:01 | 39 min medidos | Implementar cobro de cuenta con medios combinados y Mercado Pago | Dos migraciones aplicadas solo a `carnicerias_test_visual`; recibos de prueba 11 y 12 verificados en Electron con medios combinados y vuelto, turno de Caja B neto $6 efectivo + $4 no efectivo. Orden QR creada, consultada y recuperada tras recarga; el sandbox respondió 404 al cancelarla y quedó pendiente sin registrar recibo. Pasaron 196 pruebas Angular antes del ajuste final, 8 pruebas focalizadas posteriores, 26 .NET sin crear base, 88 Electron, lint, builds y comprobación de migraciones. Rama `feature/ui-v2` publicada en `e378653`. Sin pausas conocidas; compilaciones y pruebas supervisadas incluidas. |
+
+**Total activo registrado desde el 16/10/2026:** 302 min medidos, más seis tramos menores a 1 min y tramos no cuantificables.

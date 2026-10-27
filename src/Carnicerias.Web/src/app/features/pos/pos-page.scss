@@ -204,6 +204,13 @@
 .account-collection-dialog { width: min(100%, 44rem); max-height: min(90dvh, 50rem); overflow: auto; }
 .account-collection-dialog .credit-customer-search input { box-sizing: border-box; flex: 1; min-width: 0; min-height: 2.3rem; padding: 0.4rem; border: 1px solid var(--pos-border); border-radius: 0.25rem; font: inherit; }
 .account-collection-dialog .quantity-field { margin-top: 0.75rem; }
+.account-deferred-payments { margin: 0.8rem 0; padding: 0.8rem; border: 1px solid var(--pos-border); border-radius: 0.3rem; background: var(--pos-panel); }
+.account-deferred-payments h3 { margin: 0 0 0.4rem; font-size: 0.9rem; }
+.account-deferred-payments p { margin: 0 0 0.5rem; }
+.account-deferred-payment { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; padding: 0.45rem 0; border-top: 1px solid var(--pos-border); font-size: 0.8rem; }
+.account-deferred-payment span { overflow-wrap: anywhere; }
+.account-deferred-payment button { flex: none; min-height: 2.2rem; padding: 0.35rem 0.65rem; border: 1px solid var(--pos-border); border-radius: 0.25rem; background: var(--pos-panel); color: var(--pos-ink); font: inherit; cursor: pointer; }
+.account-deferred-payment button:disabled { opacity: 0.55; cursor: not-allowed; }
 .account-balance-summary { margin-top: 0.8rem; }
 .account-collection-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
 .account-allocation-toggle { display: flex; align-items: center; gap: 0.5rem; margin: 0.9rem 0; font-size: 0.82rem; font-weight: 650; }

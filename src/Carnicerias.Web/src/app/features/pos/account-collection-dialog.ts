@@ -25,6 +25,7 @@ interface CollectionMercadoPagoDraft {
   readonly payments: readonly CollectionPayment[];
   readonly manual: boolean;
   readonly allocations: Readonly<Record<string, string>>;
+  readonly providerOrderId?: string;
 }
 
 @Component({
@@ -71,6 +72,8 @@ export class AccountCollectionDialog implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly receipt = signal<CustomerCollectionReceipt | null>(null);
   protected readonly pending = signal<(CustomerCollectionRequest & { readonly customerId: string }) | null>(null);
+  protected readonly deferredMercadoPagoDrafts = signal<readonly CollectionMercadoPagoDraft[]>([]);
+  protected readonly deferredLoadError = signal(false);
   private operationId: string = crypto.randomUUID();
   private customerSearchRevision = 0;
   private accountLoadRevision = 0;
@@ -105,6 +108,9 @@ export class AccountCollectionDialog implements OnInit {
   protected readonly problem = computed(() => {
     const amount = this.parsedAmount();
     if (!this.customer() || !this.account()) return 'Elegí un cliente y consultá su cuenta.';
+    if (this.deferredLoadError()) return 'No se pudo leer la lista de cobros pendientes de Mercado Pago.';
+    if (this.deferredMercadoPagoDrafts().some((draft) => draft.customer.id === this.customer()?.id))
+      return 'Este cliente tiene un cobro de Mercado Pago pendiente. Retomalo antes de iniciar otro.';
     if (amount === null || amount <= 0 || amount > 9_999_999_999.99)
       return 'Ingresá un importe mayor a cero, con hasta dos decimales.';
     if (this.mercadoPagoLoadState() === 'loading') return 'Consultando el cobro previo de Mercado Pago.';
@@ -131,6 +137,7 @@ export class AccountCollectionDialog implements OnInit {
   });
 
   ngOnInit(): void {
+    this.restoreDeferredMercadoPagoDrafts();
     this.restorePending();
     this.findCustomers();
     this.loadGateways();
@@ -167,6 +174,13 @@ export class AccountCollectionDialog implements OnInit {
     if (this.mercadoPagoOrderActive() || this.mercadoPagoLoadState() === 'error' ||
         this.mercadoPagoLoadState() === 'loading') return;
     const id = (event.target as HTMLSelectElement).value;
+    if (this.deferredLoadError() || this.deferredMercadoPagoDrafts().some((draft) => draft.customer.id === id)) {
+      (event.target as HTMLSelectElement).value = this.customer()?.id ?? '';
+      this.error.set(this.deferredLoadError()
+        ? 'No se pudo leer la lista de cobros pendientes. Reintentá su recuperación.'
+        : 'Este cliente tiene un cobro de Mercado Pago pendiente. Retomalo antes de iniciar otro.');
+      return;
+    }
     this.clearMercadoPagoDraft();
     this.clearMercadoPagoPoll();
     this.mercadoPagoIntent.set(null);
@@ -221,6 +235,10 @@ export class AccountCollectionDialog implements OnInit {
   }
   protected paymentAmount(method: CollectionPaymentMethod): number {
     return this.selectedPayments().find((payment) => payment.method === method)?.amount ?? 0;
+  }
+  protected paymentAmountInDraft(draft: CollectionMercadoPagoDraft,
+    method: CollectionPaymentMethod): number {
+    return draft.payments.find((payment) => payment.method === method)?.amount ?? 0;
   }
   protected togglePayment(method: CollectionPaymentMethod, event: Event): void {
     const checkbox = event.target as HTMLInputElement;
@@ -311,7 +329,7 @@ export class AccountCollectionDialog implements OnInit {
         },
         error: () => {
           this.mercadoPagoBusy.set(false);
-          this.mercadoPagoMessage.set('No se pudo confirmar la cancelación. Consultá el pago antes de cambiar de medio.');
+          this.mercadoPagoMessage.set('Mercado Pago no confirmó la cancelación. Podés dejar la orden pendiente y seguir con otro cliente sin registrar este cobro.');
         },
       });
   }
@@ -467,6 +485,7 @@ export class AccountCollectionDialog implements OnInit {
     const draft: CollectionMercadoPagoDraft = {
       operationId: this.operationId, customer, amount: this.amount(), page: this.page(),
       payments: this.selectedPayments(), manual: this.manual(), allocations: this.allocations(),
+      providerOrderId: this.mercadoPagoIntent()?.providerOrderId ?? undefined,
     };
     try {
       localStorage.setItem(this.mercadoPagoStorageKey(), JSON.stringify(draft));
@@ -515,6 +534,7 @@ export class AccountCollectionDialog implements OnInit {
       typeof customer['name'] === 'string' && typeof item['amount'] === 'string' &&
       Number.isInteger(item['page']) && (item['page'] as number) >= 1 &&
       typeof item['manual'] === 'boolean' && Array.isArray(item['payments']) &&
+      (item['providerOrderId'] === undefined || typeof item['providerOrderId'] === 'string') &&
       item['payments'].length > 0 && item['payments'].some((payment: CollectionPayment) =>
         payment?.method === 'mercadoPago') && item['payments'].every((payment: CollectionPayment) =>
         payment && methods.some((method) => method.id === payment.method) &&
@@ -598,6 +618,78 @@ export class AccountCollectionDialog implements OnInit {
   }
 
   private mercadoPagoStorageKey(): string { return `${this.storageKey()}:mercado-pago`; }
+
+  private deferredMercadoPagoStorageKey(): string {
+    return `${this.mercadoPagoStorageKey()}:deferred`;
+  }
+
+  private restoreDeferredMercadoPagoDrafts(): void {
+    try {
+      const raw = localStorage.getItem(this.deferredMercadoPagoStorageKey());
+      const value: unknown = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(value) || !value.every((draft) => this.isMercadoPagoDraft(draft)) ||
+          new Set(value.map((draft: CollectionMercadoPagoDraft) => draft.operationId)).size !== value.length)
+        throw new Error('Invalid deferred collection drafts');
+      this.deferredMercadoPagoDrafts.set(value);
+      this.deferredLoadError.set(false);
+    } catch {
+      this.deferredLoadError.set(true);
+      this.error.set('No se pudo leer la lista de cobros pendientes. No se iniciará otro cobro hasta recuperarla.');
+    }
+  }
+
+  protected retryDeferredRecovery(): void { this.restoreDeferredMercadoPagoDrafts(); }
+
+  protected deferMercadoPago(): void {
+    const intent = this.mercadoPagoIntent();
+    if (!intent || intent.approved || !this.mercadoPagoOrderActive() || this.mercadoPagoBusy() ||
+        this.deferredLoadError() || !this.saveMercadoPagoDraft()) return;
+    try {
+      const raw = localStorage.getItem(this.mercadoPagoStorageKey());
+      const value: unknown = raw ? JSON.parse(raw) : null;
+      if (!this.isMercadoPagoDraft(value)) throw new Error('Invalid current collection draft');
+      const draft = value as CollectionMercadoPagoDraft;
+      const deferred = [...this.deferredMercadoPagoDrafts().filter((item) =>
+        item.operationId !== draft.operationId), draft];
+      localStorage.setItem(this.deferredMercadoPagoStorageKey(), JSON.stringify(deferred));
+      localStorage.removeItem(this.mercadoPagoStorageKey());
+      this.deferredMercadoPagoDrafts.set(deferred);
+      this.clearMercadoPagoPoll();
+      this.accountLoadRevision++;
+      this.operationId = crypto.randomUUID();
+      this.customer.set(null);
+      this.account.set(null);
+      this.amount.set('');
+      this.selectedPayments.set([{ method: 'cash', amount: 0 }]);
+      this.mercadoPagoIntent.set(null);
+      this.mercadoPagoQrImage.set(null);
+      this.mercadoPagoMessage.set(null);
+      this.mercadoPagoLoadState.set('idle');
+      this.allocations.set({});
+      this.manual.set(false);
+      this.page.set(1);
+      this.error.set(null);
+    } catch {
+      this.error.set('No se pudo guardar el cobro pendiente. La orden sigue abierta en esta caja.');
+    }
+  }
+
+  protected resumeDeferredMercadoPago(operationId: string): void {
+    if (this.pending() || this.mercadoPagoOrderActive() || this.mercadoPagoBusy() ||
+        this.mercadoPagoLoadState() === 'loading' || this.mercadoPagoLoadState() === 'error' ||
+        this.deferredLoadError()) return;
+    const draft = this.deferredMercadoPagoDrafts().find((item) => item.operationId === operationId);
+    if (!draft) return;
+    try {
+      localStorage.setItem(this.mercadoPagoStorageKey(), JSON.stringify(draft));
+      const remaining = this.deferredMercadoPagoDrafts().filter((item) => item.operationId !== operationId);
+      localStorage.setItem(this.deferredMercadoPagoStorageKey(), JSON.stringify(remaining));
+      this.deferredMercadoPagoDrafts.set(remaining);
+      this.restoreMercadoPagoDraft();
+    } catch {
+      this.error.set('No se pudo recuperar el cobro pendiente. Reintentá antes de cobrar.');
+    }
+  }
 
   protected formatMoney(value: number): string {
     return value.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' });

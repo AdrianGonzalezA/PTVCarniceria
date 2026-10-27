@@ -8,7 +8,7 @@
 | **Abrí el turno para comenzar a vender** | Identificarse como el cajero responsable y abrir turno con el fondo inicial real. |
 | **Stock insuficiente** | Reducir cantidad, elegir otro artículo o pedir que se registre una entrada/ajuste autorizado. No forzar la venta. |
 | **Guardando ticket…** | Esperar antes de cambiar de A–D o cobrar. Si aparece error, usar **Reintentar** y verificar el detalle persistido. |
-| **Orden Mercado Pago pendiente** | Esperar la consulta automática o usar **Consultar pago**; no cobrar otra vez hasta conocer el estado. |
+| **Orden Mercado Pago pendiente** | Esperar la consulta automática o usar **Consultar pago**. En un cobro de cuenta, si falla la cancelación, **Dejar pendiente y seguir** conserva la orden para retomarla; se puede atender a otro cliente, pero no cobrar otra vez al mismo cliente hasta aclarar el estado. |
 | **ARCA pendiente o error** | La venta puede estar ya registrada. Usar **Consultar ARCA / reintentar**; no repetir ticket y pago. |
 | **No se pudo imprimir/guardar PDF** | Confirmar en **Venta confirmada** que la operación existe; reintentar solo la salida del comprobante. |
 

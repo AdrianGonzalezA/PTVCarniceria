@@ -73,15 +73,40 @@ public sealed class MercadoPagoQrClientTests
             "0123456789abcdef0123456789abcdef", 2501m));
     }
 
+    [Fact]
+    public async Task CancelUsesJsonContentTypeAndIdempotencyKey()
+    {
+        var handler = new Handler("""
+            {"id":"ORD123","type":"qr","external_reference":"0123456789abcdef0123456789abcdef",
+             "status":"canceled","transactions":{"payments":[{"id":"PAY123","amount":"10.00",
+             "status":"canceled","status_detail":"canceled_by_api"}]}}
+            """);
+        var key = Guid.NewGuid();
+        var order = await new MercadoPagoQrClient(new HttpClient(handler)).CancelAsync(
+            "test-token", "ORD123", "0123456789abcdef0123456789abcdef", 10m, key);
+        Assert.Equal("canceled", order.Status);
+        Assert.Equal("POST", handler.Method);
+        Assert.Equal("application/json", handler.ContentType);
+        Assert.Equal(key.ToString("D"), handler.IdempotencyKey);
+        Assert.Equal("https://api.mercadopago.com/v1/orders/ORD123/cancel", handler.Url);
+    }
+
     private sealed class Handler(string response) : HttpMessageHandler
     {
         public string Url { get; private set; } = "";
         public string Body { get; private set; } = "";
+        public string Method { get; private set; } = "";
+        public string? ContentType { get; private set; }
+        public string? IdempotencyKey { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             Url = request.RequestUri!.ToString();
+            Method = request.Method.Method;
+            ContentType = request.Content?.Headers.ContentType?.MediaType;
+            IdempotencyKey = request.Headers.TryGetValues("X-Idempotency-Key", out var values)
+                ? values.Single() : null;
             Body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken);
             return new HttpResponseMessage(HttpStatusCode.OK)
             {

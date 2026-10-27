@@ -37,6 +37,25 @@
         </button>
       </div>
     } @else {
+      @if (deferredLoadError()) {
+        <p class="payment-guidance" role="alert">No se pudo leer la lista de órdenes pendientes de esta caja.</p>
+        <button type="button" (click)="retryDeferredRecovery()">Reintentar recuperación</button>
+      }
+      @if (deferredMercadoPagoDrafts().length > 0) {
+        <section class="account-deferred-payments" aria-label="Cobros de Mercado Pago pendientes de conciliación">
+          <h3>Mercado Pago · por conciliar</h3>
+          <p class="payment-guidance">Estas órdenes no generaron recibo. Consultá su estado antes de volver a cobrar al mismo cliente.</p>
+          @for (draft of deferredMercadoPagoDrafts(); track draft.operationId) {
+            <div class="account-deferred-payment">
+              <span>{{ draft.customer.name }} · {{ formatMoney(paymentAmountInDraft(draft, 'mercadoPago')) }}
+                · Orden {{ draft.providerOrderId ?? draft.operationId.slice(0, 8) }}</span>
+              <button type="button" [disabled]="mercadoPagoOrderActive() || mercadoPagoBusy() ||
+                mercadoPagoLoadState() === 'loading' || mercadoPagoLoadState() === 'error'"
+                (click)="resumeDeferredMercadoPago(draft.operationId)">Retomar</button>
+            </div>
+          }
+        </section>
+      }
       <div class="credit-customer-search">
         <label for="collection-search">Cliente, código o nombre</label>
         <div>
@@ -111,6 +130,8 @@
                   <button type="button" [disabled]="mercadoPagoBusy()" (click)="checkMercadoPago()">Consultar pago</button>
                   @if (mercadoPagoOrderActive() && !mercadoPagoIntent()?.approved) {
                     <button type="button" [disabled]="mercadoPagoBusy()" (click)="cancelMercadoPago()">Cancelar orden</button>
+                    <button type="button" [disabled]="mercadoPagoBusy() || deferredLoadError()"
+                      (click)="deferMercadoPago()">Dejar pendiente y seguir</button>
                   }
                 }
               </div>

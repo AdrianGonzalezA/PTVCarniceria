@@ -86,6 +86,8 @@ public sealed class MercadoPagoQrClient(HttpClient httpClient)
             throw new ArgumentException("A QR order and cancellation idempotency key are required.");
         using var request = NewRequest(HttpMethod.Post, $"/v1/orders/{orderId}/cancel", token);
         request.Headers.TryAddWithoutValidation("X-Idempotency-Key", idempotencyKey.ToString("D"));
+        request.Content = new ByteArrayContent([]);
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
         return await SendAsync(request, orderId, expectedReference, expectedAmount, cancellationToken);
     }
 

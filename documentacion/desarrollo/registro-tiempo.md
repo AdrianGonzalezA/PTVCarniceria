@@ -97,4 +97,6 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 
 | 27/10/2026 | 18:48:37 | 18:49:38 | 1 min 1 s medidos | Explicar saldo a favor de Recursos Informáticos | Diagnóstico de solo lectura en `carnicerias_test_visual`: recibos 11 ($12,34) y 12 ($10) se registraron como crédito; una venta a cuenta posterior de $22,34 quedó saldada por el recibo 13 en efectivo, sin consumir ese crédito. Cargos e imputaciones totales coinciden en $35.437,34; crédito disponible $22,34 y aplicaciones de crédito cero. La orden QR cancelada localmente no generó recibo. Sin pausas conocidas ni cambios de datos. |
 
-**Total activo registrado desde el 16/10/2026:** 320 min 16 s medidos, más seis tramos menores a 1 min y tramos no cuantificables.
+| 27/10/2026 | 18:51:10 | 18:51:33 | 23 s medidos | Indicar cómo usar el saldo a favor en una venta | Se verificaron los controles reales de **Finalizar compra → Cobrar venta → Cuenta corriente**, el campo **Aplicar saldo a favor (parcial o total)** y el recálculo automático de efectivo. Se explicó que el cajero elige el importe aplicado y que no entra dinero a caja por esa parte. Sin pausas conocidas ni cambios de datos o aplicación. |
+
+**Total activo registrado desde el 16/10/2026:** 320 min 39 s medidos, más seis tramos menores a 1 min y tramos no cuantificables.

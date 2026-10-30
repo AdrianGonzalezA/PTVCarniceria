@@ -41,7 +41,7 @@ describe('PosPage', () => {
   });
 
   async function checkoutWithGateways(intent: MercadoPagoIntent | null, unavailable = false,
-    modes: readonly MercadoPagoMode[] = []) {
+    modes: readonly MercadoPagoMode[] = [], total = 2500) {
     const session: CurrentSession = {
       userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-14T20:00:00Z',
       context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
@@ -55,7 +55,7 @@ describe('PosPage', () => {
       { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of({
         id: 'draft-id', ticketSlot: 'A', priceListId: 'list-id', updatedAtUtc: '2026-10-13T15:00:00Z',
         lines: [{ id: 'line-id', productId: 'product-id', productCode: '1001', productName: 'Asado',
-          unit: 'kg', saleMode: 'weight', quantity: 1, unitPrice: 2500 }],
+          unit: 'kg', saleMode: 'weight', quantity: 1, unitPrice: total }],
       }) } },
       { provide: MercadoPagoClient, useValue: { get: () => of(intent),
         start: () => NEVER, check: () => NEVER, cancel: () => NEVER } },
@@ -77,6 +77,31 @@ describe('PosPage', () => {
     const options = fixture.nativeElement.querySelector('.payment-methods').textContent as string;
     expect(options).toContain('Efectivo');
     expect(options).not.toContain('Mercado Pago');
+  });
+
+  it('rounds the remaining amount to cents when adding a payment method', async () => {
+    const fixture = await checkoutWithGateways(null, false, ['qr'], 79398.7);
+    const methods = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.payment-option')];
+    const payment = (name: string) => methods.find((method) => method.textContent?.includes(name))!;
+    const setAmount = (name: string, amount: string) => {
+      const input = payment(name).querySelector<HTMLInputElement>('.payment-amount')!;
+      input.value = amount;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges();
+    };
+    setAmount('Efectivo', '50000');
+    payment('Débito').querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    fixture.detectChanges();
+    setAmount('Débito', '10000');
+    payment('Mercado Pago').querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    fixture.detectChanges();
+    setAmount('Mercado Pago', '19000');
+    payment('Transferencia').querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    fixture.detectChanges();
+
+    expect(payment('Transferencia').querySelector<HTMLInputElement>('.payment-amount')!.value).toBe('398.7');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.checkout-dialog')!.textContent)
+      .not.toContain('Completá cada medio de pago con un importe válido.');
   });
 
   it('keeps manual methods but fails closed for new integrated payments if availability fails', async () => {

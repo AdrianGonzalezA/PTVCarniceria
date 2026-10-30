@@ -1359,7 +1359,7 @@ export class PosPage implements OnInit {
     }
     this.selectedPayments.update((payments) => checked
       ? [...payments, { method, amount: method === 'cash' ? this.dueNow() :
-        Math.max(0, this.dueNow() - payments.reduce((sum, item) => sum + item.amount, 0)) }]
+        Math.max(0, Math.round((this.dueNow() - payments.reduce((sum, item) => sum + item.amount, 0)) * 100) / 100) }]
       : payments.filter((payment) => payment.method !== method));
     this.checkoutError.set(null);
   }

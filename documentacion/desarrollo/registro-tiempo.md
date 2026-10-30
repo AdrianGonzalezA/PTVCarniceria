@@ -101,4 +101,6 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 
 | 30/10/2026 | 08:22:32 | 08:25:27 | 2 min 55 s medidos | Levantar administración, APIs y dos cajas de La Rústica | PostgreSQL existente activo; se inició API POS `5197` y conjunto de sucursal/central `5249`/`5251`/`4302`, se reutilizó Angular `4200` y se abrió `/admin` en navegador. Se compiló y preparó el POS; Caja A y Caja B se abrieron en Electron con perfiles distintos. API POS devolvió `401` sin sesión, APIs de sucursal/central `200`, y ambas ventanas mostraron Carnicería Rústica SRL, Alta Córdoba y su caja correspondiente. Sin pausas conocidas, bases nuevas ni cambios de datos. |
 
-**Total activo registrado desde el 16/10/2026:** 323 min 34 s medidos, más seis tramos menores a 1 min y tramos no cuantificables.
+| 30/10/2026 | 11:14:37 | 11:17:21 | 2 min 44 s medidos | Comparar comprobante real con factura y ticket del POS | Se revisó la imagen local de una Factura A y se cotejó con el modelo de venta, el PDF, la impresión serie/Hasar, el catálogo impositivo y la solicitud ARCA. Se identificaron como brechas la unidad física separada de los kilos, las percepciones operativas, los datos fiscales persistentes del cliente y referencias comerciales opcionales. Se distinguieron campos existentes que solo requieren presentación. Sin pausas conocidas ni cambios en servicios o base. |
+
+**Total activo registrado desde el 16/10/2026:** 326 min 18 s medidos, más seis tramos menores a 1 min y tramos no cuantificables.

@@ -87,3 +87,20 @@ Validar la entrada en el borde de la API y sostener índices de unicidad/versió
 - `PUT /api/admin/tax-assignments` admite `isAssigned: false` para una entrada IVA. Cierra solo las reglas vigentes vinculadas a **esa entrada** en el alcance seleccionado o en todos los artículos existentes. Una alícuota distinta permanece vigente. La respuesta mantiene `affectedCount` y `changedCount`; la operación usa la misma transacción y los bloqueos por artículo de la asignación.
 - El administrador ofrece **Quitar IVA** por artículo y **Quitar** por selección o por todos. Tras aplicar, recarga ambas grillas de clasificación. El historial distingue reglas terminadas de la única vigente. Quitar deja el artículo **sin regla fiscal configurada**; no lo declara exento ni no alcanzado. Una factura electrónica nueva requiere una regla fiscal completa.
 - En la base local de La Rústica, Carbon 5k y Malbec A quedaron con **IVA21 como única regla vigente**; sus reglas de 10,5 % tienen fecha de fin y permanecen solo como historial. No se recalcularon ventas ni se creó otra base.
+
+## Análisis de importes: factura B 00099-00000025 (30/10/2026)
+
+**Estado:** constatación del comportamiento vigente y propuesta de presentación; no cambia el criterio de cálculo ni el comprobante autorizado. Datos ficticios de la única base local, empresa La Rústica.
+
+| Artículo | Cantidad | Precio final/kg | Total con IVA | Neto gravado 10,5 % | IVA incluido |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| AGUJA PORC. | 1,200 kg | $ 12.602,00 | $ 15.122,40 | $ 13.685,43 | $ 1.436,97 |
+| BOLA DE LOMO | 2,200 kg | $ 7.572,00 | $ 16.658,40 | $ 15.075,48 | $ 1.582,92 |
+| **Total** | | | **$ 31.780,80** | **$ 28.760,91** | **$ 3.019,89** |
+
+- La venta y el comprobante tienen descuento $ 0,00 y ningún renglón exento o no gravado. Es una factura B autorizada en homologación. El IVA 10,5 % corresponde a la **foto fiscal de cada renglón al confirmar la venta**; modificaciones posteriores del catálogo no reescriben esa foto.
+- El precio configurado es final, con IVA incluido. Por renglón se calcula `neto = redondear(total final / 1,105; 2 decimales)` e `IVA = total final − neto`. Se suman los netos y los IVA de los renglones de cada alícuota. Esta es la regla implementada en `SaleAmountCalculator` y `FiscalRequestBuilder`; ARCA recibe `ImpNeto=28.760,91`, `ImpIVA=3.019,89` e `ImpTotal=31.780,80`, con una sola entrada `AlicIva` de 10,5 %.
+- Si se divide **el total agrupado** de $ 31.780,80 por 1,105 antes de redondear, resulta neto $ 28.760,90 e IVA $ 3.019,90. La diferencia de $ 0,01 es exclusivamente el orden de redondeo. No mezclar ese resultado con los importes persistidos por artículo ni cambiar la factura 25 ya autorizada.
+- Regla común y verificable para facturadores conectados a WSFEv1: **totalizar una sola base e IVA por alícuota**, hacer coincidir `ImpNeto` con las bases, `ImpIVA` con los IVA y `ImpTotal` con neto + IVA + exentos/no gravados + tributos. ARCA permite tolerancia de redondeo en la correspondencia entre base e impuesto. Fuente: [manual oficial WSFEv1](https://arca.gob.ar/ws/WSFEV1/documentos/manual-desarrollador-COMPG-v3-4-2.pdf), validaciones 10022, 10023, 10048, 10051 y 10061. La norma no fija en esas validaciones si el redondeo interno de cada POS se hace por renglón o por grupo.
+- La factura B actual muestra el precio final y **IVA contenido** total; el neto no aparece explícitamente en el PDF. Propuesta a revisar: mostrar la alícuota de cada artículo y un cuadro informativo por alícuota con neto, IVA y total, siempre tomado del snapshot autorizado. Para factura A, mantener la exposición de precios netos e IVA discriminado. [ARCA: transparencia fiscal](https://www.afip.gob.ar/comunicacion/transparencia-fiscal/) y [RG 5614/2024](https://biblioteca.arca.gob.ar/search/query/norma.aspx?p=t%3ARAG%7Cn%3A5614%7Co%3A9%7Ca%3A2024%7Cf%3A12%2F12%2F2024).
+- Los gravámenes de catálogo tipo `otro` aún no se calculan. La salida actual imprime $ 0,00 de «Otros Impuestos Nacionales Indirectos»; antes de usarla con artículos efectivamente alcanzados debe definirse y calcularse ese concepto, sin derivarlo solo de la asignación de catálogo.

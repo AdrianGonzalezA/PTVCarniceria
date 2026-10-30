@@ -103,4 +103,22 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 
 | 30/10/2026 | 11:14:37 | 11:17:21 | 2 min 44 s medidos | Comparar comprobante real con factura y ticket del POS | Se revisó la imagen local de una Factura A y se cotejó con el modelo de venta, el PDF, la impresión serie/Hasar, el catálogo impositivo y la solicitud ARCA. Se identificaron como brechas la unidad física separada de los kilos, las percepciones operativas, los datos fiscales persistentes del cliente y referencias comerciales opcionales. Se distinguieron campos existentes que solo requieren presentación. Sin pausas conocidas ni cambios en servicios o base. |
 
-**Total activo registrado desde el 16/10/2026:** 326 min 18 s medidos, más seis tramos menores a 1 min y tramos no cuantificables.
+| 30/10/2026 | 11:20:15 | — | No cuantificable | Iniciar ampliación configurable de facturas y tickets | Se revisaron contratos, reglas de caja, catálogo fiscal y documentación oficial de ARCA. El turno fue interrumpido antes de tomar una marca final; no se atribuyen minutos a ese tramo. |
+
+| 30/10/2026 | 11:21:05 | 11:33:33 | 12 min 28 s medidos | Avanzar en facturación configurable y datos de ventas de laboratorio | Se confirmó autorización para adaptar datos existentes en la base única. Se añadieron pruebas y modelo de ficha fiscal por cliente, localidad/provincia y referencia comercial de venta; ABM de clientes y endpoint de búsqueda fiscal; API de confirmación con identidad vinculada e idempotencia. Cuatro pruebas de dominio y tres del formulario pasaron. El trabajo continúa con la petición sobre impresión térmica; sin pausas conocidas. |
+
+| 30/10/2026 | 11:33:33 | 11:38:43 | 5 min 10 s medidos | Incorporar factura fiscal a comandera térmica | Se revisaron los contratos de comprobante, el PDF A4 y la salida serie; se definió imprimir una factura electrónica autorizada en ESC/POS con CAE y QR. Sin pausas conocidas. |
+
+| 30/10/2026 | 11:38:43 | 11:39:04 | 21 s medidos | Aclarar configuración de la impresión térmica | Se incorporó la elección de ancho de papel y controlador desde la administración. Sin pausas conocidas. |
+
+| 30/10/2026 | 11:39:04 | 11:39:35 | 31 s medidos | Definir catálogo de dispositivos | Se acordó una entidad de sucursal con nombre, tipo, controlador, COM, velocidad y ancho de papel; un modelo nuevo que use un controlador existente no requiere editar código. Sin pausas conocidas. |
+
+| 30/10/2026 | 11:39:35 | 11:57:36 | 16 min 22 s medidos | Implementar catálogo de dispositivos y salida ESC/POS | Se añadieron entidad, API, asignación a cajas, propagación de cambios y salida térmica de factura homologada. Se aplicó la primera migración a la base única y se iniciaron pruebas puras. Pausa de 1 min 39 s para levantar Caja C, excluida del tiempo activo de esta petición. |
+
+| 30/10/2026 | 11:53:41 | 11:55:20 | 1 min 39 s medidos | Levantar Caja C de LA Rústica | Se inició Electron con el perfil de Caja C y se comprobó respuesta de la API; el usuario confirmó que la caja abrió. Sin base nueva ni interrupción de otras cajas. |
+
+| 30/10/2026 | 11:57:36 | 11:59:02 | 1 min 26 s medidos | Diagnosticar caja abierta durante una presentación | Consulta de solo lectura: Caja A de Alta Córdoba tenía un turno de Juan abierto desde el 27/10, con un borrador y ventas registradas. El usuario cerró el turno; se verificó que LA Rústica quedó con cero turnos abiertos. No se alteraron datos directamente. |
+
+| 30/10/2026 | 11:59:02 | 12:24:51 | 25 min 49 s medidos | Continuar factura, catálogo de dispositivos y comprobantes tras cerrar turno | Se incorporó el conteo físico de piezas, independiente del peso, a borradores, ventas, historial y salidas PDF/serie/ESC/POS; las piezas trazables existentes recibieron 1 solo cuando tenían identificador. Se aplicó la segunda migración únicamente a `carnicerias_test_visual`. Se actualizaron manuales, especificaciones, arquitectura y guía de despliegue. Pasaron 96 pruebas puras .NET, 52 Angular focalizadas, 26 Electron focalizadas, compilaciones y lint. Código publicado en `92001c5` en `feature/ui-v2`. No se reiniciaron las APIs ni las cajas abiertas para la presentación; queda la revisión física/visual de la nueva salida. Sin pausas conocidas; compilaciones supervisadas incluidas. |
+
+**Total activo registrado desde el 16/10/2026:** 389 min 12 s medidos, más ocho tramos menores a 1 min y tramos no cuantificables.

@@ -16,9 +16,9 @@
     </div>
     <div><label for="assignment-action">Acción</label>
       <select id="assignment-action" [value]="isAssigned() ? 'assign' : 'remove'"
-        [disabled]="selectedTax()?.kind === 'iva'" (change)="actionChanged($event)">
+        (change)="actionChanged($event)">
         <option value="assign">Asignar</option>
-        @if (selectedTax()?.kind !== 'iva') { <option value="remove">Quitar</option> }
+        <option value="remove">Quitar</option>
       </select>
     </div>
     <fieldset><legend>Artículos alcanzados</legend>
@@ -37,6 +37,8 @@
   </div>
   @if (selectedTax()?.kind === 'otro') {
     <p class="assignment-note">No calculado: este gravamen queda configurado, pero no altera el precio, el cobro ni ARCA.</p>
+  } @else if (selectedTax()?.kind === 'iva' && !isAssigned()) {
+    <p class="assignment-note">Quitar esta alícuota deja los artículos sin regla de IVA vigente. Las ventas anteriores conservan sus impuestos; una factura nueva requiere volver a configurar el tratamiento fiscal.</p>
   } @else {
     <p class="assignment-note">El IVA seleccionado se aplicará sólo a ventas nuevas. Los datos actuales de prueba deben validarse antes de producción.</p>
   }

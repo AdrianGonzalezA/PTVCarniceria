@@ -21,6 +21,7 @@ public static class AdminProductTaxEndpoints
         group.MapGet("", ListAsync);
         group.MapGet("/{productId:guid}", HistoryAsync);
         group.MapPut("/{productId:guid}", SetAsync);
+        group.MapDelete("/{productId:guid}", RemoveAsync);
         return endpoints;
     }
 
@@ -134,6 +135,42 @@ public static class AdminProductTaxEndpoints
             SqlState: PostgresErrorCodes.UniqueViolation or
                 PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected
         })
+        {
+            return Error(StatusCodes.Status409Conflict, "TAX_ASSIGNMENT_CONFLICT");
+        }
+    }
+
+    private static async Task<IResult> RemoveAsync(Guid productId,
+        PlatformAccessDbContext db, OperationalContextAccessor accessor,
+        TimeProvider timeProvider, HttpContext httpContext, CancellationToken cancellationToken)
+    {
+        if (!AllowedOrigin(httpContext)) return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
+        if (productId == Guid.Empty) return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+        var context = accessor.Context;
+        try
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable, cancellationToken);
+            await ProductPriceConsistencyLock.AcquireAsync(db, context.CompanyId, productId,
+                cancellationToken);
+            if (!await db.CatalogProducts.AsNoTracking().AnyAsync(item =>
+                    item.CompanyId == context.CompanyId && item.Id == productId, cancellationToken))
+                return Results.NotFound();
+            var current = await db.ProductTaxRules.SingleOrDefaultAsync(item =>
+                item.CompanyId == context.CompanyId && item.ProductId == productId &&
+                item.EffectiveToUtc == null, cancellationToken);
+            if (current is not null)
+            {
+                var now = timeProvider.GetUtcNow();
+                current.Close(now <= current.EffectiveFromUtc
+                    ? current.EffectiveFromUtc.AddTicks(10) : now);
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            await transaction.CommitAsync(cancellationToken);
+            return Results.NoContent();
+        }
+        catch (PostgresException exception) when (exception.SqlState is
+            PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected)
         {
             return Error(StatusCodes.Status409Conflict, "TAX_ASSIGNMENT_CONFLICT");
         }

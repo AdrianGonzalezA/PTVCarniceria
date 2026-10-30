@@ -17,7 +17,7 @@
     }
 
     <app-tax-catalog-panel />
-    <app-tax-assignment-panel />
+    <app-tax-assignment-panel (updated)="load()" />
 
     <section class="category-panel history-panel" aria-labelledby="tax-list-title" [attr.aria-busy]="loading()">
       <header class="panel-heading"><div>
@@ -64,6 +64,12 @@
           <button class="secondary-button" type="button" (click)="close()">Cerrar</button></header>
         <div class="tax-editor-body">
           <p class="account-note">Los precios del POS son finales. El IVA vigente se extrae del precio final al confirmar una venta nueva. No se asume una alícuota por familia de productos.</p>
+          <p class="account-note">Solo la regla vigente se aplica. Las reglas con fecha de fin son antecedentes y se conservan en el historial.</p>
+          @if (product.currentRule; as currentRule) {
+            <p class="account-note" role="status">Regla vigente: {{ label(currentRule.treatment) }} · {{ currentRule.ratePercent }} %.</p>
+          } @else {
+            <p class="account-note" role="status">Sin regla fiscal vigente.</p>
+          }
           <div class="tax-editor-fields">
             <div><label for="tax-treatment">Tratamiento</label>
               <select id="tax-treatment" [value]="treatment()" [disabled]="saving()" (change)="treatmentChanged($event)">
@@ -81,8 +87,13 @@
             </div>
           </div>
           @if (saveError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
-          @if (saveSuccess()) { <p class="tax-success" role="status">Regla guardada; el historial anterior permanece disponible.</p> }
+          @if (saveSuccess(); as success) { <p class="tax-success" role="status">{{ success }}</p> }
           <button type="button" [disabled]="saving()" (click)="save()">{{ saving() ? 'Guardando…' : 'Guardar regla' }}</button>
+          @if (product.currentRule) {
+            <button type="button" class="secondary-button" [disabled]="saving()" (click)="remove()">
+              {{ product.currentRule.treatment === 'taxed' ? 'Quitar IVA' : 'Quitar tratamiento fiscal' }}
+            </button>
+          }
           <h3>Historial de reglas</h3>
           @if (historyError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
           @else if (history().length === 0) { <p class="state-message">Sin reglas anteriores.</p> }

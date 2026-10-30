@@ -53,4 +53,10 @@ export class AdminProductTaxClient {
       { treatment, ratePercent, ...(taxCatalogEntryId ? { taxCatalogEntryId } : {}) },
       { withCredentials: true });
   }
+
+  remove(productId: string) {
+    return this.http.delete<void>(
+      `/api/admin/product-tax-rules/${encodeURIComponent(productId)}`,
+      { withCredentials: true });
+  }
 }

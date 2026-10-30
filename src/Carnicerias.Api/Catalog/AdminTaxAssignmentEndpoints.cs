@@ -74,9 +74,6 @@ public static class AdminTaxAssignmentEndpoints
             if (tax is null) return Results.NotFound();
             if (request.IsAssigned.Value && !tax.IsActive)
                 return Error(StatusCodes.Status409Conflict, "TAX_INACTIVE");
-            if (tax.Kind == TaxKind.Vat && !request.IsAssigned.Value)
-                return Error(StatusCodes.Status400BadRequest, "VAT_REQUIRES_TREATMENT");
-
             var productQuery = db.CatalogProducts.AsNoTracking()
                 .Where(item => item.CompanyId == context.CompanyId);
             if (request.Scope == "selected" && request.ProductIds is { Length: > 0 } selected)
@@ -108,8 +105,11 @@ public static class AdminTaxAssignmentEndpoints
 
             var now = timeProvider.GetUtcNow();
             var changed = tax.Kind == TaxKind.Vat
-                ? await AssignVatAsync(db, context.CompanyId, context.UserId, tax,
-                    productIds, now, cancellationToken)
+                ? request.IsAssigned.Value
+                    ? await AssignVatAsync(db, context.CompanyId, context.UserId, tax,
+                        productIds, now, cancellationToken)
+                    : await RemoveVatAsync(db, context.CompanyId, tax.Id,
+                        productIds, now, cancellationToken)
                 : await AssignOtherAsync(db, context.CompanyId, context.UserId, tax.Id,
                     request.IsAssigned.Value, productIds, now, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -187,6 +187,21 @@ public static class AdminTaxAssignmentEndpoints
         }
         await db.SaveChangesAsync(cancellationToken);
         return changed;
+    }
+
+    private static async Task<int> RemoveVatAsync(PlatformAccessDbContext db,
+        Guid companyId, Guid taxId, Guid[] productIds,
+        DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var current = await db.ProductTaxRules.Where(item =>
+                item.CompanyId == companyId && item.TaxCatalogEntryId == taxId &&
+                productIds.Contains(item.ProductId) && item.EffectiveToUtc == null)
+            .ToArrayAsync(cancellationToken);
+        foreach (var rule in current)
+            rule.Close(now <= rule.EffectiveFromUtc
+                ? rule.EffectiveFromUtc.AddTicks(10) : now);
+        await db.SaveChangesAsync(cancellationToken);
+        return current.Length;
     }
 
     private static bool AllowedOrigin(HttpContext context)

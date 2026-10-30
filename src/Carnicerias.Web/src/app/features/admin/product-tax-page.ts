@@ -38,7 +38,7 @@ export class ProductTaxPage implements OnInit {
   protected readonly vatOptionsError = signal<string | null>(null);
   protected readonly saving = signal(false);
   protected readonly saveError = signal<string | null>(null);
-  protected readonly saveSuccess = signal(false);
+  protected readonly saveSuccess = signal<string | null>(null);
 
   ngOnInit(): void {
     this.sessions.current().subscribe({
@@ -94,7 +94,7 @@ export class ProductTaxPage implements OnInit {
     this.history.set([]);
     this.historyError.set(null);
     this.saveError.set(null);
-    this.saveSuccess.set(false);
+    this.saveSuccess.set(null);
     this.loadHistory(product.id);
   }
 
@@ -127,12 +127,12 @@ export class ProductTaxPage implements OnInit {
     if (!window.confirm(`¿Guardar el tratamiento fiscal de ${product.name}? No altera ventas anteriores.`)) return;
     this.saving.set(true);
     this.saveError.set(null);
-    this.saveSuccess.set(false);
+    this.saveSuccess.set(null);
     this.client.set(product.id, this.treatment(), rate,
       this.treatment() === 'taxed' ? this.selectedTaxId() : undefined).subscribe({
       next: (rule) => {
         this.saving.set(false);
-        this.saveSuccess.set(true);
+        this.saveSuccess.set('Regla guardada; el historial anterior permanece disponible.');
         this.selected.set({ ...product, currentRule: rule });
         this.loadHistory(product.id);
         this.load();
@@ -140,6 +140,32 @@ export class ProductTaxPage implements OnInit {
       error: () => {
         this.saving.set(false);
         this.saveError.set('No se guardó la regla fiscal. Verificá los datos y reintentá.');
+      },
+    });
+  }
+
+  protected remove(): void {
+    const product = this.selected();
+    if (!product?.currentRule || this.saving()) return;
+    if (!window.confirm(`¿Quitar la regla fiscal vigente de ${product.name}? ` +
+      'El artículo quedará sin IVA configurado para facturas nuevas. Las ventas anteriores no cambian.')) return;
+    this.saving.set(true);
+    this.saveError.set(null);
+    this.saveSuccess.set(null);
+    this.client.remove(product.id).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.saveSuccess.set('Regla fiscal quitada; el historial anterior permanece disponible.');
+        this.selected.set({ ...product, currentRule: null });
+        this.treatment.set('taxed');
+        this.rate.set('');
+        this.selectedTaxId.set('');
+        this.loadHistory(product.id);
+        this.load();
+      },
+      error: () => {
+        this.saving.set(false);
+        this.saveError.set('No se pudo quitar la regla fiscal. Actualizá e intentá de nuevo.');
       },
     });
   }

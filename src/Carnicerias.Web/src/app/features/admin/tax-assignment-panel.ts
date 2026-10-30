@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit, output, signal } from '@angular/core';
 import { AdminProductTaxClient, TaxProductPage, TaxProductRow } from '../../core/admin/admin-product-tax-client';
 import { AdminTaxAssignmentClient, AssignmentResult, OtherTaxAssignment } from '../../core/admin/admin-tax-assignment-client';
 import { AdminTaxCatalogClient, TaxCatalogEntry } from '../../core/admin/admin-tax-catalog-client';
@@ -12,6 +12,7 @@ import { AdminDetailDialog } from './admin-detail-dialog';
   styleUrls: ['./categories-page.scss', './tax-assignment-panel.scss'],
 })
 export class TaxAssignmentPanel implements OnInit {
+  readonly updated = output<void>();
   private readonly catalog = inject(AdminTaxCatalogClient);
   private readonly productsClient = inject(AdminProductTaxClient);
   private readonly assignments = inject(AdminTaxAssignmentClient);
@@ -154,7 +155,9 @@ export class TaxAssignmentPanel implements OnInit {
 
   private confirmation(tax: TaxCatalogEntry, count: number): string {
     const action = this.isAssigned() ? 'Aplicar' : 'Quitar';
-    return `¿${action} ${tax.name} a ${count} artículos? No cambia ventas anteriores.`;
+    const fiscalWarning = tax.kind === 'iva' && !this.isAssigned()
+      ? ' Los artículos que tengan esta alícuota quedarán sin regla de IVA vigente para facturas nuevas.' : '';
+    return `¿${action} ${tax.name} a ${count} artículos? No cambia ventas anteriores.${fiscalWarning}`;
   }
 
   private submit(request: ReturnType<AdminTaxAssignmentClient['setAll']>): void {
@@ -167,6 +170,8 @@ export class TaxAssignmentPanel implements OnInit {
         this.selectedIds.set([]);
         this.saveSuccess.set(`${result.changedCount} de ${result.affectedCount} artículos actualizados.`);
         if (this.historyProduct()) this.viewHistory(this.historyProduct()!);
+        this.loadProducts();
+        this.updated.emit();
       },
       error: () => {
         this.saving.set(false);

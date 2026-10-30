@@ -103,6 +103,11 @@ describe('TaxAssignmentPanel', () => {
     expect(save.request.body).toEqual({ taxCatalogEntryId: 'other-id', isAssigned: true,
       scope: 'all', expectedProductCount: 2 });
     save.flush({ affectedCount: 2, changedCount: 2 });
+    http.expectOne((request) => request.url === '/api/admin/product-tax-rules').flush({
+      page: 1, pageSize: 25, total: 2,
+      items: [{ id: 'p1', code: 'P1', name: 'Asado', isActive: true, currentRule: null },
+        { id: 'p2', code: 'P2', name: 'Artículo inactivo', isActive: false, currentRule: null }],
+    });
     fixture.detectChanges();
     expect(page.textContent).toContain('2 artículos');
     expect(page.textContent).toContain('No calculado');
@@ -135,6 +140,11 @@ describe('TaxAssignmentPanel', () => {
     expect(save.request.body).toEqual({ taxCatalogEntryId: 'other-id', isAssigned: false,
       scope: 'selected', productIds: ['p1', 'p2'] });
     save.flush({ affectedCount: 2, changedCount: 2 });
+    http.expectOne((request) => request.url === '/api/admin/product-tax-rules').flush({
+      page: 1, pageSize: 25, total: 2,
+      items: [{ id: 'p1', code: 'P1', name: 'Asado', isActive: true, currentRule: null },
+        { id: 'p2', code: 'P2', name: 'Entraña', isActive: true, currentRule: null }],
+    });
     (page.querySelector('tbody button') as HTMLButtonElement).click();
     http.expectOne('/api/admin/tax-assignments/p1').flush([{
       id: 'assignment-id', productId: 'p1', taxCatalogEntryId: 'other-id',
@@ -148,5 +158,53 @@ describe('TaxAssignmentPanel', () => {
     page.querySelector<HTMLButtonElement>('dialog button')!.click();
     fixture.detectChanges();
     expect(page.querySelector('dialog')).toBeNull();
+  });
+
+  it('can remove an IVA rate from all articles and refreshes the current rules', () => {
+    const fixture = TestBed.createComponent(TaxAssignmentPanel);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/admin/taxes/active').flush([
+      { id: 'iva21', code: 'IVA21', name: 'IVA 21', kind: 'iva',
+        ratePercent: 21, isActive: true, createdAtUtc: '2026-10-09T11:00:00Z', deactivatedAtUtc: null },
+    ]);
+    http.expectOne('/api/admin/tax-assignments/count').flush({ total: 2 });
+    const rule = { id: 'rule1', productId: 'p1', treatment: 'taxed', ratePercent: 21,
+      taxCatalogEntryId: 'iva21', effectiveFromUtc: '2026-10-09T11:00:00Z',
+      effectiveToUtc: null, changedByUserId: 'admin' };
+    http.expectOne((request) => request.url === '/api/admin/product-tax-rules').flush({
+      page: 1, pageSize: 25, total: 2,
+      items: [{ id: 'p1', code: 'P1', name: 'Asado', isActive: true, currentRule: rule },
+        { id: 'p2', code: 'P2', name: 'Bondiola', isActive: true,
+          currentRule: { ...rule, id: 'rule2', productId: 'p2', ratePercent: 10.5 } }],
+    });
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    const tax = page.querySelector('#assignment-tax') as HTMLSelectElement;
+    tax.value = 'iva21';
+    tax.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    const action = page.querySelector('#assignment-action') as HTMLSelectElement;
+    expect(action.disabled).toBe(false);
+    expect([...action.options].map((option) => option.value)).toContain('remove');
+    action.value = 'remove';
+    action.dispatchEvent(new Event('change'));
+    (page.querySelector('#assignment-all') as HTMLInputElement).click();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    (page.querySelector('#assignment-apply') as HTMLButtonElement).click();
+    http.expectOne('/api/admin/tax-assignments/count').flush({ total: 2 });
+    const save = http.expectOne('/api/admin/tax-assignments');
+    expect(save.request.body).toEqual({ taxCatalogEntryId: 'iva21', isAssigned: false,
+      scope: 'all', expectedProductCount: 2 });
+    save.flush({ affectedCount: 2, changedCount: 1 });
+    http.expectOne((request) => request.url === '/api/admin/product-tax-rules').flush({
+      page: 1, pageSize: 25, total: 2,
+      items: [{ id: 'p1', code: 'P1', name: 'Asado', isActive: true, currentRule: null },
+        { id: 'p2', code: 'P2', name: 'Bondiola', isActive: true,
+          currentRule: { ...rule, id: 'rule2', productId: 'p2', ratePercent: 10.5 } }],
+    });
+    fixture.detectChanges();
+    expect(page.querySelector('tbody')?.textContent).toContain('Sin configurar');
+    expect(page.textContent).toContain('1 de 2 artículos actualizados.');
   });
 });

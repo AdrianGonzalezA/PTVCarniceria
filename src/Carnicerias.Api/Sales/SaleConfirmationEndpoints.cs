@@ -359,7 +359,8 @@ public static class SaleConfirmationEndpoints
             .Select(line => new SaleConfirmationLineResponse(
                 line.ProductCode, line.ProductName, line.Unit, line.Quantity, line.UnitPrice,
                 line.LineTotal, line.PieceIdentifier, line.PieceCount, line.NetAfterDiscount,
-                line.TaxableBase, line.TaxAmount, line.TaxRatePercent)).ToArray(),
+                line.TaxableBase, line.TaxAmount, line.TaxRatePercent,
+                TaxTreatmentName(line.TaxTreatment))).ToArray(),
         sale.Payments.Select(payment => new SaleConfirmationPaymentResponse(
             MethodName(payment.Method), payment.TenderedAmount, payment.AppliedAmount)).ToArray());
 
@@ -389,6 +390,15 @@ public static class SaleConfirmationEndpoints
         SaleRecipientTaxStatus.SmallTaxpayer => "smallTaxpayer",
         SaleRecipientTaxStatus.Exempt => "exempt",
         _ => throw new ArgumentOutOfRangeException(nameof(status))
+    };
+
+    private static string? TaxTreatmentName(SaleTaxTreatment? treatment) => treatment switch
+    {
+        SaleTaxTreatment.Taxed => "taxed",
+        SaleTaxTreatment.Exempt => "exempt",
+        SaleTaxTreatment.NotTaxed => "notTaxed",
+        null => null,
+        _ => throw new ArgumentOutOfRangeException(nameof(treatment))
     };
 
     private static IResult PaymentError(PaymentSettlementError error) => error switch
@@ -424,6 +434,6 @@ public static class SaleConfirmationEndpoints
         decimal Quantity, decimal UnitPrice, decimal LineTotal, string? PieceIdentifier,
         int? PieceCount,
         decimal? NetAfterDiscount, decimal? TaxableBase, decimal? TaxAmount,
-        decimal? TaxRatePercent);
+        decimal? TaxRatePercent, string? TaxTreatment);
     private sealed record SaleConfirmationPaymentResponse(string Method, decimal TenderedAmount, decimal AppliedAmount);
 }

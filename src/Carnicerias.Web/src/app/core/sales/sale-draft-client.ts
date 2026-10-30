@@ -65,7 +65,8 @@ export interface ConfirmedSale {
   readonly purchaseOrderNumber?: string | null;
   readonly lines: readonly { readonly code: string; readonly name: string; readonly unit: string; readonly quantity: number; readonly unitPrice: number; readonly lineTotal: number; readonly pieceIdentifier?: string | null; readonly pieceCount?: number | null;
     readonly netAfterDiscount?: number | null; readonly taxableBase?: number | null;
-    readonly taxAmount?: number | null; readonly taxRatePercent?: number | null }[];
+    readonly taxAmount?: number | null; readonly taxRatePercent?: number | null;
+    readonly taxTreatment?: 'taxed' | 'exempt' | 'notTaxed' | null }[];
   readonly payments: readonly { readonly method: SalePaymentMethod; readonly tenderedAmount: number; readonly appliedAmount: number }[];
 }
 

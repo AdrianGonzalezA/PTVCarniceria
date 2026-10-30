@@ -64,6 +64,30 @@ describe('ESC/POS invoice receipt', () => {
     expect(bytes.toString('ascii')).toContain('1,500 kg');
   });
 
+  it('prints each B invoice line rate and a net, VAT and total summary per rate', () => {
+    const mixed: ReceiptRequest = { ...receipt, total: 2315,
+      lines: [
+        { code: '1', name: 'Corte 10', unit: 'kg', quantity: 1,
+          unitPrice: 1105, lineTotal: 1105, netAfterDiscount: 1105,
+          taxTreatment: 'taxed', taxableBase: 1000, taxAmount: 105, taxRatePercent: 10.5 },
+        { code: '2', name: 'Corte 21', unit: 'kg', quantity: 1,
+          unitPrice: 1210, lineTotal: 1210, netAfterDiscount: 1210,
+          taxTreatment: 'taxed', taxableBase: 1000, taxAmount: 210, taxRatePercent: 21 },
+      ],
+      fiscal: { ...receipt.fiscal!, vatBreakdown: [
+        { ratePercent: 10.5, taxableBase: 1000, taxAmount: 105 },
+        { ratePercent: 21, taxableBase: 1000, taxAmount: 210 },
+      ] },
+    };
+    const printed = formatEscPosReceipt(mixed, 58).toString('ascii');
+    expect(printed).toContain('IVA 10,5%');
+    expect(printed).toContain('IVA 21%');
+    expect(printed).toContain('Neto 10,5%');
+    expect(printed).toContain('Total 10,5%');
+    expect(printed).toContain('Total 21%');
+    expect(printed).toContain('IVA contenido');
+  });
+
   it('writes the thermal bytes to the assigned COM port', async () => {
     SerialPortMock.binding.createPort('COM3', { record: true });
     let port: SerialPortMock | undefined;

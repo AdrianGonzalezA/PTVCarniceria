@@ -28,12 +28,14 @@ app.whenReady().then(async () => {
       confirmedAtUtc: '2026-10-09T13:00:00Z', total: 49835.50, changeAmount: 0,
       lines: [
         { code: '001', name: 'Asado bovino fresco', unit: 'kg', quantity: 1.250,
-          unitPrice: 13260, lineTotal: 16575, netAfterDiscount: 16575, taxableBase: 15000, taxAmount: 1575 },
+          unitPrice: 13260, lineTotal: 16575, netAfterDiscount: 16575, taxableBase: 15000,
+          taxAmount: 1575, taxRatePercent: 10.5, taxTreatment: 'taxed' },
         { code: '002', name: 'Vacío bovino fresco', unit: 'kg', quantity: 0.850,
-          unitPrice: 17680, lineTotal: 15028, netAfterDiscount: 15028, taxableBase: 13600, taxAmount: 1428 },
+          unitPrice: 17680, lineTotal: 15028, netAfterDiscount: 15028, taxableBase: 13600,
+          taxAmount: 1428, taxRatePercent: 10.5, taxTreatment: 'taxed' },
         { code: '003', name: 'Nalga bovina fresca', unit: 'kg', quantity: 1.100,
           unitPrice: 16575, lineTotal: 18232.50, netAfterDiscount: 18232.50,
-          taxableBase: 16500, taxAmount: 1732.50 },
+          taxableBase: 15068.18, taxAmount: 3164.32, taxRatePercent: 21, taxTreatment: 'taxed' },
       ],
       payments: [{ method: 'cash', tenderedAmount: 49835.50, appliedAmount: 49835.50 }],
       fiscal: { saleId: 'SMOKE-FACTURA', status: 'Authorized', total: 49835.50,
@@ -43,7 +45,10 @@ app.whenReady().then(async () => {
         pointOfSale: 99, voucherType: 6, number: 128, issueDate: '2026-10-09',
         receiverName: null, receiverAddress: null, receiverTaxStatus: 'finalConsumer',
         receiverDocumentType: 99, receiverDocumentNumber: 0,
-        vatBreakdown: [{ ratePercent: 10.5, taxableBase: 45100, taxAmount: 4735.50 }],
+        vatBreakdown: [
+          { ratePercent: 10.5, taxableBase: 28600, taxAmount: 3003 },
+          { ratePercent: 21, taxableBase: 15068.18, taxAmount: 3164.32 },
+        ],
         exemptAmount: 0, notTaxedAmount: 0, cae: '12345678901234', caeExpiry: '2026-10-19' },
     });
     await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(await createFiscalInvoiceHtml(invoice))}`);

@@ -1,4 +1,4 @@
-import type { ReceiptRequest } from './receipt-pdf';
+import { fiscalLineTaxLabel, formatVatRate, type ReceiptRequest } from './receipt-pdf';
 
 const paymentNames: Record<string, string> = {
   cash: 'Efectivo', debit: 'Débito', credit: 'Crédito', transfer: 'Transferencia',
@@ -56,6 +56,8 @@ export function formatSerialReceipt(receipt: ReceiptRequest): string {
       minimumFractionDigits: line.unit === 'kg' ? 3 : 0, maximumFractionDigits: 3,
     });
     lines.push(`${printable(line.name)} (${printable(line.code)})`);
+    if (fiscal?.saleDocumentType === 'ElectronicInvoice')
+      lines.push(`  ${fiscalLineTaxLabel(line)}`);
     if (line.pieceIdentifier) lines.push(`  Pieza ${printable(line.pieceIdentifier)}`);
     if (line.pieceCount != null) lines.push(`  Piezas fisicas ${line.pieceCount}`);
     lines.push(`  ${quantity} ${printable(line.unit)} x $ ${money(line.unitPrice)}`);
@@ -67,9 +69,13 @@ export function formatSerialReceipt(receipt: ReceiptRequest): string {
   }
   if (fiscal) {
     lines.push('----------------------------------------', 'DESGLOSE IMPOSITIVO DE PRUEBA');
-    for (const item of fiscal.vatBreakdown)
-      lines.push(`Neto ${item.ratePercent}% $ ${money(item.taxableBase)}`,
-        `IVA ${item.ratePercent}% incluido $ ${money(item.taxAmount)}`);
+    for (const item of fiscal.vatBreakdown) {
+      const rate = formatVatRate(item.ratePercent);
+      lines.push(`Neto ${rate}% $ ${money(item.taxableBase)}`,
+        `IVA ${rate}% incluido $ ${money(item.taxAmount)}`);
+      if (fiscal.saleDocumentType === 'ElectronicInvoice' && fiscal.voucherType === 6)
+        lines.push(`Total ${rate}% $ ${money(item.taxableBase + item.taxAmount)}`);
+    }
     if (fiscal.exemptAmount > 0) lines.push(`Exento $ ${money(fiscal.exemptAmount)}`);
     if (fiscal.notTaxedAmount > 0) lines.push(`No gravado $ ${money(fiscal.notTaxedAmount)}`);
   }

@@ -33,6 +33,8 @@ Al pulsar **Confirmar venta**, primero se registra la venta con pagos y egreso d
 
 La instalación actual es de prueba: los comprobantes fiscales se identifican como **sin validez fiscal**. No entregar esas salidas como facturas productivas.
 
+En una **factura B**, el precio de cada artículo es final e incluye IVA. La columna **Impuesto** indica su alícuota o tratamiento fiscal; el resumen muestra neto, IVA incluido y total por alícuota. Es un desglose informativo: el IVA no se agrega nuevamente al importe a pagar. En una **factura A**, los importes de los artículos son netos y el IVA aparece discriminado en el resumen. Los importes proceden de la venta confirmada, de modo que cambios posteriores en los impuestos del catálogo no alteran el comprobante. El mismo criterio se muestra en el PDF y en la salida térmica de factura electrónica.
+
 ## Imprimir o guardar
 
 Al cerrar una venta, el comprobante se envía automáticamente **solo si la caja tiene una impresora asignada**. La comandera ESC/POS de 58 u 80 mm puede imprimir ticket no fiscal, ticket fiscal de homologación o factura electrónica con CAE y QR después de la autorización de ARCA. La impresora de texto serial entrega un ticket textual. La Hasar SMH/P-441F de laboratorio imprime ticket no fiscal y, tras el CAE, ticket fiscal B para consumidor final; no recibe facturas electrónicas. En **Venta confirmada**, pulsá **Descargar comprobante** para guardar el PDF en Descargas; los comprobantes fiscales requieren autorización previa. La pantalla confirma la descarga sin mostrar la ruta. Una falla de impresión o descarga **no repite ni deshace** la venta; ante un resultado incierto, revisá el papel y el estado del equipo antes de cualquier nueva acción.

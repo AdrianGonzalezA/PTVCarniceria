@@ -194,14 +194,53 @@ describe('virtual receipt PDF content', () => {
         receiverDocumentNumber: 0 } })).rejects.toThrow('CUIT');
   });
 
+  it('shows invoice 25 line rates and reconciles B net, VAT and total by rate', async () => {
+    const receipt = validateReceiptRequest({ ...validRequest, total: 31780.80,
+      payments: [{ method: 'cash', tenderedAmount: 31780.80, appliedAmount: 31780.80 }],
+      lines: [
+        { code: '71.001', name: 'AGUJA PORC.', unit: 'kg', quantity: 1.2,
+          unitPrice: 12602, lineTotal: 15122.40, netAfterDiscount: 15122.40,
+          taxTreatment: 'taxed', taxableBase: 13685.43, taxAmount: 1436.97,
+          taxRatePercent: 10.5 },
+        { code: '71.250', name: 'BOLA DE LOMO', unit: 'kg', quantity: 2.2,
+          unitPrice: 7572, lineTotal: 16658.40, netAfterDiscount: 16658.40,
+          taxTreatment: 'taxed', taxableBase: 15075.48, taxAmount: 1582.92,
+          taxRatePercent: 10.5 },
+      ],
+      fiscal: { saleId: 'sale-123', status: 'Authorized', total: 31780.80,
+        saleDocumentType: 'ElectronicInvoice', issuerCuit: '30710106513',
+        issuerName: 'Empresa de prueba', issuerAddress: 'Domicilio de prueba',
+        pointOfSale: 99, voucherType: 6, number: 25, issueDate: '2026-10-30',
+        receiverName: null, receiverAddress: null, receiverTaxStatus: 'finalConsumer',
+        receiverDocumentType: 99, receiverDocumentNumber: 0,
+        vatBreakdown: [{ ratePercent: 10.5, taxableBase: 28760.91, taxAmount: 3019.89 }],
+        exemptAmount: 0, notTaxedAmount: 0, cae: '12345678901234', caeExpiry: '2026-11-09' },
+    });
+    const html = await createFiscalInvoiceHtml(receipt);
+    expect(html).toContain('00099-00000025');
+    expect(html).toContain('AGUJA PORC.');
+    expect(html).toContain('BOLA DE LOMO');
+    expect(html.match(/<td class="number">IVA 10,5%<\/td>/g)).toHaveLength(2);
+    expect(html).toContain('<th>Neto gravado</th>');
+    expect(html).toContain('<td>10,5 %</td>');
+    expect(html).toContain('28.760,91');
+    expect(html).toContain('<th>IVA incluido</th>');
+    expect(html).toContain('3.019,89');
+    expect(html).toContain('<th>Total</th>');
+    expect(html).toContain('31.780,80');
+    expect(html).not.toContain('3.019,90');
+  });
+
   it('keeps exempt lines in an A invoice without treating them as taxable', async () => {
     const receipt = validateReceiptRequest({ ...validRequest, total: 1605,
       payments: [{ method: 'cash', tenderedAmount: 1605, appliedAmount: 1605 }],
       lines: [
         { code: '1', name: 'Corte gravado', unit: 'kg', quantity: 1, unitPrice: 1105,
-          lineTotal: 1105, netAfterDiscount: 1105, taxableBase: 1000, taxAmount: 105 },
+          lineTotal: 1105, netAfterDiscount: 1105, taxableBase: 1000, taxAmount: 105,
+          taxRatePercent: 10.5, taxTreatment: 'taxed' },
         { code: '2', name: 'Artículo exento', unit: 'unidad', quantity: 1, unitPrice: 500,
-          lineTotal: 500, netAfterDiscount: 500, taxableBase: 0, taxAmount: 0 },
+          lineTotal: 500, netAfterDiscount: 500, taxableBase: 0, taxAmount: 0,
+          taxRatePercent: 0, taxTreatment: 'exempt' },
       ],
       fiscal: { saleId: 'sale-123', status: 'Authorized', total: 1605,
         saleDocumentType: 'ElectronicInvoice', issuerCuit: '30710106513',
@@ -214,6 +253,7 @@ describe('virtual receipt PDF content', () => {
     });
     const html = await createFiscalInvoiceHtml(receipt);
     expect(html).toContain('Artículo exento');
+    expect(html).toContain('<td class="number">Exento</td>');
     expect(html).toContain('Exento');
     expect(html).toContain('1.605,00');
   });
@@ -225,6 +265,7 @@ describe('virtual receipt PDF content', () => {
     { lines: [{ ...validRequest.lines[0], quantity: -2 }] },
     { payments: [{ ...validRequest.payments[0], method: 'unknown' }] },
     { cashier: 'x'.repeat(121) },
+    { lines: [{ ...validRequest.lines[0], taxTreatment: 'inventado' }] },
   ])('rejects malformed or excessive renderer input', (change) => {
     expect(() => validateReceiptRequest({ ...validRequest, ...change })).toThrow();
   });

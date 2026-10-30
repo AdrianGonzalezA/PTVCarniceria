@@ -1,4 +1,4 @@
-import type { ReceiptRequest } from './receipt-pdf';
+import { fiscalLineTaxLabel, formatVatRate, type ReceiptRequest } from './receipt-pdf';
 import { createFiscalQrUrl, fiscalInvoiceLineAmount } from './fiscal-invoice';
 import { sendSerialBytes } from './serial-printer';
 
@@ -114,6 +114,7 @@ export function formatEscPosReceipt(receipt: ReceiptRequest, paperWidthMm: 58 | 
   rule();
   for (const line of receipt.lines) {
     lines(`${line.code} ${line.name}`);
+    if (invoice) lines(fiscalLineTaxLabel(line));
     if (line.pieceIdentifier) lines(`Pieza ${line.pieceIdentifier}`);
     if (line.pieceCount != null) lines(`Piezas fisicas ${line.pieceCount}`);
     const quantity = line.quantity.toLocaleString('es-AR', {
@@ -129,12 +130,20 @@ export function formatEscPosReceipt(receipt: ReceiptRequest, paperWidthMm: 58 | 
   if (fiscal) {
     if (fiscal.voucherType === 1) {
       for (const item of fiscal.vatBreakdown) {
-        pair(`Neto ${item.ratePercent}%`, `$ ${money(item.taxableBase)}`);
-        pair(`IVA ${item.ratePercent}%`, `$ ${money(item.taxAmount)}`);
+        pair(`Neto ${formatVatRate(item.ratePercent)}%`, `$ ${money(item.taxableBase)}`);
+        pair(`IVA ${formatVatRate(item.ratePercent)}%`, `$ ${money(item.taxAmount)}`);
       }
       if (fiscal.exemptAmount) pair('Exento', `$ ${money(fiscal.exemptAmount)}`);
       if (fiscal.notTaxedAmount) pair('No gravado', `$ ${money(fiscal.notTaxedAmount)}`);
     } else {
+      for (const item of fiscal.vatBreakdown) {
+        const rate = formatVatRate(item.ratePercent);
+        pair(`Neto ${rate}%`, `$ ${money(item.taxableBase)}`);
+        pair(`IVA ${rate}%`, `$ ${money(item.taxAmount)}`);
+        pair(`Total ${rate}%`, `$ ${money(item.taxableBase + item.taxAmount)}`);
+      }
+      if (fiscal.exemptAmount) pair('Exento', `$ ${money(fiscal.exemptAmount)}`);
+      if (fiscal.notTaxedAmount) pair('No gravado', `$ ${money(fiscal.notTaxedAmount)}`);
       pair('IVA contenido', `$ ${money(fiscal.vatBreakdown.reduce(
         (sum, item) => sum + item.taxAmount, 0))}`);
     }

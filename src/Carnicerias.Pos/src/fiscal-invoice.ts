@@ -1,5 +1,6 @@
 import QRCode from 'qrcode';
-import { type FiscalReceipt, type ReceiptRequest } from './receipt-pdf';
+import { fiscalLineTaxLabel, formatVatRate, type FiscalReceipt,
+  type ReceiptRequest } from './receipt-pdf';
 
 const money = (value: number): string => value.toLocaleString('es-AR', {
   minimumFractionDigits: 2, maximumFractionDigits: 2,
@@ -95,6 +96,7 @@ export async function createFiscalInvoiceHtml(receipt: ReceiptRequest): Promise<
       minimumFractionDigits: line.unit === 'kg' ? 3 : 0, maximumFractionDigits: 3,
     })} ${escapeHtml(line.unit)}</td>
     ${hasPieces ? `<td class="number">${line.pieceCount ?? '—'}</td>` : ''}
+    <td class="number">${fiscalLineTaxLabel(line)}</td>
     <td class="number">${money(amounts[index]! / line.quantity)}</td>
     <td class="number">${money(amounts[index]!)}</td>
   </tr>`).join('');
@@ -103,7 +105,15 @@ export async function createFiscalInvoiceHtml(receipt: ReceiptRequest): Promise<
       ${fiscal.vatBreakdown.map((group) => `<div class="summary-row"><span>IVA ${group.ratePercent}%</span><span>${money(group.taxAmount)}</span></div>`).join('')}
       ${fiscal.exemptAmount ? `<div class="summary-row"><span>Exento</span><span>${money(fiscal.exemptAmount)}</span></div>` : ''}
       ${fiscal.notTaxedAmount ? `<div class="summary-row"><span>No gravado</span><span>${money(fiscal.notTaxedAmount)}</span></div>` : ''}`
-    : `<div class="summary-row"><span>Subtotal</span><span>${money(receipt.total)}</span></div>`;
+    : `<div class="summary-caption">Desglose informativo del precio final</div>
+      ${fiscal.vatBreakdown.length ? `<table class="tax-summary"><thead><tr>
+        <th>Alícuota</th><th>Neto gravado</th><th>IVA incluido</th><th>Total</th>
+      </tr></thead><tbody>${fiscal.vatBreakdown.map((group) => `<tr>
+        <td>${formatVatRate(group.ratePercent)} %</td><td>${money(group.taxableBase)}</td>
+        <td>${money(group.taxAmount)}</td><td>${money(group.taxableBase + group.taxAmount)}</td>
+      </tr>`).join('')}</tbody></table>` : ''}
+      ${fiscal.exemptAmount ? `<div class="summary-row"><span>Exento</span><span>${money(fiscal.exemptAmount)}</span></div>` : ''}
+      ${fiscal.notTaxedAmount ? `<div class="summary-row"><span>No gravado</span><span>${money(fiscal.notTaxedAmount)}</span></div>` : ''}`;
   const transparency = isA ? '' : `<section class="transparency">
     <strong>Régimen de Transparencia Fiscal al Consumidor</strong>
     <span>(Ley 27.743)</span>
@@ -121,6 +131,7 @@ export async function createFiscalInvoiceHtml(receipt: ReceiptRequest): Promise<
     * { box-sizing: border-box; }
     body { margin: 0; font: 10pt Arial, sans-serif; color: #192a28; overflow-wrap: anywhere; }
     .invoice { min-height: 271mm; display: flex; flex-direction: column; }
+    .invoice-b { min-height: 258mm; }
     .environment { font-size: 8pt; font-weight: bold; color: #275c4b; text-align: right; margin-bottom: 5mm; }
     .heading { border: 1px solid #afc2ba; display: grid; grid-template-columns: 1fr 1fr; }
     .seller, .document { padding: 6mm; min-height: 47mm; }
@@ -152,6 +163,10 @@ export async function createFiscalInvoiceHtml(receipt: ReceiptRequest): Promise<
     .transparency strong, .transparency span { display: block; }
     .transparency p { margin: 2mm 0; }
     .summary { grid-column: 2; }
+    .summary-caption { font-weight: bold; padding: 2mm; border-bottom: 1px solid #afc2ba; }
+    .tax-summary th { background: #eaf0ed; color: #192a28; font-size: 8pt; padding: 1.5mm 1mm; text-align: right; }
+    .tax-summary th:first-child, .tax-summary td:first-child { text-align: left; }
+    .tax-summary td { font-size: 9pt; padding: 1.5mm 1mm; text-align: right; white-space: nowrap; }
     .summary-row { display: flex; justify-content: space-between; padding: 1.5mm 2mm; }
     .total { background: #285e4c; color: white; font-size: 16pt; font-weight: bold;
       display: flex; justify-content: space-between; padding: 4mm; margin-top: 6mm; }
@@ -161,7 +176,10 @@ export async function createFiscalInvoiceHtml(receipt: ReceiptRequest): Promise<
     .authorization strong { display: block; }
     .disclaimer { color: #285e4c; font-weight: bold; }
     .footer { border-top: 1px solid #afc2ba; color: #526861; font-size: 8pt; margin-top: 7mm; padding-top: 3mm; }
-    </style></head><body><main class="invoice">
+    .invoice-b .lower { padding-top: 5mm; }
+    .invoice-b .authorization { margin-top: 6mm; }
+    .invoice-b .footer { margin-top: 4mm; }
+    </style></head><body><main class="invoice${isA ? '' : ' invoice-b'}">
     <div class="environment">HOMOLOGACIÓN ARCA · SIN VALIDEZ FISCAL</div>
     <header class="heading"><section class="seller">
       <div class="issuer">${escapeHtml(fiscal.issuerName)}</div>
@@ -190,7 +208,8 @@ export async function createFiscalInvoiceHtml(receipt: ReceiptRequest): Promise<
       ? `<p class="condition">Pedido / OC: ${escapeHtml(receipt.purchaseOrderNumber)}</p>` : ''}
     <table><thead><tr><th>Cód.</th><th>Descripción</th><th class="number">${onlyKg ? 'Kg netos' : 'Cantidad'}</th>
       ${hasPieces ? '<th class="number">Piezas</th>' : ''}
-      <th class="number">${onlyKg ? 'Precio/kg' : 'Precio unit.'}</th><th class="number">Importe</th></tr></thead>
+      <th class="number">Impuesto</th><th class="number">${onlyKg ? 'Precio/kg' : 'Precio unit.'}</th>
+      <th class="number">Importe</th></tr></thead>
       <tbody>${rows}</tbody></table>
     <div class="notes"><p>${isA ? 'Precios netos sin IVA' : 'Precios finales con IVA incluido'}</p>
       ${receipt.discountAmount ? `<p>Descuento global incluido: $ ${money(receipt.discountAmount)}${receipt.discountReason ? ` · ${escapeHtml(receipt.discountReason)}` : ''}</p>` : ''}

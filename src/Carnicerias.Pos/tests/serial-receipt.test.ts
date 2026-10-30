@@ -75,4 +75,28 @@ describe('serial receipt', () => {
     expect(text).toContain('HOMOLOGACION - SIN VALIDEZ FISCAL');
     expect(text).not.toContain('NO ES FACTURA NI COMPROBANTE FISCAL');
   });
+
+  it('shows the B invoice line rate and its rate total on a text printer', () => {
+    const text = formatSerialReceipt({ ...receipt, documentType: 'electronicInvoice',
+      lines: [
+        { ...receipt.lines[0]!, netAfterDiscount: 5000, taxableBase: 4132.23,
+          taxAmount: 867.77, taxRatePercent: 21, taxTreatment: 'taxed' },
+        { ...receipt.lines[1]!, netAfterDiscount: 5200, taxableBase: 4297.52,
+          taxAmount: 902.48, taxRatePercent: 21, taxTreatment: 'taxed' },
+      ],
+      fiscal: { saleDocumentType: 'ElectronicInvoice', issuerCuit: '30710106513',
+        issuerName: 'Empresa de prueba', issuerAddress: 'Domicilio de prueba',
+        issuerIibb: null, issuerActivityStartDate: null,
+        pointOfSale: 99, voucherType: 6, number: 25, issueDate: '2026-10-30',
+        receiverName: null, receiverAddress: null, receiverTaxStatus: 'finalConsumer',
+        receiverDocumentType: 99, receiverDocumentNumber: 0,
+        vatBreakdown: [{ ratePercent: 21, taxableBase: 8429.75, taxAmount: 1770.25 }],
+        exemptAmount: 0, notTaxedAmount: 0, cae: '12345678901234', caeExpiry: '2026-11-09' },
+    });
+    const products = text.split('DESGLOSE IMPOSITIVO DE PRUEBA')[0];
+    expect(products).toContain('IVA 21%');
+    expect(text).toContain('Neto 21% $ 8.429,75');
+    expect(text).toContain('IVA 21% incluido $ 1.770,25');
+    expect(text).toContain('Total 21% $ 10.200,00');
+  });
 });

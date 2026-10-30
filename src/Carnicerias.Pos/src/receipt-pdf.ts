@@ -50,6 +50,7 @@ export interface ReceiptRequest {
     readonly taxableBase?: number | null;
     readonly taxAmount?: number | null;
     readonly taxRatePercent?: number | null;
+    readonly taxTreatment?: 'taxed' | 'exempt' | 'notTaxed' | null;
   }[];
   readonly payments: readonly {
     readonly method: string; readonly tenderedAmount: number; readonly appliedAmount: number;
@@ -133,6 +134,10 @@ export function validateReceiptRequest(value: unknown): ReceiptRequest {
       const pieceCount = line['pieceCount'] == null ? null : line['pieceCount'];
       if (pieceCount != null && (typeof pieceCount !== 'number' || !Number.isInteger(pieceCount) ||
           pieceCount < 1 || pieceCount > 10000)) throw new Error('Invalid receipt piece count');
+      const taxTreatment = line['taxTreatment'];
+      if (taxTreatment != null && (typeof taxTreatment !== 'string' ||
+          !['taxed', 'exempt', 'notTaxed'].includes(taxTreatment)))
+        throw new Error('Invalid receipt tax treatment');
       return {
         code: label(line['code']), name: label(line['name']), unit: label(line['unit'], 30),
         quantity, unitPrice: amount(line['unitPrice']), lineTotal: amount(line['lineTotal']),
@@ -142,6 +147,8 @@ export function validateReceiptRequest(value: unknown): ReceiptRequest {
         taxableBase: line['taxableBase'] == null ? null : amount(line['taxableBase']),
         taxAmount: line['taxAmount'] == null ? null : amount(line['taxAmount']),
         taxRatePercent: line['taxRatePercent'] == null ? null : amount(line['taxRatePercent']),
+        taxTreatment: taxTreatment == null ? null
+          : taxTreatment as 'taxed' | 'exempt' | 'notTaxed',
       };
     }),
     payments: payments.map((input: unknown) => {
@@ -230,6 +237,20 @@ function escapeHtml(value: string): string {
 const money = (value: number): string => value.toLocaleString('es-AR', {
   minimumFractionDigits: 2, maximumFractionDigits: 2,
 });
+
+export const formatVatRate = (rate: number): string => rate.toLocaleString('es-AR', {
+  maximumFractionDigits: 2,
+});
+
+export function fiscalLineTaxLabel(line: ReceiptRequest['lines'][number]): string {
+  if (line.taxTreatment === 'exempt') return 'Exento';
+  if (line.taxTreatment === 'notTaxed') return 'No gravado';
+  if (line.taxTreatment === 'taxed' ||
+      (line.taxTreatment == null && line.taxableBase != null && line.taxableBase > 0)) {
+    return line.taxRatePercent == null ? 'IVA sin alícuota' : `IVA ${formatVatRate(line.taxRatePercent)}%`;
+  }
+  return 'Sin dato fiscal';
+}
 
 export function createReceiptHtml(receipt: ReceiptRequest): string {
   const rows = receipt.lines.map((line) => `<tr><td>${escapeHtml(line.name)}<small>${escapeHtml(line.code)}${line.pieceIdentifier ? ` · Pieza ${escapeHtml(line.pieceIdentifier)}` : ''}${line.pieceCount != null ? ` · ${line.pieceCount} ${line.pieceCount === 1 ? 'pieza' : 'piezas'} físicas` : ''} · ${line.quantity.toLocaleString('es-AR', { minimumFractionDigits: line.unit === 'kg' ? 3 : 0, maximumFractionDigits: 3 })} ${escapeHtml(line.unit)} × $ ${money(line.unitPrice)}</small></td><td>$ ${money(line.lineTotal)}</td></tr>`).join('');

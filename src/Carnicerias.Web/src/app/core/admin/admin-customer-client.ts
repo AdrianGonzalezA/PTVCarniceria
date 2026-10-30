@@ -7,6 +7,19 @@ export interface AdminCustomer {
   readonly name: string;
   readonly isActive: boolean;
   readonly creditEnabled: boolean;
+  readonly fiscalTaxStatus?: 'finalConsumer' | 'registered' | 'smallTaxpayer' | 'exempt' | null;
+  readonly fiscalDocumentNumber?: string | null;
+  readonly fiscalAddress?: string | null;
+  readonly fiscalLocality?: string | null;
+  readonly fiscalProvince?: string | null;
+}
+
+export interface AdminCustomerFiscalProfile {
+  readonly fiscalTaxStatus: NonNullable<AdminCustomer['fiscalTaxStatus']>;
+  readonly fiscalDocumentNumber?: string;
+  readonly fiscalAddress?: string;
+  readonly fiscalLocality?: string;
+  readonly fiscalProvince?: string;
 }
 
 export interface AdminCustomerPage {
@@ -22,6 +35,12 @@ export interface AdminCustomerUpdate {
   readonly name?: string;
   readonly isActive?: boolean;
   readonly creditEnabled?: boolean;
+  readonly clearFiscalProfile?: boolean;
+  readonly fiscalTaxStatus?: AdminCustomerFiscalProfile['fiscalTaxStatus'];
+  readonly fiscalDocumentNumber?: string;
+  readonly fiscalAddress?: string;
+  readonly fiscalLocality?: string;
+  readonly fiscalProvince?: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -35,8 +54,8 @@ export class AdminCustomerClient {
     return this.http.get<AdminCustomerPage>(this.endpoint, { params, withCredentials: true });
   }
 
-  create(code: string, name: string) {
-    return this.http.post<AdminCustomer>(this.endpoint, { code, name }, { withCredentials: true });
+  create(code: string, name: string, fiscal?: AdminCustomerFiscalProfile) {
+    return this.http.post<AdminCustomer>(this.endpoint, { code, name, ...fiscal }, { withCredentials: true });
   }
 
   update(id: string, changes: AdminCustomerUpdate) {

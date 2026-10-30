@@ -18,6 +18,10 @@ export interface CarniceriasNativeApi {
     readonly port: string; readonly bytesWritten: number;
     readonly confirmation: 'drained' | 'write-only';
   }>;
+  readonly printThermalReceipt: (request: ReceiptRequest) => Promise<{
+    readonly port: string; readonly bytesWritten: number;
+    readonly confirmation: 'drained' | 'write-only';
+  }>;
   readonly getHasarSaleAvailability: () => Promise<{ readonly port: string | null }>;
   readonly printHasarSaleReceipt: (request: ReceiptRequest) => Promise<HasarSalePrintResult & {
     readonly port: string;
@@ -30,6 +34,7 @@ export const enum NativeChannel {
   ReadSerialScale = 'carnicerias:read-serial-scale',
   DeviceAvailability = 'carnicerias:device-availability',
   PrintSerialReceipt = 'carnicerias:print-serial-receipt',
+  PrintThermalReceipt = 'carnicerias:print-thermal-receipt',
   HasarSaleAvailability = 'carnicerias:hasar-sale-availability',
   PrintHasarSaleReceipt = 'carnicerias:print-hasar-sale-receipt',
 }

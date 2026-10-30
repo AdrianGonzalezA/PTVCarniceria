@@ -25,6 +25,7 @@ import { NativeChannel } from './native-api';
 import { initialUrlForProfile, resolvePosProfile } from './pos-profile';
 import { createReceiptHtml, validateReceiptRequest } from './receipt-pdf';
 import { sendSerialReceipt } from './serial-printer';
+import { sendEscPosReceipt } from './escpos-receipt';
 import { fetchAssignedDevices, noDevices, TerminalDevices, type AssignedDevices } from './terminal-devices';
 import { createSecureWebPreferences, isAllowedNavigation } from './security-policy';
 import { loadTerminalCredential } from './terminal-credential';
@@ -137,6 +138,12 @@ function registerNativeApi(devices: TerminalDevices,
     await synchronizeDevices();
     const receipt = validateReceiptRequest(payload);
     return sendSerialReceipt(receipt, undefined, devices.textPrinter());
+  });
+  ipcMain.handle(NativeChannel.PrintThermalReceipt, async (event, payload: unknown) => {
+    validateIpcSender(event);
+    await synchronizeDevices();
+    const receipt = validateReceiptRequest(payload);
+    return sendEscPosReceipt(receipt, devices.escPosPrinter());
   });
   ipcMain.handle(NativeChannel.HasarSaleAvailability, async (event) => {
     validateIpcSender(event);

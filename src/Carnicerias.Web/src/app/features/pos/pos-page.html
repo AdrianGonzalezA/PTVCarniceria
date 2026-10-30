@@ -299,6 +299,9 @@
                         (change)="updateLineQuantity(line.id, $event)"
                       />
                       <small>{{ unitLabel(line.product) }}</small>
+                      @if (line.product.mode === 'weight' && line.pieceCount !== null && line.pieceCount !== undefined) {
+                        <small>{{ line.pieceCount }} {{ line.pieceCount === 1 ? 'pieza' : 'piezas' }}</small>
+                      }
                     </td>
                     <td class="ticket-line-price">
                       <span>{{ formatMoney(line.product.price) }}</span>
@@ -393,6 +396,14 @@
             (input)="updateQuantity($event)"
           />
         </label>
+        @if (product.mode === 'weight') {
+          <label class="quantity-field piece-count-field" for="product-piece-count">
+            Piezas físicas (opcional)
+            <input id="product-piece-count" type="number" min="1" max="10000" step="1"
+              [readOnly]="!!scannedPieceId()" [value]="pieceCountDraft()"
+              (input)="updatePieceCount($event)" placeholder="Cantidad de piezas" />
+          </label>
+        }
         @if (product.mode === 'weight' && !scannedPieceIdentifier() && devices().scale) {
           <button class="receipt-pdf-button scale-read-button" type="button" [disabled]="scaleBusy()" (click)="readSerialScale()">
             {{ scaleBusy() ? 'Leyendo balanza…' : 'Leer balanza' }}
@@ -422,6 +433,23 @@
           <p class="sale-document-choice">{{ documentTypeName() }} · {{ recipientTaxStatusName() }}</p>
           @if (documentType() !== 'nonFiscalTicket') {
             <p class="payment-guidance">La venta y el cobro se guardan primero. Luego se consulta ARCA homologación: solo si llega el CAE se habilitan la impresión serial y el PDF fiscal de prueba.</p>
+            <div class="fiscal-customer-lookup">
+              <label for="sale-fiscal-customer-search">Cliente con ficha fiscal</label>
+              <input id="sale-fiscal-customer-search" maxlength="100" autocomplete="off"
+                [value]="fiscalCustomerSearch()" [disabled]="checkoutBusy()"
+                (input)="updateFiscalCustomerSearch($event)" />
+              <button type="button" [disabled]="fiscalCustomerLoading() || checkoutBusy()"
+                (click)="searchFiscalCustomers()">{{ fiscalCustomerLoading() ? 'Buscando…' : 'Buscar cliente' }}</button>
+              <label for="sale-fiscal-customer">Ficha fiscal guardada (opcional)</label>
+              <select id="sale-fiscal-customer" [value]="fiscalCustomerId()" [disabled]="checkoutBusy()"
+                (change)="selectFiscalCustomer($event)">
+                <option value="">Ingresar datos manualmente</option>
+                @for (customer of fiscalCustomerOptions(); track customer.id) {
+                  <option [value]="customer.id">{{ customer.code }} · {{ customer.name }}</option>
+                }
+              </select>
+              @if (fiscalCustomerError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
+            </div>
             <div class="sale-document-fields">
               <label for="sale-recipient-name">Nombre o razón social @if (recipientTaxStatus() !== 'finalConsumer') { (obligatorio) }</label>
               <input id="sale-recipient-name" maxlength="200" autocomplete="off" [value]="recipientName()" [disabled]="checkoutBusy()" (input)="updateRecipientName($event)" />
@@ -429,6 +457,12 @@
               <input id="sale-recipient-document-number" inputmode="numeric" maxlength="20" autocomplete="off" [value]="recipientDocumentNumber()" [disabled]="checkoutBusy()" (input)="updateRecipientDocumentNumber($event)" />
               <label for="sale-recipient-address">Domicilio @if (recipientTaxStatus() !== 'finalConsumer') { (obligatorio) }</label>
               <input id="sale-recipient-address" maxlength="200" autocomplete="off" [value]="recipientAddress()" [disabled]="checkoutBusy()" (input)="updateRecipientAddress($event)" />
+              <label for="sale-recipient-locality">Localidad (opcional)</label>
+              <input id="sale-recipient-locality" maxlength="100" autocomplete="off" [value]="recipientLocality()" [disabled]="checkoutBusy()" (input)="updateRecipientLocality($event)" />
+              <label for="sale-recipient-province">Provincia (opcional)</label>
+              <input id="sale-recipient-province" maxlength="100" autocomplete="off" [value]="recipientProvince()" [disabled]="checkoutBusy()" (input)="updateRecipientProvince($event)" />
+              <label for="sale-purchase-order">Pedido u orden de compra (opcional)</label>
+              <input id="sale-purchase-order" maxlength="80" autocomplete="off" [value]="purchaseOrderNumber()" [disabled]="checkoutBusy()" (input)="updatePurchaseOrderNumber($event)" />
             </div>
             @if (documentProblem(); as problem) { <p class="pos-error" role="alert">{{ problem }}</p> }
           }
@@ -602,7 +636,7 @@
               @if (result.number) { Número {{ result.number }}. }
             </p>
           } @else {
-            <p class="receipt-file" role="status">Ticket enviado a {{ result.port }}.
+            <p class="receipt-file" role="status">Comprobante enviado a {{ result.port }}.
               @if (result.confirmation === 'write-only') { El controlador virtual no confirmó el vaciado; comprobá el ticket en PuTTY. }
             </p>
           }
@@ -622,9 +656,9 @@
             }
           }
           @if (sale.documentType !== 'fiscalTicket' && sale.documentType !== 'electronicInvoice' || fiscalDocument()?.status === 'Authorized') {
-            @if (devices().printer && (sale.documentType !== 'electronicInvoice' || devices().printer?.kind === 'text')) {
+            @if (devices().printer && (sale.documentType !== 'electronicInvoice' || devices().printer?.kind !== 'hasar')) {
               <button class="receipt-pdf-button serial-print-button" type="button" [disabled]="serialPrintBusy() || !!serialPrintResult()" (click)="printSerialReceipt(sale)">
-                {{ serialPrintBusy() ? 'Imprimiendo…' : serialPrintResult() ? 'Ticket impreso' : 'Reintentar impresión' }}
+                {{ serialPrintBusy() ? 'Imprimiendo…' : serialPrintResult() ? 'Comprobante enviado' : 'Reintentar impresión' }}
               </button>
             }
             <button class="receipt-pdf-button save-pdf-button" type="button" [disabled]="receiptPdfBusy()" (click)="saveReceiptPdf(sale)">

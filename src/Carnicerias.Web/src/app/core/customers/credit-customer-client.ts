@@ -7,6 +7,14 @@ export interface CreditCustomerOption {
   readonly name: string;
 }
 
+export interface FiscalCustomerOption extends CreditCustomerOption {
+  readonly fiscalTaxStatus: 'finalConsumer' | 'registered' | 'smallTaxpayer' | 'exempt';
+  readonly fiscalDocumentNumber: string | null;
+  readonly fiscalAddress: string | null;
+  readonly fiscalLocality: string | null;
+  readonly fiscalProvince: string | null;
+}
+
 export interface CreditCustomerAccount {
   readonly customerId: string;
   readonly customerCode: string;
@@ -59,6 +67,13 @@ export class CreditCustomerClient {
     let params = new HttpParams();
     if (search) params = params.set('search', search);
     return this.http.get<readonly CreditCustomerOption[]>('/api/customers/account-options',
+      { params, withCredentials: true });
+  }
+
+  searchFiscal(search = '') {
+    let params = new HttpParams();
+    if (search) params = params.set('search', search);
+    return this.http.get<readonly FiscalCustomerOption[]>('/api/customers/fiscal-options',
       { params, withCredentials: true });
   }
 

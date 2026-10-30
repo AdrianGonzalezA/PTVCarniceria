@@ -30,6 +30,12 @@ describe('terminal device assignments', () => {
     } })).toThrow('POS_DEVICE_CONFIG_INVALID');
     expect(() => parseAssignedDevices({ devices: { scale: null } }))
       .toThrow('POS_DEVICE_CONFIG_INVALID');
+    expect(parseAssignedDevices({ devices: { scale: null,
+      printer: { kind: 'escpos', port: 'COM3', baudRate: 19200, paperWidthMm: 58 },
+    } }).printer).toEqual({ kind: 'escpos', port: 'COM3', baudRate: 19200, paperWidthMm: 58 });
+    expect(() => parseAssignedDevices({ devices: { scale: null,
+      printer: { kind: 'escpos', port: 'COM3', baudRate: 19200, paperWidthMm: 60 },
+    } })).toThrow('POS_DEVICE_CONFIG_INVALID');
   });
 
   it('does not accept an expired terminal credential as a device assignment', async () => {

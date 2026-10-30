@@ -37,10 +37,15 @@ export interface ReceiptRequest {
   readonly discountReason?: string | null;
   readonly customerCode: string | null;
   readonly customerName: string | null;
+  readonly fiscalCustomerCode?: string | null;
+  readonly purchaseOrderNumber?: string | null;
+  readonly recipientLocality?: string | null;
+  readonly recipientProvince?: string | null;
   readonly lines: readonly {
     readonly code: string; readonly name: string; readonly unit: string;
     readonly quantity: number; readonly unitPrice: number; readonly lineTotal: number;
     readonly pieceIdentifier?: string | null;
+    readonly pieceCount?: number | null;
     readonly netAfterDiscount?: number | null;
     readonly taxableBase?: number | null;
     readonly taxAmount?: number | null;
@@ -113,14 +118,26 @@ export function validateReceiptRequest(value: unknown): ReceiptRequest {
     discountReason,
     customerCode,
     customerName,
+    fiscalCustomerCode: data['fiscalCustomerCode'] == null ? null
+      : label(data['fiscalCustomerCode'], 80),
+    purchaseOrderNumber: data['purchaseOrderNumber'] == null ? null
+      : label(data['purchaseOrderNumber'], 80),
+    recipientLocality: data['recipientLocality'] == null ? null
+      : label(data['recipientLocality'], 100),
+    recipientProvince: data['recipientProvince'] == null ? null
+      : label(data['recipientProvince'], 100),
     lines: lines.map((input: unknown) => {
       const line = object(input);
       const quantity = amount(line['quantity'], true);
       if (quantity > 10_000) throw new Error('Invalid receipt quantity');
+      const pieceCount = line['pieceCount'] == null ? null : line['pieceCount'];
+      if (pieceCount != null && (typeof pieceCount !== 'number' || !Number.isInteger(pieceCount) ||
+          pieceCount < 1 || pieceCount > 10000)) throw new Error('Invalid receipt piece count');
       return {
         code: label(line['code']), name: label(line['name']), unit: label(line['unit'], 30),
         quantity, unitPrice: amount(line['unitPrice']), lineTotal: amount(line['lineTotal']),
         pieceIdentifier: line['pieceIdentifier'] == null ? null : label(line['pieceIdentifier'], 80),
+        pieceCount,
         netAfterDiscount: line['netAfterDiscount'] == null ? null : amount(line['netAfterDiscount']),
         taxableBase: line['taxableBase'] == null ? null : amount(line['taxableBase']),
         taxAmount: line['taxAmount'] == null ? null : amount(line['taxAmount']),
@@ -215,7 +232,7 @@ const money = (value: number): string => value.toLocaleString('es-AR', {
 });
 
 export function createReceiptHtml(receipt: ReceiptRequest): string {
-  const rows = receipt.lines.map((line) => `<tr><td>${escapeHtml(line.name)}<small>${escapeHtml(line.code)}${line.pieceIdentifier ? ` · Pieza ${escapeHtml(line.pieceIdentifier)}` : ''} · ${line.quantity.toLocaleString('es-AR', { minimumFractionDigits: line.unit === 'kg' ? 3 : 0, maximumFractionDigits: 3 })} ${escapeHtml(line.unit)} × $ ${money(line.unitPrice)}</small></td><td>$ ${money(line.lineTotal)}</td></tr>`).join('');
+  const rows = receipt.lines.map((line) => `<tr><td>${escapeHtml(line.name)}<small>${escapeHtml(line.code)}${line.pieceIdentifier ? ` · Pieza ${escapeHtml(line.pieceIdentifier)}` : ''}${line.pieceCount != null ? ` · ${line.pieceCount} ${line.pieceCount === 1 ? 'pieza' : 'piezas'} físicas` : ''} · ${line.quantity.toLocaleString('es-AR', { minimumFractionDigits: line.unit === 'kg' ? 3 : 0, maximumFractionDigits: 3 })} ${escapeHtml(line.unit)} × $ ${money(line.unitPrice)}</small></td><td>$ ${money(line.lineTotal)}</td></tr>`).join('');
   const payments = receipt.payments.map((payment) => `<tr><td>${methods[payment.method]}</td><td>$ ${money(payment.appliedAmount)}</td></tr>`).join('');
   const accountCharge = receipt.accountChargeAmount > 0
     ? `<tr><td>Cuenta corriente</td><td>$ ${money(receipt.accountChargeAmount)}</td></tr>` : '';

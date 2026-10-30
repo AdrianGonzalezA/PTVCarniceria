@@ -37,7 +37,9 @@ public static class SaleConfirmationEndpoints
             request.DocumentType is null or { Length: > 32 } ||
             request.RecipientTaxStatus is null or { Length: > 32 } ||
             request.RecipientName?.Length > 200 || request.RecipientDocumentNumber?.Length > 20 ||
-            request.RecipientAddress?.Length > 200)
+            request.RecipientAddress?.Length > 200 || request.RecipientLocality?.Length > 100 ||
+            request.RecipientProvince?.Length > 100 || request.PurchaseOrderNumber?.Length > 80 ||
+            request.FiscalCustomerId == Guid.Empty)
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var tenders = new List<PaymentTender>(request.Payments.Count);
@@ -87,11 +89,29 @@ public static class SaleConfirmationEndpoints
             try
             {
                 documentChoice = SaleDocumentChoice.Create(request.DocumentType, request.RecipientTaxStatus,
-                    request.RecipientName, request.RecipientDocumentNumber, request.RecipientAddress, total);
+                    request.RecipientName, request.RecipientDocumentNumber, request.RecipientAddress, total,
+                    request.RecipientLocality, request.RecipientProvince);
             }
             catch (ArgumentException)
             {
                 return Error(StatusCodes.Status400BadRequest, "DOCUMENT_DETAILS_INVALID");
+            }
+            CustomerAccount? fiscalCustomer = null;
+            if (request.FiscalCustomerId is Guid fiscalCustomerId)
+            {
+                if (documentChoice.Type == SaleDocumentType.NonFiscalTicket ||
+                    request.CustomerId is Guid accountCustomerId && accountCustomerId != fiscalCustomerId)
+                    return Error(StatusCodes.Status400BadRequest, "FISCAL_CUSTOMER_MISMATCH");
+                fiscalCustomer = await db.CustomerAccounts.AsNoTracking().SingleOrDefaultAsync(customer =>
+                    customer.CompanyId == context.CompanyId && customer.Id == fiscalCustomerId &&
+                    customer.IsActive && customer.FiscalTaxStatus != null, cancellationToken);
+                if (fiscalCustomer is null || fiscalCustomer.FiscalTaxStatus != documentChoice.RecipientTaxStatus ||
+                    fiscalCustomer.Name != documentChoice.RecipientName ||
+                    fiscalCustomer.FiscalDocumentNumber != documentChoice.RecipientDocumentNumber ||
+                    fiscalCustomer.FiscalAddress != documentChoice.RecipientAddress ||
+                    fiscalCustomer.FiscalLocality != documentChoice.RecipientLocality ||
+                    fiscalCustomer.FiscalProvince != documentChoice.RecipientProvince)
+                    return Error(StatusCodes.Status409Conflict, "FISCAL_CUSTOMER_CHANGED");
             }
             CustomerAccount? creditCustomer = null;
             if (request.AccountChargeAmount > 0 || request.CreditAppliedAmount > 0)
@@ -167,11 +187,13 @@ public static class SaleConfirmationEndpoints
             var sale = new ConfirmedSale(context.CompanyId, context.BranchId, context.UserId,
                 shift.Id, draft.Id, draft.PriceListId, total, requestHash, now, accessor.TerminalId,
                 request.CustomerId, request.AccountChargeAmount, creditCustomer?.Code, creditCustomer?.Name,
-                request.CreditAppliedAmount, draft.DiscountAmount, draft.DiscountReason, documentChoice);
+                request.CreditAppliedAmount, draft.DiscountAmount, draft.DiscountReason, documentChoice,
+                fiscalCustomer?.Id, fiscalCustomer?.Code, request.PurchaseOrderNumber);
             mercadoPagoIntent?.ApplyToSale(sale.Id);
             sale.Lines.AddRange(draft.Lines.Select(line => new ConfirmedSaleLine(
                 context.CompanyId, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
-                line.SaleMode, line.Quantity, line.UnitPrice, line.InventoryPieceId, line.PieceIdentifier)));
+                line.SaleMode, line.Quantity, line.UnitPrice, line.InventoryPieceId, line.PieceIdentifier,
+                line.PieceCount)));
             var productIds = sale.Lines.Select(line => line.ProductId).Distinct().ToArray();
             var taxRules = await db.ProductTaxRules.AsNoTracking()
                 .Where(rule => rule.CompanyId == context.CompanyId && productIds.Contains(rule.ProductId) &&
@@ -290,6 +312,16 @@ public static class SaleConfirmationEndpoints
         }
         if (request.MercadoPagoIntentId is Guid mercadoPagoIntentId)
             canonical += $"|mercadoPago:{mercadoPagoIntentId:N}";
+        if (request.FiscalCustomerId is Guid fiscalCustomerId)
+            canonical += $"|fiscalCustomer:{fiscalCustomerId:N}";
+        if (request.PurchaseOrderNumber is not null || request.RecipientLocality is not null ||
+            request.RecipientProvince is not null)
+        {
+            static string EncodeCommercial(string? value) =>
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(value ?? ""));
+            canonical += $"|commercial:{EncodeCommercial(request.PurchaseOrderNumber)}:" +
+                $"{EncodeCommercial(request.RecipientLocality)}:{EncodeCommercial(request.RecipientProvince)}";
+        }
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
 
@@ -319,13 +351,14 @@ public static class SaleConfirmationEndpoints
     private static SaleConfirmationResponse ToResponse(ConfirmedSale sale, decimal change) => new(
         sale.Id, sale.Total, change, sale.ConfirmedAtUtc, sale.CustomerId, sale.AccountChargeAmount,
         sale.CreditAppliedAmount, sale.DiscountAmount, sale.DiscountReason,
-        sale.CustomerCode, sale.CustomerName,
+        sale.CustomerCode, sale.CustomerName, sale.FiscalCustomerId, sale.FiscalCustomerCode,
+        sale.PurchaseOrderNumber,
         DocumentTypeName(sale.DocumentType), RecipientTaxStatusName(sale.RecipientTaxStatus),
-        sale.RecipientName,
+        sale.RecipientName, sale.RecipientLocality, sale.RecipientProvince,
         sale.Lines.OrderBy(line => line.ProductName).ThenBy(line => line.PieceIdentifier)
             .Select(line => new SaleConfirmationLineResponse(
                 line.ProductCode, line.ProductName, line.Unit, line.Quantity, line.UnitPrice,
-                line.LineTotal, line.PieceIdentifier, line.NetAfterDiscount,
+                line.LineTotal, line.PieceIdentifier, line.PieceCount, line.NetAfterDiscount,
                 line.TaxableBase, line.TaxAmount, line.TaxRatePercent)).ToArray(),
         sale.Payments.Select(payment => new SaleConfirmationPaymentResponse(
             MethodName(payment.Method), payment.TenderedAmount, payment.AppliedAmount)).ToArray());
@@ -374,17 +407,22 @@ public static class SaleConfirmationEndpoints
         decimal CreditAppliedAmount = 0, string DocumentType = "nonFiscalTicket",
         string RecipientTaxStatus = "finalConsumer", string? RecipientName = null,
         string? RecipientDocumentNumber = null, string? RecipientAddress = null,
-        Guid? MercadoPagoIntentId = null);
+        Guid? MercadoPagoIntentId = null, Guid? FiscalCustomerId = null,
+        string? RecipientLocality = null, string? RecipientProvince = null,
+        string? PurchaseOrderNumber = null);
     private sealed record PaymentRequest(string? Method, decimal Amount);
     private sealed record SaleConfirmationResponse(Guid Id, decimal Total, decimal ChangeAmount,
         DateTimeOffset ConfirmedAtUtc, Guid? CustomerId, decimal AccountChargeAmount,
         decimal CreditAppliedAmount, decimal DiscountAmount, string? DiscountReason,
-        string? CustomerCode, string? CustomerName,
+        string? CustomerCode, string? CustomerName, Guid? FiscalCustomerId,
+        string? FiscalCustomerCode, string? PurchaseOrderNumber,
         string DocumentType, string RecipientTaxStatus, string? RecipientName,
+        string? RecipientLocality, string? RecipientProvince,
         IReadOnlyList<SaleConfirmationLineResponse> Lines,
         IReadOnlyList<SaleConfirmationPaymentResponse> Payments);
     private sealed record SaleConfirmationLineResponse(string Code, string Name, string Unit,
         decimal Quantity, decimal UnitPrice, decimal LineTotal, string? PieceIdentifier,
+        int? PieceCount,
         decimal? NetAfterDiscount, decimal? TaxableBase, decimal? TaxAmount,
         decimal? TaxRatePercent);
     private sealed record SaleConfirmationPaymentResponse(string Method, decimal TenderedAmount, decimal AppliedAmount);

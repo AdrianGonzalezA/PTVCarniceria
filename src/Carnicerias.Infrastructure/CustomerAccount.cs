@@ -31,6 +31,55 @@ public sealed class CustomerAccount
     public bool IsActive { get; private set; }
     public bool CreditEnabled { get; private set; }
     public bool CanChargeToAccount => IsActive && CreditEnabled;
+    public SaleRecipientTaxStatus? FiscalTaxStatus { get; private set; }
+    public string? FiscalDocumentNumber { get; private set; }
+    public string? FiscalAddress { get; private set; }
+    public string? FiscalLocality { get; private set; }
+    public string? FiscalProvince { get; private set; }
+
+    public void UpdateFiscalProfile(SaleRecipientTaxStatus? taxStatus, string? documentNumber,
+        string? address, string? locality, string? province)
+    {
+        if (taxStatus is null)
+        {
+            if (!string.IsNullOrWhiteSpace(documentNumber) || !string.IsNullOrWhiteSpace(address) ||
+                !string.IsNullOrWhiteSpace(locality) || !string.IsNullOrWhiteSpace(province))
+                throw new ArgumentException("A fiscal tax status is required for fiscal details.");
+            FiscalTaxStatus = null;
+            FiscalDocumentNumber = null;
+            FiscalAddress = null;
+            FiscalLocality = null;
+            FiscalProvince = null;
+            return;
+        }
+
+        if (!Enum.IsDefined(taxStatus.Value))
+            throw new ArgumentException("Invalid fiscal tax status.", nameof(taxStatus));
+        var status = taxStatus.Value switch
+        {
+            SaleRecipientTaxStatus.FinalConsumer => "finalConsumer",
+            SaleRecipientTaxStatus.Registered => "registered",
+            SaleRecipientTaxStatus.SmallTaxpayer => "smallTaxpayer",
+            SaleRecipientTaxStatus.Exempt => "exempt",
+            _ => throw new ArgumentException("Invalid fiscal tax status.", nameof(taxStatus))
+        };
+        var fiscal = SaleDocumentChoice.Create("electronicInvoice", status, Name,
+            documentNumber, address, 1m);
+        var normalizedLocality = NormalizeOptional(locality, 100);
+        var normalizedProvince = NormalizeOptional(province, 100);
+        FiscalTaxStatus = taxStatus;
+        FiscalDocumentNumber = fiscal.RecipientDocumentNumber;
+        FiscalAddress = fiscal.RecipientAddress;
+        FiscalLocality = normalizedLocality;
+        FiscalProvince = normalizedProvince;
+    }
+
+    private static string? NormalizeOptional(string? value, int maximum)
+    {
+        var normalized = value?.Trim().Normalize(NormalizationForm.FormKC);
+        if (normalized?.Length > maximum) throw new ArgumentException("Fiscal detail is too long.");
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
 
     public void UpdateDetails(string code, string name)
     {

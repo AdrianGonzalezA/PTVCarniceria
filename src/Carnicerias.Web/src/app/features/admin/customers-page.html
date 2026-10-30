@@ -98,6 +98,22 @@
           @if (editorForm.controls.name.touched && editorForm.controls.name.invalid) {
             <p class="field-error" role="alert">Ingresá un nombre de hasta 200 caracteres.</p>
           }
+          <label for="customer-fiscal-status">Condición IVA (opcional)</label>
+          <select id="customer-fiscal-status" formControlName="fiscalTaxStatus">
+            <option value="">Sin ficha fiscal</option>
+            <option value="finalConsumer">Consumidor final</option>
+            <option value="registered">Responsable inscripto</option>
+            <option value="smallTaxpayer">Monotributista</option>
+            <option value="exempt">Exento</option>
+          </select>
+          <label for="customer-fiscal-document">CUIT o DNI</label>
+          <input id="customer-fiscal-document" formControlName="fiscalDocumentNumber" maxlength="20" autocomplete="off" />
+          <label for="customer-fiscal-address">Domicilio fiscal</label>
+          <input id="customer-fiscal-address" formControlName="fiscalAddress" maxlength="200" autocomplete="off" />
+          <label for="customer-fiscal-locality">Localidad</label>
+          <input id="customer-fiscal-locality" formControlName="fiscalLocality" maxlength="100" autocomplete="off" />
+          <label for="customer-fiscal-province">Provincia</label>
+          <input id="customer-fiscal-province" formControlName="fiscalProvince" maxlength="100" autocomplete="off" />
           @if (!editingId()) { <p>El cliente se crea sin cuenta corriente; podés habilitarla después desde la lista.</p> }
           @if (actionError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
           <div class="editor-actions">

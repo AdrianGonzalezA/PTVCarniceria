@@ -8,12 +8,14 @@ export interface AdminTerminal {
   readonly isHistorical: boolean;
   readonly hasCredential: boolean;
   readonly devices: TerminalDevices;
+  readonly scaleDeviceId?: string | null;
+  readonly printerDeviceId?: string | null;
 }
 
 export interface TerminalDevices {
   readonly scale: { readonly port: string; readonly baudRate: number } | null;
-  readonly printer: { readonly kind: 'text' | 'hasar'; readonly port: string;
-    readonly baudRate: number } | null;
+  readonly printer: { readonly kind: 'text' | 'hasar' | 'escpos'; readonly port: string;
+    readonly baudRate: number; readonly paperWidthMm?: 58 | 80 | null } | null;
 }
 
 export interface ProvisionedTerminal {
@@ -56,7 +58,7 @@ export class AdminTerminalClient {
   }
 
   configureDevices(companyId: string, branchId: string, terminalId: string,
-    devices: TerminalDevices) {
+    devices: { readonly scaleDeviceId: string | null; readonly printerDeviceId: string | null }) {
     return this.http.put<AdminTerminal>(
       `${this.endpoint(companyId, branchId)}/${terminalId}/devices`, devices,
       { withCredentials: true });

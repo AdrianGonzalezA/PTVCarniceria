@@ -3,7 +3,8 @@ using System.Text.RegularExpressions;
 namespace Carnicerias.Infrastructure;
 
 public sealed record SerialDeviceAssignment(string Port, int BaudRate);
-public sealed record PrinterDeviceAssignment(string Kind, string Port, int BaudRate);
+public sealed record PrinterDeviceAssignment(string Kind, string Port, int BaudRate,
+    int? PaperWidthMm = null);
 public sealed record PosTerminalDevices(SerialDeviceAssignment? Scale, PrinterDeviceAssignment? Printer);
 
 public sealed class PosTerminal
@@ -38,11 +39,26 @@ public sealed class PosTerminal
     public string? PrinterKind { get; private set; }
     public string? PrinterPort { get; private set; }
     public int? PrinterBaudRate { get; private set; }
+    public int? PrinterPaperWidthMm { get; private set; }
+    public Guid? ScaleDeviceId { get; private set; }
+    public Guid? PrinterDeviceId { get; private set; }
 
     public PosTerminalDevices DeviceAssignments() => new(
         ScalePort is null ? null : new SerialDeviceAssignment(ScalePort, ScaleBaudRate!.Value),
         PrinterPort is null ? null : new PrinterDeviceAssignment(
-            PrinterKind!, PrinterPort, PrinterBaudRate!.Value));
+            PrinterKind!, PrinterPort, PrinterBaudRate!.Value, PrinterPaperWidthMm));
+
+    public void AssignCatalogDevices(BranchDevice? scale, BranchDevice? printer)
+    {
+        if (scale is not null && (scale.CompanyId != CompanyId || scale.BranchId != BranchId ||
+            scale.Type != "scale" || !scale.IsActive) ||
+            printer is not null && (printer.CompanyId != CompanyId || printer.BranchId != BranchId ||
+            printer.Type != "printer" || !printer.IsActive))
+            throw new ArgumentException("Device must be active and belong to this branch.");
+        ConfigureDevices(new PosTerminalDevices(scale?.ScaleAssignment(), printer?.PrinterAssignment()));
+        ScaleDeviceId = scale?.Id;
+        PrinterDeviceId = printer?.Id;
+    }
 
     public void ConfigureDevices(PosTerminalDevices devices)
     {
@@ -53,9 +69,11 @@ public sealed class PosTerminal
         if (scale is not null && !ValidSerial(scale.Port, scale.BaudRate))
             throw new ArgumentException("Invalid scale serial settings.", nameof(devices));
         if (printer is not null &&
-            (printer.Kind is not ("text" or "hasar") ||
+            (printer.Kind is not ("text" or "hasar" or "escpos") ||
              !ValidSerial(printer.Port, printer.BaudRate) ||
-             (printer.Kind == "hasar" && printer.BaudRate != 9600)))
+             (printer.Kind == "hasar" && printer.BaudRate != 9600) ||
+             (printer.Kind == "escpos" ? printer.PaperWidthMm is not (58 or 80)
+                : printer.PaperWidthMm is not null)))
             throw new ArgumentException("Invalid printer serial settings.", nameof(devices));
         if (scale is not null && printer is not null &&
             string.Equals(scale.Port, printer.Port, StringComparison.OrdinalIgnoreCase))
@@ -66,10 +84,13 @@ public sealed class PosTerminal
         PrinterKind = printer?.Kind;
         PrinterPort = printer?.Port.ToUpperInvariant();
         PrinterBaudRate = printer?.BaudRate;
+        PrinterPaperWidthMm = printer?.PaperWidthMm;
+        ScaleDeviceId = null;
+        PrinterDeviceId = null;
     }
 
     private static bool ValidSerial(string? port, int baudRate) =>
-        port is not null && Regex.IsMatch(port, "^COM[1-9][0-9]{0,2}$", RegexOptions.IgnoreCase) &&
+        port is not null && Regex.IsMatch(port, "\\ACOM[1-9][0-9]{0,2}\\z", RegexOptions.IgnoreCase) &&
         baudRate is 1200 or 2400 or 4800 or 9600 or 19200 or 38400 or 57600 or 115200;
 
     public void Rename(string name)

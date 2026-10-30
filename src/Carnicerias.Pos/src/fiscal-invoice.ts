@@ -32,7 +32,8 @@ export function createFiscalQrUrl(fiscal: FiscalReceipt, total: number): string 
   return `https://www.arca.gob.ar/fe/qr/?p=${encodeURIComponent(Buffer.from(JSON.stringify(payload)).toString('base64'))}`;
 }
 
-function lineAmount(receipt: ReceiptRequest, line: ReceiptRequest['lines'][number]): number {
+export function fiscalInvoiceLineAmount(receipt: ReceiptRequest,
+  line: ReceiptRequest['lines'][number]): number {
   const final = line.netAfterDiscount ?? line.lineTotal;
   if (receipt.discountAmount && line.netAfterDiscount == null)
     throw new Error('Invoice discount allocation is missing');
@@ -56,7 +57,7 @@ export async function createFiscalInvoiceHtml(receipt: ReceiptRequest): Promise<
     throw new Error('Invoice class does not match the receiver tax status');
   if (isA && (fiscal.receiverDocumentType !== 80 || fiscal.receiverDocumentNumber === 0))
     throw new Error('Invoice A requires receiver CUIT');
-  const amounts = receipt.lines.map((line) => lineAmount(receipt, line));
+  const amounts = receipt.lines.map((line) => fiscalInvoiceLineAmount(receipt, line));
   const taxable = fiscal.vatBreakdown.reduce((sum, group) => sum + group.taxableBase, 0);
   const vat = fiscal.vatBreakdown.reduce((sum, group) => sum + group.taxAmount, 0);
   const expectedLines = isA ? taxable + fiscal.exemptAmount + fiscal.notTaxedAmount : receipt.total;
@@ -86,12 +87,14 @@ export async function createFiscalInvoiceHtml(receipt: ReceiptRequest): Promise<
     ...(receipt.creditAppliedAmount ? ['Saldo a favor'] : []),
   ].join(' / ');
   const onlyKg = receipt.lines.every((line) => line.unit === 'kg');
+  const hasPieces = receipt.lines.some((line) => line.pieceCount != null);
   const rows = receipt.lines.map((line, index) => `<tr>
     <td>${escapeHtml(line.code)}</td>
     <td>${escapeHtml(line.name)}${line.pieceIdentifier ? `<small>Pieza ${escapeHtml(line.pieceIdentifier)}</small>` : ''}</td>
     <td class="number">${line.quantity.toLocaleString('es-AR', {
       minimumFractionDigits: line.unit === 'kg' ? 3 : 0, maximumFractionDigits: 3,
     })} ${escapeHtml(line.unit)}</td>
+    ${hasPieces ? `<td class="number">${line.pieceCount ?? '—'}</td>` : ''}
     <td class="number">${money(amounts[index]! / line.quantity)}</td>
     <td class="number">${money(amounts[index]!)}</td>
   </tr>`).join('');
@@ -176,10 +179,17 @@ export async function createFiscalInvoiceHtml(receipt: ReceiptRequest): Promise<
     </section></header>
     <section class="customer"><strong>Cliente: ${escapeHtml(receiver)}</strong>
       <p>Domicilio: ${escapeHtml(fiscal.receiverAddress ?? 'NR')}</p>
+      ${receipt.recipientLocality || receipt.recipientProvince
+        ? `<p>Localidad / provincia: ${escapeHtml([receipt.recipientLocality, receipt.recipientProvince]
+          .filter(Boolean).join(' · '))}</p>` : ''}
+      ${receipt.fiscalCustomerCode ? `<p>Cliente N.º ${escapeHtml(receipt.fiscalCustomerCode)}</p>` : ''}
       <div class="split"><span>Condición IVA: ${taxStatus[fiscal.receiverTaxStatus]}</span><span>${receiverDocument}</span></div>
     </section>
     <p class="condition">Condición de venta: ${escapeHtml(saleCondition)}</p>
+    ${receipt.purchaseOrderNumber
+      ? `<p class="condition">Pedido / OC: ${escapeHtml(receipt.purchaseOrderNumber)}</p>` : ''}
     <table><thead><tr><th>Cód.</th><th>Descripción</th><th class="number">${onlyKg ? 'Kg netos' : 'Cantidad'}</th>
+      ${hasPieces ? '<th class="number">Piezas</th>' : ''}
       <th class="number">${onlyKg ? 'Precio/kg' : 'Precio unit.'}</th><th class="number">Importe</th></tr></thead>
       <tbody>${rows}</tbody></table>
     <div class="notes"><p>${isA ? 'Precios netos sin IVA' : 'Precios finales con IVA incluido'}</p>

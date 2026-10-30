@@ -8,6 +8,7 @@ Guardar automáticamente hasta cuatro tickets A–D por caja y turno, alternar e
 
 - La empresa, sucursal y usuario se obtienen de la sesión autorizada; nunca del body del cliente.
 - El servidor valida productos activos, modalidad y cantidades, lista asignada a sucursal y precio vigente. Ignora precios enviados por el cliente.
+- En un artículo por peso, `quantity` representa kilogramos y `pieceCount` representa una cantidad física opcional, entera y positiva. No se infieren piezas de los kilogramos. Cada pieza trazable leída fija `pieceCount = 1` y conserva su identificador en un renglón independiente. En artículos por unidad, `pieceCount` no se usa porque `quantity` ya expresa unidades. El borrador y la venta confirmada conservan el dato como snapshot.
 - Un ticket en borrador no descuenta stock. El egreso ocurre al confirmar la venta, en la misma transacción que venta, pagos y caja.
 - El ticket sí reserva cantidades disponibles en la sucursal. La reserva se actualiza atómicamente con los renglones; quitar líneas o cancelar libera exactamente esas cantidades.
 - El POS muestra la unidad de venta definida en el catálogo y advierte al ingresar una cantidad superior al disponible antes de agregar o aumentar un renglón. Al editar un renglón ya guardado, su propia reserva cuenta dentro del máximo permitido. El servidor sigue siendo la autoridad: si el stock cambia entre la consulta y el guardado, rechaza la operación y el POS vuelve al último detalle persistido, sin presentar como agregado el renglón rechazado.
@@ -23,6 +24,7 @@ Guardar automáticamente hasta cuatro tickets A–D por caja y turno, alternar e
 - `GET /api/sales/drafts`: devuelve los borradores activos A–D del turno/caja/cajero autorizados; las ranuras vacías no se incluyen.
 - `GET /api/sales/drafts/{slot}`: obtiene el borrador de A, B, C o D, o `204` si la ranura está vacía.
 - `PUT /api/sales/drafts/{slot}`: reemplaza hasta 100 renglones solo en esa ranura; los precios se consultan en el servidor dentro de la lista elegida.
+- Cada renglón del `PUT` admite `pieceCount` opcional. La API devuelve `pieceCount` en borradores y confirmaciones; las ventas anteriores sin conteo conocido quedan en `null`. La migración de laboratorio asigna `1` solo a renglones con `InventoryPieceId` trazable.
 - `DELETE /api/sales/drafts/{slot}`: cancela únicamente ese borrador, conserva el detalle para auditoría y libera su reserva.
 - Las rutas heredadas `/api/sales/draft` siguen representando A para no romper clientes existentes durante la transición.
 - `GET /api/inventory/stock`: consulta existencia física, reservada y disponible por producto en la sucursal activa.

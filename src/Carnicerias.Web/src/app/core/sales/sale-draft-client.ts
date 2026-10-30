@@ -9,6 +9,7 @@ export interface SaleDraftLine {
   readonly unit: string;
   readonly saleMode: 'weight' | 'unit';
   readonly quantity: number;
+  readonly pieceCount?: number | null;
   readonly unitPrice: number;
   readonly inventoryPieceId?: string | null;
   readonly pieceIdentifier?: string | null;
@@ -36,6 +37,10 @@ export interface SaleDocumentRequest {
   readonly recipientName?: string;
   readonly recipientDocumentNumber?: string;
   readonly recipientAddress?: string;
+  readonly recipientLocality?: string;
+  readonly recipientProvince?: string;
+  readonly fiscalCustomerId?: string;
+  readonly purchaseOrderNumber?: string;
 }
 
 export interface ConfirmedSale {
@@ -53,7 +58,12 @@ export interface ConfirmedSale {
   readonly documentType?: SaleDocumentType;
   readonly recipientTaxStatus?: SaleRecipientTaxStatus;
   readonly recipientName?: string | null;
-  readonly lines: readonly { readonly code: string; readonly name: string; readonly unit: string; readonly quantity: number; readonly unitPrice: number; readonly lineTotal: number; readonly pieceIdentifier?: string | null;
+  readonly recipientLocality?: string | null;
+  readonly recipientProvince?: string | null;
+  readonly fiscalCustomerId?: string | null;
+  readonly fiscalCustomerCode?: string | null;
+  readonly purchaseOrderNumber?: string | null;
+  readonly lines: readonly { readonly code: string; readonly name: string; readonly unit: string; readonly quantity: number; readonly unitPrice: number; readonly lineTotal: number; readonly pieceIdentifier?: string | null; readonly pieceCount?: number | null;
     readonly netAfterDiscount?: number | null; readonly taxableBase?: number | null;
     readonly taxAmount?: number | null; readonly taxRatePercent?: number | null }[];
   readonly payments: readonly { readonly method: SalePaymentMethod; readonly tenderedAmount: number; readonly appliedAmount: number }[];
@@ -71,7 +81,8 @@ export class SaleDraftClient {
     return this.http.get<SaleDraft | null>(this.draftUrl(slot), { withCredentials: true });
   }
 
-  save(priceListId: string, lines: readonly { readonly productId: string; readonly quantity: number; readonly inventoryPieceId?: string }[],
+  save(priceListId: string, lines: readonly { readonly productId: string; readonly quantity: number;
+    readonly inventoryPieceId?: string; readonly pieceCount?: number | null }[],
     slot: SaleTicketSlot = 'A', discountAmount = 0, discountReason: string | null = null) {
     return this.http.put<SaleDraft>(this.draftUrl(slot),
       { priceListId, lines, discountAmount, discountReason }, { withCredentials: true });

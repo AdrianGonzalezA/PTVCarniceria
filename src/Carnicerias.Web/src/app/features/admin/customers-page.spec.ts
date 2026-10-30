@@ -74,4 +74,41 @@ describe('CustomersPage dialogs', () => {
     fixture.detectChanges();
     expect(page.querySelector('dialog[aria-labelledby="customer-action-title"]')).toBeNull();
   });
+
+  it('saves a reusable fiscal profile with the customer', () => {
+    const fixture = TestBed.createComponent(CustomersPage);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/sessions/current').flush({ userId: 'admin', username: 'admin', expiresAtUtc: '',
+      context: { userId: 'admin', companyId: 'c', companyName: 'Empresa', branchId: 'b', branchName: 'Sucursal',
+        permissions: ['organization.manage'], sessionId: 's' } });
+    http.expectOne((request) => request.url === '/api/admin/customers').flush({
+      items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0,
+    });
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    page.querySelector<HTMLButtonElement>('.admin-import-heading-actions > button')!.click();
+    fixture.detectChanges();
+    const fill = (selector: string, value: string) => {
+      const input = page.querySelector<HTMLInputElement | HTMLSelectElement>(selector)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    fill('#customer-code', 'B2B-1');
+    fill('#customer-name', 'Carnicería Cliente');
+    fill('#customer-fiscal-status', 'registered');
+    fill('#customer-fiscal-document', '30000000007');
+    fill('#customer-fiscal-address', 'Calle 123');
+    page.querySelector<HTMLButtonElement>('.editor-actions button[type="submit"]')!.click();
+    const create = http.expectOne('/api/admin/customers');
+    expect(create.request.body).toMatchObject({ code: 'B2B-1', name: 'Carnicería Cliente',
+      fiscalTaxStatus: 'registered', fiscalDocumentNumber: '30000000007', fiscalAddress: 'Calle 123' });
+    create.flush({ id: 'new', code: 'B2B-1', name: 'Carnicería Cliente', isActive: true,
+      creditEnabled: false, fiscalTaxStatus: 'registered', fiscalDocumentNumber: '30000000007',
+      fiscalAddress: 'Calle 123' });
+    http.expectOne((request) => request.url === '/api/admin/customers').flush({
+      items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0,
+    });
+  });
 });

@@ -5,7 +5,8 @@ import { Router, RouterLink } from '@angular/router';
 import { AdminAreaTabs } from './admin-area-tabs';
 import { Observable } from 'rxjs';
 import { AdminBranch, AdminCompany, AdminOrganizationClient } from '../../core/admin/admin-organization-client';
-import { AdminTerminal, AdminTerminalClient, AdminTerminalUpdate, ProvisionedTerminal, TerminalDevices } from '../../core/admin/admin-terminal-client';
+import { AdminTerminal, AdminTerminalClient, AdminTerminalUpdate, ProvisionedTerminal } from '../../core/admin/admin-terminal-client';
+import { AdminBranchDeviceClient, BranchDevice, BranchDeviceChanges } from '../../core/admin/admin-branch-device-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { AdminDetailDialog } from './admin-detail-dialog';
 
@@ -22,6 +23,7 @@ type OrganizationAction =
 export class OrganizationPage implements OnInit {
   private readonly client = inject(AdminOrganizationClient);
   private readonly terminalsClient = inject(AdminTerminalClient);
+  private readonly branchDevicesClient = inject(AdminBranchDeviceClient);
   private readonly sessions = inject(SessionClient);
   private readonly router = inject(Router);
   private readonly formBuilder = inject(FormBuilder);
@@ -33,9 +35,20 @@ export class OrganizationPage implements OnInit {
     name: ['', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(120)]],
   });
   protected readonly devicesForm = this.formBuilder.nonNullable.group({
-    scaleMode: 'none', scalePort: '', scaleBaudRate: 9600,
-    printerKind: 'none', printerPort: '', printerBaudRate: 9600,
+    scaleDeviceId: '', printerDeviceId: '',
   });
+  protected readonly catalogForm = this.formBuilder.nonNullable.group({
+    name: ['', [Validators.required, Validators.maxLength(120)]],
+    type: 'printer', driver: 'escpos', port: 'COM1', baudRate: 9600,
+    paperWidthMm: 80, isActive: true,
+  });
+  protected readonly catalogDevices = signal<readonly BranchDevice[]>([]);
+  protected readonly catalogOpen = signal(false);
+  protected readonly catalogLoading = signal(false);
+  protected readonly catalogError = signal<string | null>(null);
+  protected readonly catalogEditorOpen = signal(false);
+  protected readonly editingCatalogDevice = signal<BranchDevice | null>(null);
+  protected readonly catalogSaving = signal(false);
   protected readonly session = signal<CurrentSession | null>(null);
   protected readonly companies = signal<readonly AdminCompany[]>([]);
   protected readonly companiesLoading = signal(true);
@@ -178,6 +191,8 @@ export class OrganizationPage implements OnInit {
     this.selectedTerminalBranch.set(branch);
     this.terminalEditorOpen.set(false);
     this.deviceEditorTerminal.set(null);
+    this.catalogOpen.set(false);
+    this.catalogDevices.set([]);
     this.clearCredential();
     this.loadTerminals(company.id, branch.id);
   }
@@ -186,6 +201,7 @@ export class OrganizationPage implements OnInit {
     if (this.terminalSaving() || this.terminalActionId() || this.shownCredential() ||
         this.deviceEditorTerminal()) return;
     this.selectedTerminalBranch.set(null);
+    this.catalogOpen.set(false);
     this.terminals.set([]);
     this.terminalEditorOpen.set(false);
     this.clearCredential();
@@ -214,14 +230,12 @@ export class OrganizationPage implements OnInit {
   }
 
   protected startDeviceEditor(terminal: AdminTerminal): void {
-    const devices = terminal.devices ?? { scale: null, printer: null };
     this.devicesForm.reset({
-      scaleMode: devices.scale ? 'serial' : 'none',
-      scalePort: devices.scale?.port ?? '', scaleBaudRate: devices.scale?.baudRate ?? 9600,
-      printerKind: devices.printer?.kind ?? 'none',
-      printerPort: devices.printer?.port ?? '', printerBaudRate: devices.printer?.baudRate ?? 9600,
+      scaleDeviceId: terminal.scaleDeviceId ?? '',
+      printerDeviceId: terminal.printerDeviceId ?? '',
     });
     this.devicesError.set(null);
+    this.loadCatalog();
     this.deviceEditorTerminal.set(terminal);
   }
 
@@ -235,22 +249,8 @@ export class OrganizationPage implements OnInit {
     const terminal = this.deviceEditorTerminal();
     if (!company || !branch || !terminal || this.devicesSaving()) return;
     const value = this.devicesForm.getRawValue();
-    const scalePort = value.scalePort.trim().toUpperCase();
-    const printerPort = value.printerPort.trim().toUpperCase();
-    const scale = value.scaleMode === 'serial'
-      ? { port: scalePort, baudRate: value.scaleBaudRate } : null;
-    const printerKind = value.printerKind === 'text' ? 'text'
-      : value.printerKind === 'hasar' ? 'hasar' : null;
-    const printer: TerminalDevices['printer'] = printerKind
-      ? { kind: printerKind, port: printerPort,
-        baudRate: printerKind === 'hasar' ? 9600 : value.printerBaudRate } : null;
-    if ((scale && !/^COM[1-9][0-9]{0,2}$/.test(scale.port)) ||
-        (printer && !/^COM[1-9][0-9]{0,2}$/.test(printer.port)) ||
-        (scale && printer && scale.port === printer.port)) {
-      this.devicesError.set('Revisá los puertos COM: deben ser válidos y distintos.');
-      return;
-    }
-    const devices: TerminalDevices = { scale, printer };
+    const devices = { scaleDeviceId: value.scaleDeviceId || null,
+      printerDeviceId: value.printerDeviceId || null };
     this.devicesSaving.set(true);
     this.devicesError.set(null);
     this.terminalsClient.configureDevices(company.id, branch.id, terminal.id, devices).subscribe({
@@ -262,9 +262,87 @@ export class OrganizationPage implements OnInit {
       },
       error: () => {
         this.devicesSaving.set(false);
-        this.devicesError.set('No se pudo guardar la asignación. Revisá los puertos e intentá de nuevo.');
+        this.devicesError.set('No se pudo guardar la asignación. Revisá el catálogo y los puertos.');
       },
     });
+  }
+
+  protected openCatalog(): void {
+    this.catalogOpen.set(true);
+    this.loadCatalog();
+  }
+
+  protected closeCatalog(): void { this.catalogOpen.set(false); }
+
+  protected startCreateCatalogDevice(): void {
+    this.editingCatalogDevice.set(null);
+    this.catalogForm.reset({ name: '', type: 'printer', driver: 'escpos', port: 'COM1',
+      baudRate: 9600, paperWidthMm: 80, isActive: true });
+    this.catalogError.set(null);
+    this.catalogEditorOpen.set(true);
+  }
+
+  protected startEditCatalogDevice(device: BranchDevice): void {
+    this.editingCatalogDevice.set(device);
+    this.catalogForm.reset({ name: device.name, type: device.type, driver: device.driver,
+      port: device.port, baudRate: device.baudRate,
+      paperWidthMm: device.paperWidthMm ?? 80, isActive: device.isActive });
+    this.catalogError.set(null);
+    this.catalogEditorOpen.set(true);
+  }
+
+  protected cancelCatalogEditor(): void {
+    if (!this.catalogSaving()) this.catalogEditorOpen.set(false);
+  }
+
+  protected saveCatalogDevice(): void {
+    const company = this.selectedCompany();
+    const branch = this.selectedTerminalBranch();
+    if (!company || !branch || this.catalogSaving() || this.catalogForm.invalid) {
+      this.catalogForm.markAllAsTouched();
+      return;
+    }
+    const value = this.catalogForm.getRawValue();
+    const driver = value.type === 'scale' ? 'serial-scale' : value.driver;
+    const changes = { name: value.name.trim(), type: value.type,
+      driver, port: value.port.trim().toUpperCase(),
+      baudRate: driver === 'hasar' ? 9600 : value.baudRate,
+      paperWidthMm: driver === 'escpos' ? value.paperWidthMm : null,
+      isActive: value.isActive } as BranchDeviceChanges;
+    if (!changes.name || !/^COM[1-9][0-9]{0,2}$/.test(changes.port)) {
+      this.catalogError.set('Ingresá nombre y puerto COM válidos.');
+      return;
+    }
+    const editing = this.editingCatalogDevice();
+    this.catalogSaving.set(true);
+    this.catalogError.set(null);
+    const operation = editing
+      ? this.branchDevicesClient.update(company.id, branch.id, editing.id, changes)
+      : this.branchDevicesClient.create(company.id, branch.id, changes);
+    operation.subscribe({
+      next: (device) => {
+        this.catalogDevices.set([...this.catalogDevices().filter((item) => item.id !== device.id), device]
+          .sort((a, b) => a.name.localeCompare(b.name)));
+        this.catalogSaving.set(false);
+        this.catalogEditorOpen.set(false);
+        this.actionMessage.set('Dispositivo guardado. La caja recibirá la configuración actualizada.');
+        if (editing) this.loadTerminals(company.id, branch.id);
+      },
+      error: (error: HttpErrorResponse) => {
+        this.catalogSaving.set(false);
+        this.catalogError.set(error.error?.error?.code === 'DEVICE_ASSIGNED_TO_TERMINAL'
+          ? 'Primero quitá la asignación de las cajas que usan este dispositivo.'
+          : 'No se pudo guardar el dispositivo. Revisá nombre, puerto y controlador.');
+      },
+    });
+  }
+
+  protected printerDevices(): readonly BranchDevice[] {
+    return this.catalogDevices().filter((item) => item.type === 'printer' && item.isActive);
+  }
+
+  protected scaleDevices(): readonly BranchDevice[] {
+    return this.catalogDevices().filter((item) => item.type === 'scale' && item.isActive);
   }
 
   protected scaleDescription(terminal: AdminTerminal): string {
@@ -273,7 +351,8 @@ export class OrganizationPage implements OnInit {
 
   protected printerDescription(terminal: AdminTerminal): string {
     return terminal.devices?.printer
-      ? `${terminal.devices.printer.kind === 'hasar' ? 'Hasar' : 'Texto'} ${terminal.devices.printer.port}`
+      ? `${terminal.devices.printer.kind === 'hasar' ? 'Hasar'
+        : terminal.devices.printer.kind === 'escpos' ? 'Comandera térmica' : 'Texto'} ${terminal.devices.printer.port}`
       : 'Sin impresora';
   }
 
@@ -457,6 +536,21 @@ export class OrganizationPage implements OnInit {
       error: () => {
         this.terminalsLoading.set(false);
         this.terminalsError.set('No se pudieron cargar las cajas de esta sucursal.');
+      },
+    });
+  }
+
+  private loadCatalog(): void {
+    const company = this.selectedCompany();
+    const branch = this.selectedTerminalBranch();
+    if (!company || !branch) return;
+    this.catalogLoading.set(true);
+    this.catalogError.set(null);
+    this.branchDevicesClient.list(company.id, branch.id).subscribe({
+      next: (devices) => { this.catalogDevices.set(devices); this.catalogLoading.set(false); },
+      error: () => {
+        this.catalogLoading.set(false);
+        this.catalogError.set('No se pudo cargar el catálogo de dispositivos.');
       },
     });
   }

@@ -65,7 +65,7 @@ public sealed class SaleDraft
         foreach (var existingLine in Lines.ToArray())
         {
             if (requestedLines.Remove((existingLine.ProductId, existingLine.InventoryPieceId), out var requestedLine))
-                existingLine.UpdateQuantity(requestedLine.Quantity);
+                existingLine.UpdateDetails(requestedLine.Quantity, requestedLine.PieceCount);
             else
                 Lines.Remove(existingLine);
         }
@@ -118,8 +118,9 @@ public sealed class SaleDraftLine
 
     public SaleDraftLine(Guid companyId, Guid productId, string productCode, string productName,
         string unit, ProductSaleMode saleMode, decimal quantity, decimal unitPrice,
-        Guid? inventoryPieceId = null, string? pieceIdentifier = null)
+        Guid? inventoryPieceId = null, string? pieceIdentifier = null, int? pieceCount = null)
     {
+        ValidatePieceCount(saleMode, inventoryPieceId, pieceCount);
         Id = Guid.NewGuid();
         CompanyId = companyId;
         ProductId = productId;
@@ -131,6 +132,7 @@ public sealed class SaleDraftLine
         UnitPrice = unitPrice;
         InventoryPieceId = inventoryPieceId;
         PieceIdentifier = pieceIdentifier;
+        PieceCount = pieceCount;
     }
 
     public Guid Id { get; private set; }
@@ -145,10 +147,24 @@ public sealed class SaleDraftLine
     public decimal UnitPrice { get; private set; }
     public Guid? InventoryPieceId { get; private set; }
     public string? PieceIdentifier { get; private set; }
+    public int? PieceCount { get; private set; }
 
-    public void UpdateQuantity(decimal quantity)
+    public void UpdateDetails(decimal quantity, int? pieceCount)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(quantity);
+        ValidatePieceCount(SaleMode, InventoryPieceId, pieceCount);
         Quantity = quantity;
+        PieceCount = pieceCount;
+    }
+
+    private static void ValidatePieceCount(ProductSaleMode saleMode, Guid? inventoryPieceId,
+        int? pieceCount)
+    {
+        if (pieceCount is <= 0 or > 10000)
+            throw new ArgumentOutOfRangeException(nameof(pieceCount));
+        if ((saleMode == ProductSaleMode.Unit && pieceCount is not null) ||
+            (inventoryPieceId is not null && pieceCount is not null and not 1))
+            throw new ArgumentException("Physical piece count must match the sale mode and tracked piece.",
+                nameof(pieceCount));
     }
 }

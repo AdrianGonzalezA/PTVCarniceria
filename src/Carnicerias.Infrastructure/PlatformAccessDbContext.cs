@@ -25,6 +25,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
     public DbSet<BranchCentralConnectionEvent> BranchCentralConnectionEvents => Set<BranchCentralConnectionEvent>();
 
     public DbSet<PosTerminal> PosTerminals => Set<PosTerminal>();
+    public DbSet<BranchDevice> BranchDevices => Set<BranchDevice>();
 
     public DbSet<ArcaCompanySettings> ArcaCompanySettings => Set<ArcaCompanySettings>();
     public DbSet<MercadoPagoGatewaySettings> MercadoPagoGatewaySettings => Set<MercadoPagoGatewaySettings>();
@@ -212,6 +213,16 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(terminal => terminal.ScalePort).HasMaxLength(6);
             entity.Property(terminal => terminal.PrinterKind).HasMaxLength(8);
             entity.Property(terminal => terminal.PrinterPort).HasMaxLength(6);
+            entity.HasOne<BranchDevice>().WithMany()
+                .HasForeignKey(terminal => new { terminal.CompanyId, terminal.BranchId,
+                    terminal.ScaleDeviceId })
+                .HasPrincipalKey(device => new { device.CompanyId, device.BranchId, device.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<BranchDevice>().WithMany()
+                .HasForeignKey(terminal => new { terminal.CompanyId, terminal.BranchId,
+                    terminal.PrinterDeviceId })
+                .HasPrincipalKey(device => new { device.CompanyId, device.BranchId, device.Id })
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<Branch>().WithMany()
                 .HasForeignKey(terminal => new { terminal.CompanyId, terminal.BranchId })
                 .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
@@ -220,6 +231,22 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .IsUnique();
             entity.HasIndex(terminal => terminal.CredentialHash)
                 .IsUnique().HasFilter("\"CredentialHash\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<BranchDevice>(entity =>
+        {
+            entity.ToTable("branch_devices");
+            entity.HasKey(device => device.Id);
+            entity.HasAlternateKey(device => new { device.CompanyId, device.BranchId, device.Id });
+            entity.Property(device => device.Name).HasMaxLength(120).IsRequired();
+            entity.Property(device => device.Type).HasMaxLength(12).IsRequired();
+            entity.Property(device => device.Driver).HasMaxLength(16).IsRequired();
+            entity.Property(device => device.Port).HasMaxLength(6).IsRequired();
+            entity.HasOne<Branch>().WithMany()
+                .HasForeignKey(device => new { device.CompanyId, device.BranchId })
+                .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(device => new { device.CompanyId, device.BranchId, device.Name }).IsUnique();
         });
 
         modelBuilder.Entity<ArcaCompanySettings>(entity =>
@@ -372,6 +399,11 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(customer => customer.Code).HasMaxLength(80).IsRequired();
             entity.Property(customer => customer.NormalizedCode).HasMaxLength(80).IsRequired();
             entity.Property(customer => customer.Name).HasMaxLength(200).IsRequired();
+            entity.Property(customer => customer.FiscalTaxStatus).HasConversion<int?>();
+            entity.Property(customer => customer.FiscalDocumentNumber).HasMaxLength(11);
+            entity.Property(customer => customer.FiscalAddress).HasMaxLength(200);
+            entity.Property(customer => customer.FiscalLocality).HasMaxLength(100);
+            entity.Property(customer => customer.FiscalProvince).HasMaxLength(100);
             entity.Ignore(customer => customer.CanChargeToAccount);
             entity.HasOne<Company>().WithMany().HasForeignKey(customer => customer.CompanyId)
                 .OnDelete(DeleteBehavior.Restrict);
@@ -870,6 +902,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             {
                 table.HasCheckConstraint("CK_sale_draft_lines_quantity_positive", "\"Quantity\" > 0");
                 table.HasCheckConstraint("CK_sale_draft_lines_price_positive", "\"UnitPrice\" > 0");
+                table.HasCheckConstraint("CK_sale_draft_lines_piece_count", "\"PieceCount\" IS NULL OR \"PieceCount\" BETWEEN 1 AND 10000");
             });
             entity.HasKey(line => line.Id);
             entity.Property(line => line.Id).ValueGeneratedNever();
@@ -880,6 +913,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(line => line.Quantity).HasPrecision(12, 3);
             entity.Property(line => line.UnitPrice).HasPrecision(12, 2);
             entity.Property(line => line.PieceIdentifier).HasMaxLength(80);
+            entity.Property(line => line.PieceCount);
             entity.HasOne<InventoryPiece>().WithMany().HasForeignKey(line => line.InventoryPieceId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<CatalogProduct>().WithMany()
@@ -908,12 +942,20 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(sale => sale.DiscountReason).HasMaxLength(200);
             entity.Property(sale => sale.CustomerCode).HasMaxLength(80);
             entity.Property(sale => sale.CustomerName).HasMaxLength(200);
+            entity.Property(sale => sale.FiscalCustomerCode).HasMaxLength(80);
+            entity.Property(sale => sale.PurchaseOrderNumber).HasMaxLength(80);
             entity.Property(sale => sale.RecipientName).HasMaxLength(200);
             entity.Property(sale => sale.RecipientDocumentNumber).HasMaxLength(11);
             entity.Property(sale => sale.RecipientAddress).HasMaxLength(200);
+            entity.Property(sale => sale.RecipientLocality).HasMaxLength(100);
+            entity.Property(sale => sale.RecipientProvince).HasMaxLength(100);
             entity.Property(sale => sale.PaymentRequestHash).HasMaxLength(64).IsRequired();
             entity.HasOne<CustomerAccount>().WithMany()
                 .HasForeignKey(sale => new { sale.CompanyId, sale.CustomerId })
+                .HasPrincipalKey(customer => new { customer.CompanyId, customer.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CustomerAccount>().WithMany()
+                .HasForeignKey(sale => new { sale.CompanyId, sale.FiscalCustomerId })
                 .HasPrincipalKey(customer => new { customer.CompanyId, customer.Id })
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<Branch>().WithMany()
@@ -985,6 +1027,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             {
                 table.HasCheckConstraint("CK_confirmed_sale_lines_quantity_positive", "\"Quantity\" > 0");
                 table.HasCheckConstraint("CK_confirmed_sale_lines_unit_price_positive", "\"UnitPrice\" > 0");
+                table.HasCheckConstraint("CK_confirmed_sale_lines_piece_count", "\"PieceCount\" IS NULL OR \"PieceCount\" BETWEEN 1 AND 10000");
             });
             entity.HasKey(line => line.Id);
             entity.Property(line => line.ProductCode).HasMaxLength(80).IsRequired();
@@ -1001,6 +1044,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(line => line.TaxableBase).HasPrecision(12, 2);
             entity.Property(line => line.TaxAmount).HasPrecision(12, 2);
             entity.Property(line => line.PieceIdentifier).HasMaxLength(80);
+            entity.Property(line => line.PieceCount);
             entity.HasOne<InventoryPiece>().WithMany().HasForeignKey(line => line.InventoryPieceId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(line => line.InventoryPieceId).IsUnique()

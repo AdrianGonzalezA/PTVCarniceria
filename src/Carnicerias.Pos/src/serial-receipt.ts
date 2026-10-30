@@ -36,10 +36,15 @@ export function formatSerialReceipt(receipt: ReceiptRequest): string {
       `Receptor ${printable(fiscal.receiverName ?? 'Consumidor final')}`,
       `Documento ${fiscal.receiverDocumentType} ${fiscal.receiverDocumentNumber}`,
       ...(fiscal.receiverAddress ? [`Domicilio ${printable(fiscal.receiverAddress)}`] : []),
+      ...(receipt.recipientLocality || receipt.recipientProvince
+        ? [`Localidad / provincia ${printable([receipt.recipientLocality,
+          receipt.recipientProvince].filter(Boolean).join(' / '))}`] : []),
+      ...(receipt.fiscalCustomerCode ? [`Cliente Nro. ${printable(receipt.fiscalCustomerCode)}`] : []),
     ] : []),
     printable(receipt.branch),
     `${printable(receipt.terminal)} - ${printable(receipt.cashier)}`,
     `Venta ${printable(receipt.saleId)}`,
+    ...(receipt.purchaseOrderNumber ? [`Pedido / OC ${printable(receipt.purchaseOrderNumber)}`] : []),
     date,
     '----------------------------------------',
     'PRODUCTOS',
@@ -52,6 +57,7 @@ export function formatSerialReceipt(receipt: ReceiptRequest): string {
     });
     lines.push(`${printable(line.name)} (${printable(line.code)})`);
     if (line.pieceIdentifier) lines.push(`  Pieza ${printable(line.pieceIdentifier)}`);
+    if (line.pieceCount != null) lines.push(`  Piezas fisicas ${line.pieceCount}`);
     lines.push(`  ${quantity} ${printable(line.unit)} x $ ${money(line.unitPrice)}`);
     lines.push(`  Importe $ ${money(line.lineTotal)}`);
   }

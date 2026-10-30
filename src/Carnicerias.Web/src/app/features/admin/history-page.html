@@ -152,12 +152,19 @@
             <p>Receptor: {{ ticket.recipientName ?? 'Consumidor final' }}
               @if (ticket.recipientDocumentNumber) { · {{ ticket.recipientDocumentNumber }} }
               @if (ticket.recipientAddress) { · {{ ticket.recipientAddress }} }
+              @if (ticket.recipientLocality || ticket.recipientProvince) {
+                · {{ ticket.recipientLocality }} {{ ticket.recipientProvince }}
+              }
+              @if (ticket.fiscalCustomerCode) { · Cliente {{ ticket.fiscalCustomerCode }} }
             </p>
           }
+          @if (ticket.purchaseOrderNumber) { <p>Pedido / OC: {{ ticket.purchaseOrderNumber }}</p> }
           @if (ticket.discountAmount > 0) { <p>Descuento global: − $ {{ ticket.discountAmount | number:'1.2-2' }} · {{ ticket.discountReason }}</p> }
           <h4>Artículos</h4>
-          <ul>@for (line of ticket.lines; track line.code) {
+          <ul>@for (line of ticket.lines; track $index) {
             <li>{{ line.name }} · {{ line.quantity }} {{ line.unit }} × $ {{ line.unitPrice | number:'1.2-2' }} = $ {{ line.lineTotal | number:'1.2-2' }}
+              @if (line.pieceIdentifier) { <br />Pieza trazable: {{ line.pieceIdentifier }} }
+              @if (line.pieceCount !== null && line.pieceCount !== undefined) { <br />Piezas físicas: {{ line.pieceCount }} }
               @if (line.netAfterDiscount !== null) {
                 <br />Descuento asignado: $ {{ line.orderDiscountAmount | number:'1.2-2' }} · Neto comercial: $ {{ line.netAfterDiscount | number:'1.2-2' }}
               }

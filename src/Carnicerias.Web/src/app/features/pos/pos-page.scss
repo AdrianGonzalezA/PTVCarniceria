@@ -153,6 +153,7 @@
 .scale-status { padding: 0.6rem; color: #48483f; background: #ececd9; font-size: 0.8rem; }
 .quantity-field { display: grid; gap: 0.35rem; font-size: 0.85rem; font-weight: 650; }
 .quantity-field input { min-height: 2.8rem; padding: 0.55rem; border: 1px solid var(--pos-border); border-radius: 0.3rem; font: inherit; }
+.piece-count-field { margin-top: 0.7rem; }
 .quantity-field select { min-height: 2.8rem; padding: 0.55rem; border: 1px solid var(--pos-border); border-radius: 0.3rem; font: inherit; }
 .inventory-dialog { max-height: min(90dvh, 55rem); overflow: auto; }
 .inventory-list { display: grid; max-height: 14rem; overflow: auto; margin: 0.75rem 0; border: 1px solid var(--pos-border); border-radius: 0.3rem; }

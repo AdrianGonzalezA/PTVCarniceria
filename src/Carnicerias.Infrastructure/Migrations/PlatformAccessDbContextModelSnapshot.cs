@@ -172,6 +172,55 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.ToTable("barcode_profiles", "inventory");
                 });
 
+            modelBuilder.Entity("Carnicerias.Infrastructure.BranchDevice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BaudRate")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Driver")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int?>("PaperWidthMm")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Port")
+                        .IsRequired()
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "BranchId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("branch_devices", "platform_access");
+                });
+
             modelBuilder.Entity("Carnicerias.Infrastructure.BranchInventoryBalance", b =>
                 {
                     b.Property<Guid>("CompanyId")
@@ -534,6 +583,13 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<int>("DocumentType")
                         .HasColumnType("integer");
 
+                    b.Property<string>("FiscalCustomerCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid?>("FiscalCustomerId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("PaymentRequestHash")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -545,6 +601,10 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<Guid>("PriceListId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("PurchaseOrderNumber")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
                     b.Property<string>("RecipientAddress")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -553,9 +613,17 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasMaxLength(11)
                         .HasColumnType("character varying(11)");
 
+                    b.Property<string>("RecipientLocality")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("RecipientName")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<string>("RecipientProvince")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<int>("RecipientTaxStatus")
                         .HasColumnType("integer");
@@ -576,6 +644,8 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.HasIndex("CompanyId", "ConfirmedAtUtc");
 
                     b.HasIndex("CompanyId", "CustomerId");
+
+                    b.HasIndex("CompanyId", "FiscalCustomerId");
 
                     b.HasIndex("CompanyId", "PriceListId");
 
@@ -619,6 +689,9 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<decimal>("OrderDiscountAmount")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
+
+                    b.Property<int?>("PieceCount")
+                        .HasColumnType("integer");
 
                     b.Property<string>("PieceIdentifier")
                         .HasMaxLength(80)
@@ -686,6 +759,8 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.ToTable("confirmed_sale_lines", "pos_sales", t =>
                         {
+                            t.HasCheckConstraint("CK_confirmed_sale_lines_piece_count", "\"PieceCount\" IS NULL OR \"PieceCount\" BETWEEN 1 AND 10000");
+
                             t.HasCheckConstraint("CK_confirmed_sale_lines_quantity_positive", "\"Quantity\" > 0");
 
                             t.HasCheckConstraint("CK_confirmed_sale_lines_unit_price_positive", "\"UnitPrice\" > 0");
@@ -708,6 +783,25 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.Property<bool>("CreditEnabled")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("FiscalAddress")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("FiscalDocumentNumber")
+                        .HasMaxLength(11)
+                        .HasColumnType("character varying(11)");
+
+                    b.Property<string>("FiscalLocality")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("FiscalProvince")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("FiscalTaxStatus")
+                        .HasColumnType("integer");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
@@ -1592,9 +1686,15 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<int?>("PrinterBaudRate")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("PrinterDeviceId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("PrinterKind")
                         .HasMaxLength(8)
                         .HasColumnType("character varying(8)");
+
+                    b.Property<int?>("PrinterPaperWidthMm")
+                        .HasColumnType("integer");
 
                     b.Property<string>("PrinterPort")
                         .HasMaxLength(6)
@@ -1602,6 +1702,9 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.Property<int?>("ScaleBaudRate")
                         .HasColumnType("integer");
+
+                    b.Property<Guid?>("ScaleDeviceId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("ScalePort")
                         .HasMaxLength(6)
@@ -1615,6 +1718,10 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.HasIndex("CompanyId", "BranchId", "Name")
                         .IsUnique();
+
+                    b.HasIndex("CompanyId", "BranchId", "PrinterDeviceId");
+
+                    b.HasIndex("CompanyId", "BranchId", "ScaleDeviceId");
 
                     b.ToTable("pos_terminals", "platform_access");
                 });
@@ -1939,6 +2046,9 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<Guid?>("InventoryPieceId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("PieceCount")
+                        .HasColumnType("integer");
+
                     b.Property<string>("PieceIdentifier")
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
@@ -1985,6 +2095,8 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.ToTable("sale_draft_lines", "pos_sales", t =>
                         {
+                            t.HasCheckConstraint("CK_sale_draft_lines_piece_count", "\"PieceCount\" IS NULL OR \"PieceCount\" BETWEEN 1 AND 10000");
+
                             t.HasCheckConstraint("CK_sale_draft_lines_price_positive", "\"UnitPrice\" > 0");
 
                             t.HasCheckConstraint("CK_sale_draft_lines_quantity_positive", "\"Quantity\" > 0");
@@ -2479,6 +2591,16 @@ namespace Carnicerias.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Carnicerias.Infrastructure.BranchDevice", b =>
+                {
+                    b.HasOne("Carnicerias.PlatformAccess.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "BranchId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Carnicerias.Infrastructure.BranchInventoryBalance", b =>
                 {
                     b.HasOne("Carnicerias.PlatformAccess.Branch", null)
@@ -2641,6 +2763,12 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.HasOne("Carnicerias.Infrastructure.CustomerAccount", null)
                         .WithMany()
                         .HasForeignKey("CompanyId", "CustomerId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.Infrastructure.CustomerAccount", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "FiscalCustomerId")
                         .HasPrincipalKey("CompanyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
 
@@ -3043,6 +3171,18 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasPrincipalKey("CompanyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.BranchDevice", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "BranchId", "PrinterDeviceId")
+                        .HasPrincipalKey("CompanyId", "BranchId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.Infrastructure.BranchDevice", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "BranchId", "ScaleDeviceId")
+                        .HasPrincipalKey("CompanyId", "BranchId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Carnicerias.Infrastructure.PriceList", b =>

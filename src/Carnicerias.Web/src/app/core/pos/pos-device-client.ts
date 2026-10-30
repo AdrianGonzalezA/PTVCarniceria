@@ -6,6 +6,7 @@ import { AuthorizedFiscalDocument } from '../sales/fiscal-document-client';
 interface DeviceBridge {
   readSerialScale(): Promise<{ readonly weightKg: number; readonly stable: boolean; readonly observedAtUtc: string }>;
   printSerialReceipt(request: ReceiptPayload): Promise<SerialPrintResult>;
+  printThermalReceipt?(request: ReceiptPayload): Promise<SerialPrintResult>;
   getDeviceAvailability?(): Promise<PosDeviceAvailability>;
   getHasarSaleAvailability?(): Promise<{ readonly port: string | null }>;
   printHasarSaleReceipt?(request: ReceiptPayload): Promise<HasarSalePrintResult>;
@@ -13,8 +14,8 @@ interface DeviceBridge {
 
 export interface PosDeviceAvailability {
   readonly scale: { readonly port: string; readonly baudRate: number } | null;
-  readonly printer: { readonly kind: 'text' | 'hasar'; readonly port: string;
-    readonly baudRate: number } | null;
+  readonly printer: { readonly kind: 'text' | 'hasar' | 'escpos'; readonly port: string;
+    readonly baudRate: number; readonly paperWidthMm?: 58 | 80 | null } | null;
 }
 
 const noDevices: PosDeviceAvailability = { scale: null, printer: null };
@@ -71,6 +72,10 @@ export class PosDeviceClient {
     if (devices.printer.kind === 'hasar') {
       if (!bridge.printHasarSaleReceipt) throw new Error('DEVICE_UNAVAILABLE');
       return bridge.printHasarSaleReceipt(payload);
+    }
+    if (devices.printer.kind === 'escpos') {
+      if (!bridge.printThermalReceipt) throw new Error('DEVICE_UNAVAILABLE');
+      return bridge.printThermalReceipt(payload);
     }
     return bridge.printSerialReceipt(payload);
   }

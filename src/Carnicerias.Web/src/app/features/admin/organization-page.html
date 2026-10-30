@@ -121,7 +121,7 @@
     }
 
     @if (selectedTerminalBranch(); as terminalBranch) {
-      @if (!terminalEditorOpen() && !deviceEditorTerminal() && !pendingAction()) {
+      @if (!terminalEditorOpen() && !deviceEditorTerminal() && !catalogEditorOpen() && !pendingAction()) {
       <app-admin-detail-dialog labelledBy="terminals-title"
         [canClose]="!terminalSaving() && !terminalActionId() && !shownCredential()" (closed)="closeTerminals()">
       <section class="category-panel terminals-panel" aria-labelledby="terminals-title" [attr.aria-busy]="terminalsLoading()">
@@ -133,6 +133,7 @@
           </div>
           <div class="header-actions">
             <button type="button" class="create-terminal-button" [disabled]="!terminalBranch.isActive || !selectedCompany()?.isActive" (click)="startCreateTerminal()">Nueva caja</button>
+            <button type="button" class="secondary-button catalog-button" (click)="catalogOpen() ? closeCatalog() : openCatalog()">{{ catalogOpen() ? 'Ocultar dispositivos' : 'Catálogo de dispositivos' }}</button>
             <button type="button" class="secondary-button" [disabled]="terminalSaving() || !!terminalActionId() || !!shownCredential()" (click)="closeTerminals()">Cerrar</button>
           </div>
         </header>
@@ -171,6 +172,37 @@
             </tbody>
           </table></div>
         }
+        @if (catalogOpen()) {
+          <section class="device-catalog" aria-labelledby="device-catalog-title">
+            <header class="panel-heading">
+              <div><h3 id="device-catalog-title">Dispositivos de la sucursal</h3>
+                <p>Configurá el controlador y el puerto una vez; después asigná el dispositivo a una caja.</p></div>
+              <button type="button" class="create-device-button" (click)="startCreateCatalogDevice()">Nuevo dispositivo</button>
+            </header>
+            @if (catalogError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+            @if (catalogLoading()) { <p role="status">Cargando dispositivos…</p> }
+            @else if (catalogDevices().length === 0) { <p>Aún no hay dispositivos.</p> }
+            @else {
+              <div class="table-wrap"><table>
+                <thead><tr><th>Nombre</th><th>Tipo</th><th>Controlador</th><th>Conexión</th><th>Estado</th><th>Acciones</th></tr></thead>
+                <tbody>
+                  @for (device of catalogDevices(); track device.id) {
+                    <tr class="catalog-device-row">
+                      <td>{{ device.name }}</td>
+                      <td>{{ device.type === 'scale' ? 'Balanza' : 'Impresora' }}</td>
+                      <td>{{ device.driver }}</td>
+                      <td>{{ device.port }} · {{ device.baudRate }}
+                        @if (device.paperWidthMm) { · {{ device.paperWidthMm }} mm }
+                      </td>
+                      <td>{{ device.isActive ? 'Activo' : 'Inactivo' }}</td>
+                      <td><button type="button" class="secondary-button" (click)="startEditCatalogDevice(device)">Editar</button></td>
+                    </tr>
+                  }
+                </tbody>
+              </table></div>
+            }
+          </section>
+        }
       </section>
       </app-admin-detail-dialog>
       }
@@ -196,46 +228,71 @@
           [canClose]="!devicesSaving()" (closed)="cancelDeviceEditor()">
           <form class="editor-form terminal-devices-form" [formGroup]="devicesForm" (ngSubmit)="saveDevices()">
             <h3 id="terminal-devices-title">Dispositivos · {{ terminal.name }}</h3>
-            <p>Solo se abrirán los puertos asignados a esta caja. «Ninguno» desactiva el dispositivo.</p>
-            <label for="device-scale-mode">Balanza</label>
-            <select id="device-scale-mode" formControlName="scaleMode">
-              <option value="none">Sin balanza</option>
-              <option value="serial">Balanza serial</option>
+            <p>Elegí dispositivos del catálogo de esta sucursal. Sin asignación, la caja no abre ese puerto.</p>
+            @if (catalogLoading()) { <p role="status">Cargando catálogo…</p> }
+            @if (catalogError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
+            <label for="device-scale-id">Balanza</label>
+            <select id="device-scale-id" formControlName="scaleDeviceId">
+              <option value="">Sin balanza</option>
+              @for (device of scaleDevices(); track device.id) {
+                <option [value]="device.id">{{ device.name }} · {{ device.port }}</option>
+              }
             </select>
-            @if (devicesForm.controls.scaleMode.value === 'serial') {
-              <label for="device-scale-port">Puerto de balanza</label>
-              <input id="device-scale-port" formControlName="scalePort" maxlength="6" placeholder="COM6" />
-              <label for="device-scale-baud">Velocidad de balanza</label>
-              <select id="device-scale-baud" formControlName="scaleBaudRate">
+            <label for="device-printer-id">Impresora</label>
+            <select id="device-printer-id" formControlName="printerDeviceId">
+              <option value="">Sin impresora</option>
+              @for (device of printerDevices(); track device.id) {
+                <option [value]="device.id">{{ device.name }} · {{ device.driver }} · {{ device.port }}</option>
+              }
+            </select>
+            @if (devicesError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
+            <div class="editor-actions">
+              <button type="submit" [disabled]="devicesSaving() || catalogLoading()">{{ devicesSaving() ? 'Guardando…' : 'Guardar asignación' }}</button>
+              <button type="button" class="secondary-button" [disabled]="devicesSaving()" (click)="cancelDeviceEditor()">Cancelar</button>
+            </div>
+          </form>
+        </app-admin-detail-dialog>
+      }
+      @if (catalogEditorOpen()) {
+        <app-admin-detail-dialog labelledBy="catalog-editor-title" [compact]="true"
+          [canClose]="!catalogSaving()" (closed)="cancelCatalogEditor()">
+          <form class="editor-form catalog-device-form" [formGroup]="catalogForm" (ngSubmit)="saveCatalogDevice()">
+            <h3 id="catalog-editor-title">{{ editingCatalogDevice() ? 'Editar dispositivo' : 'Nuevo dispositivo' }}</h3>
+            <label for="catalog-device-name">Nombre</label>
+            <input id="catalog-device-name" formControlName="name" maxlength="120" required />
+            <label for="catalog-device-type">Tipo</label>
+            <select id="catalog-device-type" formControlName="type" [disabled]="!!editingCatalogDevice()">
+              <option value="printer">Impresora</option><option value="scale">Balanza</option>
+            </select>
+            @if (catalogForm.controls.type.value === 'printer') {
+              <label for="catalog-device-driver">Controlador</label>
+              <select id="catalog-device-driver" formControlName="driver" [disabled]="!!editingCatalogDevice()">
+                <option value="escpos">Comandera ESC/POS</option>
+                <option value="text">Texto serial</option>
+                <option value="hasar">Hasar SMH/P-441F</option>
+              </select>
+            } @else { <p>Lectura de balanza serial.</p> }
+            <label for="catalog-device-port">Puerto COM</label>
+            <input id="catalog-device-port" formControlName="port" maxlength="6" placeholder="COM3" required />
+            @if (catalogForm.controls.driver.value !== 'hasar' || catalogForm.controls.type.value === 'scale') {
+              <label for="catalog-device-baud">Velocidad</label>
+              <select id="catalog-device-baud" formControlName="baudRate">
                 @for (baud of [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]; track baud) {
                   <option [ngValue]="baud">{{ baud }}</option>
                 }
               </select>
+            } @else { <p>Hasar usa 9600 baudios.</p> }
+            @if (catalogForm.controls.type.value === 'printer' && catalogForm.controls.driver.value === 'escpos') {
+              <label for="catalog-device-width">Ancho de papel</label>
+              <select id="catalog-device-width" formControlName="paperWidthMm">
+                <option [ngValue]="58">58 mm</option><option [ngValue]="80">80 mm</option>
+              </select>
             }
-            <label for="device-printer-kind">Impresora</label>
-            <select id="device-printer-kind" formControlName="printerKind">
-              <option value="none">Sin impresora</option>
-              <option value="text">Serial de texto</option>
-              <option value="hasar">Hasar SMH/P-441F</option>
-            </select>
-            @if (devicesForm.controls.printerKind.value !== 'none') {
-              <label for="device-printer-port">Puerto de impresora</label>
-              <input id="device-printer-port" formControlName="printerPort" maxlength="6" placeholder="COM8" />
-              @if (devicesForm.controls.printerKind.value === 'text') {
-                <label for="device-printer-baud">Velocidad de impresora</label>
-                <select id="device-printer-baud" formControlName="printerBaudRate">
-                  @for (baud of [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]; track baud) {
-                    <option [ngValue]="baud">{{ baud }}</option>
-                  }
-                </select>
-              } @else {
-                <p>Hasar usa 9600 baudios.</p>
-              }
-            }
-            @if (devicesError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
+            <label class="checkbox-row"><input type="checkbox" formControlName="isActive" /> Activo</label>
+            @if (catalogError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
             <div class="editor-actions">
-              <button type="submit" [disabled]="devicesSaving()">{{ devicesSaving() ? 'Guardando…' : 'Guardar dispositivos' }}</button>
-              <button type="button" class="secondary-button" [disabled]="devicesSaving()" (click)="cancelDeviceEditor()">Cancelar</button>
+              <button type="submit" [disabled]="catalogSaving()">{{ catalogSaving() ? 'Guardando…' : 'Guardar dispositivo' }}</button>
+              <button type="button" class="secondary-button" [disabled]="catalogSaving()" (click)="cancelCatalogEditor()">Cancelar</button>
             </div>
           </form>
         </app-admin-detail-dialog>

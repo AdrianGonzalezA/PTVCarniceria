@@ -12,7 +12,9 @@ public sealed class ConfirmedSale
         Guid? customerId = null, decimal accountChargeAmount = 0,
         string? customerCode = null, string? customerName = null,
         decimal creditAppliedAmount = 0, decimal discountAmount = 0,
-        string? discountReason = null, SaleDocumentChoice? documentChoice = null)
+        string? discountReason = null, SaleDocumentChoice? documentChoice = null,
+        Guid? fiscalCustomerId = null, string? fiscalCustomerCode = null,
+        string? purchaseOrderNumber = null)
     {
         if (posTerminalId == Guid.Empty)
             throw new ArgumentException("Terminal id cannot be empty.", nameof(posTerminalId));
@@ -29,6 +31,10 @@ public sealed class ConfirmedSale
             (discountAmount > 0 && (string.IsNullOrWhiteSpace(discountReason) ||
                 discountReason.Trim().Length is < 10 or > 200)))
             throw new ArgumentException("A discounted sale requires a valid amount and reason.");
+        if (fiscalCustomerId == Guid.Empty ||
+            (fiscalCustomerId is null) != string.IsNullOrWhiteSpace(fiscalCustomerCode) ||
+            fiscalCustomerCode?.Length > 80 || purchaseOrderNumber?.Trim().Length > 80)
+            throw new ArgumentException("Invalid fiscal customer or order reference.");
         Id = Guid.NewGuid();
         CompanyId = companyId;
         BranchId = branchId;
@@ -45,6 +51,10 @@ public sealed class ConfirmedSale
         CreditAppliedAmount = creditAppliedAmount;
         CustomerCode = customerCode;
         CustomerName = customerName;
+        FiscalCustomerId = fiscalCustomerId;
+        FiscalCustomerCode = fiscalCustomerCode?.Trim();
+        PurchaseOrderNumber = string.IsNullOrWhiteSpace(purchaseOrderNumber)
+            ? null : purchaseOrderNumber.Trim();
         DiscountAmount = discountAmount;
         DiscountReason = discountAmount > 0 ? discountReason?.Trim() : null;
         DocumentType = documentChoice?.Type ?? SaleDocumentType.NonFiscalTicket;
@@ -52,6 +62,8 @@ public sealed class ConfirmedSale
         RecipientName = documentChoice?.RecipientName;
         RecipientDocumentNumber = documentChoice?.RecipientDocumentNumber;
         RecipientAddress = documentChoice?.RecipientAddress;
+        RecipientLocality = documentChoice?.RecipientLocality;
+        RecipientProvince = documentChoice?.RecipientProvince;
     }
 
     public Guid Id { get; private set; }
@@ -70,6 +82,9 @@ public sealed class ConfirmedSale
     public decimal CreditAppliedAmount { get; private set; }
     public string? CustomerCode { get; private set; }
     public string? CustomerName { get; private set; }
+    public Guid? FiscalCustomerId { get; private set; }
+    public string? FiscalCustomerCode { get; private set; }
+    public string? PurchaseOrderNumber { get; private set; }
     public decimal DiscountAmount { get; private set; }
     public string? DiscountReason { get; private set; }
     public SaleDocumentType DocumentType { get; private set; }
@@ -77,6 +92,8 @@ public sealed class ConfirmedSale
     public string? RecipientName { get; private set; }
     public string? RecipientDocumentNumber { get; private set; }
     public string? RecipientAddress { get; private set; }
+    public string? RecipientLocality { get; private set; }
+    public string? RecipientProvince { get; private set; }
     public List<ConfirmedSaleLine> Lines { get; private set; } = [];
     public List<SalePayment> Payments { get; private set; } = [];
 }
@@ -87,8 +104,14 @@ public sealed class ConfirmedSaleLine
 
     public ConfirmedSaleLine(Guid companyId, Guid productId, string code, string name, string unit,
         ProductSaleMode saleMode, decimal quantity, decimal unitPrice,
-        Guid? inventoryPieceId = null, string? pieceIdentifier = null)
+        Guid? inventoryPieceId = null, string? pieceIdentifier = null, int? pieceCount = null)
     {
+        if (pieceCount is <= 0 or > 10000)
+            throw new ArgumentOutOfRangeException(nameof(pieceCount));
+        if ((saleMode == ProductSaleMode.Unit && pieceCount is not null) ||
+            (inventoryPieceId is not null && pieceCount is not null and not 1))
+            throw new ArgumentException("Physical piece count must match the sale mode and tracked piece.",
+                nameof(pieceCount));
         Id = Guid.NewGuid();
         CompanyId = companyId;
         ProductId = productId;
@@ -101,6 +124,7 @@ public sealed class ConfirmedSaleLine
         LineTotal = decimal.Round(quantity * unitPrice, 2, MidpointRounding.AwayFromZero);
         InventoryPieceId = inventoryPieceId;
         PieceIdentifier = pieceIdentifier;
+        PieceCount = pieceCount;
     }
 
     public Guid Id { get; private set; }
@@ -116,6 +140,7 @@ public sealed class ConfirmedSaleLine
     public decimal LineTotal { get; private set; }
     public Guid? InventoryPieceId { get; private set; }
     public string? PieceIdentifier { get; private set; }
+    public int? PieceCount { get; private set; }
     public decimal OrderDiscountAmount { get; private set; }
     public decimal? NetAfterDiscount { get; private set; }
     public Guid? TaxRuleId { get; private set; }

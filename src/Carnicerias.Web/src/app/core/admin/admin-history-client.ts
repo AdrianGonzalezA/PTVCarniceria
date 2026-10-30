@@ -62,6 +62,10 @@ export interface SaleDetail {
   readonly recipientName: string | null;
   readonly recipientDocumentNumber: string | null;
   readonly recipientAddress: string | null;
+  readonly recipientLocality?: string | null;
+  readonly recipientProvince?: string | null;
+  readonly fiscalCustomerCode?: string | null;
+  readonly purchaseOrderNumber?: string | null;
   readonly taxSnapshotStatus: 'legacy' | 'unconfigured' | 'complete';
   readonly taxableBase: number | null;
   readonly taxAmount: number | null;
@@ -75,6 +79,8 @@ export interface SaleDetail {
     readonly quantity: number;
     readonly unitPrice: number;
     readonly lineTotal: number;
+    readonly pieceIdentifier?: string | null;
+    readonly pieceCount?: number | null;
     readonly orderDiscountAmount: number;
     readonly netAfterDiscount: number | null;
     readonly taxTreatment: string | null;

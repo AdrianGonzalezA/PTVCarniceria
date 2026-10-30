@@ -71,6 +71,33 @@ describe('virtual receipt PDF content', () => {
     expect(html).toContain('Pieza 999002 · 0,750 kg');
   });
 
+  it('keeps physical pieces separate from kilograms in both receipt layouts', async () => {
+    const weighted = validateReceiptRequest({ ...validRequest,
+      lines: [{ code: '2546', name: 'Cortito', unit: 'kg', quantity: 1.5,
+        pieceCount: 2, unitPrice: 1600, lineTotal: 2400 }],
+    });
+    expect(createReceiptHtml(weighted)).toContain('2 piezas físicas · 1,500 kg');
+    const fiscal = {
+      saleId: 'sale-123', status: 'Authorized', total: 2400,
+      saleDocumentType: 'ElectronicInvoice', issuerCuit: '30710106513',
+      issuerName: 'Empresa de prueba', issuerAddress: 'Domicilio de prueba',
+      issuerIibb: '123456789', issuerActivityStartDate: '2020-01-15',
+      pointOfSale: 99, voucherType: 6, number: 3, issueDate: '2026-10-09',
+      receiverName: null, receiverAddress: null, receiverTaxStatus: 'finalConsumer',
+      receiverDocumentType: 99, receiverDocumentNumber: 0,
+      vatBreakdown: [{ ratePercent: 21, taxableBase: 1983.47, taxAmount: 416.53 }],
+      exemptAmount: 0, notTaxedAmount: 0,
+      cae: '86410975393203', caeExpiry: '2026-10-19',
+    };
+    const invoice = await createFiscalInvoiceHtml(validateReceiptRequest({ ...validRequest,
+      lines: weighted.lines, fiscal }));
+    expect(invoice).toContain('>Piezas</th>');
+    expect(invoice).toContain('>2</td>');
+    expect(invoice).toContain('1,500 kg');
+    expect(() => validateReceiptRequest({ ...validRequest,
+      lines: [{ ...validRequest.lines[0], pieceCount: 0 }] })).toThrow('piece count');
+  });
+
   it('escapes untrusted sale text and does not load remote assets', () => {
     const html = createReceiptHtml(validateReceiptRequest({
       ...validRequest, lines: [{ ...validRequest.lines[0], name: '<img src=x onerror=alert(1)>' }],
@@ -93,13 +120,18 @@ describe('virtual receipt PDF content', () => {
       exemptAmount: 0, notTaxedAmount: 0,
       cae: '86410975393203', caeExpiry: '2026-10-19',
     };
-    const receipt = validateReceiptRequest({ ...validRequest, fiscal });
+    const receipt = validateReceiptRequest({ ...validRequest, fiscal,
+      fiscalCustomerCode: 'CLI-100', recipientLocality: 'Córdoba',
+      recipientProvince: 'Córdoba', purchaseOrderNumber: 'OC-22' });
     const html = await createFiscalInvoiceHtml(receipt);
     expect(html).toContain('FACTURA B');
     expect(html).toContain('Código Nº 006');
     expect(html).toContain('00099-00000003');
     expect(html).toContain('IIBB: 123456789 | Inicio: 15/01/2020');
     expect(html).toContain('CAE: 86410975393203');
+    expect(html).toContain('CLI-100');
+    expect(html).toContain('OC-22');
+    expect(html).toContain('Córdoba');
     expect(html).toContain('IVA&nbsp;contenido');
     expect(html).toContain('data:image/png;base64,');
     expect(html).toContain('@page { size: A4;');

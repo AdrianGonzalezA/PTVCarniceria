@@ -135,6 +135,10 @@ public static class SaleDraftEndpoints
             if ((saleMode == ProductSaleMode.Unit && requestedLine.Quantity != decimal.Truncate(requestedLine.Quantity)) ||
                 (saleMode == ProductSaleMode.Weight && requestedLine.Quantity <= 0))
                 return Error(StatusCodes.Status400BadRequest, "INVALID_PRODUCT_QUANTITY");
+            if (requestedLine.PieceCount is <= 0 or > 10000 ||
+                (saleMode == ProductSaleMode.Unit && requestedLine.PieceCount is not null) ||
+                (requestedLine.InventoryPieceId is not null && requestedLine.PieceCount is not null and not 1))
+                return Error(StatusCodes.Status400BadRequest, "INVALID_PIECE_COUNT");
 
             InventoryPiece? piece = null;
             if (requestedLine.InventoryPieceId is Guid pieceId)
@@ -165,7 +169,8 @@ public static class SaleDraftEndpoints
                 existingLine?.ProductCode ?? product.Code,
                 existingLine?.ProductName ?? product.Name,
                 existingLine?.Unit ?? product.Unit, saleMode, requestedLine.Quantity, price,
-                piece?.Id, piece?.ExternalIdentifier));
+                piece?.Id, piece?.ExternalIdentifier,
+                piece is null ? requestedLine.PieceCount : 1));
         }
 
         var undiscountedTotal = lines.Sum(line => decimal.Round(line.Quantity * line.UnitPrice,
@@ -280,7 +285,7 @@ public static class SaleDraftEndpoints
             .Select(line => new SaleDraftLineResponse(
                 line.Id, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
                 line.SaleMode == ProductSaleMode.Weight ? "weight" : "unit", line.Quantity, line.UnitPrice,
-                line.InventoryPieceId, line.PieceIdentifier)).ToArray());
+                line.InventoryPieceId, line.PieceIdentifier, line.PieceCount)).ToArray());
 
     private static IResult Error(int statusCode, string code) => Results.Json(
         new Carnicerias.Api.Contracts.ErrorResponse(
@@ -289,11 +294,12 @@ public static class SaleDraftEndpoints
 
     private sealed record SaveSaleDraftRequest(Guid PriceListId, IReadOnlyList<SaveSaleDraftLineRequest> Lines,
         decimal DiscountAmount = 0, string? DiscountReason = null);
-    private sealed record SaveSaleDraftLineRequest(Guid ProductId, decimal Quantity, Guid? InventoryPieceId = null);
+    private sealed record SaveSaleDraftLineRequest(Guid ProductId, decimal Quantity,
+        Guid? InventoryPieceId = null, int? PieceCount = null);
     private sealed record SaleDraftResponse(Guid Id, string TicketSlot, Guid PriceListId, DateTimeOffset UpdatedAtUtc,
         decimal DiscountAmount, string? DiscountReason,
         IReadOnlyList<SaleDraftLineResponse> Lines);
     private sealed record SaleDraftLineResponse(Guid Id, Guid ProductId, string ProductCode, string ProductName,
         string Unit, string SaleMode, decimal Quantity, decimal UnitPrice,
-        Guid? InventoryPieceId, string? PieceIdentifier);
+        Guid? InventoryPieceId, string? PieceIdentifier, int? PieceCount);
 }

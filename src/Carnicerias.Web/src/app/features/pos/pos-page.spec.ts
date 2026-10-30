@@ -20,6 +20,7 @@ import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { AuthorizedFiscalDocument, FiscalDocumentClient } from '../../core/sales/fiscal-document-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { PosPage } from './pos-page';
+import { CreditCustomerClient } from '../../core/customers/credit-customer-client';
 import { POS_ELECTRON_MODE } from '../../core/pos/pos-electron-mode';
 
 describe('PosPage', () => {
@@ -141,6 +142,8 @@ describe('PosPage', () => {
         id: 'shift-id', openingCash: 0, openedAtUtc: '2026-10-06T15:00:00Z', closedAtUtc: null,
       }) } },
       { provide: InventoryPieceClient, useValue: { lookup: () => throwError(() => new HttpErrorResponse({ status: 404 })) } },
+      { provide: CreditCustomerClient, useValue: { searchFiscal: () => of([]),
+        search: () => of([]) } },
       { provide: FiscalDocumentClient, useValue: { issue: () => NEVER } },
       { provide: MercadoPagoClient, useValue: { get: () => of(null),
         start: () => NEVER, check: () => NEVER, cancel: () => NEVER } },
@@ -1039,7 +1042,7 @@ describe('PosPage', () => {
       context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
         branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
     };
-    let savedLines: readonly { productId: string; quantity: number }[] = [];
+    let savedLines: readonly { productId: string; quantity: number; pieceCount?: number }[] = [];
     TestBed.configureTestingModule({ providers: [
       provideRouter([]),
       { provide: SessionClient, useValue: { current: () => of(session) } },
@@ -1056,12 +1059,13 @@ describe('PosPage', () => {
       { provide: SaleDraftClient, useValue: {
         list: () => of([]),
         current: () => of(null),
-        save: (_: string, lines: readonly { productId: string; quantity: number }[]) => {
+        save: (_: string, lines: readonly { productId: string; quantity: number; pieceCount?: number }[]) => {
           savedLines = lines;
           return of({ id: 'draft-id', priceListId: 'list-id', updatedAtUtc: '2026-10-06T16:00:00Z',
             lines: lines.map((line) => ({ productId: line.productId, productCode: line.productId,
               productName: line.productId, unit: line.productId === 'weight-id' ? 'kg' : 'paquete',
-              saleMode: line.productId === 'weight-id' ? 'weight' : 'unit', quantity: line.quantity, unitPrice: 1000 })) });
+              saleMode: line.productId === 'weight-id' ? 'weight' : 'unit', quantity: line.quantity,
+              pieceCount: line.pieceCount, unitPrice: 1000 })) });
         },
       } },
       { provide: InventoryClient, useValue: { stock: () => of([
@@ -1080,10 +1084,14 @@ describe('PosPage', () => {
     let quantity = fixture.nativeElement.querySelector('#product-quantity') as HTMLInputElement;
     quantity.value = '0.25';
     quantity.dispatchEvent(new Event('input', { bubbles: true }));
+    const pieces = fixture.nativeElement.querySelector('#product-piece-count') as HTMLInputElement;
+    pieces.value = '2';
+    pieces.dispatchEvent(new Event('input', { bubbles: true }));
     fixture.detectChanges();
     (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
-    expect(savedLines).toEqual([{ productId: 'weight-id', quantity: 0.25 }]);
+    expect(savedLines).toEqual([{ productId: 'weight-id', quantity: 0.25, pieceCount: 2 }]);
+    expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('2 piezas');
 
     (fixture.nativeElement.querySelectorAll('.product-card')[1] as HTMLButtonElement).click();
     fixture.detectChanges();
@@ -1099,7 +1107,7 @@ describe('PosPage', () => {
     quantity.dispatchEvent(new Event('input', { bubbles: true }));
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.pos-dialog [role="alert"]').textContent).toContain('entera');
-    expect(savedLines).toEqual([{ productId: 'weight-id', quantity: 0.25 }]);
+    expect(savedLines).toEqual([{ productId: 'weight-id', quantity: 0.25, pieceCount: 2 }]);
   });
 
   it('removes a rejected addition when stock changed after the catalog loaded', async () => {

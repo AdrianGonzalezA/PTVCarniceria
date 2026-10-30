@@ -39,12 +39,10 @@ public static class AdminCustomerEndpoints
         }
 
         var totalItems = await query.LongCountAsync(cancellationToken);
-        var items = await query.OrderBy(customer => customer.Name).ThenBy(customer => customer.Id)
+        var customers = await query.OrderBy(customer => customer.Name).ThenBy(customer => customer.Id)
             .Skip((page - 1) * pageSize).Take(pageSize)
-            .Select(customer => new CustomerResponse(customer.Id, customer.Code, customer.Name,
-                customer.IsActive, customer.CreditEnabled))
             .ToArrayAsync(cancellationToken);
-        return Results.Ok(new CustomerPage(items, page, pageSize, totalItems,
+        return Results.Ok(new CustomerPage(customers.Select(ToResponse).ToArray(), page, pageSize, totalItems,
             totalItems == 0 ? 0 : (totalItems - 1) / pageSize + 1));
     }
 
@@ -58,6 +56,15 @@ public static class AdminCustomerEndpoints
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var customer = new CustomerAccount(accessor.Context.CompanyId, request.Code, request.Name);
+        if (HasFiscalValues(request.FiscalTaxStatus, request.FiscalDocumentNumber,
+                request.FiscalAddress, request.FiscalLocality, request.FiscalProvince))
+        {
+            if (!TryFiscalStatus(request.FiscalTaxStatus, out var status))
+                return Error(StatusCodes.Status400BadRequest, "FISCAL_PROFILE_INVALID");
+            try { customer.UpdateFiscalProfile(status, request.FiscalDocumentNumber,
+                request.FiscalAddress, request.FiscalLocality, request.FiscalProvince); }
+            catch (ArgumentException) { return Error(StatusCodes.Status400BadRequest, "FISCAL_PROFILE_INVALID"); }
+        }
         db.CustomerAccounts.Add(customer);
         try
         {
@@ -77,7 +84,10 @@ public static class AdminCustomerEndpoints
     {
         if (!AllowedOrigin(httpContext)) return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
         if (customerId == Guid.Empty || request is null ||
-            (request.Code is null && request.Name is null && request.IsActive is null && request.CreditEnabled is null) ||
+            (request.Code is null && request.Name is null && request.IsActive is null &&
+             request.CreditEnabled is null && !request.ClearFiscalProfile &&
+             !HasFiscalValues(request.FiscalTaxStatus, request.FiscalDocumentNumber,
+                 request.FiscalAddress, request.FiscalLocality, request.FiscalProvince)) ||
             (request.Code is not null && !ValidCode(request.Code)) ||
             (request.Name is not null && !ValidName(request.Name)))
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
@@ -88,6 +98,22 @@ public static class AdminCustomerEndpoints
 
         if (request.Code is not null || request.Name is not null)
             customer.UpdateDetails(request.Code ?? customer.Code, request.Name ?? customer.Name);
+        if (request.ClearFiscalProfile)
+        {
+            if (HasFiscalValues(request.FiscalTaxStatus, request.FiscalDocumentNumber,
+                    request.FiscalAddress, request.FiscalLocality, request.FiscalProvince))
+                return Error(StatusCodes.Status400BadRequest, "FISCAL_PROFILE_INVALID");
+            customer.UpdateFiscalProfile(null, null, null, null, null);
+        }
+        else if (HasFiscalValues(request.FiscalTaxStatus, request.FiscalDocumentNumber,
+                     request.FiscalAddress, request.FiscalLocality, request.FiscalProvince))
+        {
+            if (!TryFiscalStatus(request.FiscalTaxStatus, out var status))
+                return Error(StatusCodes.Status400BadRequest, "FISCAL_PROFILE_INVALID");
+            try { customer.UpdateFiscalProfile(status, request.FiscalDocumentNumber,
+                request.FiscalAddress, request.FiscalLocality, request.FiscalProvince); }
+            catch (ArgumentException) { return Error(StatusCodes.Status400BadRequest, "FISCAL_PROFILE_INVALID"); }
+        }
         if (request.IsActive is bool active)
         {
             if (active) customer.Activate();
@@ -113,7 +139,32 @@ public static class AdminCustomerEndpoints
     }
 
     private static CustomerResponse ToResponse(CustomerAccount customer) =>
-        new(customer.Id, customer.Code, customer.Name, customer.IsActive, customer.CreditEnabled);
+        new(customer.Id, customer.Code, customer.Name, customer.IsActive, customer.CreditEnabled,
+            customer.FiscalTaxStatus switch
+            {
+                SaleRecipientTaxStatus.FinalConsumer => "finalConsumer",
+                SaleRecipientTaxStatus.Registered => "registered",
+                SaleRecipientTaxStatus.SmallTaxpayer => "smallTaxpayer",
+                SaleRecipientTaxStatus.Exempt => "exempt",
+                _ => null
+            }, customer.FiscalDocumentNumber, customer.FiscalAddress,
+            customer.FiscalLocality, customer.FiscalProvince);
+
+    private static bool HasFiscalValues(params string?[] values) =>
+        values.Any(value => value is not null);
+
+    private static bool TryFiscalStatus(string? value, out SaleRecipientTaxStatus status)
+    {
+        status = value switch
+        {
+            "finalConsumer" => SaleRecipientTaxStatus.FinalConsumer,
+            "registered" => SaleRecipientTaxStatus.Registered,
+            "smallTaxpayer" => SaleRecipientTaxStatus.SmallTaxpayer,
+            "exempt" => SaleRecipientTaxStatus.Exempt,
+            _ => (SaleRecipientTaxStatus)(-1)
+        };
+        return Enum.IsDefined(status);
+    }
 
     private static bool ValidDetails(string? code, string? name) => ValidCode(code) && ValidName(name);
     private static bool ValidCode(string? code) =>
@@ -134,9 +185,16 @@ public static class AdminCustomerEndpoints
     private static IResult Error(int statusCode, string code) => Results.Json(
         new ErrorResponse(new ApiError(code, "No se pudo completar la solicitud", [])), statusCode: statusCode);
 
-    private sealed record CustomerCreateRequest(string Code, string Name);
-    private sealed record CustomerUpdateRequest(string? Code, string? Name, bool? IsActive, bool? CreditEnabled);
-    private sealed record CustomerResponse(Guid Id, string Code, string Name, bool IsActive, bool CreditEnabled);
+    private sealed record CustomerCreateRequest(string Code, string Name,
+        string? FiscalTaxStatus = null, string? FiscalDocumentNumber = null,
+        string? FiscalAddress = null, string? FiscalLocality = null, string? FiscalProvince = null);
+    private sealed record CustomerUpdateRequest(string? Code, string? Name, bool? IsActive, bool? CreditEnabled,
+        string? FiscalTaxStatus = null, string? FiscalDocumentNumber = null,
+        string? FiscalAddress = null, string? FiscalLocality = null, string? FiscalProvince = null,
+        bool ClearFiscalProfile = false);
+    private sealed record CustomerResponse(Guid Id, string Code, string Name, bool IsActive, bool CreditEnabled,
+        string? FiscalTaxStatus, string? FiscalDocumentNumber, string? FiscalAddress,
+        string? FiscalLocality, string? FiscalProvince);
     private sealed record CustomerPage(IReadOnlyList<CustomerResponse> Items, int Page, int PageSize,
         long TotalItems, long TotalPages);
 }

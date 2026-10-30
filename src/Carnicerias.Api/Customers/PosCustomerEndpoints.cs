@@ -15,6 +15,8 @@ public static class PosCustomerEndpoints
             .RequireOperationalPermission(PlatformPermissionCatalog.PosAccountCharge);
         endpoints.MapGet("/api/customers/account-options", AccountOptionsAsync)
             .RequireOperationalPermission(PlatformPermissionCatalog.PosAccountCharge);
+        endpoints.MapGet("/api/customers/fiscal-options", FiscalOptionsAsync)
+            .RequireOperationalContext();
         endpoints.MapGet("/api/customers/{customerId:guid}/account", AccountAsync)
             .RequireOperationalPermission(PlatformPermissionCatalog.PosAccountCharge);
         return endpoints;
@@ -111,12 +113,48 @@ public static class PosCustomerEndpoints
         return Results.Ok(options);
     }
 
+    private static async Task<IResult> FiscalOptionsAsync(
+        PlatformAccessDbContext db, OperationalContextAccessor accessor,
+        CancellationToken cancellationToken, string? search = null)
+    {
+        if ((search?.Length ?? 0) > 100)
+            return Results.Json(new ErrorResponse(new ApiError("VALIDATION_ERROR",
+                "No se pudo completar la solicitud", [])), statusCode: StatusCodes.Status400BadRequest);
+        var query = db.CustomerAccounts.AsNoTracking().Where(customer =>
+            customer.CompanyId == accessor.Context.CompanyId && customer.IsActive &&
+            customer.FiscalTaxStatus != null);
+        var normalized = search?.Trim().Normalize(NormalizationForm.FormKC);
+        if (!string.IsNullOrEmpty(normalized))
+        {
+            var pattern = $"%{EscapeLike(normalized)}%";
+            query = query.Where(customer => EF.Functions.ILike(customer.Code, pattern, "\\") ||
+                EF.Functions.ILike(customer.Name, pattern, "\\") ||
+                (customer.FiscalDocumentNumber != null &&
+                 EF.Functions.ILike(customer.FiscalDocumentNumber, pattern, "\\")));
+        }
+        var rows = await query.OrderBy(customer => customer.Name).ThenBy(customer => customer.Id)
+            .Take(20).ToArrayAsync(cancellationToken);
+        return Results.Ok(rows.Select(customer => new FiscalCustomerOption(customer.Id,
+            customer.Code, customer.Name, customer.FiscalTaxStatus switch
+            {
+                SaleRecipientTaxStatus.FinalConsumer => "finalConsumer",
+                SaleRecipientTaxStatus.Registered => "registered",
+                SaleRecipientTaxStatus.SmallTaxpayer => "smallTaxpayer",
+                SaleRecipientTaxStatus.Exempt => "exempt",
+                _ => throw new InvalidOperationException("Unknown customer tax status")
+            }, customer.FiscalDocumentNumber, customer.FiscalAddress,
+            customer.FiscalLocality, customer.FiscalProvince)).ToArray());
+    }
+
     private static string EscapeLike(string value) =>
         value.Replace("\\", "\\\\", StringComparison.Ordinal)
             .Replace("%", "\\%", StringComparison.Ordinal)
             .Replace("_", "\\_", StringComparison.Ordinal);
 
     private sealed record CustomerOption(Guid Id, string Code, string Name);
+    private sealed record FiscalCustomerOption(Guid Id, string Code, string Name,
+        string FiscalTaxStatus, string? FiscalDocumentNumber, string? FiscalAddress,
+        string? FiscalLocality, string? FiscalProvince);
     private sealed record AccountSale(Guid SaleId, DateTimeOffset ChargedAtUtc,
         decimal OriginalAmount, decimal OutstandingAmount);
     private sealed record CustomerAccountResponse(Guid CustomerId, string CustomerCode, string CustomerName,

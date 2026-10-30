@@ -2,7 +2,8 @@ import type { SerialDeviceConfig } from './deployment-config';
 import { SerialScale, type ScaleReading } from './serial-scale';
 
 export interface AssignedPrinter extends SerialDeviceConfig {
-  readonly kind: 'text' | 'hasar';
+  readonly kind: 'text' | 'hasar' | 'escpos';
+  readonly paperWidthMm?: 58 | 80 | null;
 }
 
 export interface AssignedDevices {
@@ -36,10 +37,13 @@ export function parseAssignedDevices(value: unknown): AssignedDevices {
   if (devices.printer !== null) {
     const input = record(devices.printer);
     const setting = serial(input);
-    if ((input.kind !== 'text' && input.kind !== 'hasar') ||
-        (input.kind === 'hasar' && setting.baudRate !== 9600))
+    if ((input.kind !== 'text' && input.kind !== 'hasar' && input.kind !== 'escpos') ||
+        (input.kind === 'hasar' && setting.baudRate !== 9600) ||
+        (input.kind === 'escpos' ? ![58, 80].includes(Number(input.paperWidthMm))
+          : input.paperWidthMm != null))
       throw new Error('POS_DEVICE_CONFIG_INVALID');
-    printer = { ...setting, kind: input.kind };
+    printer = { ...setting, kind: input.kind,
+      ...(input.kind === 'escpos' ? { paperWidthMm: input.paperWidthMm as 58 | 80 } : {}) };
   }
   if (scale && printer && scale.port === printer.port)
     throw new Error('POS_DEVICE_CONFIG_INVALID');
@@ -97,6 +101,11 @@ export class TerminalDevices {
   hasarPrinter(): SerialDeviceConfig {
     if (this.settings.printer?.kind !== 'hasar') throw new Error('HASAR_PRINTER_NOT_CONFIGURED');
     return this.settings.printer;
+  }
+
+  escPosPrinter(): AssignedPrinter & { readonly paperWidthMm: 58 | 80 } {
+    if (this.settings.printer?.kind !== 'escpos') throw new Error('THERMAL_PRINTER_NOT_CONFIGURED');
+    return this.settings.printer as AssignedPrinter & { readonly paperWidthMm: 58 | 80 };
   }
 
   async stop(): Promise<void> { await this.apply(noDevices); }

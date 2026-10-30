@@ -14,14 +14,15 @@ Si administración deshabilita la lista seleccionada y el ticket está vacío, l
 
 Podés elegir una categoría, buscar por nombre/código o escribir/leer un código en **Producto / lector**. El campo vuelve a quedar disponible para nuevas lecturas durante la operación. Al elegir un artículo se abre una ventana donde se ingresa:
 
-- **Peso en kilogramos**, hasta tres decimales, si el artículo se vende por peso. Puede escribirse manualmente o usarse **Leer balanza COM6** cuando hay una balanza serial configurada y una lectura estable reciente.
+- **Peso en kilogramos**, hasta tres decimales, si el artículo se vende por peso. Puede escribirse manualmente o usarse **Leer balanza** cuando hay una balanza serial asignada y una lectura estable reciente.
+- **Piezas físicas**, opcional para artículos por peso. Es un entero independiente de los kilogramos; si no se conoce, dejalo vacío. Una pieza trazable leída del código registra una pieza automáticamente.
 - **Cantidad entera** si el artículo se vende por unidad. La modalidad y la unidad se definen en el catálogo, no al cobrar.
 
 El POS compara la cantidad con el disponible y avisa **Stock insuficiente** antes de agregar. Si el stock cambia mientras se guarda, el servidor puede rechazar la modificación y el POS vuelve al último detalle efectivamente guardado. Esperá el estado **Borrador guardado**; ante un error usá **Reintentar**.
 
 ## Piezas trazables
 
-Una etiqueta de pieza previamente recibida en la sucursal puede identificar el artículo y traer su peso. Al leerla, el POS presenta la pieza y los kilos de la etiqueta; ese peso queda fijo. Cada pieza ocupa **un renglón separado**, aun si dos piezas pertenecen al mismo artículo. El identificador de pieza aparece también en el detalle del comprobante de prueba.
+Una etiqueta de pieza previamente recibida en la sucursal puede identificar el artículo y traer su peso. Al leerla, el POS presenta la pieza y los kilos de la etiqueta; ese peso queda fijo. Cada pieza ocupa **un renglón separado**, aun si dos piezas pertenecen al mismo artículo. El identificador y la cantidad física de una pieza aparecen también en el comprobante, separados del peso.
 
 La lectura en venta **no crea stock**. La pieza debe haber ingresado antes por **Negocio → Recepción de piezas**. Un código no reconocido o una pieza ya usada se rechaza. El saldo físico se administra por artículo; la trazabilidad individual todavía tiene límites descritos en [06 · Límites](06-limites-y-problemas-frecuentes.md).
 

@@ -156,6 +156,7 @@ app.MapAdminArcaSettingsEndpoints();
 app.MapAdminMercadoPagoSettingsEndpoints();
 app.MapAdminCloverOAuthEndpoints();
 app.MapAdminTerminalEndpoints();
+app.MapAdminBranchDeviceEndpoints();
 app.MapAdminHistoryEndpoints();
 app.MapAdminCustomerEndpoints();
 app.MapAdminExcelImportEndpoints();

@@ -9,13 +9,15 @@ public enum SaleRecipientTaxStatus { FinalConsumer, Registered, SmallTaxpayer, E
 // This records what was requested at checkout; it is not proof that a fiscal document was issued.
 public sealed record SaleDocumentChoice(
     SaleDocumentType Type, SaleRecipientTaxStatus RecipientTaxStatus,
-    string? RecipientName, string? RecipientDocumentNumber, string? RecipientAddress)
+    string? RecipientName, string? RecipientDocumentNumber, string? RecipientAddress,
+    string? RecipientLocality = null, string? RecipientProvince = null)
 {
     // ARCA's published identification threshold for final consumers, checked again before issuance.
     public const decimal FinalConsumerIdentificationThreshold = 10_000_000m;
 
     public static SaleDocumentChoice Create(string? type, string? taxStatus, string? name,
-        string? documentNumber, string? address, decimal saleTotal)
+        string? documentNumber, string? address, decimal saleTotal,
+        string? locality = null, string? province = null)
     {
         var documentType = type switch
         {
@@ -38,11 +40,14 @@ public sealed record SaleDocumentChoice(
 
         var normalizedName = Normalize(name);
         var normalizedAddress = Normalize(address);
+        var normalizedLocality = Normalize(locality);
+        var normalizedProvince = Normalize(province);
         var digits = documentNumber is null ? null : new string(documentNumber.Where(char.IsAsciiDigit).ToArray());
         if (documentNumber is not null && documentNumber.Any(character =>
                 !char.IsAsciiDigit(character) && character is not '-' and not ' '))
             throw new ArgumentException("Invalid recipient document number.", nameof(documentNumber));
-        if (normalizedName?.Length > 200 || normalizedAddress?.Length > 200)
+        if (normalizedName?.Length > 200 || normalizedAddress?.Length > 200 ||
+            normalizedLocality?.Length > 100 || normalizedProvince?.Length > 100)
             throw new ArgumentException("Recipient details are too long.");
 
         if (recipientTaxStatus != SaleRecipientTaxStatus.FinalConsumer)
@@ -57,7 +62,8 @@ public sealed record SaleDocumentChoice(
             throw new ArgumentException("Final consumer identification is required for this amount.");
 
         return new(documentType, recipientTaxStatus, normalizedName,
-            string.IsNullOrEmpty(digits) ? null : digits, normalizedAddress);
+            string.IsNullOrEmpty(digits) ? null : digits, normalizedAddress,
+            normalizedLocality, normalizedProvince);
     }
 
     private static string? Normalize(string? value) =>

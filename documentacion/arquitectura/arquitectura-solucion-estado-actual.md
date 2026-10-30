@@ -1,6 +1,6 @@
 # Arquitectura de la solución Carnicerías — estado actual
 
-**Corte:** 19/10/2026. **Audiencia:** desarrollo, implementación y quien genere diagramas o documentación derivada. **Carácter:** descripción del software existente y de la topología aprobada; no certifica aptitud productiva.
+**Corte:** 30/10/2026. **Audiencia:** desarrollo, implementación y quien genere diagramas o documentación derivada. **Carácter:** descripción del software existente y de la topología aprobada; no certifica aptitud productiva.
 
 Para metodología, versiones, conexiones, credenciales y fronteras de seguridad, ver el [anexo técnico](anexo-tecnico-metodologia-conectividad-seguridad.md).
 
@@ -88,7 +88,7 @@ El navegador del administrador local y Electron consumen la misma API de sucursa
 | Electron → API POS | HTTP(S) `/api/*` por LAN; destino por `pos-config.json` | Sesión de cajero + credencial de terminal local protegida; alcance de empresa/sucursal/caja validado por servidor. | Sin API/LAN no hay confirmación offline. Solo se recuperan borradores ya persistidos. |
 | Navegador admin → API POS | Mismo origen del sitio publicado, `/api/*` | Sesión y permisos locales. | La administración no accede directamente a PostgreSQL. |
 | API POS → PostgreSQL local | Npgsql/EF Core | Cadena configurada fuera de Git; acceso exclusivo del servidor. | No se confirma venta si no se puede persistir la transacción. |
-| Electron → COM/descargas locales | IPC a proceso principal de Electron | Solo dispositivos asignados a esa caja: balanza serial, impresora de texto o Hasar de laboratorio; PDF en la PC. | Una falla de impresión posterior no deshace una venta confirmada. Sin dispositivo asignado no se abre COM. |
+| Electron → COM/descargas locales | IPC a proceso principal de Electron | Solo dispositivos del catálogo de sucursal asignados a esa caja: balanza serial, texto serial, ESC/POS 58/80 mm o Hasar de laboratorio; PDF en la PC. | Una falla de impresión posterior no deshace una venta confirmada. Sin dispositivo asignado no se abre COM. |
 | Web central → API central | HTTP(S) `/api/v1/*` | Cookie/sesión central, separada de la local. | No afecta operación de sucursal. |
 | API central → datos centrales | EF Core, esquema `central_access` | Solo identidades, auditoría, instalaciones, destinos y credenciales cifradas centrales. | No lee tablas POS como atajo para el dashboard. |
 | API central → API sucursal | `GET /api/central/v1/installation` y `/summary` | Bearer de servicio específico; tres IDs remotos fijos y verificados, destino/IP aprobados. | Si una sucursal no responde, dashboard incompleto; no se presenta un parcial como total general. |
@@ -102,9 +102,9 @@ El navegador del administrador local y Electron consumen la misma API de sucursa
 
 | Esquema actual | Propiedad funcional de los datos |
 | --- | --- |
-| `platform_access` | Empresas, sucursales, usuarios, roles/permisos, sesiones, terminales y configuración/vínculo local con central. |
+| `platform_access` | Empresas, sucursales, usuarios, roles/permisos, sesiones, catálogo de dispositivos por sucursal, asignación a terminales y configuración/vínculo local con central. |
 | `catalog_pricing` | Categorías, artículos y códigos alternativos, costos con vigencia, listas/precios, impuestos y cargas de catálogo. |
-| `customers_credit` | Clientes, cuenta corriente, cargos, recibos, aplicaciones y correcciones. |
+| `customers_credit` | Clientes y ficha fiscal opcional, cuenta corriente, cargos, recibos, aplicaciones y correcciones. |
 | `pos_sales` | Borradores A/B/C/D, renglones, ventas confirmadas y comprobantes fiscales. |
 | `payments_cash` | Turnos, medios e intenciones de pago, movimientos de caja y configuración de pasarelas. |
 | `inventory` | Existencias agregadas y movimientos por artículo/sucursal, perfiles de código y piezas trazables recibidas. |
@@ -121,7 +121,7 @@ Implementación aprovisiona empresa/sucursal, caja y su credencial. Cada perfil 
 ### 7.2 Venta, borradores, stock y caja
 
 1. El cajero arma hasta cuatro tickets A/B/C/D alternables. Cada borrador guardado queda en PostgreSQL asociado al contexto de caja/cajero/turno y puede recuperarse tras reiniciar Electron; una edición que todavía no llegó al servidor no tiene garantía de recuperación.
-2. La API valida artículo, unidad de venta, precio vigente, lista habilitada y disponibilidad. Las líneas de piezas trazables se mantienen separadas; la disponibilidad del stock se calcula considerando reservas de borradores. Cancelar un borrador libera su reserva.
+2. La API valida artículo, unidad de venta, precio vigente, lista habilitada y disponibilidad. Las líneas de piezas trazables se mantienen separadas; cada una conserva sus kilos y una pieza física. En una carga manual por peso, el conteo físico es opcional e independiente de los kilos. La disponibilidad del stock se calcula considerando reservas de borradores. Cancelar un borrador libera su reserva.
 3. Al cobrar, la API comprueba turno abierto, permisos, montos/medios de pago, crédito de cliente y, cuando corresponde, intención externa aprobada. La confirmación se ejecuta en transacción serializable: venta y líneas, pago/movimiento de caja, cargo de cuenta corriente si aplica, descuento/movimiento de stock, liberación de reserva y estado del borrador se confirman juntos.
 4. Reintentar la misma confirmación con la misma solicitud es idempotente; una repetición incongruente se rechaza. Una falla de persistencia conserva el detalle para reintentar y no debe presentarse como venta terminada.
 5. Tras el commit, se tramita por separado la emisión ARCA elegida y/o la impresión/descarga del comprobante. Una falla externa se diagnostica y reintenta sin duplicar la venta. El cierre de turno concilia importes por cajero/caja/turno.

@@ -5,7 +5,8 @@ import { Router, RouterLink } from '@angular/router';
 import { AdminAreaTabs } from './admin-area-tabs';
 import { AdminDetailDialog } from './admin-detail-dialog';
 import { AdminExcelImportActions } from './admin-excel-import-actions';
-import { AdminCustomer, AdminCustomerClient, AdminCustomerPage } from '../../core/admin/admin-customer-client';
+import { AdminCustomer, AdminCustomerClient, AdminCustomerFiscalProfile,
+  AdminCustomerPage } from '../../core/admin/admin-customer-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 
 @Component({
@@ -23,6 +24,11 @@ export class CustomersPage implements OnInit {
   protected readonly editorForm = this.formBuilder.nonNullable.group({
     code: ['', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(80)]],
     name: ['', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(200)]],
+    fiscalTaxStatus: [''],
+    fiscalDocumentNumber: ['', [Validators.maxLength(20)]],
+    fiscalAddress: ['', [Validators.maxLength(200)]],
+    fiscalLocality: ['', [Validators.maxLength(100)]],
+    fiscalProvince: ['', [Validators.maxLength(100)]],
   });
   protected readonly session = signal<CurrentSession | null>(null);
   protected readonly pageData = signal<AdminCustomerPage | null>(null);
@@ -77,7 +83,8 @@ export class CustomersPage implements OnInit {
 
   protected startCreate(): void {
     this.editingId.set(null);
-    this.editorForm.reset({ code: '', name: '' });
+    this.editorForm.reset({ code: '', name: '', fiscalTaxStatus: '', fiscalDocumentNumber: '',
+      fiscalAddress: '', fiscalLocality: '', fiscalProvince: '' });
     this.actionMessage.set(null);
     this.actionError.set(null);
     this.editorOpen.set(true);
@@ -85,7 +92,12 @@ export class CustomersPage implements OnInit {
 
   protected startEdit(customer: AdminCustomer): void {
     this.editingId.set(customer.id);
-    this.editorForm.reset({ code: customer.code, name: customer.name });
+    this.editorForm.reset({ code: customer.code, name: customer.name,
+      fiscalTaxStatus: customer.fiscalTaxStatus ?? '',
+      fiscalDocumentNumber: customer.fiscalDocumentNumber ?? '',
+      fiscalAddress: customer.fiscalAddress ?? '',
+      fiscalLocality: customer.fiscalLocality ?? '',
+      fiscalProvince: customer.fiscalProvince ?? '' });
     this.actionMessage.set(null);
     this.actionError.set(null);
     this.editorOpen.set(true);
@@ -100,16 +112,37 @@ export class CustomersPage implements OnInit {
   protected save(): void {
     const code = this.editorForm.controls.code.value.trim();
     const name = this.editorForm.controls.name.value.trim();
+    const fiscalTaxStatus = this.editorForm.controls.fiscalTaxStatus.value;
+    const fiscalDocumentNumber = this.editorForm.controls.fiscalDocumentNumber.value.trim();
+    const fiscalAddress = this.editorForm.controls.fiscalAddress.value.trim();
+    const fiscalLocality = this.editorForm.controls.fiscalLocality.value.trim();
+    const fiscalProvince = this.editorForm.controls.fiscalProvince.value.trim();
     if (!code || !name || this.editorForm.invalid || this.isSaving()) {
       this.editorForm.markAllAsTouched();
       return;
     }
+    if (fiscalTaxStatus && !['finalConsumer', 'registered', 'smallTaxpayer', 'exempt'].includes(fiscalTaxStatus)) {
+      this.actionError.set('Elegí una condición IVA válida.');
+      return;
+    }
+    if ((!fiscalTaxStatus && (fiscalDocumentNumber || fiscalAddress || fiscalLocality || fiscalProvince)) ||
+        (fiscalTaxStatus && fiscalTaxStatus !== 'finalConsumer' &&
+         (!fiscalDocumentNumber || !fiscalAddress))) {
+      this.actionError.set('Para una ficha fiscal identificada, indicá condición IVA, CUIT y domicilio.');
+      return;
+    }
+    const fiscal = fiscalTaxStatus ? {
+      fiscalTaxStatus: fiscalTaxStatus as AdminCustomerFiscalProfile['fiscalTaxStatus'],
+      fiscalDocumentNumber, fiscalAddress, fiscalLocality, fiscalProvince,
+    } : undefined;
 
     this.isSaving.set(true);
     this.actionError.set(null);
     this.actionMessage.set(null);
     const id = this.editingId();
-    const operation = id ? this.customers.update(id, { code, name }) : this.customers.create(code, name);
+    const operation = id ? this.customers.update(id, { code, name, ...fiscal,
+      ...(!fiscal && this.pageData()?.items.some((item) => item.id === id && item.fiscalTaxStatus)
+        ? { clearFiscalProfile: true } : {}) }) : this.customers.create(code, name, fiscal);
     operation.subscribe({
       next: (customer) => {
         this.isSaving.set(false);
@@ -176,7 +209,7 @@ export class CustomersPage implements OnInit {
   private errorMessage(error: HttpErrorResponse): string {
     if (error.status === 409) return 'El código ya existe o el cliente no admite esa acción.';
     if (error.status === 401 || error.status === 403) return 'La sesión no tiene permiso para modificar clientes.';
-    if (error.status === 400) return 'Revisá el código y el nombre del cliente.';
+    if (error.status === 400) return 'Revisá el código, el nombre y la ficha fiscal del cliente.';
     return 'No se pudo guardar el cambio. Intentá de nuevo.';
   }
 

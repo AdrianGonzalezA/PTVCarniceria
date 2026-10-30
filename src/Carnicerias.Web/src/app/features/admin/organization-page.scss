@@ -32,9 +32,12 @@
 .field-error { margin: 0; color: var(--admin-org-error); }
 .secondary-button { color: var(--admin-org-ink); background: var(--admin-org-control); border-color: var(--admin-org-control-border); }
 .editor-form { max-width: 40rem; }
-.terminal-devices-form select { box-sizing: border-box; width: 100%; min-height: 2.75rem; padding: .625rem .75rem; color: var(--admin-org-ink); background: var(--admin-org-control); border: 1px solid var(--admin-org-control-border); border-radius: .25rem; font: inherit; }
-.terminal-devices-form select:focus-visible { outline: 3px solid var(--admin-org-focus); outline-offset: 2px; }
-:host-context(html[data-visual-theme='nocturno']) .terminal-devices-form select { color-scheme: dark; }
+.terminal-devices-form select,.catalog-device-form select,.catalog-device-form input:not([type='checkbox']) { box-sizing: border-box; width: 100%; min-height: 2.75rem; padding: .625rem .75rem; color: var(--admin-org-ink); background: var(--admin-org-control); border: 1px solid var(--admin-org-control-border); border-radius: .25rem; font: inherit; }
+.terminal-devices-form select:focus-visible,.catalog-device-form select:focus-visible,.catalog-device-form input:focus-visible { outline: 3px solid var(--admin-org-focus); outline-offset: 2px; }
+:host-context(html[data-visual-theme='nocturno']) .terminal-devices-form select,:host-context(html[data-visual-theme='nocturno']) .catalog-device-form select { color-scheme: dark; }
+.device-catalog { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--admin-org-control-border); }
+.device-catalog .panel-heading { gap: 1rem; }
+.catalog-device-form .checkbox-row { display: flex; align-items: center; gap: .5rem; }
 
 @media (max-width: 42rem) {
   .panel-heading { align-items: stretch; flex-direction: column; }

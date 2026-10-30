@@ -15,7 +15,7 @@ import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { AuthorizedFiscalDocument, FiscalDocumentClient } from '../../core/sales/fiscal-document-client';
 import { CashierShift, CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
-import { CreditCustomerAccount, CreditCustomerClient, CreditCustomerOption } from '../../core/customers/credit-customer-client';
+import { CreditCustomerAccount, CreditCustomerClient, CreditCustomerOption, FiscalCustomerOption } from '../../core/customers/credit-customer-client';
 import { AccountCollectionDialog } from './account-collection-dialog';
 import QRCode from 'qrcode';
 import { MercadoPagoClient, MercadoPagoIntent, MercadoPagoMode } from '../../core/sales/mercado-pago-client';
@@ -38,6 +38,7 @@ interface SaleLine {
   readonly id: string;
   readonly product: PosProduct;
   readonly quantity: number;
+  readonly pieceCount?: number | null;
   readonly inventoryPieceId?: string;
   readonly pieceIdentifier?: string;
 }
@@ -181,6 +182,7 @@ export class PosPage implements OnInit {
   protected readonly scannedPieceIdentifier = signal<string | null>(null);
   private readonly scannedPieceId = signal<string | null>(null);
   protected readonly quantityDraft = signal('1');
+  protected readonly pieceCountDraft = signal('');
   protected readonly scaleBusy = signal(false);
   protected readonly scaleNotice = signal<string | null>(null);
   protected readonly scaleError = signal<string | null>(null);
@@ -193,6 +195,11 @@ export class PosPage implements OnInit {
         Math.abs(Math.round(quantity * 1000) - quantity * 1000) > 0.000001)
       return product.mode === 'weight' ? 'Ingresá un peso válido mayor a cero (hasta 3 decimales).' : 'Ingresá una cantidad válida mayor a cero.';
     if (product.mode === 'unit' && !Number.isInteger(quantity)) return 'Ingresá una cantidad entera de unidades de venta.';
+    if (product.mode === 'weight' && this.pieceCountDraft().trim()) {
+      const pieces = Number(this.pieceCountDraft());
+      if (!Number.isInteger(pieces) || pieces < 1 || pieces > 10000)
+        return 'Ingresá una cantidad de piezas entera entre 1 y 10000.';
+    }
     const available = this.availableStock(product);
     if (!this.isDemoPriceList() && available !== undefined && quantity > available)
       return `Stock insuficiente. Disponible: ${available.toLocaleString('es-AR', { maximumFractionDigits: 3 })} ${this.unitLabel(product)}.`;
@@ -230,6 +237,14 @@ export class PosPage implements OnInit {
   protected readonly recipientName = signal('');
   protected readonly recipientDocumentNumber = signal('');
   protected readonly recipientAddress = signal('');
+  protected readonly recipientLocality = signal('');
+  protected readonly recipientProvince = signal('');
+  protected readonly purchaseOrderNumber = signal('');
+  protected readonly fiscalCustomerSearch = signal('');
+  protected readonly fiscalCustomerOptions = signal<readonly FiscalCustomerOption[]>([]);
+  protected readonly fiscalCustomerId = signal('');
+  protected readonly fiscalCustomerLoading = signal(false);
+  protected readonly fiscalCustomerError = signal<string | null>(null);
   protected readonly documentProblem = computed(() => {
     if (this.documentType() === 'nonFiscalTicket') return null;
     const name = this.recipientName().trim();
@@ -245,6 +260,13 @@ export class PosPage implements OnInit {
       return 'Ingresá un DNI o CUIT válido para el consumidor final.';
     }
     if (name.length > 200 || address.length > 200) return 'Los datos del cliente son demasiado extensos.';
+    if (this.recipientLocality().length > 100 || this.recipientProvince().length > 100 ||
+        this.purchaseOrderNumber().length > 80)
+      return 'Localidad, provincia o referencia comercial demasiado extensa.';
+    if (this.fiscalCustomerId() && this.creditCustomerId() &&
+        this.fiscalCustomerId() !== this.creditCustomerId() &&
+        this.accountChargeAmount() + this.creditAppliedAmount() > 0)
+      return 'El cliente fiscal debe coincidir con la cuenta corriente usada en esta venta.';
     return null;
   });
   protected readonly confirmedSale = signal<ConfirmedSale | null>(null);
@@ -392,6 +414,7 @@ export class PosPage implements OnInit {
           : this.saleDraftClient.save(operation.priceListId, operation.lines.map((line) => ({
               productId: line.product.id,
               quantity: line.quantity,
+              ...(line.pieceCount != null ? { pieceCount: line.pieceCount } : {}),
               ...(line.inventoryPieceId ? { inventoryPieceId: line.inventoryPieceId } : {}),
             })), slot, operation.discountAmount, operation.discountReason);
         return request.pipe(
@@ -454,6 +477,7 @@ export class PosPage implements OnInit {
             unit: item.unit,
           },
           quantity: item.quantity,
+          pieceCount: item.pieceCount ?? null,
           ...(item.inventoryPieceId ? { inventoryPieceId: item.inventoryPieceId } : {}),
           ...(item.pieceIdentifier ? { pieceIdentifier: item.pieceIdentifier } : {}),
         })));
@@ -852,6 +876,7 @@ export class PosPage implements OnInit {
     this.scannedPieceIdentifier.set(pieceIdentifier);
     this.scannedPieceId.set(pieceId);
     this.quantityDraft.set(String(quantity));
+    this.pieceCountDraft.set(pieceId ? '1' : '');
     this.scaleNotice.set(null);
     this.scaleError.set(null);
   }
@@ -863,6 +888,14 @@ export class PosPage implements OnInit {
     }
     this.quantityDraft.set((event.target as HTMLInputElement).value.replace(',', '.'));
     this.scaleNotice.set(null);
+  }
+
+  protected updatePieceCount(event: Event): void {
+    if (this.scannedPieceId()) {
+      (event.target as HTMLInputElement).value = '1';
+      return;
+    }
+    this.pieceCountDraft.set((event.target as HTMLInputElement).value);
   }
 
   protected readSerialScale(): void {
@@ -912,7 +945,9 @@ export class PosPage implements OnInit {
       this.errorMessage.set('Stock insuficiente para agregar esta pieza al ticket.');
       return;
     }
-    this.addProductLine(product, quantity, pieceId, this.scannedPieceIdentifier());
+    const pieceCount = product.mode === 'weight' && this.pieceCountDraft().trim()
+      ? Number(this.pieceCountDraft()) : null;
+    this.addProductLine(product, quantity, pieceId, this.scannedPieceIdentifier(), pieceCount);
     this.selectedProduct.set(null);
     this.scannedPieceIdentifier.set(null);
     this.scannedPieceId.set(null);
@@ -1179,6 +1214,14 @@ export class PosPage implements OnInit {
     this.recipientName.set('');
     this.recipientDocumentNumber.set('');
     this.recipientAddress.set('');
+    this.recipientLocality.set('');
+    this.recipientProvince.set('');
+    this.purchaseOrderNumber.set('');
+    this.fiscalCustomerId.set('');
+    this.fiscalCustomerSearch.set('');
+    this.fiscalCustomerOptions.set([]);
+    this.fiscalCustomerError.set(null);
+    if (this.documentType() !== 'nonFiscalTicket') this.searchFiscalCustomers();
     if (this.canChargeToAccount()) this.searchCreditCustomers();
     this.checkoutError.set(null);
     this.checkoutNotice.set(true);
@@ -1452,6 +1495,7 @@ export class PosPage implements OnInit {
 
   protected selectRecipientTaxStatus(event: Event): void {
     this.recipientTaxStatus.set((event.target as HTMLSelectElement).value as SaleRecipientTaxStatus);
+    this.fiscalCustomerId.set('');
     this.rememberDocumentChoice();
     this.checkoutError.set(null);
   }
@@ -1468,14 +1512,64 @@ export class PosPage implements OnInit {
 
   protected updateRecipientName(event: Event): void {
     this.recipientName.set((event.target as HTMLInputElement).value.slice(0, 201));
+    this.fiscalCustomerId.set('');
   }
 
   protected updateRecipientDocumentNumber(event: Event): void {
     this.recipientDocumentNumber.set((event.target as HTMLInputElement).value.slice(0, 20));
+    this.fiscalCustomerId.set('');
   }
 
   protected updateRecipientAddress(event: Event): void {
     this.recipientAddress.set((event.target as HTMLInputElement).value.slice(0, 201));
+    this.fiscalCustomerId.set('');
+  }
+
+  protected updateRecipientLocality(event: Event): void {
+    this.recipientLocality.set((event.target as HTMLInputElement).value.slice(0, 101));
+    this.fiscalCustomerId.set('');
+  }
+
+  protected updateRecipientProvince(event: Event): void {
+    this.recipientProvince.set((event.target as HTMLInputElement).value.slice(0, 101));
+    this.fiscalCustomerId.set('');
+  }
+
+  protected updatePurchaseOrderNumber(event: Event): void {
+    this.purchaseOrderNumber.set((event.target as HTMLInputElement).value.slice(0, 81));
+  }
+
+  protected updateFiscalCustomerSearch(event: Event): void {
+    this.fiscalCustomerSearch.set((event.target as HTMLInputElement).value.slice(0, 100));
+  }
+
+  protected searchFiscalCustomers(): void {
+    this.fiscalCustomerLoading.set(true);
+    this.fiscalCustomerError.set(null);
+    this.creditCustomerClient.searchFiscal(this.fiscalCustomerSearch().trim()).subscribe({
+      next: (customers) => {
+        this.fiscalCustomerOptions.set(customers);
+        this.fiscalCustomerLoading.set(false);
+      },
+      error: () => {
+        this.fiscalCustomerLoading.set(false);
+        this.fiscalCustomerError.set('No se pudieron consultar las fichas fiscales.');
+      },
+    });
+  }
+
+  protected selectFiscalCustomer(event: Event): void {
+    const id = (event.target as HTMLSelectElement).value;
+    const customer = this.fiscalCustomerOptions().find((option) => option.id === id);
+    this.fiscalCustomerId.set(customer?.id ?? '');
+    if (!customer) return;
+    this.recipientTaxStatus.set(customer.fiscalTaxStatus);
+    this.recipientName.set(customer.name);
+    this.recipientDocumentNumber.set(customer.fiscalDocumentNumber ?? '');
+    this.recipientAddress.set(customer.fiscalAddress ?? '');
+    this.recipientLocality.set(customer.fiscalLocality ?? '');
+    this.recipientProvince.set(customer.fiscalProvince ?? '');
+    this.rememberDocumentChoice();
   }
 
   private validCuit(value: string): boolean {
@@ -1575,7 +1669,11 @@ export class PosPage implements OnInit {
       { documentType: this.documentType(), recipientTaxStatus: this.recipientTaxStatus(),
         recipientName: this.recipientName().trim() || undefined,
         recipientDocumentNumber: this.recipientDocumentNumber().trim() || undefined,
-        recipientAddress: this.recipientAddress().trim() || undefined },
+        recipientAddress: this.recipientAddress().trim() || undefined,
+        recipientLocality: this.recipientLocality().trim() || undefined,
+        recipientProvince: this.recipientProvince().trim() || undefined,
+        purchaseOrderNumber: this.purchaseOrderNumber().trim() || undefined,
+        fiscalCustomerId: this.fiscalCustomerId() || undefined },
       this.mercadoPagoIntent()?.approved ? this.mercadoPagoIntent()!.id : undefined).subscribe({
       next: (sale) => this.finishConfirmedSale(sale),
       error: (error: HttpErrorResponse) => {
@@ -1627,6 +1725,10 @@ export class PosPage implements OnInit {
     this.recipientName.set('');
     this.recipientDocumentNumber.set('');
     this.recipientAddress.set('');
+    this.recipientLocality.set('');
+    this.recipientProvince.set('');
+    this.purchaseOrderNumber.set('');
+    this.fiscalCustomerId.set('');
     this.errorMessage.set(null);
     this.loadCashierShift();
     this.loadPriceLists();
@@ -1645,7 +1747,7 @@ export class PosPage implements OnInit {
         this.fiscalDocument.set(document);
         this.fiscalBusy.set(false);
         if (document.status === 'Authorized') {
-          if (sale.documentType === 'fiscalTicket') this.printSerialReceipt(sale);
+          this.printSerialReceipt(sale);
         } else if (document.status === 'Rejected') {
           this.fiscalError.set(`ARCA rechazó la emisión (código ${document.errorCodes ?? 'sin detalle'}). La venta sigue registrada.`);
         }
@@ -1837,14 +1939,17 @@ export class PosPage implements OnInit {
   }
 
   private addProductLine(product: PosProduct, quantity: number, pieceId: string | null = null,
-    pieceIdentifier: string | null = null): void {
+    pieceIdentifier: string | null = null, pieceCount: number | null = null): void {
     this.lines.update((lines) => {
       const existing = pieceId ? undefined : lines.find((line) => line.product.id === product.id && !line.inventoryPieceId);
       if (!existing) return [...lines, { id: crypto.randomUUID(), product, quantity,
+        pieceCount,
         ...(pieceId ? { inventoryPieceId: pieceId } : {}),
         ...(pieceIdentifier ? { pieceIdentifier } : {}) }];
       return lines.map((line) => line.id === existing.id
-        ? { ...line, quantity: this.roundQuantity(line.quantity + quantity) }
+        ? { ...line, quantity: this.roundQuantity(line.quantity + quantity),
+            pieceCount: line.pieceCount != null && pieceCount != null
+              ? line.pieceCount + pieceCount : null }
         : line);
     });
     this.persistCurrentDraft();
@@ -1914,6 +2019,7 @@ export class PosPage implements OnInit {
             unit: item.unit,
           },
           quantity: item.quantity,
+          pieceCount: item.pieceCount ?? null,
           ...(item.inventoryPieceId ? { inventoryPieceId: item.inventoryPieceId } : {}),
           ...(item.pieceIdentifier ? { pieceIdentifier: item.pieceIdentifier } : {}),
         })));

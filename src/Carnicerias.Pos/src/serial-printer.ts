@@ -19,6 +19,15 @@ export async function sendSerialReceipt(
 ): Promise<{ readonly port: string; readonly bytesWritten: number;
   readonly confirmation: 'drained' | 'write-only' }> {
   const bytes = Buffer.from(formatSerialReceipt(receipt), 'utf8');
+  return sendSerialBytes(bytes, createPort, device);
+}
+
+export async function sendSerialBytes(
+  bytes: Buffer,
+  createPort: (options: PrinterOptions) => SerialWritable = (options) => new SerialPort(options),
+  device: SerialDeviceConfig = { port: 'COM1', baudRate: 9600 },
+): Promise<{ readonly port: string; readonly bytesWritten: number;
+  readonly confirmation: 'drained' | 'write-only' }> {
   const options = { ...printerOptions, path: device.port, baudRate: device.baudRate };
   const transmissionMs = Math.ceil(bytes.length * 10 / options.baudRate * 1000) + 150;
   const port = createPort(options);

@@ -171,6 +171,8 @@ public static class AdminHistoryEndpoints
                 _ => "finalConsumer"
             },
             sale.RecipientName, sale.RecipientDocumentNumber, sale.RecipientAddress,
+            sale.RecipientLocality, sale.RecipientProvince, sale.FiscalCustomerCode,
+            sale.PurchaseOrderNumber,
             sale.Lines.Any(line => line.NetAfterDiscount is null) ? "legacy" :
                 sale.Lines.Any(line => line.TaxRuleId is null) ? "unconfigured" : "complete",
             sale.Lines.All(line => line.TaxRuleId is not null)
@@ -187,6 +189,7 @@ public static class AdminHistoryEndpoints
                 line.ProductCode, line.ProductName, line.Unit,
                 line.SaleMode == ProductSaleMode.Unit ? "unit" : "weight",
                 line.Quantity, line.UnitPrice, line.LineTotal,
+                line.PieceIdentifier, line.PieceCount,
                 line.OrderDiscountAmount, line.NetAfterDiscount, line.TaxTreatment?.ToString(),
                 line.TaxRatePercent, line.TaxableBase, line.TaxAmount)).ToArray(),
             sale.Payments.OrderBy(payment => payment.Method).Select(payment => new SalePaymentItem(
@@ -352,11 +355,14 @@ public static class AdminHistoryEndpoints
         decimal DiscountAmount, string? DiscountReason,
         string DocumentType, string RecipientTaxStatus, string? RecipientName,
         string? RecipientDocumentNumber, string? RecipientAddress,
+        string? RecipientLocality, string? RecipientProvince, string? FiscalCustomerCode,
+        string? PurchaseOrderNumber,
         string TaxSnapshotStatus, decimal? TaxableBase, decimal? TaxAmount,
         decimal? ExemptAmount, decimal? NotTaxedAmount,
         SaleLineItem[] Lines, SalePaymentItem[] Payments);
     private sealed record SaleLineItem(string Code, string Name, string Unit, string SaleMode,
         decimal Quantity, decimal UnitPrice, decimal LineTotal,
+        string? PieceIdentifier, int? PieceCount,
         decimal OrderDiscountAmount, decimal? NetAfterDiscount, string? TaxTreatment,
         decimal? TaxRatePercent, decimal? TaxableBase, decimal? TaxAmount);
     private sealed record SalePaymentItem(string Method, decimal TenderedAmount, decimal AppliedAmount);

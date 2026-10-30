@@ -37,7 +37,8 @@ public static class AdminTerminalEndpoints
             .ToArrayAsync(cancellationToken);
         return Results.Ok(terminals.Select(terminal => new TerminalResponse(
             terminal.Id, terminal.Name, terminal.IsActive, terminal.IsHistorical,
-            terminal.CredentialHash != null, terminal.DeviceAssignments())).ToArray());
+            terminal.CredentialHash != null, terminal.DeviceAssignments(),
+            terminal.ScaleDeviceId, terminal.PrinterDeviceId)).ToArray());
     }
 
     private static async Task<IResult> CreateAsync(
@@ -128,12 +129,13 @@ public static class AdminTerminalEndpoints
         }
         httpContext.Response.Headers.CacheControl = "no-store";
         return Results.Ok(new TerminalUpdateResponse(terminal.Id, terminal.Name, terminal.IsActive,
-            terminal.IsHistorical, terminal.CredentialHash != null, terminal.DeviceAssignments(), newCredential));
+            terminal.IsHistorical, terminal.CredentialHash != null, terminal.DeviceAssignments(),
+            terminal.ScaleDeviceId, terminal.PrinterDeviceId, newCredential));
     }
 
     private static async Task<IResult> ConfigureDevicesAsync(
         Guid companyId, Guid branchId, Guid terminalId,
-        PosTerminalDevices? request,
+        TerminalDeviceSelectionRequest? request,
         PlatformAccessDbContext db,
         OperationalContextAccessor contextAccessor,
         HttpContext httpContext,
@@ -148,12 +150,23 @@ public static class AdminTerminalEndpoints
             item.CompanyId == companyId && item.BranchId == branchId, cancellationToken);
         if (terminal is null) return Error(StatusCodes.Status404NotFound, "TERMINAL_NOT_FOUND");
         if (terminal.IsHistorical) return Error(StatusCodes.Status409Conflict, "HISTORICAL_TERMINAL");
-        try { terminal.ConfigureDevices(request); }
+        var ids = new[] { request.ScaleDeviceId, request.PrinterDeviceId }
+            .Where(id => id is not null).Select(id => id!.Value).Distinct().ToArray();
+        var selected = await db.BranchDevices.AsNoTracking()
+            .Where(device => ids.Contains(device.Id) && device.CompanyId == companyId &&
+                device.BranchId == branchId && device.IsActive)
+            .ToDictionaryAsync(device => device.Id, cancellationToken);
+        if (selected.Count != ids.Length)
+            return Error(StatusCodes.Status400BadRequest, "DEVICE_CONFIG_INVALID");
+        var scale = request.ScaleDeviceId is null ? null : selected[request.ScaleDeviceId.Value];
+        var printer = request.PrinterDeviceId is null ? null : selected[request.PrinterDeviceId.Value];
+        try { terminal.AssignCatalogDevices(scale, printer); }
         catch (ArgumentException) { return Error(StatusCodes.Status400BadRequest, "DEVICE_CONFIG_INVALID"); }
         await db.SaveChangesAsync(cancellationToken);
         httpContext.Response.Headers.CacheControl = "no-store";
         return Results.Ok(new TerminalResponse(terminal.Id, terminal.Name, terminal.IsActive,
-            terminal.IsHistorical, terminal.CredentialHash != null, terminal.DeviceAssignments()));
+            terminal.IsHistorical, terminal.CredentialHash != null, terminal.DeviceAssignments(),
+            terminal.ScaleDeviceId, terminal.PrinterDeviceId));
     }
 
     private static async Task<IResult> RotateAsync(
@@ -238,9 +251,11 @@ public static class AdminTerminalEndpoints
 
     private sealed record TerminalCreateRequest(string Name);
     private sealed record TerminalUpdateRequest(string? Name, bool? IsActive);
+    private sealed record TerminalDeviceSelectionRequest(Guid? ScaleDeviceId, Guid? PrinterDeviceId);
     private sealed record TerminalResponse(Guid Id, string Name, bool IsActive, bool IsHistorical,
-        bool HasCredential, PosTerminalDevices Devices);
+        bool HasCredential, PosTerminalDevices Devices, Guid? ScaleDeviceId, Guid? PrinterDeviceId);
     private sealed record TerminalUpdateResponse(Guid Id, string Name, bool IsActive, bool IsHistorical,
-        bool HasCredential, PosTerminalDevices Devices, string? NewCredential);
+        bool HasCredential, PosTerminalDevices Devices, Guid? ScaleDeviceId, Guid? PrinterDeviceId,
+        string? NewCredential);
     private sealed record ProvisionedTerminalResponse(Guid Id, string Name, string Credential);
 }

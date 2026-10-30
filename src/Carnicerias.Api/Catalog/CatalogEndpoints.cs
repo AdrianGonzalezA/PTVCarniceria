@@ -33,13 +33,7 @@ public static class CatalogEndpoints
 
         var now = timeProvider.GetUtcNow();
         var categories = await db.ProductCategories.AsNoTracking()
-            .Where(category => category.CompanyId == context.CompanyId && category.IsActive &&
-                db.CatalogProducts.Any(product => product.CompanyId == context.CompanyId &&
-                    product.CategoryId == category.Id && product.IsActive &&
-                    db.ProductPrices.Any(price => price.CompanyId == context.CompanyId &&
-                        price.PriceListId == priceListId && price.ProductId == product.Id &&
-                        price.EffectiveFromUtc <= now &&
-                        (price.EffectiveToUtc == null || price.EffectiveToUtc > now))))
+            .Where(category => category.CompanyId == context.CompanyId && category.IsActive)
             .OrderBy(category => category.Name)
             .ThenBy(category => category.Id)
             .Select(category => new CategoryOption(

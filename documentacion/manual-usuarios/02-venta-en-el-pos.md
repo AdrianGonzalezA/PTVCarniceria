@@ -2,7 +2,7 @@
 
 ## Seleccionar lista y comprobante
 
-Con turno abierto, elegí una **lista de precios** habilitada para la sucursal. El catálogo muestra los artículos con precio vigente y el stock disponible. Antes de cobrar podés dejar seleccionado **Tipo de comprobante** (ticket no fiscal, ticket fiscal o factura electrónica) y **Tipo de cliente**. Los datos fiscales que correspondan se piden al cerrar la venta.
+Con turno abierto, elegí una **lista de precios** habilitada para la sucursal. El catálogo muestra todas las categorías activas y, dentro de cada una, los artículos con precio vigente y el stock disponible. Una categoría vacía sigue visible e indica que no tiene artículos con precio vigente en la lista seleccionada. Antes de cobrar podés dejar seleccionado **Tipo de comprobante** (ticket no fiscal, ticket fiscal o factura electrónica) y **Tipo de cliente**. Los datos fiscales que correspondan se piden al cerrar la venta.
 
 La lista queda fija en cuanto el ticket tiene renglones; para usar otra, primero hay que cancelar ese ticket. El costo estadístico del artículo no determina el precio de venta: se aplica el valor de la lista elegida.
 

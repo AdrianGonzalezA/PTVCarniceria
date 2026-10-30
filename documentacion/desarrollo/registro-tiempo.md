@@ -99,4 +99,6 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 
 | 27/10/2026 | 18:51:10 | 18:51:33 | 23 s medidos | Indicar cómo usar el saldo a favor en una venta | Se verificaron los controles reales de **Finalizar compra → Cobrar venta → Cuenta corriente**, el campo **Aplicar saldo a favor (parcial o total)** y el recálculo automático de efectivo. Se explicó que el cajero elige el importe aplicado y que no entra dinero a caja por esa parte. Sin pausas conocidas ni cambios de datos o aplicación. |
 
-**Total activo registrado desde el 16/10/2026:** 320 min 39 s medidos, más seis tramos menores a 1 min y tramos no cuantificables.
+| 30/10/2026 | 08:22:32 | 08:25:27 | 2 min 55 s medidos | Levantar administración, APIs y dos cajas de La Rústica | PostgreSQL existente activo; se inició API POS `5197` y conjunto de sucursal/central `5249`/`5251`/`4302`, se reutilizó Angular `4200` y se abrió `/admin` en navegador. Se compiló y preparó el POS; Caja A y Caja B se abrieron en Electron con perfiles distintos. API POS devolvió `401` sin sesión, APIs de sucursal/central `200`, y ambas ventanas mostraron Carnicería Rústica SRL, Alta Córdoba y su caja correspondiente. Sin pausas conocidas, bases nuevas ni cambios de datos. |
+
+**Total activo registrado desde el 16/10/2026:** 323 min 34 s medidos, más seis tramos menores a 1 min y tramos no cuantificables.

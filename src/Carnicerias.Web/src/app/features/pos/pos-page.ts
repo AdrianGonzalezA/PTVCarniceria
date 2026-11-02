@@ -79,6 +79,8 @@ const demoPriceLists = [
   { id: 'demo:convenio', name: 'Convenio (prueba)', priceFactor: 0.95 },
 ] as const;
 
+const categoryRefreshIntervalMs = 15_000;
+
 @Component({
   selector: 'app-pos-page',
   imports: [RouterLink, AccountCollectionDialog],
@@ -114,6 +116,8 @@ export class PosPage implements OnInit {
   private stockRequestRevision = 0;
   private liveRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private priceListRefreshInFlight = false;
+  private categoryRefreshInFlight = false;
+  private lastCategoryRefreshAt = 0;
   private stockRefreshInFlight = false;
   private initialDraftLoadRequested = false;
   private scaleRequestRevision = 0;
@@ -545,6 +549,47 @@ export class PosPage implements OnInit {
     if (!this.canOperate()) return;
     this.refreshPriceLists();
     this.refreshStock();
+    this.refreshCategories();
+  }
+
+  private refreshCategories(): void {
+    const priceListId = this.selectedPriceListId();
+    const now = Date.now();
+    if (!priceListId || this.isDemoPriceList() || this.priceListUnavailable() ||
+        this.categoryRefreshInFlight || now - this.lastCategoryRefreshAt < categoryRefreshIntervalMs)
+      return;
+    this.categoryRefreshInFlight = true;
+    this.lastCategoryRefreshAt = now;
+    const viewRevision = this.ticketViewRevision;
+    this.catalogClient.categories(priceListId).pipe(
+      timeout(4000), takeUntilDestroyed(this.destroyRef),
+      finalize(() => { this.categoryRefreshInFlight = false; }),
+    ).subscribe({
+      next: (items) => {
+        if (!this.canOperate() || this.selectedPriceListId() !== priceListId ||
+            viewRevision !== this.ticketViewRevision) return;
+        const previous = this.catalogCategories();
+        if (previous.length === items.length && previous.every((category, index) =>
+          category.id === items[index].id && category.name === items[index].name &&
+          category.productCount === items[index].productCount)) return;
+        this.catalogCategories.set(items);
+        const activeIds = new Set(items.map((category) => category.id));
+        this.realProducts.update((products) => {
+          const visible = products.filter((product) => activeIds.has(product.category));
+          return visible.length === products.length ? products : visible;
+        });
+        if (!activeIds.has(this.activeCategory())) {
+          const nextCategoryId = items[0]?.id ?? '';
+          this.activeCategory.set(nextCategoryId);
+          if (!this.searchReady()) {
+            this.realProducts.set([]);
+            if (nextCategoryId) this.loadProducts(priceListId, nextCategoryId);
+            else this.catalogLoadState.set('ready');
+          }
+        }
+      },
+      error: () => undefined,
+    });
   }
 
   private refreshPriceLists(): void {
@@ -792,6 +837,7 @@ export class PosPage implements OnInit {
     this.catalogClient.categories(priceListId).subscribe({
       next: (items) => {
         if (this.selectedPriceListId() !== priceListId || viewRevision !== this.ticketViewRevision) return;
+        this.lastCategoryRefreshAt = Date.now();
         this.catalogCategories.set(items);
         this.catalogLoadState.set('ready');
         const firstCategory = items[0]?.id;

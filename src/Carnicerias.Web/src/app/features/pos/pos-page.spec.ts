@@ -1579,8 +1579,20 @@ describe('PosPage', () => {
     let stockMissing = false;
     let stockFails = false;
     let listsFail = false;
+    let categoriesFail = false;
+    let categoryRows = [{ id: 'meat', name: 'Carnes', productCount: 1 }];
     const priceLists = vi.fn(() => listsFail
       ? throwError(() => new HttpErrorResponse({ status: 503 })) : of(lists));
+    const categories = vi.fn(() => categoriesFail
+      ? throwError(() => new HttpErrorResponse({ status: 503 })) : of(categoryRows));
+    const products = vi.fn((filters: { categoryId?: string }) => {
+      const items = filters.categoryId === 'pork'
+        ? [{ id: 'bondiola', code: '2001', name: 'Bondiola', categoryId: 'pork',
+          saleMode: 'unit', unit: 'unidad', price: 1200, availableStock: 10 }]
+        : [{ id: 'asado', code: '1002', name: 'Asado', categoryId: 'meat',
+          saleMode: 'unit', unit: 'unidad', price: 1000, availableStock: 10 }];
+      return of({ items, page: 1, pageSize: 50, totalItems: items.length });
+    });
     const stock = vi.fn(() => stockFails
       ? throwError(() => new HttpErrorResponse({ status: 503 }))
       : of(stockMissing ? [] : [{ productId: 'asado', available }]));
@@ -1590,10 +1602,7 @@ describe('PosPage', () => {
       provideRouter([]),
       { provide: SessionClient, useValue: { current: () => of(session) } },
       { provide: CatalogClient, useValue: { priceLists,
-        categories: () => of([{ id: 'meat', name: 'Carnes', productCount: 1 }]),
-        products: () => of({ items: [{ id: 'asado', code: '1002', name: 'Asado', categoryId: 'meat',
-          saleMode: 'unit', unit: 'unidad', price: 1000, availableStock: 10 }],
-          page: 1, pageSize: 50, totalItems: 1 }) } },
+        categories, products } },
       { provide: SaleDraftClient, useValue: { list: () => of([]), current, save } },
       { provide: InventoryClient, useValue: { stock } },
     ] });
@@ -1601,8 +1610,10 @@ describe('PosPage', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
-    return { fixture, priceLists, stock, current, save,
+    return { fixture, priceLists, categories, products, stock, current, save,
       setLists: (value: typeof lists) => { lists = value; },
+      setCategories: (value: typeof categoryRows) => { categoryRows = value; },
+      failCategories: (value: boolean) => { categoriesFail = value; },
       setAvailable: (value: number) => { available = value; stockMissing = false; },
       omitStock: () => { stockMissing = true; },
       failStock: () => { stockFails = true; },
@@ -1671,6 +1682,160 @@ describe('PosPage', () => {
       await vi.advanceTimersByTimeAsync(10000);
       expect(priceLists).toHaveBeenCalledTimes(4);
       expect(stock).toHaveBeenCalledTimes(4);
+    } finally {
+      fixture?.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it('refreshes renamed and enabled categories without resetting the ticket or selected product', async () => {
+    vi.useFakeTimers();
+    let fixture: { destroy(): void } | undefined;
+    try {
+      const setup = await liveCatalogFixture();
+      fixture = setup.fixture;
+      const page = setup.fixture.nativeElement as HTMLElement;
+      page.querySelector<HTMLButtonElement>('.product-card')!.click();
+      setup.fixture.detectChanges();
+      page.querySelector<HTMLButtonElement>('.pos-dialog .finish-button')!.click();
+      setup.fixture.detectChanges();
+      page.querySelector<HTMLButtonElement>('.product-card')!.click();
+      setup.fixture.detectChanges();
+      expect(page.querySelector('#product-dialog-title')?.textContent).toContain('Asado');
+      setup.setCategories([
+        { id: 'meat', name: 'Vacuno', productCount: 1 },
+        { id: 'pork', name: 'Porcino', productCount: 1 },
+      ]);
+
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(setup.categories).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(5000);
+      setup.fixture.detectChanges();
+      expect(setup.categories).toHaveBeenCalledTimes(2);
+      expect(page.querySelector('.category-rail')?.textContent).toContain('Vacuno');
+      expect(page.querySelector('.category-rail')?.textContent).toContain('Porcino');
+      expect(page.querySelector('.category-button.active')?.textContent).toContain('Vacuno');
+      expect(page.querySelector('.ticket-lines')?.textContent).toContain('Asado');
+      expect(page.querySelector('#product-dialog-title')?.textContent).toContain('Asado');
+      expect(setup.products).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(setup.categories).toHaveBeenCalledTimes(2);
+    } finally {
+      fixture?.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it('removes a disabled active category and shows another while preserving an open product', async () => {
+    vi.useFakeTimers();
+    let fixture: { destroy(): void } | undefined;
+    try {
+      const setup = await liveCatalogFixture();
+      fixture = setup.fixture;
+      const page = setup.fixture.nativeElement as HTMLElement;
+      page.querySelector<HTMLButtonElement>('.product-card')!.click();
+      setup.fixture.detectChanges();
+      setup.setCategories([{ id: 'pork', name: 'Porcino', productCount: 1 }]);
+      await vi.advanceTimersByTimeAsync(15000);
+      setup.fixture.detectChanges();
+      expect(page.querySelector('.category-rail')?.textContent).not.toContain('Carnes');
+      expect(page.querySelector('.category-button.active')?.textContent).toContain('Porcino');
+      expect(page.querySelector('#product-dialog-title')?.textContent).toContain('Asado');
+      expect(page.querySelector('.product-grid')?.textContent).toContain('Bondiola');
+      setup.setCategories([
+        { id: 'meat', name: 'Carnes', productCount: 1 },
+        { id: 'pork', name: 'Porcino', productCount: 1 },
+      ]);
+      await vi.advanceTimersByTimeAsync(15000);
+      setup.fixture.detectChanges();
+      expect(page.querySelector('.category-rail')?.textContent).toContain('Carnes');
+      expect(page.querySelector('.category-button.active')?.textContent).toContain('Porcino');
+      expect(page.querySelector('#product-dialog-title')?.textContent).toContain('Asado');
+    } finally {
+      fixture?.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps category navigation during a failed refresh and retries on the next interval', async () => {
+    vi.useFakeTimers();
+    let fixture: { destroy(): void } | undefined;
+    try {
+      const setup = await liveCatalogFixture();
+      fixture = setup.fixture;
+      const page = setup.fixture.nativeElement as HTMLElement;
+      setup.failCategories(true);
+      await vi.advanceTimersByTimeAsync(15000);
+      setup.fixture.detectChanges();
+      expect(setup.categories).toHaveBeenCalledTimes(2);
+      expect(page.querySelector('.category-rail')?.textContent).toContain('Carnes');
+      expect(page.querySelector('.product-grid')?.textContent).toContain('Asado');
+      setup.failCategories(false);
+      setup.setCategories([{ id: 'meat', name: 'Vacuno', productCount: 1 }]);
+      await vi.advanceTimersByTimeAsync(15000);
+      setup.fixture.detectChanges();
+      expect(setup.categories).toHaveBeenCalledTimes(3);
+      expect(page.querySelector('.category-rail')?.textContent).toContain('Vacuno');
+      expect(page.querySelector('.product-grid')?.textContent).toContain('Asado');
+      expect(setup.products).toHaveBeenCalledTimes(1);
+    } finally {
+      fixture?.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it('refreshes two open POS instances from the same category catalog independently', async () => {
+    vi.useFakeTimers();
+    let first: { destroy(): void } | undefined;
+    let second: { destroy(): void } | undefined;
+    try {
+      const setup = await liveCatalogFixture();
+      first = setup.fixture;
+      const otherBox = TestBed.createComponent(PosPage);
+      second = otherBox;
+      otherBox.detectChanges();
+      await otherBox.whenStable();
+      expect(setup.categories).toHaveBeenCalledTimes(2);
+      setup.setCategories([
+        { id: 'meat', name: 'Vacuno', productCount: 1 },
+        { id: 'pork', name: 'Porcino', productCount: 1 },
+      ]);
+
+      await vi.advanceTimersByTimeAsync(15000);
+      setup.fixture.detectChanges();
+      otherBox.detectChanges();
+      expect(setup.categories).toHaveBeenCalledTimes(4);
+      expect((setup.fixture.nativeElement as HTMLElement).querySelector('.category-rail')?.textContent)
+        .toContain('Porcino');
+      expect((otherBox.nativeElement as HTMLElement).querySelector('.category-rail')?.textContent)
+        .toContain('Porcino');
+    } finally {
+      first?.destroy();
+      second?.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it('recovers category navigation after a barcode-selected product loses its category', async () => {
+    vi.useFakeTimers();
+    let fixture: { destroy(): void } | undefined;
+    try {
+      const setup = await liveCatalogFixture();
+      fixture = setup.fixture;
+      const page = setup.fixture.nativeElement as HTMLElement;
+      const search = page.querySelector<HTMLInputElement>('#product-search')!;
+      search.value = '1002';
+      search.dispatchEvent(new Event('input'));
+      search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      setup.fixture.detectChanges();
+      expect(page.querySelector('#product-dialog-title')?.textContent).toContain('Asado');
+      setup.setCategories([{ id: 'pork', name: 'Porcino', productCount: 1 }]);
+
+      await vi.advanceTimersByTimeAsync(15000);
+      setup.fixture.detectChanges();
+      expect(page.querySelector('#product-dialog-title')?.textContent).toContain('Asado');
+      expect(page.querySelector('.category-button.active')?.textContent).toContain('Porcino');
+      expect(page.querySelector('.product-grid')?.textContent).toContain('Bondiola');
     } finally {
       fixture?.destroy();
       vi.useRealTimers();

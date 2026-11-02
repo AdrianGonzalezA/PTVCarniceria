@@ -1,6 +1,6 @@
 # H0/post-H0 — Plan incremental de ejecución
 
-**Estado 02/11/2026:** I01 se implementó en `d73963c`. Por autorización del PO se adelantó I04, implementado en `e0a2a70`, y luego se autorizó **exclusivamente I05**, implementado en esta rama. I02 e I03 quedan postergados, no cancelados; ningún incremento posterior está autorizado. Cada incremento requiere autorización expresa. No se ejecutaron migraciones ni cambios de datos para I04/I05. El plan parte de `DIAGNOSTICO_IMPLEMENTACION_ACTUAL.md` y de los 25 IDs de `MATRIZ_BRECHAS_VERIFICADA.md`. Conservar la operatoria actual de cajas/turnos, tickets A/B/C/D, venta por peso/unidad, códigos alternativos, XLSX, saldo pendiente de cobro y cuenta corriente.
+**Estado 02/11/2026:** I01 se implementó en `d73963c`. Por autorización del PO se adelantó I04, implementado en `e0a2a70`, y luego I05, implementado en `c8cac8a`. I02 está autorizado **solo para preparación técnica**; su diseño y plan propuesto están en `DISENO_TECNICO_I02.md`. I03 sigue postergado; ningún cambio de código, migración o datos de I02 está autorizado. Cada incremento requiere autorización expresa. No se ejecutaron migraciones ni cambios de datos para I04/I05. El plan parte de `DIAGNOSTICO_IMPLEMENTACION_ACTUAL.md` y de los 25 IDs de `MATRIZ_BRECHAS_VERIFICADA.md`. Conservar la operatoria actual de cajas/turnos, tickets A/B/C/D, venta por peso/unidad, códigos alternativos, XLSX, saldo pendiente de cobro y cuenta corriente.
 
 ## Condiciones de ejecución y compatibilidad
 
@@ -17,7 +17,8 @@
 | Completado | I01 — filtro del historial por tipo de comprobante | Implementado y probado en `d73963c`. |
 | Completado en código | **I04 — categorías vivas en cajas POS abiertas** | Refresco y pruebas automatizadas terminados; comprobación manual en dos Electron pendiente de entorno operativo. Sin cambios de precios. |
 | Completado en código | I05 — precios visibles refrescados | Refresco y pruebas automatizadas terminados; comprobación manual en dos Electron pendiente de entorno operativo. |
-| Postergados | I02 — reserva/estado de piezas; I03a/I03b — cobros | No cancelados; sin autorización de implementación ni migración en esta etapa. |
+| Diseño autorizado | I02 — reserva/estado de piezas | Preparación técnica documentada en `DISENO_TECNICO_I02.md`; pendiente de aprobación arquitectónica y autorización expresa de código/migración/datos. |
+| Postergados | I03a/I03b — cobros | No cancelados; sin autorización de implementación ni migración en esta etapa. |
 
 ## Inventario de incrementos y dependencias
 

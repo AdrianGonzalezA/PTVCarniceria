@@ -1,0 +1,120 @@
+# I02 — Diseño técnico propuesto: reserva y estados de piezas trazables
+
+**Estado:** propuesta para revisión del Product Owner, 02/11/2026. **No autoriza implementación, migración ni escritura de datos.** Alcance del plan: BUG-06 y TRAZ-01 fase 1. I03 y cualquier otro incremento no autorizado permanecen fuera de esta etapa.
+
+## 1. Fuentes y límites
+
+- Regla aprobada Q10: reservar al incorporar una pieza al borrador, excluir otras ventas y producción, liberar al cancelar, vender al confirmar y recuperar tras cierres inesperados (`DECISIONES_PO_H0.md:59-62`).
+- Regla aprobada Q16: Disponible, Reservada, Vendida, Transferida y Consumida; solo administración libera manualmente una reserva bloqueada con auditoría; conservar ID, peso y origen (`DECISIONES_PO_H0.md:92-96`).
+- Q13 descarta estado y depósito «en tránsito»; despacho y recepción son operaciones distintas (`DECISIONES_PO_H0.md:76-80`). Producción se rige por `05_PRODUCCION_BACKOFFICE.md:5-39`, no por los pasajes 137–167 de la transcripción.
+- I02 debe preservar cajas/turnos, venta por peso/unidad, tickets A/B/C/D, código alternativo/escaneo, importador XLSX, pagos pendientes y cuenta corriente. Transferencia y producción operativas son I18b e I23, no I02 (`PLAN_EJECUCION_AJUSTADO.md:29,47-54`). No se implementan balanzas en construcción.
+
+## 2. Implementación observada y brecha concreta
+
+| Área | Evidencia exacta | Consecuencia para I02 |
+| --- | --- | --- |
+| Pieza recibida | `src/Carnicerias.Infrastructure/InventoryPiece.cs:5-67` guarda empresa, sucursal, artículo, origen, identificador externo, código, peso y fecha. `PlatformAccessDbContext.cs:632-670` mapea `inventory.pieces` e índices únicos de identidad externa y operación de recepción. | Reutilizar identidad y peso. Faltan estado, dueño de reserva y eventos de transición. |
+| Recepción | `src/Carnicerias.Api/Inventory/InventoryPieceEndpoints.cs:99-197` crea pieza y movimiento `PieceReceipt`, incrementa existencias y conserva idempotencia por `OperationId`. | Las nuevas piezas deben empezar Disponibles dentro de la misma transacción. No cambiar parser ni importación. |
+| Búsqueda POS | `InventoryPieceEndpoints.cs:25-63` consulta por sucursal/código y solo descarta pieza ya vendida mediante `ConfirmedSaleLines`. `src/Carnicerias.Web/src/app/core/inventory/inventory-piece-client.ts` y `features/pos/pos-page.ts:831-870` reutilizan esa ruta. | Informar estado no disponible al escanear, pero la búsqueda no es una reserva: la autoridad es el guardado del borrador. |
+| Borrador | `src/Carnicerias.Api/Sales/SaleDraftEndpoints.cs:75-99,143-157` valida pieza/peso y busca otras líneas activas; `:187-213` reserva **cantidad por artículo** y guarda borrador en transacción serializable. `:216-253` cancela y libera cantidad. | La consulta previa no es una exclusión persistida por pieza. Integrar adquisición/liberación individual en estas transacciones sin romper la reserva agregada. |
+| Ticket y recuperación | `src/Carnicerias.Infrastructure/SaleDraft.cs` conserva pieza, precio y slot; `PlatformAccessDbContext.cs:860-924` restringe un borrador activo por empresa/sucursal/cajero/slot, pero no una pieza en borradores activos. `SaleDraftEndpoints.cs:31-73` recupera los borradores del cajero/terminal/turno. `CashierShiftEndpoints.cs:105-110` impide cerrar turno con borrador activo. | Reutilizar recuperación A/B/C/D. La reserva debe sobrevivir caída de Electron/API y seguir el borrador persistido. |
+| Confirmación | `src/Carnicerias.Api/Sales/SaleConfirmationEndpoints.cs:58-59,183-196,227-276` confirma en transacción serializable, reduce `OnHand` y `Reserved`, crea movimiento y confirma borrador. `PlatformAccessDbContext.cs:1048-1051` tiene índice único parcial para pieza en línea de venta confirmada. | Conservar índice como última defensa. Añadir Reservada→Vendida condicionada al mismo borrador dentro de esa transacción. |
+| Transferencia/producción | `src/Carnicerias.Infrastructure/BranchInventory.cs:3-9` solo enumera apertura, ajuste, venta y recepción de pieza; `src/Carnicerias.Api/Program.cs:142-178` no registra rutas de transferencia ni producción. `05_PRODUCCION_BACKOFFICE.md:8-21,36-39` describe futuro cierre de orden. | Diseñar sus transiciones y exclusión, sin crear ahora rutas, órdenes ni movimientos de esos módulos. |
+| Permisos | `src/Carnicerias.PlatformAccess/PlatformPermissionCatalog.cs:5-25` tiene `inventory.stock.manage`, no permiso específico de liberación; `src/Carnicerias.Api/Users/UserEndpoints.cs:106-127` admite roles cashier/administrator. | Liberación excepcional requiere autorización de administrador de la misma empresa, no basta con poseer permiso genérico de stock. |
+| Pruebas | `tests/Carnicerias.IntegrationTests/InventoryPieceTests.cs:39,96` verifica modelo sin conexión. `SaleDraftPersistenceTests.cs:27-40,204-222,261` usa migraciones y una base de prueba distinta. | Reutilizar pruebas puras; no ejecutar esa suite de integración bajo la regla de base única. Preparar prueba concurrente aparte y pedir autorización antes de escribir fixture. |
+
+**Brecha de concurrencia:** la validación «no existe en otro borrador» de `SaleDraftEndpoints.cs:153-157` es lectura antes de escritura. La transacción serializable reduce carreras, pero la pieza no tiene una fila que declare su dueño; el índice de venta confirmada protege el final, no reserva la pieza mientras dos cajas preparan tickets. Tampoco hay estado que impida una futura transferencia o consumo de producción.
+
+## 3. Modelo propuesto para aprobación
+
+**Fuente de verdad:** una fila `inventory.pieces` por pieza física. Añadir `Status` (`Disponible=0`, `Reservada=1`, `Vendida=2`, `Transferida=3`, `Consumida=4`), `ReservedBySaleDraftId` y `ReservedAtUtc` opcionales, y `StateChangedAtUtc`. La FK compuesta `(CompanyId, ReservedBySaleDraftId)` referenciaría la clave alternativa ya existente `(CompanyId, Id)` de `pos_sales.sale_drafts`, con borrado restringido; la sucursal se verifica además en cada transición. `Status=Reservada` exige dueño y fecha; todos los demás estados exigen ambos nulos. ID, peso, identificador externo, origen y recepción permanecen inmutables. El estado no sustituye el balance agregado `OnHand/Reserved` ni el índice único de venta: los tres son controles complementarios.
+
+**Auditoría:** tabla aditiva `inventory.piece_state_events` con ID de evento, pieza/empresa/sucursal, estado anterior y nuevo, fecha UTC, actor o proceso, borrador/operación causal, motivo y un identificador idempotente de operación. Cada cambio de estado y liberación excepcional se registra en la misma transacción. Prohibir actualización/borrado desde la API; índices por pieza/fecha y operación. No guardar secretos ni datos de tarjeta.
+
+**Alternativa evaluada:** tabla independiente de reservas activas con `PieceId` único. También permite exclusión, pero duplica la representación de estado y dueño. Se prefiere actualización condicional de la fila de pieza para I02; esta elección requiere aprobación del PO por tratarse de arquitectura.
+
+**Extensión futura:** producción abierta podrá necesitar reservar pieza antes del cierre. I02 solo implementaría dueño `SaleDraft`. I23 deberá ampliar el esquema con dueño de orden de producción y una restricción de **un único tipo de dueño**; no se permitirá usar pieza Reservada por un borrador. La transferencia no crea un estado de tránsito. El tratamiento de la misma identidad física al recepcionar en otra sucursal se define antes de I18b (ver decisiones pendientes).
+
+## 4. Máquina de estados y operaciones
+
+| Desde → hacia | Disparador y dueño | Condición atómica | Alcance |
+| --- | --- | --- | --- |
+| Nueva → Disponible | Recepción de pieza | Recepción y movimiento de entrada confirmados juntos; identidad externa única. | I02: estado inicial; reutilizar recepción actual. |
+| Disponible → Reservada | Guardar línea trazable en borrador A/B/C/D | Pieza de misma empresa/sucursal/artículo/peso, disponible, turno abierto; asignar `ReservedBySaleDraftId`. | I02. |
+| Reservada → Reservada | Reintento o regrabación del **mismo** borrador | Dueño idéntico; no duplicar evento, línea ni `Reserved` agregado. | I02. |
+| Reservada → Disponible | Quitar línea, cancelar borrador o liberación excepcional | Dueño coincidente; ajustar `Reserved` agregado y borrador en la misma transacción; evento causal. | I02. |
+| Reservada → Vendida | Confirmar venta | Dueño igual al `SourceDraftId`; confirmar venta, movimiento, `OnHand/Reserved` y estado juntos. | I02. |
+| Disponible → Transferida | Confirmar despacho de transferencia | Pieza disponible, salida de stock y remito indivisibles. | Contrato futuro I18b; sin escritor en I02. |
+| Disponible/Reservada por la **misma orden** → Consumida | Cerrar producción | Pieza disponible o reservada exclusivamente para esa orden; consumo, movimiento y cierre indivisibles. | Contrato futuro I23; sin orden/escritor en I02. |
+
+`Vendida` y `Consumida` son terminales en I02. `Transferida` no se puede vender ni consumir en la sucursal de origen. No se permite `Reservada→Transferida` ni `Reservada por venta→Consumida`. No se reabre automáticamente una pieza por devolución, nota de crédito, ajuste manual de stock o pérdida de conexión; esos flujos requieren operación futura explícita y auditada. Las piezas trazables jamás participan de la regla futura de stock común negativo.
+
+## 5. Contrato transaccional y concurrencia
+
+1. **Guardar borrador:** conservar `PUT /api/sales/drafts/{slot}` y su transacción serializable. Calcular conjunto de piezas actuales y solicitadas. Si el borrador es nuevo, insertar primero su cabecera **dentro de la misma transacción** para satisfacer la FK de la reserva. Para cada pieza nueva, en orden estable de ID, ejecutar un `UPDATE inventory.pieces SET Status=Reservada, ReservedBySaleDraftId=@draftId, ReservedAtUtc=@now ... WHERE Id=@id AND CompanyId=@company AND BranchId=@branch AND ProductId=@product AND ReceivedWeightKg=@quantity AND Status=Disponible`; exigir exactamente una fila afectada. Para cada pieza quitada, condicionar `WHERE Status=Reservada AND ReservedBySaleDraftId=@draftId`. Mantener validación de producto/turno/lista/precio y actualización agregada de `branch_inventory` en **la misma** transacción; escribir líneas y eventos antes de confirmar. Si algo falla, se revierte todo, incluida la nueva cabecera. La repetición del mismo borrador con el mismo conjunto no cambia la reserva ni su hora.
+2. **Cancelar:** condicionar la liberación al dueño; cancelar el borrador y restar su reserva agregada dentro de la misma transacción. Mantener el bloqueo existente `MERCADO_PAGO_ORDER_ACTIVE` hasta conciliar el cobro. Un fallo no puede dejar pieza libre con borrador activo o viceversa.
+3. **Confirmar:** convertir todas las piezas Reservada→Vendida condicionadas por `draft.Id` antes del commit de venta; conservar el índice único `confirmed_sale_lines.InventoryPieceId` y la idempotencia por `SourceDraftId`/hash de pago. Cualquier conflicto aborta venta, cargo en cuenta corriente, caja y movimiento de stock en conjunto. El resultado de un reintento con la misma solicitud es la venta existente; una solicitud distinta devuelve conflicto.
+4. **Búsqueda:** `GET /api/pos/pieces/lookup` puede avisar `PIECE_RESERVED` o `PIECE_ALREADY_SOLD` sin mutar nada. Una búsqueda que decía Disponible puede quedar obsoleta antes del `PUT`: el `PUT` es la decisión final. La caja revierte la línea optimista y muestra motivo específico, conservando el resto del ticket.
+5. **Otros escritores:** toda futura transferencia, consumo, recepción de traslado o liberación administrativa debe usar el mismo predicado de estado y transacción. Un ajuste agregado de stock no debe marcar pieza individual como vendible ni cambiar su estado; si reduce disponibilidad por debajo de piezas utilizables, se requiere conciliación antes de aprobarlo.
+
+PostgreSQL toma bloqueo de fila al actualizarla; el predicado condicional y el recuento de filas hacen que solo una caja obtenga la transición Disponible→Reservada. `Serializable` puede abortar una transacción concurrente con SQLSTATE `40001`; se propone reintento acotado de la operación completa con contexto fresco y, si la pieza ya tiene dueño, respuesta `409 PIECE_RESERVED`, no `500`. También tratar `40P01` (interbloqueo) como reintento acotado. Ordenar piezas evita ciclos de bloqueo. [PostgreSQL: aislamiento](https://www.postgresql.org/docs/current/transaction-iso.html), [bloqueos de fila](https://www.postgresql.org/docs/current/explicit-locking.html), [EF Core: `ExecuteUpdate` y concurrencia](https://learn.microsoft.com/en-us/ef/core/saving/execute-insert-update-delete).
+
+**Invariantes observables:** a lo sumo un dueño de reserva por pieza; una pieza Vendida aparece en exactamente una línea confirmada; una línea activa con pieza corresponde a pieza Reservada por su borrador; el saldo `Reserved` agregado sigue reflejando todas las líneas activas (trazables y comunes), sin doble suma por reintentos. Las claves de empresa/sucursal se validan en todas las escrituras y lecturas.
+
+## 6. Recuperación ante fallos
+
+| Situación | Resultado seguro propuesto |
+| --- | --- |
+| API/Electron cae antes de `COMMIT` | PostgreSQL revierte pieza, borrador, saldo y evento juntos. La caja vuelve a consultar borradores; no asume que el envío anterior tuvo éxito. |
+| API/Electron cae después del `COMMIT` y antes de responder | La pieza sigue Reservada por el borrador persistido. La caja reabre mismo usuario, terminal y turno, consulta `GET /api/sales/drafts` y restaura A/B/C/D; repetir `PUT` es idempotente. |
+| Red desconectada | Se conserva ticket local y catálogo; no se considera adquirida una pieza hasta confirmar guardado de borrador. No hay liberación por temporizador ni por cierre de ventana. El reintento consulta estado servidor y muestra conflicto si otra caja ganó. |
+| Cajero/caja inaccesible con borrador activo | Administración de la **misma empresa** inspecciona dueño, turno, pago externo y antigüedad; libera explícitamente con motivo y evento auditado. Debe reconciliar o bloquear previamente un pago MP activo. Se propone quitar solo esa línea y ajustar saldo, preservando el resto del borrador; pendiente de aprobación del PO. |
+| Venta confirmada pero respuesta perdida | Repetir confirmación devuelve la venta existente según `SourceDraftId` y hash; nunca libera ni revende la pieza. |
+
+No usar vencimiento automático: una caja cerrada por corte puede conservar tickets válidos. Un proceso de diagnóstico de reservas «posiblemente bloqueadas» puede ser de **solo lectura** y mostrar dueño/edad, sin liberar por su cuenta. Si un turno activo no puede retomarse por cambio de credencial/cajero, el protocolo administrativo debe evitar forzar su cierre dejando borradores; la regla actual de cierre ya rechaza borrador activo.
+
+## 7. Migración propuesta, compatibilidad, respaldo y reversión
+
+**No ejecutar en esta etapa.** La base de aplicación permitida sigue siendo exclusivamente `carnicerias_test_visual` en PostgreSQL local `55433`; no crear, clonar ni reiniciar bases.
+
+1. **Prevuelo de solo lectura, antes de autorizar migración:** contar piezas sin venta, vendidas, reclamadas por borradores activos y reclamadas por más de uno; detectar vendidos con borrador activo, pieza/venta de empresa o sucursal distinta, pesos inconsistentes, reservas agregadas que no concilian con borradores y ajustes que hayan reducido saldo sin identificar pieza. No clasificar una pieza como Disponible por mera ausencia de venta si la evidencia de movimientos es ambigua. Ante conflicto, detener migración y presentar casos al PO; no limpiar datos automáticamente.
+2. **Respaldo:** ventana sin escritores; `pg_dump` en formato personalizado de la **misma** base hacia ubicación fuera de Git, con permisos restringidos; registrar hora, versión de servidor, tamaño y checksum, comprobar catálogo con `pg_restore --list`. No se restaura en otra base de Carnicerías en este entorno sin autorización explícita. Proteger secretos y archivo de respaldo.
+3. **Esquema aditivo propuesto:** agregar columnas de estado/dueño/fechas inicialmente compatibles con lectura antigua; FK restringida al borrador, CHECK de correspondencia estado↔dueño, tabla de eventos e índices por estado/sucursal/dueño. Preparar migración EF en código solo tras aprobar diseño; no ejecutarla por generar el archivo. Mantener índice único de pieza vendida.
+4. **Backfill controlado:** Vendida si hay línea confirmada única; Reservada si hay exactamente un borrador activo dueño y no hay venta; Disponible solo si recepción/stock/movimientos permiten afirmarlo. Registrar origen de clasificación y eventos iniciales. Si existen casos ambiguos, detener; los cinco estados aprobados no incluyen «desconocida» para ocultarlos. Después, exigir `Status NOT NULL`, constraints y verificar recuentos/invariantes en una transacción o lote reversible antes de abrir cajas.
+5. **Corte de compatibilidad:** impedir escrituras del API antiguo mientras se activa reserva por pieza: el binario viejo podría guardar borradores omitiendo el estado. Desplegar API/cliente compatible de forma coordinada, verificar que todas las cajas apunten a la versión nueva y reabrir escritores. Lecturas antiguas pueden convivir con columnas aditivas; **escrituras antiguas no**. Preservar borradores, cobros y ventas existentes.
+6. **Reversión:** antes de reabrir escritores, revertir aplicación y migración solo si el backfill/corte no produjo nuevas operaciones, validando restauración desde el respaldo autorizado. Si ya hay reservas/ventas nuevas, preferir corrección hacia adelante; no eliminar columnas, eventos ni estados para volver al API viejo. Si falla la activación, detener operaciones trazables, conservar el esquema y los datos, aplicar parche compatible y reconciliar. Un `Down` destructivo no es una reversión segura.
+
+## 8. Implementación incremental propuesta tras nueva autorización
+
+| Paso | Cambio acotado y archivos previstos | Criterio de aceptación y prueba | Riesgo/rollback |
+| --- | --- | --- | --- |
+| I02.1 Modelo y migración **preparada, no ejecutada sin permiso** | `InventoryPiece.cs`, nueva entidad de evento, `PlatformAccessDbContext.cs`, `src/Carnicerias.Infrastructure/Migrations/*`, pruebas de modelo. | Cinco estados, constraints de dueño, identidad/peso/origen intactos; backfill detecta ambigüedad y aborta. | Backfill incorrecto; respaldo y prevuelo obligatorios. |
+| I02.2 Reserva en borrador | `SaleDraftEndpoints.cs`, posible servicio pequeño de transición compartida, pruebas de transición/borrador. | Dos intentos concurrentes: exactamente un dueño; mismo borrador reintenta sin duplicar; quitar línea/cancelar libera; saldo agregado concilia. | Conflictos `40001`/bloqueos; reintento acotado y 409 específico. |
+| I02.3 Confirmación y recuperación | `SaleConfirmationEndpoints.cs`, `CashierShiftEndpoints.cs` solo si el protocolo lo requiere, pruebas de confirmación, caída y reintento. | Vendida una sola vez; no altera pagos/cuenta/caja; borrador reaparece tras reinicio; MP activo sigue protegido. | Composición de transacciones; rollback completo y respaldo. |
+| I02.4 Lectura POS y liberación administrativa | `InventoryPieceEndpoints.cs`, `PlatformPermissionCatalog.cs`, ruta/servicio admin nuevo y vista admin focalizada, `inventory-piece-client.ts`, `pos-page.ts`/spec. | Estado reservado/vendido informa error útil; solo administrador de la empresa libera con motivo y evento; caja conserva otras líneas. | Acceso indebido o liberación con cobro activo; autorización de rol y conciliación de pago. |
+
+**Nota de alcance:** `CashierShiftEndpoints.cs` y la pantalla admin solo cambian si la recuperación/liberación aprobada los exige. No se crean funcionalidades de transferencia o producción, ni se tocan precios, fiscalidad, balances comunes o balanzas. Un permiso de stock genérico no autoriza liberación excepcional.
+
+## 9. Matriz de pruebas a ejecutar después de autorizar implementación y fixtures
+
+| Caso | Preparación y comprobación |
+| --- | --- |
+| Dos cajas, una pieza | Dos terminales/cajeros y turnos de la misma sucursal intentan `PUT` sincronizado sobre el mismo `InventoryPieceId`: una respuesta exitosa y una `409 PIECE_RESERVED`; una sola fila de pieza con dueño, una sola línea activa, `Reserved` agregado una vez. |
+| Reintento, cambio de ticket y cancelación | Repetir `PUT` en A, alternar A/B/C/D, quitar pieza, cancelar y volver a adquirirla desde otra caja. Precio del renglón y otras líneas permanecen. No duplicar reserva ni evento por reintento. |
+| Confirmación simultánea | Intentos concurrentes de confirmación/repetición: un `ConfirmedSale`, una línea por pieza, un movimiento de salida, una disminución de `OnHand`; segunda caja nunca vende la misma pieza. |
+| Cortes y fallas | Simular corte antes/después de commit, pérdida de respuesta y reingreso mismo cajero/terminal/turno; recuperar borrador y reserva. Inyectar excepción entre estado y `SaveChanges`: rollback total. |
+| Operaciones incompatibles | Pieza Reservada no se puede transferir/consumir; Vendida/Transferida/Consumida no se reservan. En I02 son pruebas de máquina de estados, no endpoints futuros. |
+| Administración y permisos | Cajero o administrador de otra empresa reciben rechazo; administrador propio libera con motivo, evento y ajuste; pago MP preparado/pendiente/aprobado sin conciliación bloquea liberación. |
+| Regresión | Venta por unidad/peso común, código alternativo, importador XLSX, A/B/C/D, turnos, stock, cobro pendiente, cuenta corriente y venta fiscal conservan resultados. La UI POS se inspecciona en Electron. |
+
+**Restricción del entorno de pruebas:** hoy no se ejecutan pruebas ni se escriben datos. Las pruebas de modelo/puras podrán correr sin BD. La suite `SaleDraftPersistenceTests` migra y revierte otra base (`MigrateAsync` y `MigrateAsync("0")`); está prohibida por AGENTS.md. Una prueba real con dos conexiones exige fixture visible para ambas, por lo que requiere **escrituras temporales y limpieza auditada** en la única base autorizada; pedir aprobación expresa antes de ejecutarla. No presentar una prueba en memoria como evidencia suficiente de exclusividad PostgreSQL.
+
+## 10. Riesgos, dependencias y decisiones para el PO
+
+- **Aprobación arquitectónica requerida:** elegir la fila de pieza como autoridad de estado/reserva, `ReservedBySaleDraftId` con FK y bitácora inmutable de eventos, según §3. Alternativa: tabla de reservas activas única por pieza. No se modifica código antes de esa aprobación.
+- **Liberación administrativa:** validar si debe quitar solo la línea bloqueada y mantener el resto del borrador, o cancelar el borrador completo. En ambos casos, conciliar pago externo activo antes de liberar; administración de la misma empresa y motivo auditado.
+- **Transferencia futura (I18b):** Q13 y Q16 establecen salida definitiva y estado Transferida, pero no definen si al recibir en destino se conserva **la misma fila/ID** cambiando su sucursal o se crea un registro de recepción vinculado al original. El índice único empresa/origen/identificador y la conservación de ID/origen impiden decidirlo silenciosamente. No bloquea I02; definir antes de I18b.
+- **Producción futura (I23):** decidir titularidad de la reserva de una orden abierta y cuándo se adquiere. I02 solo reserva para borrador de venta; la regla vigente exige consumir pieza Disponible al cierre y excluir piezas reservadas por venta. No adelantar órdenes ni reservas de producción.
+- **Datos previos:** sin lectura de la base en esta preparación, se desconoce si existen piezas con borradores simultáneos o ajustes de stock ambiguos. El prevuelo es condición de migración, no una conclusión favorable anticipada.
+
+**Puerta de avance:** el PO revisa este diseño y resuelve las decisiones de arquitectura pertinentes. Solo una autorización posterior y expresa habilita editar código de I02; migrar esquema o alterar la base requiere autorización específica y prevuelo/respaldo. I03/I18/I23 no se abren por esta aprobación.

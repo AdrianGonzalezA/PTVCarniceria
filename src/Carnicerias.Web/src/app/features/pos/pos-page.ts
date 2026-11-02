@@ -79,7 +79,7 @@ const demoPriceLists = [
   { id: 'demo:convenio', name: 'Convenio (prueba)', priceFactor: 0.95 },
 ] as const;
 
-const categoryRefreshIntervalMs = 15_000;
+const catalogRefreshIntervalMs = 15_000;
 
 @Component({
   selector: 'app-pos-page',
@@ -118,6 +118,8 @@ export class PosPage implements OnInit {
   private priceListRefreshInFlight = false;
   private categoryRefreshInFlight = false;
   private lastCategoryRefreshAt = 0;
+  private productRefreshInFlight = false;
+  private lastProductRefreshAt = 0;
   private stockRefreshInFlight = false;
   private initialDraftLoadRequested = false;
   private scaleRequestRevision = 0;
@@ -550,13 +552,14 @@ export class PosPage implements OnInit {
     this.refreshPriceLists();
     this.refreshStock();
     this.refreshCategories();
+    this.refreshCurrentPrices();
   }
 
   private refreshCategories(): void {
     const priceListId = this.selectedPriceListId();
     const now = Date.now();
     if (!priceListId || this.isDemoPriceList() || this.priceListUnavailable() ||
-        this.categoryRefreshInFlight || now - this.lastCategoryRefreshAt < categoryRefreshIntervalMs)
+        this.categoryRefreshInFlight || now - this.lastCategoryRefreshAt < catalogRefreshIntervalMs)
       return;
     this.categoryRefreshInFlight = true;
     this.lastCategoryRefreshAt = now;
@@ -587,6 +590,54 @@ export class PosPage implements OnInit {
             else this.catalogLoadState.set('ready');
           }
         }
+      },
+      error: () => undefined,
+    });
+  }
+
+  private refreshCurrentPrices(): void {
+    const priceListId = this.selectedPriceListId();
+    const categoryId = this.activeCategory();
+    const query = this.searchText().trim();
+    const searchSubmitted = this.realSearchSubmitted();
+    const now = Date.now();
+    if (!priceListId || this.isDemoPriceList() || this.priceListUnavailable() ||
+        this.catalogLoadState() !== 'ready' || this.categoryRefreshInFlight ||
+        this.productRefreshInFlight || now - this.lastProductRefreshAt < catalogRefreshIntervalMs ||
+        (query && !searchSubmitted) || (!categoryId && !searchSubmitted)) return;
+    const selectedCode = searchSubmitted && !query && this.realProducts().length === 1
+      ? this.realProducts()[0].code : null;
+    if (searchSubmitted && !query && !selectedCode) return;
+    const filters = selectedCode ? { priceListId, code: selectedCode }
+      : query ? query.length >= 3 ? { priceListId, q: query } : { priceListId, code: query }
+      : { priceListId, categoryId };
+    this.productRefreshInFlight = true;
+    this.lastProductRefreshAt = now;
+    const viewRevision = this.ticketViewRevision;
+    this.catalogClient.products(filters).pipe(
+      timeout(4000), takeUntilDestroyed(this.destroyRef),
+      finalize(() => { this.productRefreshInFlight = false; }),
+    ).subscribe({
+      next: (page) => {
+        if (!this.canOperate() || this.selectedPriceListId() !== priceListId ||
+            viewRevision !== this.ticketViewRevision || this.activeCategory() !== categoryId ||
+            this.searchText().trim() !== query || this.realSearchSubmitted() !== searchSubmitted) return;
+        const prices = new Map(page.items.map((item) => [item.id, item.price]));
+        this.realProducts.update((products) => {
+          let changed = false;
+          const updated = products.map((product) => {
+            const price = prices.get(product.id);
+            if (price === undefined || price === product.price) return product;
+            changed = true;
+            return { ...product, price };
+          });
+          return changed ? updated : products;
+        });
+        this.selectedProduct.update((product) => {
+          if (!product) return null;
+          const price = prices.get(product.id);
+          return price === undefined || price === product.price ? product : { ...product, price };
+        });
       },
       error: () => undefined,
     });
@@ -744,6 +795,7 @@ export class PosPage implements OnInit {
         if (this.selectedPriceListId() !== priceListId || viewRevision !== this.ticketViewRevision) return;
         if (page.totalItems === 1) {
           const product = this.mapCatalogProduct(page.items[0]);
+          this.lastProductRefreshAt = Date.now();
           this.realProducts.set([product]);
           this.catalogLoadState.set('ready');
           this.searchText.set('');
@@ -793,6 +845,7 @@ export class PosPage implements OnInit {
               return;
             }
             const product = this.mapCatalogProduct(item);
+            this.lastProductRefreshAt = Date.now();
             this.realProducts.set([product]);
             this.catalogLoadState.set('ready');
             this.searchText.set('');
@@ -878,6 +931,7 @@ export class PosPage implements OnInit {
     readonly price: number;
     readonly availableStock: number;
   }[]): void {
+    this.lastProductRefreshAt = Date.now();
     this.realProducts.set(items.map((item) => this.mapCatalogProduct(item)));
     this.catalogLoadState.set('ready');
     this.focusScanInput();

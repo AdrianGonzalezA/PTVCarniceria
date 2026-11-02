@@ -1580,17 +1580,20 @@ describe('PosPage', () => {
     let stockFails = false;
     let listsFail = false;
     let categoriesFail = false;
+    let productsFail = false;
+    let asadoPrice = 1000;
     let categoryRows = [{ id: 'meat', name: 'Carnes', productCount: 1 }];
     const priceLists = vi.fn(() => listsFail
       ? throwError(() => new HttpErrorResponse({ status: 503 })) : of(lists));
     const categories = vi.fn(() => categoriesFail
       ? throwError(() => new HttpErrorResponse({ status: 503 })) : of(categoryRows));
-    const products = vi.fn((filters: { categoryId?: string }) => {
-      const items = filters.categoryId === 'pork'
+    const products = vi.fn((filters: { categoryId?: string; code?: string }) => {
+      if (productsFail) return throwError(() => new HttpErrorResponse({ status: 503 }));
+      const items = filters.categoryId === 'pork' || filters.code === '2001'
         ? [{ id: 'bondiola', code: '2001', name: 'Bondiola', categoryId: 'pork',
           saleMode: 'unit', unit: 'unidad', price: 1200, availableStock: 10 }]
         : [{ id: 'asado', code: '1002', name: 'Asado', categoryId: 'meat',
-          saleMode: 'unit', unit: 'unidad', price: 1000, availableStock: 10 }];
+          saleMode: 'unit', unit: 'unidad', price: asadoPrice, availableStock: 10 }];
       return of({ items, page: 1, pageSize: 50, totalItems: items.length });
     });
     const stock = vi.fn(() => stockFails
@@ -1614,6 +1617,8 @@ describe('PosPage', () => {
       setLists: (value: typeof lists) => { lists = value; },
       setCategories: (value: typeof categoryRows) => { categoryRows = value; },
       failCategories: (value: boolean) => { categoriesFail = value; },
+      setAsadoPrice: (value: number) => { asadoPrice = value; },
+      failProducts: (value: boolean) => { productsFail = value; },
       setAvailable: (value: number) => { available = value; stockMissing = false; },
       omitStock: () => { stockMissing = true; },
       failStock: () => { stockFails = true; },
@@ -1667,8 +1672,9 @@ describe('PosPage', () => {
     try {
       const setup = await liveCatalogFixture();
       fixture = setup.fixture;
-      const { priceLists, stock, current } = setup;
+      const { priceLists, products, stock, current } = setup;
       expect(priceLists).toHaveBeenCalledTimes(1);
+      expect(products).toHaveBeenCalledTimes(1);
       expect(stock).toHaveBeenCalledTimes(1);
       await vi.advanceTimersByTimeAsync(5000);
       expect(priceLists).toHaveBeenCalledTimes(2);
@@ -1682,6 +1688,7 @@ describe('PosPage', () => {
       await vi.advanceTimersByTimeAsync(10000);
       expect(priceLists).toHaveBeenCalledTimes(4);
       expect(stock).toHaveBeenCalledTimes(4);
+      expect(products).toHaveBeenCalledTimes(1);
     } finally {
       fixture?.destroy();
       vi.useRealTimers();
@@ -1717,7 +1724,7 @@ describe('PosPage', () => {
       expect(page.querySelector('.category-button.active')?.textContent).toContain('Vacuno');
       expect(page.querySelector('.ticket-lines')?.textContent).toContain('Asado');
       expect(page.querySelector('#product-dialog-title')?.textContent).toContain('Asado');
-      expect(setup.products).toHaveBeenCalledTimes(1);
+      expect(setup.products).toHaveBeenCalledTimes(2);
       await vi.advanceTimersByTimeAsync(5000);
       expect(setup.categories).toHaveBeenCalledTimes(2);
     } finally {
@@ -1777,7 +1784,7 @@ describe('PosPage', () => {
       expect(setup.categories).toHaveBeenCalledTimes(3);
       expect(page.querySelector('.category-rail')?.textContent).toContain('Vacuno');
       expect(page.querySelector('.product-grid')?.textContent).toContain('Asado');
-      expect(setup.products).toHaveBeenCalledTimes(1);
+      expect(setup.products).toHaveBeenCalledTimes(3);
     } finally {
       fixture?.destroy();
       vi.useRealTimers();
@@ -1836,6 +1843,191 @@ describe('PosPage', () => {
       expect(page.querySelector('#product-dialog-title')?.textContent).toContain('Asado');
       expect(page.querySelector('.category-button.active')?.textContent).toContain('Porcino');
       expect(page.querySelector('.product-grid')?.textContent).toContain('Bondiola');
+    } finally {
+      fixture?.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it('refreshes visible prices without changing the price or total of an open ticket', async () => {
+    vi.useFakeTimers();
+    let fixture: { destroy(): void } | undefined;
+    try {
+      const setup = await liveCatalogFixture();
+      fixture = setup.fixture;
+      const page = setup.fixture.nativeElement as HTMLElement;
+      page.querySelector<HTMLButtonElement>('.product-card')!.click();
+      setup.fixture.detectChanges();
+      page.querySelector<HTMLButtonElement>('.pos-dialog .finish-button')!.click();
+      setup.fixture.detectChanges();
+      expect(page.querySelector('.ticket-lines')?.textContent).toContain('1.000');
+      setup.setAsadoPrice(1450);
+
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(setup.products).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(5000);
+      setup.fixture.detectChanges();
+      expect(setup.products).toHaveBeenCalledTimes(2);
+      expect(page.querySelector('.product-card .product-price')?.textContent).toContain('1.450');
+      expect(page.querySelector('.ticket-lines')?.textContent).toContain('1.000');
+      expect(page.querySelector('.ticket-lines')?.textContent).not.toContain('1.450');
+      expect(page.querySelector('.sale-footer .total-field')?.textContent).toContain('1.000');
+      expect(page.querySelector('.category-button.active')?.textContent).toContain('Carnes');
+      expect(page.querySelector('.ticket-tab[aria-current="page"]')?.textContent).toContain('A');
+      expect(setup.save).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(setup.products).toHaveBeenCalledTimes(2);
+    } finally {
+      fixture?.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it('updates a selected product before adding it while preserving its entered quantity', async () => {
+    vi.useFakeTimers();
+    let fixture: { destroy(): void } | undefined;
+    try {
+      const setup = await liveCatalogFixture();
+      fixture = setup.fixture;
+      const page = setup.fixture.nativeElement as HTMLElement;
+      page.querySelector<HTMLButtonElement>('.product-card')!.click();
+      setup.fixture.detectChanges();
+      const quantity = page.querySelector<HTMLInputElement>('#product-quantity')!;
+      quantity.value = '2';
+      quantity.dispatchEvent(new Event('input'));
+      setup.setAsadoPrice(1450);
+
+      await vi.advanceTimersByTimeAsync(15000);
+      setup.fixture.detectChanges();
+      expect(page.querySelector('#product-dialog-title')?.textContent).toContain('Asado');
+      expect(page.querySelector('.product-facts')?.textContent).toContain('1.450');
+      expect(page.querySelector<HTMLInputElement>('#product-quantity')?.value).toBe('2');
+      page.querySelector<HTMLButtonElement>('.pos-dialog .finish-button')!.click();
+      setup.fixture.detectChanges();
+      expect(page.querySelector('.ticket-lines')?.textContent).toContain('2.900');
+    } finally {
+      fixture?.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps available prices and selling usable after a failed refresh, then retries', async () => {
+    vi.useFakeTimers();
+    let fixture: { destroy(): void } | undefined;
+    try {
+      const setup = await liveCatalogFixture();
+      fixture = setup.fixture;
+      const page = setup.fixture.nativeElement as HTMLElement;
+      setup.failProducts(true);
+      await vi.advanceTimersByTimeAsync(15000);
+      setup.fixture.detectChanges();
+      expect(setup.products).toHaveBeenCalledTimes(2);
+      expect(page.querySelector('.product-card .product-price')?.textContent).toContain('1.000');
+      expect(page.querySelector('.product-card')).not.toBeNull();
+      page.querySelector<HTMLButtonElement>('.product-card')!.click();
+      setup.fixture.detectChanges();
+      expect(page.querySelector('#product-dialog-title')?.textContent).toContain('Asado');
+      page.querySelector<HTMLButtonElement>('.pos-dialog .dialog-close')!.click();
+      setup.setAsadoPrice(1450);
+      setup.failProducts(false);
+
+      await vi.advanceTimersByTimeAsync(15000);
+      setup.fixture.detectChanges();
+      expect(setup.products).toHaveBeenCalledTimes(3);
+      expect(page.querySelector('.product-card .product-price')?.textContent).toContain('1.450');
+    } finally {
+      fixture?.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it('updates prices in two open POS instances without reloading either ticket view', async () => {
+    vi.useFakeTimers();
+    let first: { destroy(): void } | undefined;
+    let second: { destroy(): void } | undefined;
+    try {
+      const setup = await liveCatalogFixture();
+      first = setup.fixture;
+      const otherBox = TestBed.createComponent(PosPage);
+      second = otherBox;
+      otherBox.detectChanges();
+      await otherBox.whenStable();
+      expect(setup.products).toHaveBeenCalledTimes(2);
+      setup.setAsadoPrice(1450);
+
+      await vi.advanceTimersByTimeAsync(15000);
+      setup.fixture.detectChanges();
+      otherBox.detectChanges();
+      expect(setup.products).toHaveBeenCalledTimes(4);
+      for (const box of [setup.fixture, otherBox]) {
+        const page = box.nativeElement as HTMLElement;
+        expect(page.querySelector('.product-card .product-price')?.textContent).toContain('1.450');
+        expect(page.querySelector('.category-button.active')?.textContent).toContain('Carnes');
+      }
+    } finally {
+      first?.destroy();
+      second?.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it('refreshes the price of a barcode-selected product without closing its dialog', async () => {
+    vi.useFakeTimers();
+    let fixture: { destroy(): void } | undefined;
+    try {
+      const setup = await liveCatalogFixture();
+      fixture = setup.fixture;
+      const page = setup.fixture.nativeElement as HTMLElement;
+      const search = page.querySelector<HTMLInputElement>('#product-search')!;
+      search.value = '1002';
+      search.dispatchEvent(new Event('input'));
+      search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      setup.fixture.detectChanges();
+      expect(page.querySelector('.product-facts')?.textContent).toContain('1.000');
+      setup.setAsadoPrice(1450);
+
+      await vi.advanceTimersByTimeAsync(15000);
+      setup.fixture.detectChanges();
+      expect(setup.products).toHaveBeenLastCalledWith({ priceListId: 'list-id', code: '1002' });
+      expect(page.querySelector('#product-dialog-title')?.textContent).toContain('Asado');
+      expect(page.querySelector('.product-facts')?.textContent).toContain('1.450');
+    } finally {
+      fixture?.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignores a late price response after the cashier changes category', async () => {
+    vi.useFakeTimers();
+    let fixture: { destroy(): void } | undefined;
+    try {
+      const setup = await liveCatalogFixture();
+      fixture = setup.fixture;
+      const page = setup.fixture.nativeElement as HTMLElement;
+      setup.setCategories([
+        { id: 'meat', name: 'Carnes', productCount: 1 },
+        { id: 'pork', name: 'Cerdo', productCount: 1 },
+      ]);
+      await vi.advanceTimersByTimeAsync(15000);
+      setup.fixture.detectChanges();
+      [...page.querySelectorAll<HTMLButtonElement>('.category-button')]
+        .find((button) => button.textContent?.includes('Cerdo'))!.click();
+      setup.fixture.detectChanges();
+      expect(page.querySelector('.product-grid')?.textContent).toContain('Bondiola');
+      const stalePage = { items: [{ id: 'bondiola', code: '2001', name: 'Bondiola', categoryId: 'pork',
+        saleMode: 'unit', unit: 'unidad', price: 9999, availableStock: 10 }],
+        page: 1, pageSize: 50, totalItems: 1 };
+      const pending = new Subject<typeof stalePage>();
+      setup.products.mockImplementationOnce(() => pending);
+      await vi.advanceTimersByTimeAsync(15000);
+      [...page.querySelectorAll<HTMLButtonElement>('.category-button')]
+        .find((button) => button.textContent?.includes('Carnes'))!.click();
+      pending.next(stalePage);
+      pending.complete();
+      setup.fixture.detectChanges();
+      expect(page.querySelector('.category-button.active')?.textContent).toContain('Carnes');
+      expect(page.querySelector('.product-grid')?.textContent).toContain('Asado');
+      expect(page.querySelector('.product-grid')?.textContent).not.toContain('Bondiola');
     } finally {
       fixture?.destroy();
       vi.useRealTimers();

@@ -45,4 +45,4 @@ Se mantuvieron las rutas existentes de borrador, confirmación, recepción y bú
 3. Se necesita corte coordinado de escritores. Mezclar API vieja y nueva permitiría rutas antiguas sin transición de estado o intentos de inserción sin columnas obligatorias.
 4. Los estados `Transferred` y `Consumed` son terminales en el modelo actual, pero no tienen flujo de transferencia/producción en I02; dichos módulos requieren diseño y autorización propios.
 
-**Siguiente puerta:** autorización expresa para prevuelo de datos, respaldo, aplicación de migración y fixture de integración sobre la única base. Hasta entonces, I02 queda preparado en código y no se debe iniciar la API nueva sobre el esquema anterior.
+**Siguiente puerta:** el PO autorizó el prevuelo de solo lectura, documentado en `documentacion/despliegue/preflight-i02-20261102.md`, pero el contenedor de la base única está detenido y los datos aún no pudieron consultarse. El respaldo, la aplicación de la migración y el fixture de integración requieren autorización posterior y separada. I02 sigue preparado en código; no se debe iniciar la API nueva sobre el esquema anterior.

@@ -433,6 +433,15 @@ export class PosPage implements OnInit {
       if (slot !== this.activeTicketSlot()) return;
       if (error) {
         if (revision === this.draftRevision) {
+          if (['PIECE_RELEASED_BY_ADMIN', 'PIECE_RESERVATION_MISSING',
+            'SALE_DRAFT_CONFLICT'].includes(error.error?.error?.code)) {
+            this.loadSavedDraft();
+            this.errorMessage.set(error.error?.error?.code === 'PIECE_RELEASED_BY_ADMIN'
+              ? 'Administración liberó una pieza de este ticket. Se recuperó el resto de la venta guardada.'
+              : 'El ticket cambió en otra operación. Se recuperó la venta guardada.');
+            this.refreshStock();
+            return;
+          }
           if (operation === 'cancel') this.lines.set(this.persistedLines());
           if (['INSUFFICIENT_STOCK', 'PIECE_ALREADY_USED', 'PIECE_NOT_AVAILABLE',
             'MERCADO_PAGO_ORDER_ACTIVE'].includes(error.error?.error?.code)) {
@@ -862,7 +871,11 @@ export class PosPage implements OnInit {
         this.pieceLookupError(error.status === 409
           ? error.error?.error?.code === 'PIECE_ALREADY_SOLD'
             ? 'Esta pieza ya fue vendida y no se puede agregar a otro ticket.'
-            : 'Hay más de una pieza con esa etiqueta en la sucursal. Revisá el origen antes de vender.'
+            : error.error?.error?.code === 'PIECE_RESERVED'
+              ? 'Esta pieza ya está reservada en un ticket.'
+              : error.error?.error?.code === 'PIECE_NOT_AVAILABLE'
+                ? 'Esta pieza no está disponible para la venta.'
+                : 'Hay más de una pieza con esa etiqueta en la sucursal. Revisá el origen antes de vender.'
           : error.status === 404
             ? 'El código no corresponde a un artículo ni a una pieza recibida en esta sucursal.'
             : 'No se pudo consultar la pieza. Intentá nuevamente.');

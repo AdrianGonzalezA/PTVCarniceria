@@ -24,6 +24,14 @@
 .piece-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .piece-options > div { display: grid; gap: 0.5rem; }
 .piece-empty { margin: 1rem; }
+.piece-dialog-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 1rem; background: rgb(0 0 0 / 65%); }
+.piece-dialog { width: min(42rem, 100%); max-height: min(85vh, 50rem); overflow: auto; color: var(--admin-abm-ink); background: var(--admin-abm-surface); border: 1px solid var(--admin-abm-border); border-radius: .4rem; box-shadow: 0 1rem 3rem rgb(0 0 0 / 35%); }
+.piece-dialog-content { padding: 1rem 1.25rem; }
+.piece-event-list { max-height: 12rem; overflow: auto; padding-left: 1.4rem; }
+.piece-event-list li { margin-bottom: .65rem; }
+.piece-release-form { display: grid; gap: .6rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--admin-abm-border); }
+.piece-release-form textarea { width: 100%; box-sizing: border-box; padding: .65rem; color: var(--admin-piece-ink); background: var(--admin-piece-control); border: 1px solid var(--admin-piece-border); border-radius: .25rem; font: inherit; }
+.piece-release-form textarea:focus-visible, .piece-dialog button:focus-visible { outline: 3px solid var(--admin-piece-focus); outline-offset: 2px; }
 :host-context(html[data-visual-theme='nocturno']) {
   .piece-form select { color-scheme: dark; }
   .piece-panel .panel-heading a { color: #e5b27f; }

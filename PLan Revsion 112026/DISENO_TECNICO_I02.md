@@ -1,6 +1,6 @@
 # I02 — Diseño técnico propuesto: reserva y estados de piezas trazables
 
-**Estado:** propuesta para revisión del Product Owner, 02/11/2026. **No autoriza implementación, migración ni escritura de datos.** Alcance del plan: BUG-06 y TRAZ-01 fase 1. I03 y cualquier otro incremento no autorizado permanecen fuera de esta etapa.
+**Estado:** modelo funcional aprobado por el Product Owner el 02/11/2026. Se autorizó implementar código y preparar migración, **sin ejecutar migraciones ni escribir datos**. El resultado y las verificaciones constan en `IMPLEMENTACION_I02.md`. Alcance: BUG-06 y TRAZ-01 fase 1. I03 y cualquier otro incremento permanecen fuera de esta etapa.
 
 ## 1. Fuentes y límites
 
@@ -29,7 +29,7 @@
 
 **Fuente de verdad:** una fila `inventory.pieces` por pieza física. Añadir `Status` (`Disponible=0`, `Reservada=1`, `Vendida=2`, `Transferida=3`, `Consumida=4`), `ReservedBySaleDraftId` y `ReservedAtUtc` opcionales, y `StateChangedAtUtc`. La FK compuesta `(CompanyId, ReservedBySaleDraftId)` referenciaría la clave alternativa ya existente `(CompanyId, Id)` de `pos_sales.sale_drafts`, con borrado restringido; la sucursal se verifica además en cada transición. `Status=Reservada` exige dueño y fecha; todos los demás estados exigen ambos nulos. ID, peso, identificador externo, origen y recepción permanecen inmutables. El estado no sustituye el balance agregado `OnHand/Reserved` ni el índice único de venta: los tres son controles complementarios.
 
-**Auditoría:** tabla aditiva `inventory.piece_state_events` con ID de evento, pieza/empresa/sucursal, estado anterior y nuevo, fecha UTC, actor o proceso, borrador/operación causal, motivo y un identificador idempotente de operación. Cada cambio de estado y liberación excepcional se registra en la misma transacción. Prohibir actualización/borrado desde la API; índices por pieza/fecha y operación. No guardar secretos ni datos de tarjeta.
+**Auditoría:** tabla aditiva `inventory.piece_state_events` con ID de evento, pieza/empresa/sucursal, estado anterior y nuevo, fecha UTC, actor o proceso, borrador/operación causal y motivo. Cada cambio de estado y liberación excepcional se registra en la misma transacción. El ID de evento identifica la transición y los cambios condicionales de estado evitan duplicados por reintento; la recepción conserva su `OperationId` ya existente. Prohibir actualización/borrado desde la API; índices por pieza/fecha y borrador. No guardar secretos ni datos de tarjeta.
 
 **Alternativa evaluada:** tabla independiente de reservas activas con `PieceId` único. También permite exclusión, pero duplica la representación de estado y dueño. Se prefiere actualización condicional de la fila de pieza para I02; esta elección requiere aprobación del PO por tratarse de arquitectura.
 
@@ -107,14 +107,14 @@ No usar vencimiento automático: una caja cerrada por corte puede conservar tick
 | Administración y permisos | Cajero o administrador de otra empresa reciben rechazo; administrador propio libera con motivo, evento y ajuste; pago MP preparado/pendiente/aprobado sin conciliación bloquea liberación. |
 | Regresión | Venta por unidad/peso común, código alternativo, importador XLSX, A/B/C/D, turnos, stock, cobro pendiente, cuenta corriente y venta fiscal conservan resultados. La UI POS se inspecciona en Electron. |
 
-**Restricción del entorno de pruebas:** hoy no se ejecutan pruebas ni se escriben datos. Las pruebas de modelo/puras podrán correr sin BD. La suite `SaleDraftPersistenceTests` migra y revierte otra base (`MigrateAsync` y `MigrateAsync("0")`); está prohibida por AGENTS.md. Una prueba real con dos conexiones exige fixture visible para ambas, por lo que requiere **escrituras temporales y limpieza auditada** en la única base autorizada; pedir aprobación expresa antes de ejecutarla. No presentar una prueba en memoria como evidencia suficiente de exclusividad PostgreSQL.
+**Restricción del entorno de pruebas:** se pueden ejecutar pruebas de modelo, frontend y compilación sin BD. La suite `SaleDraftPersistenceTests` migra y revierte otra base (`MigrateAsync` y `MigrateAsync("0")`); está prohibida por AGENTS.md. Una prueba real con dos conexiones exige fixture visible para ambas, por lo que requiere **escrituras temporales y limpieza auditada** en la única base autorizada; pedir aprobación expresa antes de ejecutarla. No presentar una prueba en memoria como evidencia suficiente de exclusividad PostgreSQL.
 
 ## 10. Riesgos, dependencias y decisiones para el PO
 
-- **Aprobación arquitectónica requerida:** elegir la fila de pieza como autoridad de estado/reserva, `ReservedBySaleDraftId` con FK y bitácora inmutable de eventos, según §3. Alternativa: tabla de reservas activas única por pieza. No se modifica código antes de esa aprobación.
-- **Liberación administrativa:** validar si debe quitar solo la línea bloqueada y mantener el resto del borrador, o cancelar el borrador completo. En ambos casos, conciliar pago externo activo antes de liberar; administración de la misma empresa y motivo auditado.
+- **Modelo aprobado:** la fila de pieza es la autoridad de estado/reserva, con `ReservedBySaleDraftId`, FK y eventos según §3. La tabla independiente de reservas fue descartada para I02.
+- **Liberación administrativa aprobada:** quitar solo la pieza afectada y conservar las demás líneas; bloquear mientras haya pago externo activo, conciliación pendiente o confirmación en curso. Requiere administrador de la misma empresa y motivo auditado.
 - **Transferencia futura (I18b):** Q13 y Q16 establecen salida definitiva y estado Transferida, pero no definen si al recibir en destino se conserva **la misma fila/ID** cambiando su sucursal o se crea un registro de recepción vinculado al original. El índice único empresa/origen/identificador y la conservación de ID/origen impiden decidirlo silenciosamente. No bloquea I02; definir antes de I18b.
 - **Producción futura (I23):** decidir titularidad de la reserva de una orden abierta y cuándo se adquiere. I02 solo reserva para borrador de venta; la regla vigente exige consumir pieza Disponible al cierre y excluir piezas reservadas por venta. No adelantar órdenes ni reservas de producción.
 - **Datos previos:** sin lectura de la base en esta preparación, se desconoce si existen piezas con borradores simultáneos o ajustes de stock ambiguos. El prevuelo es condición de migración, no una conclusión favorable anticipada.
 
-**Puerta de avance:** el PO revisa este diseño y resuelve las decisiones de arquitectura pertinentes. Solo una autorización posterior y expresa habilita editar código de I02; migrar esquema o alterar la base requiere autorización específica y prevuelo/respaldo. I03/I18/I23 no se abren por esta aprobación.
+**Puerta de despliegue:** el PO aprobó el modelo funcional y habilitó código y archivos de migración de I02. Aplicar la migración, escribir fixtures o alterar la base requiere autorización específica, prevuelo y respaldo. I03/I18/I23 no se abren por esta aprobación.

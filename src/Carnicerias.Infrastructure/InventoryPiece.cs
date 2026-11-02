@@ -2,6 +2,15 @@ using System.Text;
 
 namespace Carnicerias.Infrastructure;
 
+public enum InventoryPieceStatus
+{
+    Available,
+    Reserved,
+    Sold,
+    Transferred,
+    Consumed
+}
+
 public sealed class InventoryPiece
 {
     private InventoryPiece()
@@ -49,6 +58,8 @@ public sealed class InventoryPiece
         IdentifierField = identifierField.Trim().ToLowerInvariant();
         ReceivedWeightKg = receivedWeightKg;
         ReceivedAtUtc = receivedAtUtc.ToUniversalTime();
+        Status = InventoryPieceStatus.Available;
+        StateChangedAtUtc = ReceivedAtUtc;
     }
 
     public Guid Id { get; private set; }
@@ -66,4 +77,58 @@ public sealed class InventoryPiece
     public string IdentifierField { get; private set; }
     public decimal ReceivedWeightKg { get; private set; }
     public DateTimeOffset ReceivedAtUtc { get; private set; }
+    public InventoryPieceStatus Status { get; private set; }
+    public Guid? ReservedBySaleDraftId { get; private set; }
+    public DateTimeOffset? ReservedAtUtc { get; private set; }
+    public DateTimeOffset StateChangedAtUtc { get; private set; }
+
+    public void ReserveForSale(Guid draftId, DateTimeOffset now)
+    {
+        if (draftId == Guid.Empty) throw new ArgumentException("A draft is required.", nameof(draftId));
+        if (Status == InventoryPieceStatus.Reserved && ReservedBySaleDraftId == draftId) return;
+        if (Status != InventoryPieceStatus.Available)
+            throw new InvalidOperationException("The piece is not available for a sale draft.");
+        Status = InventoryPieceStatus.Reserved;
+        ReservedBySaleDraftId = draftId;
+        ReservedAtUtc = now.ToUniversalTime();
+        StateChangedAtUtc = ReservedAtUtc.Value;
+    }
+
+    public void ReleaseSaleReservation(Guid draftId, DateTimeOffset now)
+    {
+        if (Status != InventoryPieceStatus.Reserved || ReservedBySaleDraftId != draftId ||
+            draftId == Guid.Empty)
+            throw new InvalidOperationException("The draft does not own this piece.");
+        Status = InventoryPieceStatus.Available;
+        ReservedBySaleDraftId = null;
+        ReservedAtUtc = null;
+        StateChangedAtUtc = now.ToUniversalTime();
+    }
+
+    public void MarkSold(Guid draftId, DateTimeOffset now)
+    {
+        if (Status != InventoryPieceStatus.Reserved || ReservedBySaleDraftId != draftId ||
+            draftId == Guid.Empty)
+            throw new InvalidOperationException("The draft does not own this piece.");
+        Status = InventoryPieceStatus.Sold;
+        ReservedBySaleDraftId = null;
+        ReservedAtUtc = null;
+        StateChangedAtUtc = now.ToUniversalTime();
+    }
+
+    public void MarkTransferred(DateTimeOffset now)
+    {
+        if (Status != InventoryPieceStatus.Available)
+            throw new InvalidOperationException("Only an available piece can be transferred.");
+        Status = InventoryPieceStatus.Transferred;
+        StateChangedAtUtc = now.ToUniversalTime();
+    }
+
+    public void MarkConsumed(DateTimeOffset now)
+    {
+        if (Status != InventoryPieceStatus.Available)
+            throw new InvalidOperationException("Only an available piece can be consumed.");
+        Status = InventoryPieceStatus.Consumed;
+        StateChangedAtUtc = now.ToUniversalTime();
+    }
 }

@@ -1381,10 +1381,22 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasPrecision(12, 3)
                         .HasColumnType("numeric(12,3)");
 
+                    b.Property<DateTimeOffset?>("ReservedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReservedBySaleDraftId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("SourceSystem")
                         .IsRequired()
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
+
+                    b.Property<DateTimeOffset>("StateChangedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
@@ -1396,8 +1408,12 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.HasIndex("CompanyId", "ProductId");
 
+                    b.HasIndex("CompanyId", "ReservedBySaleDraftId");
+
                     b.HasIndex("CompanyId", "BranchId", "OperationId")
                         .IsUnique();
+
+                    b.HasIndex("CompanyId", "BranchId", "Status");
 
                     b.HasIndex("CompanyId", "NormalizedSourceSystem", "ExternalIdentifier")
                         .IsUnique();
@@ -1407,6 +1423,66 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.ToTable("pieces", "inventory", t =>
                         {
                             t.HasCheckConstraint("CK_pieces_received_weight_positive", "\"ReceivedWeightKg\" > 0");
+
+                            t.HasCheckConstraint("CK_pieces_reservation_owner", "(\"Status\" = 1 AND \"ReservedBySaleDraftId\" IS NOT NULL AND \"ReservedAtUtc\" IS NOT NULL) OR (\"Status\" <> 1 AND \"ReservedBySaleDraftId\" IS NULL AND \"ReservedAtUtc\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_pieces_status", "\"Status\" BETWEEN 0 AND 4");
+                        });
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.InventoryPieceStateEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("PieceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("PreviousStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)");
+
+                    b.Property<Guid?>("SaleDraftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("PieceId");
+
+                    b.HasIndex("CompanyId", "SaleDraftId");
+
+                    b.HasIndex("CompanyId", "BranchId", "PieceId", "CreatedAtUtc");
+
+                    b.ToTable("piece_state_events", "inventory", t =>
+                        {
+                            t.HasCheckConstraint("CK_piece_state_events_kind", "\"Kind\" BETWEEN 0 AND 7");
+
+                            t.HasCheckConstraint("CK_piece_state_events_status", "\"Status\" BETWEEN 0 AND 4 AND (\"PreviousStatus\" IS NULL OR \"PreviousStatus\" BETWEEN 0 AND 4)");
                         });
                 });
 
@@ -3063,6 +3139,32 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasPrincipalKey("CompanyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.SaleDraft", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "ReservedBySaleDraftId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.InventoryPieceStateEvent", b =>
+                {
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.Infrastructure.InventoryPiece", null)
+                        .WithMany()
+                        .HasForeignKey("PieceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.SaleDraft", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "SaleDraftId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Carnicerias.Infrastructure.MercadoPagoGatewaySettings", b =>

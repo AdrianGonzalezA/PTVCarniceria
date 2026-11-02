@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Carnicerias.Infrastructure;
 using Carnicerias.Api.Security;
+using Carnicerias.Api.Sales;
 using Carnicerias.PlatformAccess;
 using Microsoft.EntityFrameworkCore;
 
@@ -118,6 +119,10 @@ public static class MercadoPagoPaymentEndpoints
         SaleDraft? draft = null;
         if (draftId is Guid saleDraftId)
         {
+            if (!await SaleDraftTransactionLock.AcquireAsync(db,
+                    accessor.Context.CompanyId, accessor.Context.BranchId,
+                    saleDraftId, cancellationToken))
+                return Error(404, "DRAFT_NOT_FOUND");
             draft = await OwnedDraftAsync(saleDraftId, db, accessor, cancellationToken);
             if (draft is null || draft.Lines.Count == 0 || draft.TotalAfterDiscount < request.Amount)
                 return Error(409, "DRAFT_NOT_CONFIRMABLE");

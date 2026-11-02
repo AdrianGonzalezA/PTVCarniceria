@@ -1,6 +1,8 @@
+using System.Data;
 using System.Text;
 using Carnicerias.Api.Contracts;
 using Carnicerias.Api.Security;
+using Carnicerias.Api.Sales;
 using Carnicerias.Domain.Inventory;
 using Carnicerias.Infrastructure;
 using Carnicerias.PlatformAccess;
@@ -17,7 +19,9 @@ public static class InventoryPieceEndpoints
             .RequireOperationalPermission(PlatformPermissionCatalog.InventoryStockManage);
         pieces.MapGet("", ListAsync);
         pieces.MapGet("/{id:guid}", GetAsync);
+        pieces.MapGet("/{id:guid}/events", ListEventsAsync);
         pieces.MapPost("", ReceiveAsync);
+        pieces.MapPost("/{id:guid}/release", ReleaseReservedAsync);
         endpoints.MapGet("/api/pos/pieces/lookup", LookupForPosAsync).RequireOperationalContext();
         return endpoints;
     }
@@ -38,6 +42,7 @@ public static class InventoryPieceEndpoints
                              select new
                              {
                                  piece.Id,
+                                 piece.Status,
                                  piece.ProductId,
                                  ProductCode = product.Code,
                                  piece.ExternalIdentifier,
@@ -54,6 +59,12 @@ public static class InventoryPieceEndpoints
         {
             0 => Error(StatusCodes.Status404NotFound, "PIECE_NOT_FOUND"),
             > 1 => Error(StatusCodes.Status409Conflict, "PIECE_BARCODE_AMBIGUOUS"),
+            _ when matches[0].Status == InventoryPieceStatus.Sold =>
+                Error(StatusCodes.Status409Conflict, "PIECE_ALREADY_SOLD"),
+            _ when matches[0].Status == InventoryPieceStatus.Reserved =>
+                Error(StatusCodes.Status409Conflict, "PIECE_RESERVED"),
+            _ when matches[0].Status != InventoryPieceStatus.Available =>
+                Error(StatusCodes.Status409Conflict, "PIECE_NOT_AVAILABLE"),
             _ when !matches[0].IsActive || matches[0].SaleMode != ProductSaleMode.Weight =>
                 Error(StatusCodes.Status404NotFound, "WEIGHT_PRODUCT_NOT_AVAILABLE"),
             _ => Results.Ok(new PosPieceLookupResponse(matches[0].Id, matches[0].ProductId,
@@ -85,15 +96,119 @@ public static class InventoryPieceEndpoints
         var query = db.InventoryPieces.AsNoTracking().Where(piece =>
             piece.CompanyId == context.CompanyId && piece.BranchId == context.BranchId);
         var total = await query.CountAsync(cancellationToken);
-        var items = await (from piece in query
+        var pageItems = await (from piece in query
                            join product in db.CatalogProducts.AsNoTracking() on piece.ProductId equals product.Id
                            orderby piece.ReceivedAtUtc descending, piece.Id descending
-                           select new PieceListItem(piece.Id, piece.ProductId, product.Code, product.Name,
+                           select new { piece.Id, piece.ProductId, ProductCode = product.Code,
+                               ProductName = product.Name,
                                piece.SourceSystem, piece.ExternalIdentifier, piece.ReceivedWeightKg,
-                               piece.RawBarcode, piece.ReceivedAtUtc))
+                               piece.RawBarcode, piece.ReceivedAtUtc, piece.Status,
+                               piece.ReservedBySaleDraftId, piece.ReservedAtUtc })
             .Skip((currentPage - 1) * currentPageSize).Take(currentPageSize)
             .ToArrayAsync(cancellationToken);
+        var items = pageItems.Select(piece => new PieceListItem(piece.Id, piece.ProductId,
+            piece.ProductCode, piece.ProductName, piece.SourceSystem, piece.ExternalIdentifier,
+            piece.ReceivedWeightKg, piece.RawBarcode, piece.ReceivedAtUtc,
+            piece.Status.ToString(), piece.ReservedBySaleDraftId, piece.ReservedAtUtc)).ToArray();
         return Results.Ok(new PieceListResponse(items, currentPage, currentPageSize, total));
+    }
+
+    private static async Task<IResult> ListEventsAsync(Guid id, PlatformAccessDbContext db,
+        OperationalContextAccessor accessor, CancellationToken cancellationToken)
+    {
+        var context = accessor.Context;
+        if (!await db.InventoryPieces.AsNoTracking().AnyAsync(piece => piece.Id == id &&
+            piece.CompanyId == context.CompanyId && piece.BranchId == context.BranchId, cancellationToken))
+            return Error(StatusCodes.Status404NotFound, "PIECE_NOT_FOUND");
+        var events = await db.InventoryPieceStateEvents.AsNoTracking()
+            .Where(item => item.PieceId == id && item.CompanyId == context.CompanyId &&
+                item.BranchId == context.BranchId)
+            .OrderByDescending(item => item.CreatedAtUtc).ThenByDescending(item => item.Id)
+            .Take(100).ToArrayAsync(cancellationToken);
+        var items = events.Select(item => new PieceEventResponse(item.Id,
+            item.PreviousStatus?.ToString(), item.Status.ToString(), item.Kind.ToString(),
+            item.SaleDraftId, item.ActorUserId, item.Reason, item.CreatedAtUtc)).ToArray();
+        return Results.Ok(items);
+    }
+
+    private static async Task<IResult> ReleaseReservedAsync(Guid id, ReleasePieceRequest? request,
+        PlatformAccessDbContext db, OperationalContextAccessor accessor, HttpContext httpContext,
+        TimeProvider clock, CancellationToken cancellationToken)
+    {
+        var origin = httpContext.Request.Headers.Origin.ToString();
+        if (!string.IsNullOrEmpty(origin) && !RequestOriginValidator.IsAllowed(origin, httpContext.Request))
+            return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
+        var reason = request?.Reason?.Trim();
+        if (id == Guid.Empty || string.IsNullOrWhiteSpace(reason) || reason.Length > 240)
+            return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+        var context = accessor.Context;
+        var admin = await (from assignment in db.UserAssignments.AsNoTracking()
+                           join role in db.Roles.AsNoTracking() on assignment.RoleId equals role.Id
+                           where assignment.UserId == context.UserId &&
+                                 assignment.CompanyId == context.CompanyId &&
+                                 assignment.BranchId == null && role.Code == "administrator"
+                           select assignment.UserId).AnyAsync(cancellationToken);
+        if (!admin) return Error(StatusCodes.Status403Forbidden, "ADMINISTRATOR_REQUIRED");
+
+        try
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable, cancellationToken);
+            var piece = await db.InventoryPieces.AsNoTracking().SingleOrDefaultAsync(item =>
+                item.Id == id && item.CompanyId == context.CompanyId &&
+                item.BranchId == context.BranchId, cancellationToken);
+            if (piece is null) return Error(StatusCodes.Status404NotFound, "PIECE_NOT_FOUND");
+            if (piece.Status != InventoryPieceStatus.Reserved ||
+                piece.ReservedBySaleDraftId is not Guid draftId)
+                return Error(StatusCodes.Status409Conflict, "PIECE_NOT_RESERVED");
+            if (!await SaleDraftTransactionLock.AcquireAsync(db, context.CompanyId,
+                    context.BranchId, draftId, cancellationToken))
+                return Error(StatusCodes.Status409Conflict, "PIECE_DRAFT_NOT_ACTIVE");
+            var draft = await db.SaleDrafts.Include(item => item.Lines).SingleOrDefaultAsync(item =>
+                item.Id == draftId && item.CompanyId == context.CompanyId &&
+                item.BranchId == context.BranchId && item.Status == SaleDraftStatus.Draft,
+                cancellationToken);
+            if (draft is null) return Error(StatusCodes.Status409Conflict, "PIECE_DRAFT_NOT_ACTIVE");
+            var line = draft.Lines.SingleOrDefault(item => item.InventoryPieceId == piece.Id);
+            if (line is null) return Error(StatusCodes.Status409Conflict, "PIECE_DRAFT_LINE_MISSING");
+            if (await db.ConfirmedSales.AsNoTracking().AnyAsync(sale =>
+                    sale.CompanyId == context.CompanyId && sale.SourceDraftId == draftId,
+                    cancellationToken))
+                return Error(StatusCodes.Status409Conflict, "SALE_ALREADY_CONFIRMED");
+            if (await db.PointPaymentIntents.AsNoTracking().AnyAsync(intent =>
+                    intent.CompanyId == context.CompanyId && intent.SaleDraftId == draftId &&
+                    (intent.Status == PointPaymentStatus.Prepared ||
+                     intent.Status == PointPaymentStatus.Pending ||
+                     intent.Status == PointPaymentStatus.Approved ||
+                     intent.Status == PointPaymentStatus.NeedsReconciliation), cancellationToken))
+                return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_ORDER_ACTIVE");
+
+            var now = clock.GetUtcNow();
+            if (!await PieceReservationTransactions.ReleaseAsync(db, piece, draftId,
+                context.UserId, InventoryPieceEventKind.AdminReleased, reason,
+                now, cancellationToken))
+                return Error(StatusCodes.Status409Conflict, "PIECE_RESERVATION_MISSING");
+            var changed = await db.BranchInventoryBalances.Where(balance =>
+                    balance.CompanyId == context.CompanyId && balance.BranchId == context.BranchId &&
+                    balance.ProductId == piece.ProductId && balance.Reserved >= line.Quantity)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(balance => balance.Reserved,
+                    balance => balance.Reserved - line.Quantity), cancellationToken);
+            if (changed != 1) return Error(StatusCodes.Status409Conflict, "STOCK_RESERVATION_MISSING");
+
+            draft.ReplaceLines(draft.Lines.Where(item => item.Id != line.Id).ToArray(), now);
+            var discountReset = draft.DiscountAmount > 0 && (draft.Lines.Count == 0 ||
+                draft.DiscountAmount >= draft.Lines.Sum(item => decimal.Round(
+                    item.Quantity * item.UnitPrice, 2, MidpointRounding.AwayFromZero)));
+            if (discountReset) draft.SetDiscount(0, null);
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return Results.Ok(new { pieceId = piece.Id, draftId, draftCancelled = false,
+                discountReset });
+        }
+        catch (Exception exception) when (PieceReservationTransactions.IsConcurrencyConflict(exception))
+        {
+            return Error(StatusCodes.Status409Conflict, "PIECE_OPERATION_IN_PROGRESS");
+        }
     }
 
     private static async Task<IResult> ReceiveAsync(ReceivePieceRequest? request,
@@ -170,6 +285,10 @@ public static class InventoryPieceEndpoints
             read.ExternalIdentifier, code, read.WeightKg, clock.GetUtcNow(), identifierField);
         db.InventoryMovements.Add(movement);
         db.InventoryPieces.Add(piece);
+        db.InventoryPieceStateEvents.Add(new InventoryPieceStateEvent(context.CompanyId,
+            context.BranchId, piece.Id, null, InventoryPieceStatus.Available,
+            InventoryPieceEventKind.Receipt, null, context.UserId,
+            "Recepción de pieza trazable", clock.GetUtcNow()));
         try
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"""
@@ -194,20 +313,24 @@ public static class InventoryPieceEndpoints
 
     private static PieceResponse ToResponse(InventoryPiece piece) => new(piece.Id, piece.OperationId,
         piece.ProductId, piece.BarcodeProfileId, piece.SourceSystem, piece.ExternalIdentifier,
-        piece.ReceivedWeightKg, piece.RawBarcode, piece.ReceivedAtUtc);
+        piece.ReceivedWeightKg, piece.RawBarcode, piece.ReceivedAtUtc, piece.Status.ToString());
 
     private static IResult Error(int statusCode, string code) => Results.Json(
-        new ErrorResponse(new ApiError(code, "No se pudo recibir la pieza", [])), statusCode: statusCode);
+        new ErrorResponse(new ApiError(code, "No se pudo procesar la pieza", [])), statusCode: statusCode);
 
     private sealed record ReceivePieceRequest(Guid OperationId, Guid ProductId, Guid BarcodeProfileId,
         string SourceSystem, string IdentifierField, string Code);
     private sealed record PieceResponse(Guid Id, Guid OperationId, Guid ProductId, Guid BarcodeProfileId,
         string SourceSystem, string ExternalIdentifier, decimal ReceivedWeightKg, string RawBarcode,
-        DateTimeOffset ReceivedAtUtc);
+        DateTimeOffset ReceivedAtUtc, string Status);
     private sealed record PieceListItem(Guid Id, Guid ProductId, string ProductCode, string ProductName,
         string SourceSystem, string ExternalIdentifier, decimal ReceivedWeightKg, string RawBarcode,
-        DateTimeOffset ReceivedAtUtc);
+        DateTimeOffset ReceivedAtUtc, string Status, Guid? ReservedBySaleDraftId,
+        DateTimeOffset? ReservedAtUtc);
     private sealed record PieceListResponse(IReadOnlyList<PieceListItem> Items, int Page, int PageSize, int Total);
+    private sealed record PieceEventResponse(Guid Id, string? PreviousStatus, string Status,
+        string Kind, Guid? SaleDraftId, Guid? ActorUserId, string Reason, DateTimeOffset CreatedAtUtc);
+    private sealed record ReleasePieceRequest(string? Reason);
     private sealed record PosPieceLookupResponse(Guid Id, Guid ProductId, string ProductCode,
         string ExternalIdentifier, decimal ReceivedWeightKg, string RawBarcode);
 }

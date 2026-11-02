@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Carnicerias.Api.Contracts;
+using Carnicerias.Api.Inventory;
 using Carnicerias.Api.Security;
 using Carnicerias.Domain.Sales;
 using Carnicerias.Infrastructure;
@@ -69,6 +70,9 @@ public static class SaleConfirmationEndpoints
                 item.Id == draftId && item.Status == SaleDraftStatus.Draft,
                 cancellationToken);
             if (draft is null || draft.Lines.Count == 0)
+                return Error(StatusCodes.Status409Conflict, "SALE_NOT_CONFIRMABLE");
+            if (!await SaleDraftTransactionLock.AcquireAsync(db, context.CompanyId,
+                    context.BranchId, draft.Id, cancellationToken))
                 return Error(StatusCodes.Status409Conflict, "SALE_NOT_CONFIRMABLE");
 
             var shift = await db.CashierShifts.SingleOrDefaultAsync(item =>
@@ -181,9 +185,17 @@ public static class SaleConfirmationEndpoints
 
             var now = timeProvider.GetUtcNow();
             foreach (var pieceId in draft.Lines.Where(line => line.InventoryPieceId is not null)
-                         .Select(line => line.InventoryPieceId!.Value))
+                         .Select(line => line.InventoryPieceId!.Value).Order())
+            {
                 if (await db.ConfirmedSaleLines.AnyAsync(line => line.InventoryPieceId == pieceId, cancellationToken))
                     return Error(StatusCodes.Status409Conflict, "PIECE_ALREADY_USED");
+                var piece = await db.InventoryPieces.AsNoTracking().SingleOrDefaultAsync(item =>
+                    item.Id == pieceId && item.CompanyId == context.CompanyId &&
+                    item.BranchId == context.BranchId, cancellationToken);
+                if (piece is null || !await PieceReservationTransactions.SellAsync(db, piece,
+                    draft.Id, context.UserId, now, cancellationToken))
+                    return Error(StatusCodes.Status409Conflict, "PIECE_RESERVATION_MISSING");
+            }
             var sale = new ConfirmedSale(context.CompanyId, context.BranchId, context.UserId,
                 shift.Id, draft.Id, draft.PriceListId, total, requestHash, now, accessor.TerminalId,
                 request.CustomerId, request.AccountChargeAmount, creditCustomer?.Code, creditCustomer?.Name,
@@ -224,7 +236,7 @@ public static class SaleConfirmationEndpoints
                     context.BranchId, creditCustomerId, sale.Id, context.UserId, shift.Id,
                     request.CreditAppliedAmount, now));
 
-            foreach (var group in draft.Lines.GroupBy(line => line.ProductId))
+            foreach (var group in draft.Lines.GroupBy(line => line.ProductId).OrderBy(group => group.Key))
             {
                 var quantity = group.Sum(line => line.Quantity);
                 var changed = await db.BranchInventoryBalances.Where(balance =>
@@ -343,7 +355,8 @@ public static class SaleConfirmationEndpoints
     private static bool IsConcurrentConfirmation(Exception exception)
     {
         for (var current = exception; current is not null; current = current.InnerException!)
-            if (current is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.SerializationFailure })
+            if (current is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation or
+                PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected })
                 return true;
         return false;
     }

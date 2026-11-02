@@ -22,6 +22,7 @@
     }
 
     @if (loadingError(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
+    @if (releaseNotice(); as message) { <p class="success-message" role="status">{{ message }}</p> }
 
     <section class="category-panel piece-panel" aria-labelledby="piece-receive-title">
       <header class="panel-heading">
@@ -75,13 +76,13 @@
 
     <section class="category-panel piece-panel" aria-labelledby="recent-pieces-title">
       <h2 id="recent-pieces-title">Últimas piezas recibidas</h2>
-      <p class="field-hint">Esta lista registra ingresos. La venta por pieza y su estado posterior todavía no están integrados al POS.</p>
+      <p class="field-hint">Consultá el estado y los movimientos de cada pieza. Una reserva permanece asociada al ticket hasta que se venda, se quite o se cancele.</p>
       @if (pieces().length === 0) {
         <p class="piece-empty">Todavía no hay piezas recibidas en esta sucursal.</p>
       } @else {
         <div class="table-wrap">
           <table>
-            <thead><tr><th scope="col">Pieza</th><th scope="col">Artículo</th><th scope="col">Peso</th><th scope="col">Origen</th></tr></thead>
+            <thead><tr><th scope="col">Pieza</th><th scope="col">Artículo</th><th scope="col">Peso</th><th scope="col">Origen</th><th scope="col">Estado</th><th scope="col">Acción</th></tr></thead>
             <tbody>
               @for (piece of pieces(); track piece.id) {
                 <tr>
@@ -89,6 +90,8 @@
                   <td>{{ piece.productCode }} · {{ piece.productName }}</td>
                   <td>{{ formatWeight(piece.receivedWeightKg) }} kg</td>
                   <td>{{ piece.sourceSystem }}</td>
+                  <td>{{ statusLabel(piece.status) }}</td>
+                  <td><button type="button" class="secondary-button" (click)="openPiece(piece)">Ver estado</button></td>
                 </tr>
               }
             </tbody>
@@ -97,4 +100,40 @@
       }
     </section>
   </div>
+
+  @if (selectedPiece(); as selected) {
+    <div class="piece-dialog-backdrop">
+      <section class="piece-dialog" role="dialog" aria-modal="true" aria-labelledby="piece-dialog-title" (keydown.escape)="closePiece()">
+        <header class="panel-heading">
+          <div><h2 id="piece-dialog-title">Pieza {{ selected.externalIdentifier }}</h2><p>{{ selected.productCode }} · {{ selected.productName }} · {{ formatWeight(selected.receivedWeightKg) }} kg</p></div>
+          <button type="button" class="secondary-button" (click)="closePiece()" aria-label="Cerrar detalle de pieza">Cerrar</button>
+        </header>
+        <div class="piece-dialog-content">
+          <p><strong>Estado:</strong> {{ statusLabel(selected.status) }}</p>
+          @if (selected.reservedBySaleDraftId) {
+            <p><strong>Borrador:</strong> {{ selected.reservedBySaleDraftId }}</p>
+            <p><strong>Reservada desde:</strong> {{ formatEventTime(selected.reservedAtUtc ?? '') }}</p>
+          }
+          <h3>Auditoría</h3>
+          @if (pieceEventsError(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
+          @if (pieceEvents().length === 0 && !pieceEventsError()) { <p>No hay eventos para mostrar.</p> }
+          <ol class="piece-event-list">
+            @for (event of pieceEvents(); track event.id) {
+              <li><strong>{{ statusLabel(event.status) }}</strong> · {{ formatEventTime(event.createdAtUtc) }}<br />{{ event.reason }}</li>
+            }
+          </ol>
+          @if (selected.status === 'Reserved' && session()?.context?.permissions?.includes('platform.users.manage')) {
+            <form class="piece-release-form" (submit)="$event.preventDefault(); releasePiece()">
+              <label for="piece-release-reason">Motivo de liberación excepcional</label>
+              <textarea id="piece-release-reason" required maxlength="240" rows="3"
+                [value]="releaseReason()" (input)="releaseReason.set($any($event.target).value)"></textarea>
+              <p class="field-hint">Se retirará solo esta pieza del borrador. Deben estar resueltos los pagos activos o pendientes de conciliación.</p>
+              @if (releaseError(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
+              <button type="submit" [disabled]="releasing() || !releaseReason().trim()">{{ releasing() ? 'Liberando…' : 'Liberar pieza' }}</button>
+            </form>
+          }
+        </div>
+      </section>
+    </div>
+  }
 </main>

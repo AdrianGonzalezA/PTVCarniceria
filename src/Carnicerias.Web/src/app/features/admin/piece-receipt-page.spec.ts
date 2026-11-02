@@ -153,4 +153,50 @@ describe('PieceReceiptPage', () => {
     fixture.detectChanges();
     expect(page.textContent).toContain('no se sumó stock');
   });
+
+  it('shows reservation audit and releases only the selected piece with an admin reason', () => {
+    const fixture = TestBed.createComponent(PieceReceiptPage);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/sessions/current').flush({ userId: 'admin-id', username: 'admin',
+      expiresAtUtc: '', context: { userId: 'admin-id', companyId: 'company-id',
+        companyName: 'Empresa', branchId: 'branch-id', branchName: 'Sucursal',
+        permissions: ['inventory.stock.manage', 'platform.users.manage'], sessionId: 'session-id' } });
+    http.expectOne('/api/admin/barcode-layouts').flush([]);
+    http.expectOne('/api/inventory/stock').flush([]);
+    const reservedPiece = { id: 'piece-id', productId: 'product-id', productCode: '2546',
+      productName: 'Asado', sourceSystem: 'Frigorífico', externalIdentifier: '250661',
+      receivedWeightKg: 51.6, rawBarcode: '2250661516008',
+      receivedAtUtc: '2026-10-08T14:00:00Z', status: 'Reserved',
+      reservedBySaleDraftId: 'draft-id', reservedAtUtc: '2026-10-08T15:00:00Z' };
+    http.expectOne('/api/inventory/pieces?page=1&pageSize=20')
+      .flush({ items: [reservedPiece], page: 1, pageSize: 20, total: 1 });
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.textContent).toContain('Reservada');
+    page.querySelector<HTMLButtonElement>('table button')!.click();
+    http.expectOne('/api/inventory/pieces/piece-id/events').flush([{ id: 'event-id',
+      previousStatus: 'Available', status: 'Reserved', kind: 'SaleReserved',
+      saleDraftId: 'draft-id', actorUserId: 'cashier-id',
+      reason: 'Reserva por borrador de venta', createdAtUtc: '2026-10-08T15:00:00Z' }]);
+    fixture.detectChanges();
+    expect(page.querySelector('[role="dialog"]')?.textContent).toContain('Reserva por borrador de venta');
+    const reason = page.querySelector<HTMLTextAreaElement>('#piece-release-reason')!;
+    reason.value = 'Cajero no puede recuperar el ticket';
+    reason.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    page.querySelector<HTMLFormElement>('.piece-release-form')!
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    const release = http.expectOne('/api/inventory/pieces/piece-id/release');
+    expect(release.request.method).toBe('POST');
+    expect(release.request.body).toEqual({ reason: 'Cajero no puede recuperar el ticket' });
+    release.flush({ pieceId: 'piece-id', draftId: 'draft-id',
+      draftCancelled: false, discountReset: false });
+    http.expectOne('/api/inventory/pieces?page=1&pageSize=20')
+      .flush({ items: [{ ...reservedPiece, status: 'Available', reservedBySaleDraftId: null,
+        reservedAtUtc: null }], page: 1, pageSize: 20, total: 1 });
+    fixture.detectChanges();
+    expect(page.querySelector('[role="dialog"]')).toBeNull();
+    expect(page.textContent).toContain('los demás renglones se conservaron');
+  });
 });

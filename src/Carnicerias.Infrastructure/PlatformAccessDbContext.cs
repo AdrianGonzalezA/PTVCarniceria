@@ -79,6 +79,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
     public DbSet<BarcodeProfile> BarcodeProfiles => Set<BarcodeProfile>();
 
     public DbSet<InventoryPiece> InventoryPieces => Set<InventoryPiece>();
+    public DbSet<InventoryPieceStateEvent> InventoryPieceStateEvents => Set<InventoryPieceStateEvent>();
 
     public DbSet<CashierShift> CashierShifts => Set<CashierShift>();
 
@@ -632,7 +633,11 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
         modelBuilder.Entity<InventoryPiece>(entity =>
         {
             entity.ToTable("pieces", "inventory", table =>
-                table.HasCheckConstraint("CK_pieces_received_weight_positive", "\"ReceivedWeightKg\" > 0"));
+            {
+                table.HasCheckConstraint("CK_pieces_received_weight_positive", "\"ReceivedWeightKg\" > 0");
+                table.HasCheckConstraint("CK_pieces_status", "\"Status\" BETWEEN 0 AND 4");
+                table.HasCheckConstraint("CK_pieces_reservation_owner", "(\"Status\" = 1 AND \"ReservedBySaleDraftId\" IS NOT NULL AND \"ReservedAtUtc\" IS NOT NULL) OR (\"Status\" <> 1 AND \"ReservedBySaleDraftId\" IS NULL AND \"ReservedAtUtc\" IS NULL)");
+            });
             entity.HasKey(piece => piece.Id);
             entity.Property(piece => piece.SourceSystem).HasMaxLength(120).IsRequired();
             entity.Property(piece => piece.NormalizedSourceSystem).HasMaxLength(120).IsRequired();
@@ -640,6 +645,12 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(piece => piece.RawBarcode).HasMaxLength(80).IsRequired();
             entity.Property(piece => piece.IdentifierField).HasMaxLength(80).IsRequired();
             entity.Property(piece => piece.ReceivedWeightKg).HasPrecision(12, 3);
+            entity.Property(piece => piece.Status).HasConversion<int>().IsRequired();
+            entity.Property(piece => piece.StateChangedAtUtc).IsRequired();
+            entity.HasOne<SaleDraft>().WithMany()
+                .HasForeignKey(piece => new { piece.CompanyId, piece.ReservedBySaleDraftId })
+                .HasPrincipalKey(draft => new { draft.CompanyId, draft.Id })
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<Branch>().WithMany()
                 .HasForeignKey(piece => new { piece.CompanyId, piece.BranchId })
                 .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
@@ -661,6 +672,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 piece.ExternalIdentifier
             }).IsUnique();
             entity.HasIndex(piece => new { piece.CompanyId, piece.BranchId, piece.OperationId }).IsUnique();
+            entity.HasIndex(piece => new { piece.CompanyId, piece.BranchId, piece.Status });
+            entity.HasIndex(piece => new { piece.CompanyId, piece.ReservedBySaleDraftId });
             entity.HasIndex(piece => new
             {
                 piece.CompanyId,
@@ -668,6 +681,29 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 piece.ProductId,
                 piece.ReceivedAtUtc
             });
+        });
+
+        modelBuilder.Entity<InventoryPieceStateEvent>(entity =>
+        {
+            entity.ToTable("piece_state_events", "inventory", table =>
+            {
+                table.HasCheckConstraint("CK_piece_state_events_status", "\"Status\" BETWEEN 0 AND 4 AND (\"PreviousStatus\" IS NULL OR \"PreviousStatus\" BETWEEN 0 AND 4)");
+                table.HasCheckConstraint("CK_piece_state_events_kind", "\"Kind\" BETWEEN 0 AND 7");
+            });
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.PreviousStatus).HasConversion<int?>();
+            entity.Property(item => item.Status).HasConversion<int>().IsRequired();
+            entity.Property(item => item.Kind).HasConversion<int>().IsRequired();
+            entity.Property(item => item.Reason).HasMaxLength(240).IsRequired();
+            entity.HasOne<InventoryPiece>().WithMany()
+                .HasForeignKey(item => item.PieceId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<SaleDraft>().WithMany()
+                .HasForeignKey(item => new { item.CompanyId, item.SaleDraftId })
+                .HasPrincipalKey(draft => new { draft.CompanyId, draft.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(item => item.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(item => new { item.CompanyId, item.BranchId, item.PieceId, item.CreatedAtUtc });
         });
 
         modelBuilder.Entity<CatalogProduct>(entity =>

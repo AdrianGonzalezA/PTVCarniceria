@@ -1174,6 +1174,59 @@ describe('PosPage', () => {
     expect((fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('reloads the persisted ticket after an administrator releases one piece', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const remainingLine = { id: 'other-line', productId: 'other-id', productCode: '1002',
+      productName: 'Otro corte', unit: 'kg', saleMode: 'weight' as const,
+      quantity: 1, unitPrice: 500 };
+    const staleDraft = { id: 'draft-id', ticketSlot: 'A' as const, priceListId: 'list-id',
+      updatedAtUtc: '2026-10-06T16:00:00Z', lines: [
+        { ...remainingLine, id: 'piece-line', productId: 'piece-product', productCode: '1001',
+          productName: 'Pieza liberada', inventoryPieceId: 'piece-id' }, remainingLine,
+      ] };
+    const current = vi.fn().mockReturnValueOnce(of(staleDraft))
+      .mockReturnValue(of({ ...staleDraft, lines: [remainingLine] }));
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: {
+        priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
+        categories: () => of([{ id: 'category-id', name: 'Carnes', productCount: 1 }]),
+        products: () => of({ items: [{ id: 'new-id', code: '1003', name: 'Nuevo corte',
+          categoryId: 'category-id', unit: 'kg', saleMode: 'weight', price: 800,
+          availableStock: 10 }], page: 1, pageSize: 50, totalItems: 1 }),
+      } },
+      { provide: SaleDraftClient, useValue: { list: () => of([]), current,
+        save: () => throwError(() => new HttpErrorResponse({ status: 409,
+          error: { error: { code: 'PIECE_RELEASED_BY_ADMIN' } } })),
+      } },
+      { provide: InventoryClient, useValue: { stock: () => of([{ productId: 'new-id', available: 10 }]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('Pieza liberada');
+
+    (fixture.nativeElement.querySelector('.product-card') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    const ticket = fixture.nativeElement.querySelector('.ticket-lines') as HTMLElement;
+    expect(current).toHaveBeenCalledTimes(2);
+    expect(ticket.textContent).not.toContain('Pieza liberada');
+    expect(ticket.textContent).toContain('Otro corte');
+    expect(ticket.textContent).not.toContain('Nuevo corte');
+    expect(fixture.nativeElement.querySelector('.pos-error[role="alert"]').textContent)
+      .toContain('Administración liberó una pieza');
+  });
+
   it('does not increase a saved line beyond the available stock plus its own reservation', async () => {
     const session: CurrentSession = {
       userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
@@ -1352,11 +1405,14 @@ describe('PosPage', () => {
           return of({ items, page: 1, pageSize: 50, totalItems: items.length });
         },
       } },
-      { provide: InventoryPieceClient, useValue: { lookup: (code: string) => code === '2999001005009' || code === '2999002007507'
-        ? of({ id: code === '2999001005009' ? 'piece-id' : 'piece-id-2', productId: asado.id, productCode: asado.code,
-          externalIdentifier: code === '2999001005009' ? '999001' : '999002',
-          receivedWeightKg: code === '2999001005009' ? 0.5 : 0.75, rawBarcode: code })
-        : throwError(() => new HttpErrorResponse({ status: 404 })) } },
+       { provide: InventoryPieceClient, useValue: { lookup: (code: string) => code === '2999003009000'
+         ? throwError(() => new HttpErrorResponse({ status: 409,
+           error: { error: { code: 'PIECE_RESERVED' } } }))
+         : code === '2999001005009' || code === '2999002007507'
+           ? of({ id: code === '2999001005009' ? 'piece-id' : 'piece-id-2', productId: asado.id, productCode: asado.code,
+             externalIdentifier: code === '2999001005009' ? '999001' : '999002',
+             receivedWeightKg: code === '2999001005009' ? 0.5 : 0.75, rawBarcode: code })
+           : throwError(() => new HttpErrorResponse({ status: 404 })) } },
       { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of(null), save } },
       { provide: InventoryClient, useValue: { stock: () => of([{ productId: asado.id, available: 79.5 }]) } },
     ] });
@@ -1416,6 +1472,14 @@ describe('PosPage', () => {
     expect(save).toHaveBeenCalledTimes(2);
     expect(fixture.nativeElement.querySelector('.pos-error').textContent)
       .toContain('no corresponde a un artículo ni a una pieza');
+
+    search.value = '2999003009000';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.pos-error').textContent)
+      .toContain('reservada en un ticket');
+    expect(save).toHaveBeenCalledTimes(2);
   });
 
   it.each([

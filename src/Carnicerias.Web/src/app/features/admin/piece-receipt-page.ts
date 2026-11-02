@@ -5,7 +5,8 @@ import { Router, RouterLink } from '@angular/router';
 import { AdminAreaTabs } from './admin-area-tabs';
 import { BarcodeLayoutClient, BarcodeProfile } from '../../core/inventory/barcode-layout-client';
 import { InventoryClient, InventoryStockItem } from '../../core/inventory/inventory-client';
-import { InventoryPieceClient, InventoryPieceListItem, InventoryPieceReceipt } from '../../core/inventory/inventory-piece-client';
+import { InventoryPieceClient, InventoryPieceEvent, InventoryPieceListItem,
+  InventoryPieceReceipt } from '../../core/inventory/inventory-piece-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 
 @Component({
@@ -31,6 +32,13 @@ export class PieceReceiptPage implements OnInit, AfterViewInit {
   protected readonly saveError = signal<string | null>(null);
   protected readonly received = signal<InventoryPieceReceipt | null>(null);
   protected readonly saving = signal(false);
+  protected readonly selectedPiece = signal<InventoryPieceListItem | null>(null);
+  protected readonly pieceEvents = signal<readonly InventoryPieceEvent[]>([]);
+  protected readonly pieceEventsError = signal<string | null>(null);
+  protected readonly releaseReason = signal('');
+  protected readonly releaseError = signal<string | null>(null);
+  protected readonly releaseNotice = signal<string | null>(null);
+  protected readonly releasing = signal(false);
   protected readonly form = this.formBuilder.nonNullable.group({
     barcodeProfileId: ['', Validators.required],
     productId: ['', Validators.required],
@@ -74,6 +82,61 @@ export class PieceReceiptPage implements OnInit, AfterViewInit {
     this.piecesClient.list().subscribe({
       next: (page) => this.pieces.set(page.items),
       error: () => this.loadingError.set('No se pudieron cargar las piezas recibidas.'),
+    });
+  }
+
+  protected openPiece(piece: InventoryPieceListItem): void {
+    this.selectedPiece.set(piece);
+    this.pieceEvents.set([]);
+    this.pieceEventsError.set(null);
+    this.releaseReason.set('');
+    this.releaseError.set(null);
+    this.piecesClient.events(piece.id).subscribe({
+      next: (events) => {
+        if (this.selectedPiece()?.id === piece.id) this.pieceEvents.set(events);
+      },
+      error: () => {
+        if (this.selectedPiece()?.id === piece.id)
+          this.pieceEventsError.set('No se pudo cargar la auditoría de esta pieza.');
+      },
+    });
+  }
+
+  protected closePiece(): void {
+    if (this.releasing()) return;
+    this.selectedPiece.set(null);
+  }
+
+  protected releasePiece(): void {
+    const piece = this.selectedPiece();
+    const reason = this.releaseReason().trim();
+    if (!piece || piece.status !== 'Reserved' || this.releasing()) return;
+    if (!reason || reason.length > 240) {
+      this.releaseError.set('Ingresá un motivo de hasta 240 caracteres.');
+      return;
+    }
+    this.releasing.set(true);
+    this.releaseError.set(null);
+    this.piecesClient.release(piece.id, reason).subscribe({
+      next: (result) => {
+        this.releasing.set(false);
+        this.selectedPiece.set(null);
+        this.releaseNotice.set(result.discountReset
+          ? 'La pieza quedó disponible. Se anuló el descuento del borrador porque el nuevo total no lo admite.'
+          : 'La pieza quedó disponible y se quitó del borrador; los demás renglones se conservaron.');
+        this.loadPieces();
+      },
+      error: (response: HttpErrorResponse) => {
+        this.releasing.set(false);
+        const code = response.error?.error?.code;
+        this.releaseError.set(code === 'MERCADO_PAGO_ORDER_ACTIVE'
+          ? 'Hay un pago activo o pendiente de conciliación. Resolvelo antes de liberar la pieza.'
+          : code === 'PIECE_OPERATION_IN_PROGRESS' || code === 'SALE_ALREADY_CONFIRMED'
+            ? 'La venta puede estar confirmándose. Actualizá el estado antes de reintentar.'
+            : code === 'ADMINISTRATOR_REQUIRED'
+              ? 'Solo un administrador de esta empresa puede liberar la reserva.'
+              : 'No se pudo liberar la pieza. Actualizá su estado y volvé a intentar.');
+      },
     });
   }
 
@@ -129,5 +192,15 @@ export class PieceReceiptPage implements OnInit, AfterViewInit {
     return weightKg.toLocaleString('es-AR', {
       minimumFractionDigits: 3, maximumFractionDigits: 3,
     });
+  }
+
+  protected statusLabel(status: string): string {
+    return ({ Available: 'Disponible', Reserved: 'Reservada', Sold: 'Vendida',
+      Transferred: 'Transferida', Consumed: 'Consumida' } as Record<string, string>)[status]
+      ?? 'Estado desconocido';
+  }
+
+  protected formatEventTime(value: string): string {
+    return new Date(value).toLocaleString('es-AR');
   }
 }

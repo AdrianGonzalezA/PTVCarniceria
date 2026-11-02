@@ -1,4 +1,5 @@
 using Carnicerias.Api.Security;
+using Carnicerias.Api.Inventory;
 using Carnicerias.Infrastructure;
 using Carnicerias.PlatformAccess;
 using Microsoft.EntityFrameworkCore;
@@ -92,125 +93,174 @@ public static class SaleDraftEndpoints
         if (request.DiscountAmount > 0 &&
             !context.Permissions.Contains(PlatformPermissionCatalog.PosDiscountApply))
             return Error(StatusCodes.Status403Forbidden, "DISCOUNT_FORBIDDEN");
-        var now = timeProvider.GetUtcNow();
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
-        var shift = await FindOpenShiftAsync(db, accessor, cancellationToken);
-        if (shift is null) return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_REQUIRED");
-        var listAvailable = await (
-            from assignment in db.BranchPriceLists
-            join list in db.PriceLists on assignment.PriceListId equals list.Id
-            where assignment.CompanyId == context.CompanyId && assignment.BranchId == context.BranchId &&
-                  assignment.PriceListId == request.PriceListId && assignment.IsActive && list.IsActive
-            select assignment.PriceListId).AnyAsync(cancellationToken);
-        if (!listAvailable) return Error(StatusCodes.Status403Forbidden, "PRICE_LIST_NOT_AVAILABLE");
-
-        var draft = await db.SaleDrafts.Include(item => item.Lines)
-            .SingleOrDefaultAsync(item => item.CompanyId == context.CompanyId &&
-                item.BranchId == context.BranchId && item.UserId == context.UserId &&
-                item.PosTerminalId == accessor.TerminalId &&
-                (accessor.TerminalId == null || item.CashierShiftId == shift.Id) &&
-                item.TicketSlot == ticketSlot &&
-                item.Status == SaleDraftStatus.Draft, cancellationToken);
-        if (draft is null && await db.SaleDrafts.AnyAsync(item =>
-                item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
-                item.UserId == context.UserId && item.TicketSlot == ticketSlot &&
-                item.Status == SaleDraftStatus.Draft, cancellationToken))
-            return Error(StatusCodes.Status409Conflict, "DRAFT_BELONGS_TO_OTHER_SHIFT");
-        if (draft is not null && draft.PriceListId != request.PriceListId)
-            return Error(StatusCodes.Status409Conflict, "DRAFT_PRICE_LIST_LOCKED");
-        if (draft is not null && await HasActiveMercadoPagoOrderAsync(db, draft.Id, cancellationToken))
-            return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_ORDER_ACTIVE");
-
-        var currentDraftId = draft?.Id ?? Guid.Empty;
-        var lines = new List<SaleDraftLine>(request.Lines.Count);
-        foreach (var requestedLine in request.Lines)
+        try
         {
-            var product = await db.CatalogProducts.AsNoTracking().SingleOrDefaultAsync(item =>
-                item.CompanyId == context.CompanyId && item.Id == requestedLine.ProductId && item.IsActive,
-                cancellationToken);
-            if (product is null) return Error(StatusCodes.Status400BadRequest, "PRODUCT_NOT_AVAILABLE");
-            var existingLine = draft?.Lines.SingleOrDefault(line => line.ProductId == product.Id &&
-                line.InventoryPieceId == requestedLine.InventoryPieceId);
-            var saleMode = existingLine?.SaleMode ?? product.SaleMode;
-            if ((saleMode == ProductSaleMode.Unit && requestedLine.Quantity != decimal.Truncate(requestedLine.Quantity)) ||
-                (saleMode == ProductSaleMode.Weight && requestedLine.Quantity <= 0))
-                return Error(StatusCodes.Status400BadRequest, "INVALID_PRODUCT_QUANTITY");
-            if (requestedLine.PieceCount is <= 0 or > 10000 ||
-                (saleMode == ProductSaleMode.Unit && requestedLine.PieceCount is not null) ||
-                (requestedLine.InventoryPieceId is not null && requestedLine.PieceCount is not null and not 1))
-                return Error(StatusCodes.Status400BadRequest, "INVALID_PIECE_COUNT");
+            var now = timeProvider.GetUtcNow();
+            await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+            var shift = await FindOpenShiftAsync(db, accessor, cancellationToken);
+            if (shift is null) return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_REQUIRED");
+            var listAvailable = await (
+                from assignment in db.BranchPriceLists
+                join list in db.PriceLists on assignment.PriceListId equals list.Id
+                where assignment.CompanyId == context.CompanyId && assignment.BranchId == context.BranchId &&
+                      assignment.PriceListId == request.PriceListId && assignment.IsActive && list.IsActive
+                select assignment.PriceListId).AnyAsync(cancellationToken);
+            if (!listAvailable) return Error(StatusCodes.Status403Forbidden, "PRICE_LIST_NOT_AVAILABLE");
 
-            InventoryPiece? piece = null;
-            if (requestedLine.InventoryPieceId is Guid pieceId)
+            var draft = await db.SaleDrafts.Include(item => item.Lines)
+                .SingleOrDefaultAsync(item => item.CompanyId == context.CompanyId &&
+                    item.BranchId == context.BranchId && item.UserId == context.UserId &&
+                    item.PosTerminalId == accessor.TerminalId &&
+                    (accessor.TerminalId == null || item.CashierShiftId == shift.Id) &&
+                    item.TicketSlot == ticketSlot &&
+                    item.Status == SaleDraftStatus.Draft, cancellationToken);
+            if (draft is not null && !await SaleDraftTransactionLock.AcquireAsync(db,
+                    context.CompanyId, context.BranchId, draft.Id, cancellationToken))
+                return Error(StatusCodes.Status409Conflict, "SALE_DRAFT_CONFLICT");
+            if (draft is null && await db.SaleDrafts.AnyAsync(item =>
+                    item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
+                    item.UserId == context.UserId && item.TicketSlot == ticketSlot &&
+                    item.Status == SaleDraftStatus.Draft, cancellationToken))
+                return Error(StatusCodes.Status409Conflict, "DRAFT_BELONGS_TO_OTHER_SHIFT");
+            if (draft is not null && draft.PriceListId != request.PriceListId)
+                return Error(StatusCodes.Status409Conflict, "DRAFT_PRICE_LIST_LOCKED");
+            if (draft is not null && await HasActiveMercadoPagoOrderAsync(db, draft.Id, cancellationToken))
+                return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_ORDER_ACTIVE");
+
+            var currentDraftId = draft?.Id ?? Guid.Empty;
+            var requestedPieces = new Dictionary<Guid, InventoryPiece>();
+            var lines = new List<SaleDraftLine>(request.Lines.Count);
+            foreach (var requestedLine in request.Lines)
             {
-                piece = await db.InventoryPieces.AsNoTracking().SingleOrDefaultAsync(item =>
-                    item.Id == pieceId && item.CompanyId == context.CompanyId &&
-                    item.BranchId == context.BranchId && item.ProductId == product.Id,
+                var product = await db.CatalogProducts.AsNoTracking().SingleOrDefaultAsync(item =>
+                    item.CompanyId == context.CompanyId && item.Id == requestedLine.ProductId && item.IsActive,
                     cancellationToken);
-                if (piece is null || saleMode != ProductSaleMode.Weight ||
-                    piece.ReceivedWeightKg != requestedLine.Quantity)
-                    return Error(StatusCodes.Status409Conflict, "PIECE_NOT_AVAILABLE");
-                if (await db.ConfirmedSaleLines.AnyAsync(line => line.InventoryPieceId == pieceId, cancellationToken) ||
-                    await db.Set<SaleDraftLine>().AnyAsync(line => line.InventoryPieceId == pieceId &&
-                        line.SaleDraftId != currentDraftId && db.SaleDrafts.Any(other =>
-                            other.Id == line.SaleDraftId && other.Status == SaleDraftStatus.Draft), cancellationToken))
-                    return Error(StatusCodes.Status409Conflict, "PIECE_ALREADY_USED");
+                if (product is null) return Error(StatusCodes.Status400BadRequest, "PRODUCT_NOT_AVAILABLE");
+                var existingLine = draft?.Lines.SingleOrDefault(line => line.ProductId == product.Id &&
+                    line.InventoryPieceId == requestedLine.InventoryPieceId);
+                var saleMode = existingLine?.SaleMode ?? product.SaleMode;
+                if ((saleMode == ProductSaleMode.Unit && requestedLine.Quantity != decimal.Truncate(requestedLine.Quantity)) ||
+                    (saleMode == ProductSaleMode.Weight && requestedLine.Quantity <= 0))
+                    return Error(StatusCodes.Status400BadRequest, "INVALID_PRODUCT_QUANTITY");
+                if (requestedLine.PieceCount is <= 0 or > 10000 ||
+                    (saleMode == ProductSaleMode.Unit && requestedLine.PieceCount is not null) ||
+                    (requestedLine.InventoryPieceId is not null && requestedLine.PieceCount is not null and not 1))
+                    return Error(StatusCodes.Status400BadRequest, "INVALID_PIECE_COUNT");
+
+                InventoryPiece? piece = null;
+                if (requestedLine.InventoryPieceId is Guid pieceId)
+                {
+                    piece = await db.InventoryPieces.AsNoTracking().SingleOrDefaultAsync(item =>
+                        item.Id == pieceId && item.CompanyId == context.CompanyId &&
+                        item.BranchId == context.BranchId && item.ProductId == product.Id,
+                        cancellationToken);
+                    if (piece is null || saleMode != ProductSaleMode.Weight ||
+                        piece.ReceivedWeightKg != requestedLine.Quantity)
+                        return Error(StatusCodes.Status409Conflict, "PIECE_NOT_AVAILABLE");
+                    if (existingLine is not null && (piece.Status != InventoryPieceStatus.Reserved ||
+                        piece.ReservedBySaleDraftId != currentDraftId))
+                        return Error(StatusCodes.Status409Conflict, "PIECE_RESERVATION_MISSING");
+                    if (existingLine is null && piece.Status != InventoryPieceStatus.Available)
+                        return Error(StatusCodes.Status409Conflict, "PIECE_ALREADY_USED");
+                    if (draft is not null && existingLine is null &&
+                        await db.InventoryPieceStateEvents.AnyAsync(item =>
+                            item.PieceId == pieceId && item.CompanyId == context.CompanyId &&
+                            item.BranchId == context.BranchId && item.SaleDraftId == draft.Id &&
+                            item.Kind == InventoryPieceEventKind.AdminReleased, cancellationToken))
+                        return Error(StatusCodes.Status409Conflict, "PIECE_RELEASED_BY_ADMIN");
+                    if (await db.ConfirmedSaleLines.AnyAsync(line => line.InventoryPieceId == pieceId, cancellationToken) ||
+                        await db.Set<SaleDraftLine>().AnyAsync(line => line.InventoryPieceId == pieceId &&
+                            line.SaleDraftId != currentDraftId && db.SaleDrafts.Any(other =>
+                                other.Id == line.SaleDraftId && other.Status == SaleDraftStatus.Draft), cancellationToken))
+                        return Error(StatusCodes.Status409Conflict, "PIECE_ALREADY_USED");
+                    requestedPieces.Add(pieceId, piece);
+                }
+
+                var price = existingLine?.UnitPrice ?? await db.ProductPrices.AsNoTracking()
+                    .Where(item => item.CompanyId == context.CompanyId && item.PriceListId == request.PriceListId &&
+                        item.ProductId == product.Id && item.EffectiveFromUtc <= now &&
+                        (item.EffectiveToUtc == null || item.EffectiveToUtc > now))
+                    .OrderByDescending(item => item.EffectiveFromUtc)
+                    .Select(item => (decimal?)item.Amount)
+                    .FirstOrDefaultAsync(cancellationToken) ?? 0;
+                if (price <= 0) return Error(StatusCodes.Status400BadRequest, "PRODUCT_PRICE_NOT_AVAILABLE");
+                lines.Add(new SaleDraftLine(context.CompanyId, product.Id,
+                    existingLine?.ProductCode ?? product.Code,
+                    existingLine?.ProductName ?? product.Name,
+                    existingLine?.Unit ?? product.Unit, saleMode, requestedLine.Quantity, price,
+                    piece?.Id, piece?.ExternalIdentifier,
+                    piece is null ? requestedLine.PieceCount : 1));
             }
 
-            var price = existingLine?.UnitPrice ?? await db.ProductPrices.AsNoTracking()
-                .Where(item => item.CompanyId == context.CompanyId && item.PriceListId == request.PriceListId &&
-                    item.ProductId == product.Id && item.EffectiveFromUtc <= now &&
-                    (item.EffectiveToUtc == null || item.EffectiveToUtc > now))
-                .OrderByDescending(item => item.EffectiveFromUtc)
-                .Select(item => (decimal?)item.Amount)
-                .FirstOrDefaultAsync(cancellationToken) ?? 0;
-            if (price <= 0) return Error(StatusCodes.Status400BadRequest, "PRODUCT_PRICE_NOT_AVAILABLE");
-            lines.Add(new SaleDraftLine(context.CompanyId, product.Id,
-                existingLine?.ProductCode ?? product.Code,
-                existingLine?.ProductName ?? product.Name,
-                existingLine?.Unit ?? product.Unit, saleMode, requestedLine.Quantity, price,
-                piece?.Id, piece?.ExternalIdentifier,
-                piece is null ? requestedLine.PieceCount : 1));
+            var undiscountedTotal = lines.Sum(line => decimal.Round(line.Quantity * line.UnitPrice,
+                2, MidpointRounding.AwayFromZero));
+            if (request.DiscountAmount >= undiscountedTotal)
+                return Error(StatusCodes.Status400BadRequest, "DISCOUNT_EXCEEDS_TOTAL");
+
+            if (draft is null)
+            {
+                draft = new SaleDraft(context.CompanyId, context.BranchId, context.UserId, request.PriceListId, now,
+                    accessor.TerminalId, accessor.TerminalId is null ? null : shift.Id, ticketSlot);
+                db.SaleDrafts.Add(draft);
+                // Persist the header in this transaction before a piece can reference its id.
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            var oldPieceIds = draft.Lines.Where(line => line.InventoryPieceId is not null)
+                .Select(line => line.InventoryPieceId!.Value).ToHashSet();
+            var newPieceIds = lines.Where(line => line.InventoryPieceId is not null)
+                .Select(line => line.InventoryPieceId!.Value).ToHashSet();
+            foreach (var pieceId in oldPieceIds.Except(newPieceIds)
+                         .Concat(newPieceIds.Except(oldPieceIds)).Order())
+            {
+                if (newPieceIds.Contains(pieceId))
+                {
+                    if (!await PieceReservationTransactions.ReserveAsync(db, requestedPieces[pieceId],
+                        draft.Id, context.UserId, now, cancellationToken))
+                        return Error(StatusCodes.Status409Conflict, "PIECE_ALREADY_USED");
+                }
+                else
+                {
+                    var piece = await db.InventoryPieces.AsNoTracking().SingleAsync(item =>
+                        item.Id == pieceId && item.CompanyId == context.CompanyId &&
+                        item.BranchId == context.BranchId, cancellationToken);
+                    if (!await PieceReservationTransactions.ReleaseAsync(db, piece, draft.Id,
+                        context.UserId, InventoryPieceEventKind.SaleReleased,
+                        "Pieza quitada del borrador", now, cancellationToken))
+                        return Error(StatusCodes.Status409Conflict, "PIECE_RESERVATION_MISSING");
+                }
+            }
+            foreach (var productId in lines.Select(line => line.ProductId)
+                         .Concat(draft.Lines.Select(line => line.ProductId)).Distinct().Order())
+            {
+                var previousQuantity = draft.Lines.Where(line => line.ProductId == productId).Sum(line => line.Quantity);
+                var newQuantity = lines.Where(line => line.ProductId == productId).Sum(line => line.Quantity);
+                var quantityDelta = newQuantity - previousQuantity;
+                if (quantityDelta == 0) continue;
+
+                var stock = db.BranchInventoryBalances.Where(balance => balance.CompanyId == context.CompanyId &&
+                    balance.BranchId == context.BranchId && balance.ProductId == productId);
+                var updated = quantityDelta > 0
+                    ? await stock.Where(balance => balance.OnHand - balance.Reserved >= quantityDelta)
+                        .ExecuteUpdateAsync(setters => setters.SetProperty(
+                            balance => balance.Reserved, balance => balance.Reserved + quantityDelta), cancellationToken)
+                    : await stock.Where(balance => balance.Reserved >= -quantityDelta)
+                        .ExecuteUpdateAsync(setters => setters.SetProperty(
+                            balance => balance.Reserved, balance => balance.Reserved + quantityDelta), cancellationToken);
+                if (updated == 0)
+                    return Error(StatusCodes.Status409Conflict,
+                        quantityDelta > 0 ? "INSUFFICIENT_STOCK" : "STOCK_RESERVATION_MISSING");
+            }
+
+            draft.ReplaceLines(lines, now);
+            draft.SetDiscount(request.DiscountAmount, request.DiscountReason);
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return Results.Ok(ToResponse(draft));
         }
-
-        var undiscountedTotal = lines.Sum(line => decimal.Round(line.Quantity * line.UnitPrice,
-            2, MidpointRounding.AwayFromZero));
-        if (request.DiscountAmount >= undiscountedTotal)
-            return Error(StatusCodes.Status400BadRequest, "DISCOUNT_EXCEEDS_TOTAL");
-
-        if (draft is null)
+        catch (Exception exception) when (PieceReservationTransactions.IsDraftSaveConflict(exception))
         {
-            draft = new SaleDraft(context.CompanyId, context.BranchId, context.UserId, request.PriceListId, now,
-                accessor.TerminalId, accessor.TerminalId is null ? null : shift.Id, ticketSlot);
-            db.SaleDrafts.Add(draft);
+            return Error(StatusCodes.Status409Conflict, "SALE_DRAFT_CONFLICT");
         }
-        foreach (var productId in lines.Select(line => line.ProductId)
-                     .Concat(draft.Lines.Select(line => line.ProductId)).Distinct())
-        {
-            var previousQuantity = draft.Lines.Where(line => line.ProductId == productId).Sum(line => line.Quantity);
-            var newQuantity = lines.Where(line => line.ProductId == productId).Sum(line => line.Quantity);
-            var quantityDelta = newQuantity - previousQuantity;
-            if (quantityDelta == 0) continue;
-
-            var stock = db.BranchInventoryBalances.Where(balance => balance.CompanyId == context.CompanyId &&
-                balance.BranchId == context.BranchId && balance.ProductId == productId);
-            var updated = quantityDelta > 0
-                ? await stock.Where(balance => balance.OnHand - balance.Reserved >= quantityDelta)
-                    .ExecuteUpdateAsync(setters => setters.SetProperty(
-                        balance => balance.Reserved, balance => balance.Reserved + quantityDelta), cancellationToken)
-                : await stock.Where(balance => balance.Reserved >= -quantityDelta)
-                    .ExecuteUpdateAsync(setters => setters.SetProperty(
-                        balance => balance.Reserved, balance => balance.Reserved + quantityDelta), cancellationToken);
-            if (updated == 0)
-                return Error(StatusCodes.Status409Conflict,
-                    quantityDelta > 0 ? "INSUFFICIENT_STOCK" : "STOCK_RESERVATION_MISSING");
-        }
-
-        draft.ReplaceLines(lines, now);
-        draft.SetDiscount(request.DiscountAmount, request.DiscountReason);
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return Results.Ok(ToResponse(draft));
     }
 
     private static async Task<IResult> CancelAsync(
@@ -224,33 +274,54 @@ public static class SaleDraftEndpoints
             return Error(StatusCodes.Status400BadRequest, "INVALID_TICKET_SLOT");
         var context = accessor.Context;
         var now = timeProvider.GetUtcNow();
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
-        var shift = await FindOpenShiftAsync(db, accessor, cancellationToken);
-        if (shift is null) return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_REQUIRED");
-        var draft = await db.SaleDrafts.Include(item => item.Lines).SingleOrDefaultAsync(item => item.CompanyId == context.CompanyId &&
-            item.BranchId == context.BranchId && item.UserId == context.UserId &&
-            item.PosTerminalId == accessor.TerminalId &&
-            (accessor.TerminalId == null || item.CashierShiftId == shift.Id) &&
-            item.TicketSlot == ticketSlot &&
-            item.Status == SaleDraftStatus.Draft, cancellationToken);
-        if (draft is null) return Results.NoContent();
-        if (await HasActiveMercadoPagoOrderAsync(db, draft.Id, cancellationToken))
-            return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_ORDER_ACTIVE");
-        foreach (var group in draft.Lines.GroupBy(line => line.ProductId))
+        try
         {
-            var quantity = group.Sum(line => line.Quantity);
-            var updated = await db.BranchInventoryBalances.Where(balance =>
-                    balance.CompanyId == context.CompanyId && balance.BranchId == context.BranchId &&
-                    balance.ProductId == group.Key && balance.Reserved >= quantity)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(
-                    balance => balance.Reserved, balance => balance.Reserved - quantity), cancellationToken);
-            if (updated == 0)
-                return Error(StatusCodes.Status409Conflict, "STOCK_RESERVATION_MISSING");
+            await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+            var shift = await FindOpenShiftAsync(db, accessor, cancellationToken);
+            if (shift is null) return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_REQUIRED");
+            var draft = await db.SaleDrafts.Include(item => item.Lines).SingleOrDefaultAsync(item => item.CompanyId == context.CompanyId &&
+                item.BranchId == context.BranchId && item.UserId == context.UserId &&
+                item.PosTerminalId == accessor.TerminalId &&
+                (accessor.TerminalId == null || item.CashierShiftId == shift.Id) &&
+                item.TicketSlot == ticketSlot &&
+                item.Status == SaleDraftStatus.Draft, cancellationToken);
+            if (draft is not null && !await SaleDraftTransactionLock.AcquireAsync(db,
+                    context.CompanyId, context.BranchId, draft.Id, cancellationToken))
+                return Error(StatusCodes.Status409Conflict, "SALE_DRAFT_CONFLICT");
+            if (draft is null) return Results.NoContent();
+            if (await HasActiveMercadoPagoOrderAsync(db, draft.Id, cancellationToken))
+                return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_ORDER_ACTIVE");
+            foreach (var pieceId in draft.Lines.Where(line => line.InventoryPieceId is not null)
+                         .Select(line => line.InventoryPieceId!.Value).Order())
+            {
+                var piece = await db.InventoryPieces.AsNoTracking().SingleAsync(item =>
+                    item.Id == pieceId && item.CompanyId == context.CompanyId &&
+                    item.BranchId == context.BranchId, cancellationToken);
+                if (!await PieceReservationTransactions.ReleaseAsync(db, piece, draft.Id,
+                    context.UserId, InventoryPieceEventKind.SaleReleased,
+                    "Borrador cancelado", now, cancellationToken))
+                    return Error(StatusCodes.Status409Conflict, "PIECE_RESERVATION_MISSING");
+            }
+            foreach (var group in draft.Lines.GroupBy(line => line.ProductId).OrderBy(group => group.Key))
+            {
+                var quantity = group.Sum(line => line.Quantity);
+                var updated = await db.BranchInventoryBalances.Where(balance =>
+                        balance.CompanyId == context.CompanyId && balance.BranchId == context.BranchId &&
+                        balance.ProductId == group.Key && balance.Reserved >= quantity)
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(
+                        balance => balance.Reserved, balance => balance.Reserved - quantity), cancellationToken);
+                if (updated == 0)
+                    return Error(StatusCodes.Status409Conflict, "STOCK_RESERVATION_MISSING");
+            }
+            draft.Cancel(context.UserId, now);
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return Results.NoContent();
         }
-        draft.Cancel(context.UserId, now);
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return Results.NoContent();
+        catch (Exception exception) when (PieceReservationTransactions.IsConcurrencyConflict(exception))
+        {
+            return Error(StatusCodes.Status409Conflict, "SALE_DRAFT_CONFLICT");
+        }
     }
 
     private static Task<bool> HasActiveMercadoPagoOrderAsync(PlatformAccessDbContext db,

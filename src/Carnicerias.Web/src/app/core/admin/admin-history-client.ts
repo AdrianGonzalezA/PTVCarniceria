@@ -1,6 +1,8 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 
+export type HistorySaleDocumentType = 'nonFiscalTicket' | 'fiscalTicket' | 'electronicInvoice';
+
 export interface HistoryFilters {
   readonly page: number;
   readonly pageSize: number;
@@ -8,6 +10,7 @@ export interface HistoryFilters {
   readonly terminalId?: string;
   readonly fromUtc?: string;
   readonly toUtc?: string;
+  readonly documentType?: HistorySaleDocumentType;
 }
 
 export interface HistoryPage<T> {
@@ -57,7 +60,7 @@ export interface SaleDetail {
   readonly total: number;
   readonly discountAmount: number;
   readonly discountReason: string | null;
-  readonly documentType: 'nonFiscalTicket' | 'fiscalTicket' | 'electronicInvoice';
+  readonly documentType: HistorySaleDocumentType;
   readonly recipientTaxStatus: 'finalConsumer' | 'registered' | 'smallTaxpayer' | 'exempt';
   readonly recipientName: string | null;
   readonly recipientDocumentNumber: string | null;
@@ -152,8 +155,10 @@ export class AdminHistoryClient {
   }
 
   sales(filters: HistoryFilters) {
+    const params = this.params(filters);
     return this.http.get<HistoryPage<SaleHistoryItem>>('/api/admin/history/sales', {
-      params: this.params(filters), withCredentials: true,
+      params: filters.documentType ? params.set('documentType', filters.documentType) : params,
+      withCredentials: true,
     });
   }
 

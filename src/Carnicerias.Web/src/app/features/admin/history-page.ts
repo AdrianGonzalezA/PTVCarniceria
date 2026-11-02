@@ -5,7 +5,7 @@ import { AdminAreaTabs } from './admin-area-tabs';
 import { AdminBranch, AdminOrganizationClient } from '../../core/admin/admin-organization-client';
 import { AdminTerminal, AdminTerminalClient } from '../../core/admin/admin-terminal-client';
 import { AdminHistoryClient, CashHistoryItem, HistoryFilters, HistoryPage as HistoryPageData, SaleDetail,
-  SaleHistoryItem, ShiftHistoryItem, StockHistoryItem } from '../../core/admin/admin-history-client';
+  SaleHistoryItem, ShiftHistoryItem, StockHistoryItem, HistorySaleDocumentType } from '../../core/admin/admin-history-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { AdminDetailDialog } from './admin-detail-dialog';
 
@@ -32,6 +32,7 @@ export class HistoryPage implements OnInit {
   protected readonly tab = signal<HistoryTab>('sales');
   protected readonly branchId = signal('');
   protected readonly terminalId = signal('');
+  protected readonly documentType = signal<HistorySaleDocumentType | ''>('');
   protected readonly fromDate = signal('');
   protected readonly toDate = signal('');
   protected readonly page = signal(1);
@@ -102,6 +103,12 @@ export class HistoryPage implements OnInit {
 
   protected selectTerminal(event: Event): void {
     this.terminalId.set((event.target as HTMLSelectElement).value);
+    this.page.set(1);
+    this.load();
+  }
+
+  protected selectDocumentType(event: Event): void {
+    this.documentType.set((event.target as HTMLSelectElement).value as HistorySaleDocumentType | '');
     this.page.set(1);
     this.load();
   }
@@ -188,6 +195,7 @@ export class HistoryPage implements OnInit {
       branchId: this.branchId() || undefined,
       terminalId: this.tab() === 'stock' ? undefined : this.terminalId() || undefined,
       fromUtc: from?.toISOString(), toUtc: to?.toISOString(),
+      documentType: this.tab() === 'sales' ? this.documentType() || undefined : undefined,
     };
     this.loading.set(true);
     this.loadError.set(null);

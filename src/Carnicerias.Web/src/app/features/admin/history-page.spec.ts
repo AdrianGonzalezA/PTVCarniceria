@@ -128,4 +128,89 @@ describe('HistoryPage', () => {
     fixture.detectChanges();
     expect(page.textContent).toContain('No hay registros');
   });
+
+  it('combines document type with branch, terminal, dates and pagination for sales', () => {
+    const { fixture, http, page } = load();
+    const branch = page.querySelector<HTMLSelectElement>('#history-branch')!;
+    branch.value = 'branch-1';
+    branch.dispatchEvent(new Event('change'));
+    http.expectOne('/api/admin/companies/company-1/branches/branch-1/terminals').flush([
+      { id: 'terminal-1', name: 'Caja 1', isActive: true, isHistorical: false, hasCredential: true },
+    ]);
+    http.expectOne((request) => request.url === '/api/admin/history/sales').flush({
+      items: [], page: 1, pageSize: 30, totalItems: 0,
+    });
+    fixture.detectChanges();
+    const terminal = page.querySelector<HTMLSelectElement>('#history-terminal')!;
+    terminal.value = 'terminal-1';
+    terminal.dispatchEvent(new Event('change'));
+    http.expectOne((request) => request.url === '/api/admin/history/sales').flush({
+      items: [], page: 1, pageSize: 30, totalItems: 0,
+    });
+
+    const from = page.querySelector<HTMLInputElement>('#history-from')!;
+    const to = page.querySelector<HTMLInputElement>('#history-to')!;
+    from.value = '2026-10-08';
+    from.dispatchEvent(new Event('change'));
+    to.value = '2026-10-09';
+    to.dispatchEvent(new Event('change'));
+    const type = page.querySelector<HTMLSelectElement>('#history-document-type')!;
+    type.value = 'fiscalTicket';
+    type.dispatchEvent(new Event('change'));
+    const first = http.expectOne((request) => request.url === '/api/admin/history/sales');
+    expect(first.request.params.get('documentType')).toBe('fiscalTicket');
+    expect(first.request.params.get('branchId')).toBe('branch-1');
+    expect(first.request.params.get('terminalId')).toBe('terminal-1');
+    expect(first.request.params.get('fromUtc')).toBe(new Date('2026-10-08T00:00:00').toISOString());
+    expect(first.request.params.get('toUtc')).toBe(new Date('2026-10-10T00:00:00').toISOString());
+    expect(first.request.params.get('page')).toBe('1');
+    first.flush({ items: [], page: 1, pageSize: 30, totalItems: 31 });
+    fixture.detectChanges();
+    const next = Array.from(page.querySelectorAll<HTMLButtonElement>('.list-footer button'))
+      .find((button) => button.textContent?.includes('Siguiente'))!;
+    next.click();
+    const second = http.expectOne((request) => request.url === '/api/admin/history/sales');
+    expect(second.request.params.get('documentType')).toBe('fiscalTicket');
+    expect(second.request.params.get('page')).toBe('2');
+    expect(second.request.params.get('terminalId')).toBe('terminal-1');
+    second.flush({ items: [], page: 2, pageSize: 30, totalItems: 31 });
+    fixture.detectChanges();
+    expect(page.textContent).toContain('31 registros');
+  });
+
+  it('keeps the old sales request without a type and never sends it to other history tabs', () => {
+    const { fixture, http, page } = load();
+    const type = page.querySelector<HTMLSelectElement>('#history-document-type')!;
+    expect(type.value).toBe('');
+    type.value = 'electronicInvoice';
+    type.dispatchEvent(new Event('change'));
+    const selected = http.expectOne((request) => request.url === '/api/admin/history/sales');
+    expect(selected.request.params.get('documentType')).toBe('electronicInvoice');
+    selected.flush({ items: [], page: 1, pageSize: 30, totalItems: 0 });
+    fixture.detectChanges();
+
+    const shiftsTab = Array.from(page.querySelectorAll<HTMLButtonElement>('.history-tabs button'))
+      .find((button) => button.textContent?.includes('Turnos'))!;
+    shiftsTab.click();
+    const shifts = http.expectOne((request) => request.url === '/api/admin/history/shifts');
+    expect(shifts.request.params.has('documentType')).toBe(false);
+    shifts.flush({ items: [], page: 1, pageSize: 30, totalItems: 0 });
+    fixture.detectChanges();
+    expect(page.querySelector('#history-document-type')).toBeNull();
+
+    const salesTab = Array.from(page.querySelectorAll<HTMLButtonElement>('.history-tabs button'))
+      .find((button) => button.textContent?.includes('Ventas'))!;
+    salesTab.click();
+    const restored = http.expectOne((request) => request.url === '/api/admin/history/sales');
+    expect(restored.request.params.get('documentType')).toBe('electronicInvoice');
+    restored.flush({ items: [], page: 1, pageSize: 30, totalItems: 0 });
+    fixture.detectChanges();
+    const reset = page.querySelector<HTMLSelectElement>('#history-document-type')!;
+    reset.value = '';
+    reset.dispatchEvent(new Event('change'));
+    const all = http.expectOne((request) => request.url === '/api/admin/history/sales');
+    expect(all.request.params.has('documentType')).toBe(false);
+    expect(all.request.params.get('page')).toBe('1');
+    all.flush({ items: [], page: 1, pageSize: 30, totalItems: 0 });
+  });
 });

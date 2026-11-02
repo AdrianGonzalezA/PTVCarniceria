@@ -51,6 +51,15 @@
             }
           </select>
         }
+        @if (tab() === 'sales') {
+          <label for="history-document-type">Comprobante</label>
+          <select id="history-document-type" [value]="documentType()" (change)="selectDocumentType($event)">
+            <option value="">Todos</option>
+            <option value="nonFiscalTicket">Ticket no fiscal</option>
+            <option value="fiscalTicket">Ticket fiscal</option>
+            <option value="electronicInvoice">Factura electrónica</option>
+          </select>
+        }
         <label for="history-from">Desde</label>
         <input id="history-from" type="date" [value]="fromDate()" (change)="updateDate('from', $event)" />
         <label for="history-to">Hasta</label>

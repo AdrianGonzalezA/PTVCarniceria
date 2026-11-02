@@ -116,20 +116,18 @@ public static class AdminHistoryEndpoints
     private static async Task<IResult> ListSalesAsync(
         PlatformAccessDbContext db, OperationalContextAccessor accessor, CancellationToken cancellationToken,
         int page = 1, int pageSize = 30, Guid? branchId = null, Guid? terminalId = null,
-        DateTimeOffset? fromUtc = null, DateTimeOffset? toUtc = null)
+        DateTimeOffset? fromUtc = null, DateTimeOffset? toUtc = null, string? documentType = null)
     {
+        if (!SaleHistoryQuery.TryParseDocumentType(documentType, out var parsedDocumentType))
+            return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
         var check = await ValidateAsync(db, accessor.Context.CompanyId, page, pageSize,
             branchId, terminalId, fromUtc, toUtc, cancellationToken);
         if (check is not null) return check;
         var companyId = accessor.Context.CompanyId;
-        var query = db.ConfirmedSales.AsNoTracking().Where(sale => sale.CompanyId == companyId &&
-            (!branchId.HasValue || sale.BranchId == branchId.Value) &&
-            (!terminalId.HasValue || sale.PosTerminalId == terminalId.Value) &&
-            (!fromUtc.HasValue || sale.ConfirmedAtUtc >= fromUtc.Value) &&
-            (!toUtc.HasValue || sale.ConfirmedAtUtc < toUtc.Value));
+        var query = SaleHistoryQuery.ScopeSales(db.ConfirmedSales.AsNoTracking(), companyId,
+            branchId, terminalId, fromUtc, toUtc, parsedDocumentType);
         var total = await query.LongCountAsync(cancellationToken);
-        var items = await query.OrderByDescending(sale => sale.ConfirmedAtUtc).ThenByDescending(sale => sale.Id)
-            .Skip((page - 1) * pageSize).Take(pageSize)
+        var items = await SaleHistoryQuery.PageSales(query, page, pageSize)
             .Select(sale => new SaleItem(sale.Id, sale.ConfirmedAtUtc, sale.Total,
                 sale.BranchId, db.Branches.Where(branch => branch.Id == sale.BranchId)
                     .Select(branch => branch.Name).FirstOrDefault() ?? "",

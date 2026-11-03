@@ -41,6 +41,8 @@ public sealed class PieceReservationConcurrencyTests
         var piece = new InventoryPiece(company.Id, branch.Id, product.Id, profile.Id,
             firstCashier.Id, Guid.NewGuid(), movement.Id, "I02 fixture", suffix,
             "25066101000", 1.000m, now);
+        var balance = new BranchInventoryBalance(company.Id, branch.Id, product.Id);
+        balance.SetQuantities(1.000m, 0m);
         var firstDraft = new SaleDraft(company.Id, branch.Id, firstCashier.Id, priceList.Id, now);
         var secondDraft = new SaleDraft(company.Id, branch.Id, secondCashier.Id, priceList.Id, now);
         var seeded = false;
@@ -51,7 +53,7 @@ public sealed class PieceReservationConcurrencyTests
             {
                 await using var transaction = await db.Database.BeginTransactionAsync();
                 db.AddRange(company, branch, firstCashier, secondCashier, category, product,
-                    priceList, profile, movement, piece, firstDraft, secondDraft);
+                    priceList, profile, movement, piece, balance, firstDraft, secondDraft);
                 await db.SaveChangesAsync();
                 // Also clean up if the commit response is lost after PostgreSQL committed.
                 seeded = true;
@@ -143,6 +145,37 @@ public sealed class PieceReservationConcurrencyTests
                 Assert.Equal(4, await verified.InventoryPieceStateEvents.AsNoTracking()
                     .CountAsync(item => item.PieceId == piece.Id));
             }
+
+            // The stock write lease is scoped to this article and branch and expires without
+            // any cleanup job. A different connection cannot update the held stock.
+            var lockId = Guid.NewGuid();
+            await using (var owner = new PlatformAccessDbContext(options))
+            {
+                Assert.Equal(1, await owner.BranchInventoryBalances.Where(item =>
+                    item.CompanyId == company.Id && item.BranchId == branch.Id &&
+                    item.ProductId == product.Id).ExecuteUpdateAsync(setters => setters
+                    .SetProperty(item => item.ReconciliationLockId, (Guid?)lockId)
+                    .SetProperty(item => item.ReconciliationLockPieceId, (Guid?)piece.Id)
+                    .SetProperty(item => item.ReconciliationLockOwnerUserId, (Guid?)firstCashier.Id)
+                    .SetProperty(item => item.ReconciliationLockStartedAtUtc, (DateTimeOffset?)now)
+                    .SetProperty(item => item.ReconciliationLockExpiresAtUtc,
+                        (DateTimeOffset?)now.AddMinutes(3))));
+            }
+            await using (var otherBox = new PlatformAccessDbContext(options))
+            {
+                await using var transaction = await otherBox.Database.BeginTransactionAsync();
+                Assert.True(await StockReconciliationLease.IsLockedForUpdateAsync(otherBox,
+                    company.Id, branch.Id, product.Id, now.AddMinutes(1), CancellationToken.None));
+                var updated = await StockReconciliationLease.Unlocked(
+                    otherBox.BranchInventoryBalances.Where(item =>
+                        item.CompanyId == company.Id && item.BranchId == branch.Id &&
+                        item.ProductId == product.Id), now.AddMinutes(1))
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.Reserved, 0.1m));
+                Assert.Equal(0, updated);
+                Assert.False(await StockReconciliationLease.IsLockedForUpdateAsync(otherBox,
+                    company.Id, branch.Id, product.Id, now.AddMinutes(4), CancellationToken.None));
+                await transaction.RollbackAsync();
+            }
         }
         finally
         {
@@ -159,6 +192,7 @@ public sealed class PieceReservationConcurrencyTests
         await db.InventoryPieces.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.SaleDrafts.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.InventoryMovements.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
+        await db.BranchInventoryBalances.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.BarcodeProfiles.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.CatalogProducts.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.ProductCategories.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();

@@ -133,7 +133,8 @@ public static class CatalogEndpoints
                     .First(),
                 db.BranchInventoryBalances.Where(balance => balance.CompanyId == context.CompanyId &&
                         balance.BranchId == context.BranchId && balance.ProductId == product.Id)
-                    .Select(balance => balance.OnHand - balance.Reserved)
+                    .Select(balance => balance.ReconciliationLockExpiresAtUtc > now ? 0 :
+                        balance.OnHand - balance.Reserved - balance.Quarantined)
                     .FirstOrDefault()))
             .ToArrayAsync(cancellationToken);
 

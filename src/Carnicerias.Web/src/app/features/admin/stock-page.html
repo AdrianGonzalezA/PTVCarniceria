@@ -26,7 +26,7 @@
       <header class="panel-heading">
         <div>
           <h2 id="stock-title">Stock de esta sucursal</h2>
-          <p>Disponible = existencia − reservado en tickets abiertos. Cada ajuste deja un movimiento.</p>
+          <p>Disponible = existencia − reservado en tickets abiertos − inmovilizado por trazabilidad histórica. Cada ajuste deja un movimiento.</p>
         </div>
         <div class="admin-import-heading-actions">
           <app-admin-excel-import-actions kind="stock" [disabled]="loading() || saving()" (completed)="load()" />
@@ -49,15 +49,16 @@
       } @else {
         <div class="table-wrap">
           <table>
-            <thead><tr><th scope="col">Artículo</th><th scope="col">Existencia</th><th scope="col">Reservado</th><th scope="col">Disponible</th><th scope="col">Acción</th></tr></thead>
+            <thead><tr><th scope="col">Artículo</th><th scope="col">Existencia</th><th scope="col">Reservado</th><th scope="col">Inmovilizado</th><th scope="col">Disponible</th><th scope="col">Acción</th></tr></thead>
             <tbody>
               @for (item of visibleItems(); track item.productId) {
                 <tr class="stock-row">
                   <td><strong>{{ item.name }}</strong><small>{{ item.code }}</small></td>
                   <td>{{ item.onHand }} {{ item.unit ?? 'u.' }}</td>
                   <td>{{ item.reserved }} {{ item.unit ?? 'u.' }}</td>
-                  <td>{{ item.available }} {{ item.unit ?? 'u.' }}</td>
-                  <td><button type="button" class="secondary-button" [disabled]="saving()" (click)="startAdjustment(item)">Ajustar</button></td>
+                  <td>{{ item.quarantined ?? 0 }} {{ item.unit ?? 'u.' }}</td>
+                  <td>{{ item.reconciliationLocked ? 'En conteo' : item.available }} {{ item.reconciliationLocked ? '' : item.unit ?? 'u.' }}</td>
+                  <td><button type="button" class="secondary-button" [disabled]="saving() || item.reconciliationLocked" (click)="startAdjustment(item)">Ajustar</button></td>
                 </tr>
               }
             </tbody>
@@ -70,7 +71,7 @@
         [canClose]="!saving()" (closed)="cancelAdjustment()">
         <form class="editor-form stock-form" [formGroup]="adjustmentForm" (ngSubmit)="saveAdjustment()">
           <h2 id="stock-adjustment-title">Ajustar {{ item.name }}</h2>
-          <p>Actual: {{ item.onHand }} {{ item.unit ?? 'u.' }} · Reservado: {{ item.reserved }} · Disponible: {{ item.available }}</p>
+          <p>Actual: {{ item.onHand }} {{ item.unit ?? 'u.' }} · Reservado: {{ item.reserved }} · Inmovilizado: {{ item.quarantined ?? 0 }} · Disponible: {{ item.available }}</p>
           <label for="stock-delta">Variación de cantidad (positiva para entrada, negativa para salida)</label>
           <input id="stock-delta" type="number" formControlName="quantityDelta" [attr.step]="item.saleMode === 'unit' ? '1' : '0.001'" aria-describedby="stock-delta-help" required />
           <p id="stock-delta-help" class="field-hint">{{ item.saleMode === 'unit' ? 'Sólo unidades enteras.' : 'Hasta tres decimales.' }}</p>

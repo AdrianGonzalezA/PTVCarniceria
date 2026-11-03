@@ -8,7 +8,9 @@ public enum InventoryPieceStatus
     Reserved,
     Sold,
     Transferred,
-    Consumed
+    Consumed,
+    HistoricalUnverified,
+    ReconciledUnavailable
 }
 
 public sealed class InventoryPiece
@@ -129,6 +131,30 @@ public sealed class InventoryPiece
         if (Status != InventoryPieceStatus.Available)
             throw new InvalidOperationException("Only an available piece can be consumed.");
         Status = InventoryPieceStatus.Consumed;
+        StateChangedAtUtc = now.ToUniversalTime();
+    }
+
+    public void MarkHistoricalUnverified(DateTimeOffset now)
+    {
+        if (Status != InventoryPieceStatus.Available)
+            throw new InvalidOperationException("Only an unclaimed historical piece can be quarantined.");
+        Status = InventoryPieceStatus.HistoricalUnverified;
+        StateChangedAtUtc = now.ToUniversalTime();
+    }
+
+    public void ReconcileHistoricalAvailable(DateTimeOffset now)
+    {
+        if (Status != InventoryPieceStatus.HistoricalUnverified)
+            throw new InvalidOperationException("The piece is not pending historical reconciliation.");
+        Status = InventoryPieceStatus.Available;
+        StateChangedAtUtc = now.ToUniversalTime();
+    }
+
+    public void ReconcileHistoricalUnavailable(DateTimeOffset now)
+    {
+        if (Status != InventoryPieceStatus.HistoricalUnverified)
+            throw new InvalidOperationException("The piece is not pending historical reconciliation.");
+        Status = InventoryPieceStatus.ReconciledUnavailable;
         StateChangedAtUtc = now.ToUniversalTime();
     }
 }

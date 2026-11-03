@@ -38,6 +38,30 @@ export interface InventoryPieceEvent {
   readonly actorUserId: string | null;
   readonly reason: string;
   readonly createdAtUtc: string;
+  readonly evidenceReference: string | null;
+  readonly evidenceSha256: string | null;
+  readonly observedWeightKg: number | null;
+  readonly countedOnHand: number | null;
+  readonly countedAtUtc: string | null;
+  readonly inventoryMovementId: string | null;
+}
+
+export interface InventoryPieceReconciliationLease {
+  readonly lockId: string;
+  readonly pieceId: string;
+  readonly startedAtUtc: string;
+  readonly expiresAtUtc: string;
+}
+
+export interface ReconcilePieceRequest {
+  readonly lockId: string;
+  readonly operationId: string;
+  readonly outcome: 'available' | 'unavailable';
+  readonly observedWeightKg: number;
+  readonly countedOnHand: number;
+  readonly reason: string;
+  readonly evidenceReference: string;
+  readonly evidenceSha256?: string;
 }
 
 export interface ReleasePieceResult {
@@ -76,8 +100,9 @@ export interface PosPieceLookup {
 export class InventoryPieceClient {
   private readonly http = inject(HttpClient);
 
-  list(page = 1, pageSize = 20) {
-    const params = new HttpParams().set('page', page).set('pageSize', pageSize);
+  list(page = 1, pageSize = 20, status?: string) {
+    let params = new HttpParams().set('page', page).set('pageSize', pageSize);
+    if (status) params = params.set('status', status);
     return this.http.get<InventoryPiecePage>('/api/inventory/pieces',
       { params, withCredentials: true });
   }
@@ -95,6 +120,28 @@ export class InventoryPieceClient {
   release(id: string, reason: string) {
     return this.http.post<ReleasePieceResult>(`/api/inventory/pieces/${id}/release`,
       { reason }, { withCredentials: true });
+  }
+
+  acquireReconciliationLease(id: string, lockId: string) {
+    return this.http.post<InventoryPieceReconciliationLease>(
+      `/api/inventory/pieces/${id}/reconciliation-lease`, { lockId }, { withCredentials: true });
+  }
+
+  renewReconciliationLease(id: string, lockId: string) {
+    return this.http.post<{ readonly lockId: string; readonly expiresAtUtc: string }>(
+      `/api/inventory/pieces/${id}/reconciliation-lease/renew`, { lockId },
+      { withCredentials: true });
+  }
+
+  releaseReconciliationLease(id: string, lockId: string) {
+    return this.http.delete<void>(`/api/inventory/pieces/${id}/reconciliation-lease/${lockId}`,
+      { withCredentials: true });
+  }
+
+  reconcile(id: string, request: ReconcilePieceRequest) {
+    return this.http.post<{ readonly pieceId: string; readonly status: string;
+      readonly eventId: string; readonly alreadyApplied: boolean }>(
+      `/api/inventory/pieces/${id}/reconcile`, request, { withCredentials: true });
   }
 
   lookup(code: string) {

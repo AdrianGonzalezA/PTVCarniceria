@@ -51,7 +51,8 @@ SELECT to_regprocedure('pg_catalog.gen_random_uuid()') AS uuid_generator,
        (SELECT count(*) FROM pos_sales.confirmed_sale_lines WHERE "InventoryPieceId" IS NOT NULL)
            AS sold_piece_lines;
 
--- Los cinco bloqueos reproducen los predicados de la migración I02.
+-- Las primeras cuatro condiciones abortan I02. La quinta clasifica piezas
+-- HistoricalUnverified; no se asignan a ventas ni se ponen a disposición.
 SELECT 'duplicate_active_claims' AS check_name, count(*) AS conflicts
 FROM (SELECT line."InventoryPieceId"
       FROM pos_sales.sale_draft_lines line
@@ -105,6 +106,44 @@ WHERE NOT EXISTS (SELECT 1 FROM pos_sales.confirmed_sale_lines sold
                         sale."CompanyId" = piece."CompanyId" AND
                         sale."BranchId" = piece."BranchId" AND
                         sale."ConfirmedAtUtc" >= piece."ReceivedAtUtc"));
+
+-- Viabilidad de la cuarentena. Cualquier faltante de balance o kilos
+-- superiores al saldo libre abortará la migración corregida.
+WITH ambiguous AS (
+    SELECT piece."CompanyId", piece."BranchId", piece."ProductId",
+           sum(piece."ReceivedWeightKg") AS quarantine_kg
+    FROM inventory.pieces piece
+    WHERE NOT EXISTS (SELECT 1 FROM pos_sales.confirmed_sale_lines sold
+                      WHERE sold."InventoryPieceId" = piece."Id")
+      AND NOT EXISTS (SELECT 1 FROM pos_sales.sale_draft_lines line
+                      JOIN pos_sales.sale_drafts draft ON draft."Id" = line."SaleDraftId"
+                      WHERE line."InventoryPieceId" = piece."Id" AND draft."Status" = 0)
+      AND (EXISTS (SELECT 1 FROM inventory.inventory_movements movement
+                   WHERE movement."CompanyId" = piece."CompanyId" AND
+                         movement."BranchId" = piece."BranchId" AND
+                         movement."ProductId" = piece."ProductId" AND
+                         movement."Kind" = 1 AND movement."QuantityDelta" < 0 AND
+                         movement."CreatedAtUtc" >= piece."ReceivedAtUtc")
+           OR EXISTS (SELECT 1 FROM pos_sales.confirmed_sale_lines line
+                      JOIN pos_sales.confirmed_sales sale ON sale."Id" = line."SaleId"
+                      WHERE line."InventoryPieceId" IS NULL AND
+                            line."ProductId" = piece."ProductId" AND
+                            sale."CompanyId" = piece."CompanyId" AND
+                            sale."BranchId" = piece."BranchId" AND
+                            sale."ConfirmedAtUtc" >= piece."ReceivedAtUtc"))
+    GROUP BY piece."CompanyId", piece."BranchId", piece."ProductId"
+)
+SELECT ambiguous."CompanyId", ambiguous."BranchId", ambiguous."ProductId",
+       ambiguous.quarantine_kg, balance."OnHand", balance."Reserved",
+       CASE WHEN balance."ProductId" IS NULL THEN 'MISSING_BALANCE'
+            WHEN balance."OnHand" < balance."Reserved" + ambiguous.quarantine_kg
+                THEN 'INSUFFICIENT_BALANCE'
+            ELSE 'READY' END AS quarantine_gate
+FROM ambiguous
+LEFT JOIN inventory.branch_inventory balance
+  ON balance."CompanyId" = ambiguous."CompanyId" AND
+     balance."BranchId" = ambiguous."BranchId" AND
+     balance."ProductId" = ambiguous."ProductId";
 
 -- Control adicional: la reserva agregada debe coincidir con borradores activos.
 WITH draft_reserved AS (

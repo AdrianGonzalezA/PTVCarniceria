@@ -160,6 +160,8 @@ public static class SaleDraftEndpoints
                     if (existingLine is not null && (piece.Status != InventoryPieceStatus.Reserved ||
                         piece.ReservedBySaleDraftId != currentDraftId))
                         return Error(StatusCodes.Status409Conflict, "PIECE_RESERVATION_MISSING");
+                    if (existingLine is null && piece.Status == InventoryPieceStatus.HistoricalUnverified)
+                        return Error(StatusCodes.Status409Conflict, "PIECE_RECONCILIATION_REQUIRED");
                     if (existingLine is null && piece.Status != InventoryPieceStatus.Available)
                         return Error(StatusCodes.Status409Conflict, "PIECE_ALREADY_USED");
                     if (draft is not null && existingLine is null &&
@@ -205,6 +207,12 @@ public static class SaleDraftEndpoints
                 // Persist the header in this transaction before a piece can reference its id.
                 await db.SaveChangesAsync(cancellationToken);
             }
+            var affectedProductIds = lines.Select(line => line.ProductId)
+                .Concat(draft.Lines.Select(line => line.ProductId)).Distinct().Order().ToArray();
+            foreach (var productId in affectedProductIds)
+                if (await StockReconciliationLease.IsLockedForUpdateAsync(db, context.CompanyId,
+                        context.BranchId, productId, now, cancellationToken))
+                    return Error(StatusCodes.Status409Conflict, "ARTICLE_RECONCILIATION_IN_PROGRESS");
             var oldPieceIds = draft.Lines.Where(line => line.InventoryPieceId is not null)
                 .Select(line => line.InventoryPieceId!.Value).ToHashSet();
             var newPieceIds = lines.Where(line => line.InventoryPieceId is not null)
@@ -229,8 +237,7 @@ public static class SaleDraftEndpoints
                         return Error(StatusCodes.Status409Conflict, "PIECE_RESERVATION_MISSING");
                 }
             }
-            foreach (var productId in lines.Select(line => line.ProductId)
-                         .Concat(draft.Lines.Select(line => line.ProductId)).Distinct().Order())
+            foreach (var productId in affectedProductIds)
             {
                 var previousQuantity = draft.Lines.Where(line => line.ProductId == productId).Sum(line => line.Quantity);
                 var newQuantity = lines.Where(line => line.ProductId == productId).Sum(line => line.Quantity);
@@ -239,11 +246,13 @@ public static class SaleDraftEndpoints
 
                 var stock = db.BranchInventoryBalances.Where(balance => balance.CompanyId == context.CompanyId &&
                     balance.BranchId == context.BranchId && balance.ProductId == productId);
+                var unlockedStock = StockReconciliationLease.Unlocked(stock, now);
                 var updated = quantityDelta > 0
-                    ? await stock.Where(balance => balance.OnHand - balance.Reserved >= quantityDelta)
+                    ? await unlockedStock.Where(balance => balance.OnHand - balance.Reserved -
+                            balance.Quarantined >= quantityDelta)
                         .ExecuteUpdateAsync(setters => setters.SetProperty(
                             balance => balance.Reserved, balance => balance.Reserved + quantityDelta), cancellationToken)
-                    : await stock.Where(balance => balance.Reserved >= -quantityDelta)
+                    : await unlockedStock.Where(balance => balance.Reserved >= -quantityDelta)
                         .ExecuteUpdateAsync(setters => setters.SetProperty(
                             balance => balance.Reserved, balance => balance.Reserved + quantityDelta), cancellationToken);
                 if (updated == 0)
@@ -291,6 +300,10 @@ public static class SaleDraftEndpoints
             if (draft is null) return Results.NoContent();
             if (await HasActiveMercadoPagoOrderAsync(db, draft.Id, cancellationToken))
                 return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_ORDER_ACTIVE");
+            foreach (var productId in draft.Lines.Select(line => line.ProductId).Distinct().Order())
+                if (await StockReconciliationLease.IsLockedForUpdateAsync(db, context.CompanyId,
+                        context.BranchId, productId, now, cancellationToken))
+                    return Error(StatusCodes.Status409Conflict, "ARTICLE_RECONCILIATION_IN_PROGRESS");
             foreach (var pieceId in draft.Lines.Where(line => line.InventoryPieceId is not null)
                          .Select(line => line.InventoryPieceId!.Value).Order())
             {
@@ -305,9 +318,9 @@ public static class SaleDraftEndpoints
             foreach (var group in draft.Lines.GroupBy(line => line.ProductId).OrderBy(group => group.Key))
             {
                 var quantity = group.Sum(line => line.Quantity);
-                var updated = await db.BranchInventoryBalances.Where(balance =>
+                var updated = await StockReconciliationLease.Unlocked(db.BranchInventoryBalances.Where(balance =>
                         balance.CompanyId == context.CompanyId && balance.BranchId == context.BranchId &&
-                        balance.ProductId == group.Key && balance.Reserved >= quantity)
+                        balance.ProductId == group.Key && balance.Reserved >= quantity), now)
                     .ExecuteUpdateAsync(setters => setters.SetProperty(
                         balance => balance.Reserved, balance => balance.Reserved - quantity), cancellationToken);
                 if (updated == 0)

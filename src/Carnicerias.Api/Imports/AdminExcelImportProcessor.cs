@@ -65,7 +65,7 @@ public static class AdminExcelImportProcessor
             balance.BranchId == branchId && productIds.Contains(balance.ProductId));
         var balances = apply ? await balanceQuery.ToArrayAsync(cancellationToken) :
             await balanceQuery.AsNoTracking().ToArrayAsync(cancellationToken);
-        var plan = StockImportPlanner.Plan(companyId, branchId, rows, products, balances);
+        var plan = StockImportPlanner.Plan(companyId, branchId, rows, products, balances, now);
         outcomes.AddRange(plan.Outcomes);
         issues.AddRange(plan.Issues);
         if (!apply || issues.Count != 0) return;

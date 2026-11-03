@@ -184,6 +184,10 @@ public static class SaleConfirmationEndpoints
                 return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_ORDER_ACTIVE");
 
             var now = timeProvider.GetUtcNow();
+            foreach (var productId in draft.Lines.Select(line => line.ProductId).Distinct().Order())
+                if (await StockReconciliationLease.IsLockedForUpdateAsync(db, context.CompanyId,
+                        context.BranchId, productId, now, cancellationToken))
+                    return Error(StatusCodes.Status409Conflict, "ARTICLE_RECONCILIATION_IN_PROGRESS");
             foreach (var pieceId in draft.Lines.Where(line => line.InventoryPieceId is not null)
                          .Select(line => line.InventoryPieceId!.Value).Order())
             {
@@ -239,10 +243,10 @@ public static class SaleConfirmationEndpoints
             foreach (var group in draft.Lines.GroupBy(line => line.ProductId).OrderBy(group => group.Key))
             {
                 var quantity = group.Sum(line => line.Quantity);
-                var changed = await db.BranchInventoryBalances.Where(balance =>
+                var changed = await StockReconciliationLease.Unlocked(db.BranchInventoryBalances.Where(balance =>
                         balance.CompanyId == context.CompanyId && balance.BranchId == context.BranchId &&
                         balance.ProductId == group.Key && balance.OnHand >= quantity &&
-                        balance.Reserved >= quantity)
+                        balance.Reserved >= quantity), now)
                     .ExecuteUpdateAsync(setters => setters
                         .SetProperty(balance => balance.OnHand, balance => balance.OnHand - quantity)
                         .SetProperty(balance => balance.Reserved, balance => balance.Reserved - quantity),

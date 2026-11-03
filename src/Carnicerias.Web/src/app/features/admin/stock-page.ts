@@ -105,8 +105,12 @@ export class StockPage implements OnInit {
         : 'Ingresá una cantidad distinta de cero (hasta 3 decimales).');
       return;
     }
-    if (quantityDelta < 0 && item.onHand + quantityDelta < item.reserved) {
-      this.actionError.set('El ajuste dejaría menos existencia que la reservada en tickets abiertos.');
+    if (item.reconciliationLocked) {
+      this.actionError.set('El artículo está bloqueado durante un conteo físico. Actualizá el stock al finalizar.');
+      return;
+    }
+    if (quantityDelta < 0 && item.onHand + quantityDelta < item.reserved + (item.quarantined ?? 0)) {
+      this.actionError.set('El ajuste dejaría menos existencia que la reservada o inmovilizada.');
       return;
     }
     const signature = `${item.productId}|${quantityDelta}|${reason}`;
@@ -129,7 +133,9 @@ export class StockPage implements OnInit {
       error: (error: HttpErrorResponse) => {
         this.saving.set(false);
         this.actionError.set(error.error?.error?.code === 'STOCK_BELOW_RESERVED'
-          ? 'El stock cambió y no se puede descontar lo reservado. Actualizá y revisá la cantidad.'
+          ? 'El stock cambió y no se puede descontar lo reservado o inmovilizado. Actualizá y revisá la cantidad.'
+          : error.error?.error?.code === 'ARTICLE_RECONCILIATION_IN_PROGRESS'
+            ? 'El artículo está bloqueado durante un conteo físico. Reintentá al finalizar.'
           : 'No se pudo guardar el ajuste. Podés reintentar sin duplicar el movimiento.');
       },
     });

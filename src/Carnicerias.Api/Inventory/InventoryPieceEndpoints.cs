@@ -22,6 +22,7 @@ public static class InventoryPieceEndpoints
         pieces.MapGet("/{id:guid}/events", ListEventsAsync);
         pieces.MapPost("", ReceiveAsync);
         pieces.MapPost("/{id:guid}/release", ReleaseReservedAsync);
+        pieces.MapHistoricalReconciliation();
         endpoints.MapGet("/api/pos/pieces/lookup", LookupForPosAsync).RequireOperationalContext();
         return endpoints;
     }
@@ -63,6 +64,8 @@ public static class InventoryPieceEndpoints
                 Error(StatusCodes.Status409Conflict, "PIECE_ALREADY_SOLD"),
             _ when matches[0].Status == InventoryPieceStatus.Reserved =>
                 Error(StatusCodes.Status409Conflict, "PIECE_RESERVED"),
+            _ when matches[0].Status == InventoryPieceStatus.HistoricalUnverified =>
+                Error(StatusCodes.Status409Conflict, "PIECE_RECONCILIATION_REQUIRED"),
             _ when matches[0].Status != InventoryPieceStatus.Available =>
                 Error(StatusCodes.Status409Conflict, "PIECE_NOT_AVAILABLE"),
             _ when !matches[0].IsActive || matches[0].SaleMode != ProductSaleMode.Weight =>
@@ -84,17 +87,27 @@ public static class InventoryPieceEndpoints
             : Results.Ok(ToResponse(piece));
     }
 
-    private static async Task<IResult> ListAsync(int? page, int? pageSize,
+    private static async Task<IResult> ListAsync(int? page, int? pageSize, string? status,
         PlatformAccessDbContext db, OperationalContextAccessor accessor,
         CancellationToken cancellationToken)
     {
         if (page is < 1 or > 100000 || pageSize is < 1 or > 100)
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+        InventoryPieceStatus? selectedStatus = null;
+        if (status is not null)
+        {
+            if (!Enum.TryParse<InventoryPieceStatus>(status, false, out var parsed) ||
+                !Enum.IsDefined(parsed))
+                return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+            selectedStatus = parsed;
+        }
         var currentPage = page ?? 1;
         var currentPageSize = pageSize ?? 20;
         var context = accessor.Context;
         var query = db.InventoryPieces.AsNoTracking().Where(piece =>
             piece.CompanyId == context.CompanyId && piece.BranchId == context.BranchId);
+        if (selectedStatus is not null)
+            query = query.Where(piece => piece.Status == selectedStatus);
         var total = await query.CountAsync(cancellationToken);
         var pageItems = await (from piece in query
                            join product in db.CatalogProducts.AsNoTracking() on piece.ProductId equals product.Id
@@ -127,7 +140,9 @@ public static class InventoryPieceEndpoints
             .Take(100).ToArrayAsync(cancellationToken);
         var items = events.Select(item => new PieceEventResponse(item.Id,
             item.PreviousStatus?.ToString(), item.Status.ToString(), item.Kind.ToString(),
-            item.SaleDraftId, item.ActorUserId, item.Reason, item.CreatedAtUtc)).ToArray();
+            item.SaleDraftId, item.ActorUserId, item.Reason, item.CreatedAtUtc,
+            item.EvidenceReference, item.EvidenceSha256, item.ObservedWeightKg,
+            item.CountedOnHand, item.CountedAtUtc, item.InventoryMovementId)).ToArray();
         return Results.Ok(items);
     }
 
@@ -184,13 +199,16 @@ public static class InventoryPieceEndpoints
                 return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_ORDER_ACTIVE");
 
             var now = clock.GetUtcNow();
+            if (await StockReconciliationLease.IsLockedForUpdateAsync(db, context.CompanyId,
+                    context.BranchId, piece.ProductId, now, cancellationToken))
+                return Error(StatusCodes.Status409Conflict, "ARTICLE_RECONCILIATION_IN_PROGRESS");
             if (!await PieceReservationTransactions.ReleaseAsync(db, piece, draftId,
                 context.UserId, InventoryPieceEventKind.AdminReleased, reason,
                 now, cancellationToken))
                 return Error(StatusCodes.Status409Conflict, "PIECE_RESERVATION_MISSING");
-            var changed = await db.BranchInventoryBalances.Where(balance =>
+            var changed = await StockReconciliationLease.Unlocked(db.BranchInventoryBalances.Where(balance =>
                     balance.CompanyId == context.CompanyId && balance.BranchId == context.BranchId &&
-                    balance.ProductId == piece.ProductId && balance.Reserved >= line.Quantity)
+                    balance.ProductId == piece.ProductId && balance.Reserved >= line.Quantity), now)
                 .ExecuteUpdateAsync(setters => setters.SetProperty(balance => balance.Reserved,
                     balance => balance.Reserved - line.Quantity), cancellationToken);
             if (changed != 1) return Error(StatusCodes.Status409Conflict, "STOCK_RESERVATION_MISSING");
@@ -277,26 +295,31 @@ public static class InventoryPieceEndpoints
         }
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var now = clock.GetUtcNow();
         var movement = new InventoryMovement(context.CompanyId, context.BranchId, product.Id,
             context.UserId, request.OperationId, InventoryMovementKind.PieceReceipt, read.WeightKg,
-            "Recepción de pieza trazable", clock.GetUtcNow());
+            "Recepción de pieza trazable", now);
         var piece = new InventoryPiece(context.CompanyId, context.BranchId, product.Id,
             profile.Id, context.UserId, request.OperationId, movement.Id, source,
-            read.ExternalIdentifier, code, read.WeightKg, clock.GetUtcNow(), identifierField);
+            read.ExternalIdentifier, code, read.WeightKg, now, identifierField);
         db.InventoryMovements.Add(movement);
         db.InventoryPieces.Add(piece);
         db.InventoryPieceStateEvents.Add(new InventoryPieceStateEvent(context.CompanyId,
             context.BranchId, piece.Id, null, InventoryPieceStatus.Available,
             InventoryPieceEventKind.Receipt, null, context.UserId,
-            "Recepción de pieza trazable", clock.GetUtcNow()));
+            "Recepción de pieza trazable", now));
         try
         {
-            await db.Database.ExecuteSqlInterpolatedAsync($"""
+            var changed = await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO inventory.branch_inventory ("CompanyId", "BranchId", "ProductId", "OnHand", "Reserved")
                 VALUES ({context.CompanyId}, {context.BranchId}, {product.Id}, {read.WeightKg}, 0)
                 ON CONFLICT ("CompanyId", "BranchId", "ProductId") DO UPDATE
                     SET "OnHand" = inventory.branch_inventory."OnHand" + EXCLUDED."OnHand"
+                WHERE inventory.branch_inventory."ReconciliationLockExpiresAtUtc" IS NULL OR
+                    inventory.branch_inventory."ReconciliationLockExpiresAtUtc" <= {now}
                 """, cancellationToken);
+            if (changed != 1)
+                return Error(StatusCodes.Status409Conflict, "ARTICLE_RECONCILIATION_IN_PROGRESS");
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
@@ -329,7 +352,9 @@ public static class InventoryPieceEndpoints
         DateTimeOffset? ReservedAtUtc);
     private sealed record PieceListResponse(IReadOnlyList<PieceListItem> Items, int Page, int PageSize, int Total);
     private sealed record PieceEventResponse(Guid Id, string? PreviousStatus, string Status,
-        string Kind, Guid? SaleDraftId, Guid? ActorUserId, string Reason, DateTimeOffset CreatedAtUtc);
+        string Kind, Guid? SaleDraftId, Guid? ActorUserId, string Reason, DateTimeOffset CreatedAtUtc,
+        string? EvidenceReference, string? EvidenceSha256, decimal? ObservedWeightKg,
+        decimal? CountedOnHand, DateTimeOffset? CountedAtUtc, Guid? InventoryMovementId);
     private sealed record ReleasePieceRequest(string? Reason);
     private sealed record PosPieceLookupResponse(Guid Id, Guid ProductId, string ProductCode,
         string ExternalIdentifier, decimal ReceivedWeightKg, string RawBarcode);

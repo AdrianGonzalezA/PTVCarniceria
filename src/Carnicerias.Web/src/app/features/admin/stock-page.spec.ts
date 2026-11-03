@@ -140,4 +140,34 @@ describe('StockPage', () => {
     fixture.detectChanges();
     expect(page.querySelector('.error-message')?.textContent).toContain('entera');
   });
+
+  it('protects quarantined weight and disables adjustment during a physical count', () => {
+    const fixture = TestBed.createComponent(StockPage);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/sessions/current').flush({ userId: 'admin-id', username: 'admin',
+      expiresAtUtc: '', context: { userId: 'admin-id', companyId: 'company-1',
+        companyName: 'Empresa', branchId: 'branch-1', branchName: 'Centro',
+        sessionId: 'session-id', permissions: ['inventory.stock.manage'] } });
+    http.expectOne('/api/inventory/stock').flush([
+      { productId: 'p1', code: '1', name: 'Asado', unit: 'kg', saleMode: 'weight',
+        onHand: 10, reserved: 2, quarantined: 5, available: 3, reconciliationLocked: false },
+      { productId: 'p2', code: '2', name: 'Aguja', unit: 'kg', saleMode: 'weight',
+        onHand: 10, reserved: 0, quarantined: 1, available: 0, reconciliationLocked: true },
+    ]);
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelectorAll<HTMLButtonElement>('.stock-row button')[1].disabled).toBe(true);
+    expect(page.textContent).toContain('Inmovilizado');
+    page.querySelectorAll<HTMLButtonElement>('.stock-row button')[0].click();
+    fixture.detectChanges();
+    const quantity = page.querySelector<HTMLInputElement>('#stock-delta')!;
+    quantity.value = '-4';
+    quantity.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    page.querySelector<HTMLFormElement>('.stock-form')!.dispatchEvent(new Event('submit'));
+    fixture.detectChanges();
+    expect(page.querySelector('.error-message')?.textContent).toContain('inmovilizada');
+    http.expectNone('/api/inventory/adjustments');
+  });
 });

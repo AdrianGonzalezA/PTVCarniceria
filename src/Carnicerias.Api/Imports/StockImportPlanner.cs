@@ -11,7 +11,8 @@ public sealed record StockImportPlan(IReadOnlyList<StockImportChange> Changes,
 public static class StockImportPlanner
 {
     public static StockImportPlan Plan(Guid companyId, Guid branchId, IReadOnlyList<ImportRow> rows,
-        IReadOnlyList<CatalogProduct> products, IReadOnlyList<BranchInventoryBalance> balances)
+        IReadOnlyList<CatalogProduct> products, IReadOnlyList<BranchInventoryBalance> balances,
+        DateTimeOffset? now = null)
     {
         var byCode = products.Where(product => product.CompanyId == companyId)
             .ToDictionary(product => product.NormalizedCode, StringComparer.Ordinal);
@@ -58,12 +59,20 @@ public static class StockImportPlanner
             }
 
             byProduct.TryGetValue(product.Id, out var balance);
+            if (balance?.IsReconciliationLocked(now ?? DateTimeOffset.UtcNow) == true)
+            {
+                AddIssue(row, "Variacion", "ARTICLE_RECONCILIATION_IN_PROGRESS",
+                    "El artículo está bloqueado para un conteo físico; reintentá al finalizar.");
+                continue;
+            }
             var onHand = balance?.OnHand ?? 0m;
             var reserved = balance?.Reserved ?? 0m;
+            var quarantined = balance?.Quarantined ?? 0m;
             var after = onHand + quantity.Value;
-            if (after < reserved)
+            if (after < reserved + quarantined)
             {
-                AddIssue(row, "Variacion", "STOCK_BELOW_RESERVED", "La salida dejaría menos existencia que la reservada.");
+                AddIssue(row, "Variacion", "STOCK_BELOW_RESERVED",
+                    "La salida dejaría menos existencia que la reservada o inmovilizada.");
                 continue;
             }
             if (after > 999_999_999.999m)

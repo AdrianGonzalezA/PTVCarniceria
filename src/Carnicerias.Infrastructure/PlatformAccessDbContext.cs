@@ -635,7 +635,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.ToTable("pieces", "inventory", table =>
             {
                 table.HasCheckConstraint("CK_pieces_received_weight_positive", "\"ReceivedWeightKg\" > 0");
-                table.HasCheckConstraint("CK_pieces_status", "\"Status\" BETWEEN 0 AND 4");
+                table.HasCheckConstraint("CK_pieces_status", "\"Status\" BETWEEN 0 AND 6");
                 table.HasCheckConstraint("CK_pieces_reservation_owner", "(\"Status\" = 1 AND \"ReservedBySaleDraftId\" IS NOT NULL AND \"ReservedAtUtc\" IS NOT NULL) OR (\"Status\" <> 1 AND \"ReservedBySaleDraftId\" IS NULL AND \"ReservedAtUtc\" IS NULL)");
             });
             entity.HasKey(piece => piece.Id);
@@ -687,14 +687,21 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
         {
             entity.ToTable("piece_state_events", "inventory", table =>
             {
-                table.HasCheckConstraint("CK_piece_state_events_status", "\"Status\" BETWEEN 0 AND 4 AND (\"PreviousStatus\" IS NULL OR \"PreviousStatus\" BETWEEN 0 AND 4)");
-                table.HasCheckConstraint("CK_piece_state_events_kind", "\"Kind\" BETWEEN 0 AND 7");
+                table.HasCheckConstraint("CK_piece_state_events_status", "\"Status\" BETWEEN 0 AND 6 AND (\"PreviousStatus\" IS NULL OR \"PreviousStatus\" BETWEEN 0 AND 6)");
+                table.HasCheckConstraint("CK_piece_state_events_kind", "\"Kind\" BETWEEN 0 AND 8");
+                table.HasCheckConstraint("CK_piece_state_events_reconciliation_evidence", "(\"Kind\" = 8 AND \"PreviousStatus\" IS NOT NULL AND \"PreviousStatus\" = 5 AND \"Status\" IN (0, 6) AND \"ActorUserId\" IS NOT NULL AND \"ReconciliationOperationId\" IS NOT NULL AND \"EvidenceReference\" IS NOT NULL AND \"ObservedWeightKg\" IS NOT NULL AND \"CountedOnHand\" IS NOT NULL AND \"CountedAtUtc\" IS NOT NULL) OR (\"Kind\" <> 8 AND \"ReconciliationOperationId\" IS NULL AND \"EvidenceReference\" IS NULL AND \"EvidenceSha256\" IS NULL AND \"ObservedWeightKg\" IS NULL AND \"CountedOnHand\" IS NULL AND \"CountedAtUtc\" IS NULL AND \"InventoryMovementId\" IS NULL)");
             });
             entity.HasKey(item => item.Id);
             entity.Property(item => item.PreviousStatus).HasConversion<int?>();
             entity.Property(item => item.Status).HasConversion<int>().IsRequired();
             entity.Property(item => item.Kind).HasConversion<int>().IsRequired();
             entity.Property(item => item.Reason).HasMaxLength(240).IsRequired();
+            entity.Property(item => item.EvidenceReference).HasMaxLength(512);
+            entity.Property(item => item.EvidenceSha256).HasMaxLength(64);
+            entity.Property(item => item.ObservedWeightKg).HasPrecision(12, 3);
+            entity.Property(item => item.CountedOnHand).HasPrecision(12, 3);
+            entity.HasIndex(item => new { item.CompanyId, item.ReconciliationOperationId })
+                .IsUnique().HasFilter("\"ReconciliationOperationId\" IS NOT NULL");
             entity.HasOne<InventoryPiece>().WithMany()
                 .HasForeignKey(item => item.PieceId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<SaleDraft>().WithMany()
@@ -703,6 +710,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<UserIdentity>().WithMany()
                 .HasForeignKey(item => item.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<InventoryMovement>().WithMany()
+                .HasForeignKey(item => item.InventoryMovementId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(item => new { item.CompanyId, item.BranchId, item.PieceId, item.CreatedAtUtc });
         });
 
@@ -1202,11 +1211,13 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.ToTable("branch_inventory", "inventory", table =>
             {
                 table.HasCheckConstraint("CK_branch_inventory_on_hand_nonnegative", "\"OnHand\" >= 0");
-                table.HasCheckConstraint("CK_branch_inventory_reserved_range", "\"Reserved\" >= 0 AND \"Reserved\" <= \"OnHand\"");
+                table.HasCheckConstraint("CK_branch_inventory_reserved_range", "\"Reserved\" >= 0 AND \"Quarantined\" >= 0 AND \"Reserved\" + \"Quarantined\" <= \"OnHand\"");
+                table.HasCheckConstraint("CK_branch_inventory_reconciliation_lock", "(\"ReconciliationLockId\" IS NULL AND \"ReconciliationLockPieceId\" IS NULL AND \"ReconciliationLockOwnerUserId\" IS NULL AND \"ReconciliationLockStartedAtUtc\" IS NULL AND \"ReconciliationLockExpiresAtUtc\" IS NULL) OR (\"ReconciliationLockId\" IS NOT NULL AND \"ReconciliationLockPieceId\" IS NOT NULL AND \"ReconciliationLockOwnerUserId\" IS NOT NULL AND \"ReconciliationLockStartedAtUtc\" IS NOT NULL AND \"ReconciliationLockExpiresAtUtc\" IS NOT NULL AND \"ReconciliationLockExpiresAtUtc\" > \"ReconciliationLockStartedAtUtc\")");
             });
             entity.HasKey(balance => new { balance.CompanyId, balance.BranchId, balance.ProductId });
             entity.Property(balance => balance.OnHand).HasPrecision(12, 3);
             entity.Property(balance => balance.Reserved).HasPrecision(12, 3);
+            entity.Property(balance => balance.Quarantined).HasPrecision(12, 3).HasDefaultValue(0m);
             entity.HasOne<Branch>().WithMany()
                 .HasForeignKey(balance => new { balance.CompanyId, balance.BranchId })
                 .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })

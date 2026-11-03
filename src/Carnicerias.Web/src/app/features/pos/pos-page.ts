@@ -444,6 +444,7 @@ export class PosPage implements OnInit {
           }
           if (operation === 'cancel') this.lines.set(this.persistedLines());
           if (['INSUFFICIENT_STOCK', 'PIECE_ALREADY_USED', 'PIECE_NOT_AVAILABLE',
+            'PIECE_RECONCILIATION_REQUIRED', 'ARTICLE_RECONCILIATION_IN_PROGRESS',
             'MERCADO_PAGO_ORDER_ACTIVE'].includes(error.error?.error?.code)) {
             this.lines.set(this.persistedLines());
             this.discountDraft.set(String(this.persistedDiscountAmount()));
@@ -451,6 +452,10 @@ export class PosPage implements OnInit {
             this.draftStatus.set('saved');
             this.errorMessage.set(error.error?.error?.code === 'MERCADO_PAGO_ORDER_ACTIVE'
               ? 'Hay un cobro de Mercado Pago activo. Consultá o cancelá la orden desde el cierre antes de modificar el ticket.'
+              : error.error?.error?.code === 'ARTICLE_RECONCILIATION_IN_PROGRESS'
+              ? 'Este artículo está temporalmente bloqueado por un conteo físico. Conservamos el ticket; reintentá cuando termine.'
+              : error.error?.error?.code === 'PIECE_RECONCILIATION_REQUIRED'
+              ? 'Esta pieza histórica está inmovilizada hasta que Administración concilie su estado.'
               : error.error?.error?.code === 'INSUFFICIENT_STOCK'
               ? 'No hay stock suficiente. El producto o la cantidad rechazada no se agregó al ticket. Revisá las existencias.'
               : 'Esta pieza ya no está disponible. No se agregó al ticket.');
@@ -873,6 +878,8 @@ export class PosPage implements OnInit {
             ? 'Esta pieza ya fue vendida y no se puede agregar a otro ticket.'
             : error.error?.error?.code === 'PIECE_RESERVED'
               ? 'Esta pieza ya está reservada en un ticket.'
+              : error.error?.error?.code === 'PIECE_RECONCILIATION_REQUIRED'
+                ? 'Esta pieza histórica está inmovilizada hasta que Administración concilie su estado.'
               : error.error?.error?.code === 'PIECE_NOT_AVAILABLE'
                 ? 'Esta pieza no está disponible para la venta.'
                 : 'Hay más de una pieza con esa etiqueta en la sucursal. Revisá el origen antes de vender.'
@@ -1392,6 +1399,8 @@ export class PosPage implements OnInit {
 
   private draftSaveErrorMessage(error: HttpErrorResponse): string {
     const code = error.error?.error?.code;
+    if (code === 'ARTICLE_RECONCILIATION_IN_PROGRESS') return 'El artículo está temporalmente bloqueado por un conteo físico. El ticket se conserva.';
+    if (code === 'PIECE_RECONCILIATION_REQUIRED') return 'La pieza histórica está inmovilizada hasta su conciliación.';
     if (code === 'STOCK_RESERVATION_MISSING') return 'La reserva de stock cambió. Actualizá el ticket e intentá nuevamente.';
     if (code === 'PRICE_LIST_NOT_AVAILABLE') return 'La lista de precios ya no está habilitada para esta sucursal.';
     if (code === 'PRODUCT_PRICE_NOT_AVAILABLE') return 'Hay un producto sin precio vigente en esta lista.';
@@ -1938,6 +1947,7 @@ export class PosPage implements OnInit {
 
   private checkoutConflictMessage(error: HttpErrorResponse): string {
     const code = error.error?.error?.code;
+    if (code === 'ARTICLE_RECONCILIATION_IN_PROGRESS') return 'El artículo está temporalmente bloqueado por un conteo físico. El ticket se conserva; reintentá después.';
     if (code === 'CASHIER_SHIFT_REQUIRED') return 'El turno ya no está abierto. Abrí un nuevo turno para continuar.';
     if (code === 'STOCK_RESERVATION_MISSING') return 'El stock reservado cambió. Actualizá el ticket antes de volver a cobrar.';
     if (code === 'PAYMENT_TOTAL_MISMATCH') return 'Los medios de pago no alcanzan a cubrir el total.';

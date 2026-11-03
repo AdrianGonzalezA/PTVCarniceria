@@ -9,7 +9,9 @@ export interface InventoryStockItem {
   readonly saleMode?: 'weight' | 'unit';
   readonly onHand: number;
   readonly reserved: number;
+  readonly quarantined?: number;
   readonly available: number;
+  readonly reconciliationLocked?: boolean;
 }
 
 export interface StockAdjustmentResponse {

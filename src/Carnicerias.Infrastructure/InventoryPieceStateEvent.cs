@@ -9,7 +9,8 @@ public enum InventoryPieceEventKind
     AdminReleased,
     MigrationBackfill,
     Transferred,
-    Consumed
+    Consumed,
+    HistoricalReconciled
 }
 
 public sealed class InventoryPieceStateEvent
@@ -52,4 +53,40 @@ public sealed class InventoryPieceStateEvent
     public Guid? ActorUserId { get; private set; }
     public string Reason { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; }
+    public Guid? ReconciliationOperationId { get; private set; }
+    public string? EvidenceReference { get; private set; }
+    public string? EvidenceSha256 { get; private set; }
+    public decimal? ObservedWeightKg { get; private set; }
+    public decimal? CountedOnHand { get; private set; }
+    public DateTimeOffset? CountedAtUtc { get; private set; }
+    public Guid? InventoryMovementId { get; private set; }
+
+    public static InventoryPieceStateEvent Reconciled(Guid companyId, Guid branchId, Guid pieceId,
+        InventoryPieceStatus outcome, Guid actorUserId, Guid operationId, string reason,
+        string evidenceReference, string? evidenceSha256, decimal observedWeightKg,
+        decimal countedOnHand, DateTimeOffset countedAtUtc, DateTimeOffset createdAtUtc,
+        Guid? inventoryMovementId)
+    {
+        if (outcome is not (InventoryPieceStatus.Available or InventoryPieceStatus.ReconciledUnavailable) ||
+            actorUserId == Guid.Empty || operationId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(evidenceReference) || evidenceReference.Trim().Length > 512 ||
+            evidenceSha256 is not null && (evidenceSha256.Length != 64 ||
+                !evidenceSha256.All(Uri.IsHexDigit)) ||
+            observedWeightKg < 0 || countedOnHand < 0 ||
+            decimal.Round(observedWeightKg, 3) != observedWeightKg ||
+            decimal.Round(countedOnHand, 3) != countedOnHand ||
+            countedAtUtc > createdAtUtc)
+            throw new ArgumentException("Invalid historical reconciliation evidence.");
+        var item = new InventoryPieceStateEvent(companyId, branchId, pieceId,
+            InventoryPieceStatus.HistoricalUnverified, outcome,
+            InventoryPieceEventKind.HistoricalReconciled, null, actorUserId, reason, createdAtUtc);
+        item.ReconciliationOperationId = operationId;
+        item.EvidenceReference = evidenceReference.Trim();
+        item.EvidenceSha256 = evidenceSha256?.ToUpperInvariant();
+        item.ObservedWeightKg = observedWeightKg;
+        item.CountedOnHand = countedOnHand;
+        item.CountedAtUtc = countedAtUtc.ToUniversalTime();
+        item.InventoryMovementId = inventoryMovementId;
+        return item;
+    }
 }

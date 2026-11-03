@@ -74,6 +74,38 @@
       }
     </section>
 
+    <section class="category-panel piece-panel" aria-labelledby="historical-pieces-title">
+      <h2 id="historical-pieces-title">Piezas históricas por conciliar</h2>
+      <p class="field-hint">Estas piezas conservan su historia y sus kilos permanecen inmovilizados. Cada conteo requiere un acta y queda auditado.</p>
+      @if (!historicalLoaded()) {
+        <button type="button" (click)="loadHistorical(1)">Consultar pendientes</button>
+      } @else if (historicalTotal() === 0) {
+        <p class="piece-empty">No hay piezas pendientes en esta sucursal.</p>
+      } @else {
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Pieza</th><th scope="col">Artículo</th><th scope="col">Peso</th><th scope="col">Origen</th><th scope="col">Acción</th></tr></thead>
+            <tbody>
+              @for (piece of historicalPieces(); track piece.id) {
+                <tr>
+                  <td><strong>{{ piece.externalIdentifier }}</strong><small>{{ piece.rawBarcode }}</small></td>
+                  <td>{{ piece.productCode }} · {{ piece.productName }}</td>
+                  <td>{{ formatWeight(piece.receivedWeightKg) }} kg</td>
+                  <td>{{ piece.sourceSystem }}</td>
+                  <td><button type="button" class="secondary-button" (click)="openPiece(piece)">Conciliar</button></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <nav class="piece-pagination" aria-label="Páginas de piezas pendientes">
+          <button type="button" class="secondary-button" [disabled]="historicalPage() <= 1" (click)="loadHistorical(historicalPage() - 1)">Anterior</button>
+          <span>{{ historicalPage() }} / {{ historicalPageCount() }}</span>
+          <button type="button" class="secondary-button" [disabled]="historicalPage() * 20 >= historicalTotal()" (click)="loadHistorical(historicalPage() + 1)">Siguiente</button>
+        </nav>
+      }
+    </section>
+
     <section class="category-panel piece-panel" aria-labelledby="recent-pieces-title">
       <h2 id="recent-pieces-title">Últimas piezas recibidas</h2>
       <p class="field-hint">Consultá el estado y los movimientos de cada pieza. Una reserva permanece asociada al ticket hasta que se venda, se quite o se cancele.</p>
@@ -110,6 +142,17 @@
         </header>
         <div class="piece-dialog-content">
           <p><strong>Estado:</strong> {{ statusLabel(selected.status) }}</p>
+          @if (selected.status === 'HistoricalUnverified') {
+            <p class="field-hint">La pieza está inmovilizada. No puede venderse, reservarse, transferirse ni consumirse hasta verificarla con evidencia.</p>
+            @if (selectedStock(); as stock) {
+              <div class="piece-stock-summary" aria-label="Saldos del artículo en esta sucursal">
+                <span>Saldo contable <strong>{{ formatWeight(stock.onHand) }} kg</strong></span>
+                <span>Reservado <strong>{{ formatWeight(stock.reserved) }} kg</strong></span>
+                <span>Inmovilizado <strong>{{ formatWeight(stock.quarantined ?? 0) }} kg</strong></span>
+                <span>Disponible <strong>{{ formatWeight(stock.available) }} kg</strong></span>
+              </div>
+            }
+          }
           @if (selected.reservedBySaleDraftId) {
             <p><strong>Borrador:</strong> {{ selected.reservedBySaleDraftId }}</p>
             <p><strong>Reservada desde:</strong> {{ formatEventTime(selected.reservedAtUtc ?? '') }}</p>
@@ -119,9 +162,43 @@
           @if (pieceEvents().length === 0 && !pieceEventsError()) { <p>No hay eventos para mostrar.</p> }
           <ol class="piece-event-list">
             @for (event of pieceEvents(); track event.id) {
-              <li><strong>{{ statusLabel(event.status) }}</strong> · {{ formatEventTime(event.createdAtUtc) }}<br />{{ event.reason }}</li>
+              <li><strong>{{ statusLabel(event.status) }}</strong> · {{ formatEventTime(event.createdAtUtc) }}<br />{{ event.reason }}
+                @if (event.evidenceReference) {
+                  <br /><span>Acta: {{ event.evidenceReference }}. Peso observado: {{ formatWeight(event.observedWeightKg ?? 0) }} kg. Conteo total: {{ formatWeight(event.countedOnHand ?? 0) }} kg.</span>
+                }
+              </li>
             }
           </ol>
+          @if (selected.status === 'HistoricalUnverified' && session()?.context?.permissions?.includes('platform.users.manage')) {
+            <div class="piece-reconciliation-form">
+              @if (!reconciliationLease()) {
+                <p class="field-hint">Iniciá el conteo para bloquear temporalmente las operaciones de este artículo en la sucursal. Un ticket abierto con el artículo impide comenzar.</p>
+                <button type="button" (click)="beginReconciliation()" [disabled]="acquiringReconciliation()">{{ acquiringReconciliation() ? 'Iniciando…' : 'Iniciar conteo físico' }}</button>
+              } @else {
+                <p class="field-hint" role="status">Operaciones bloqueadas hasta {{ formatEventTime(reconciliationLease()!.expiresAtUtc) }}. El bloqueo se renueva mientras este diálogo permanezca abierto.</p>
+                <label for="piece-reconcile-outcome">Resultado de la verificación</label>
+                <select id="piece-reconcile-outcome" [disabled]="uncertainReconciliation()" [value]="reconciliationOutcome()" (change)="reconciliationOutcome.set($any($event.target).value)">
+                  <option value="available">Pieza encontrada y disponible</option>
+                  <option value="unavailable">Pieza no disponible</option>
+                </select>
+                <label for="piece-observed-weight">Peso observado de la pieza (kg)</label>
+                <input id="piece-observed-weight" inputmode="decimal" [disabled]="uncertainReconciliation()" [value]="observedWeight()" (input)="observedWeight.set($any($event.target).value)" />
+                <p class="field-hint">Para habilitarla debe coincidir con los {{ formatWeight(selected.receivedWeightKg) }} kg originales.</p>
+                <label for="piece-counted-on-hand">Conteo físico total del artículo en esta sucursal (kg)</label>
+                <input id="piece-counted-on-hand" inputmode="decimal" [disabled]="uncertainReconciliation()" [value]="countedOnHand()" (input)="countedOnHand.set($any($event.target).value)" />
+                <p class="field-hint">Incluí todas las existencias físicas del artículo, no solo esta pieza. Este valor actualizará el saldo contable; la inmovilización se libera por separado.</p>
+                <label for="piece-evidence">Referencia del acta o documento de evidencia</label>
+                <input id="piece-evidence" maxlength="512" [disabled]="uncertainReconciliation()" [value]="evidenceReference()" (input)="evidenceReference.set($any($event.target).value)" />
+                <label for="piece-reconcile-reason">Motivo</label>
+                <textarea id="piece-reconcile-reason" maxlength="240" rows="3" [disabled]="uncertainReconciliation()" [value]="reconciliationReason()" (input)="reconciliationReason.set($any($event.target).value)"></textarea>
+                <div class="piece-reconcile-actions">
+                  <button type="button" (click)="finishReconciliation()" [disabled]="reconciling()">{{ reconciling() ? 'Conciliando…' : uncertainReconciliation() ? 'Reintentar confirmación' : 'Confirmar conciliación' }}</button>
+                  <button type="button" class="secondary-button" (click)="cancelReconciliation()" [disabled]="reconciling()">Cancelar conteo</button>
+                </div>
+              }
+              @if (reconciliationError(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
+            </div>
+          }
           @if (selected.status === 'Reserved' && session()?.context?.permissions?.includes('platform.users.manage')) {
             <form class="piece-release-form" (submit)="$event.preventDefault(); releasePiece()">
               <label for="piece-release-reason">Motivo de liberación excepcional</label>

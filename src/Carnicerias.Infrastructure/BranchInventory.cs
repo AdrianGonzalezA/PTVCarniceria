@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace Carnicerias.Infrastructure;
 
 public enum InventoryMovementKind
@@ -24,11 +26,25 @@ public sealed class BranchInventoryBalance
     public Guid ProductId { get; private set; }
     public decimal OnHand { get; private set; }
     public decimal Reserved { get; private set; }
+    public decimal Quarantined { get; private set; }
+    [NotMapped] public decimal Available => OnHand - Reserved - Quarantined;
 
-    public void SetQuantities(decimal onHand, decimal reserved)
+    public Guid? ReconciliationLockId { get; private set; }
+    public Guid? ReconciliationLockPieceId { get; private set; }
+    public Guid? ReconciliationLockOwnerUserId { get; private set; }
+    public DateTimeOffset? ReconciliationLockStartedAtUtc { get; private set; }
+    public DateTimeOffset? ReconciliationLockExpiresAtUtc { get; private set; }
+    public bool IsReconciliationLocked(DateTimeOffset now) =>
+        ReconciliationLockId is not null && ReconciliationLockExpiresAtUtc > now;
+
+    public void SetQuantities(decimal onHand, decimal reserved, decimal? quarantined = null)
     {
+        var held = quarantined ?? Quarantined;
+        if (onHand < 0 || reserved < 0 || held < 0 || reserved + held > onHand)
+            throw new ArgumentOutOfRangeException(nameof(onHand));
         OnHand = onHand;
         Reserved = reserved;
+        Quarantined = held;
     }
 }
 

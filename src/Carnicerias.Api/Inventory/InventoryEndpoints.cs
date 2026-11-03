@@ -20,9 +20,11 @@ public static class InventoryEndpoints
         Guid? productId,
         PlatformAccessDbContext db,
         OperationalContextAccessor accessor,
+        TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         var context = accessor.Context;
+        var now = timeProvider.GetUtcNow();
         var query = from product in db.CatalogProducts.AsNoTracking()
                     join stock in db.BranchInventoryBalances.AsNoTracking()
                         .Where(item => item.CompanyId == context.CompanyId && item.BranchId == context.BranchId)
@@ -40,7 +42,10 @@ public static class InventoryEndpoints
                         product.SaleMode == ProductSaleMode.Unit ? "unit" : "weight",
                         stock == null ? 0 : stock.OnHand,
                         stock == null ? 0 : stock.Reserved,
-                        stock == null ? 0 : stock.OnHand - stock.Reserved);
+                        stock == null || stock.ReconciliationLockExpiresAtUtc > now ? 0 :
+                            stock.OnHand - stock.Reserved - stock.Quarantined,
+                        stock == null ? 0 : stock.Quarantined,
+                        stock != null && stock.ReconciliationLockExpiresAtUtc > now);
         return Results.Ok(await query.ToArrayAsync(cancellationToken));
     }
 
@@ -80,8 +85,13 @@ public static class InventoryEndpoints
                 request.ProductId, cancellationToken);
             return Results.Ok(new StockAdjustmentResponse(
                 existingOperation.OperationId, existingBalance.OnHand, existingBalance.Reserved,
-                existingBalance.OnHand - existingBalance.Reserved));
+                existingBalance.Available));
         }
+
+        var now = timeProvider.GetUtcNow();
+        if (await StockReconciliationLease.IsLockedForUpdateAsync(db, context.CompanyId,
+                context.BranchId, request.ProductId, now, cancellationToken))
+            return Error(StatusCodes.Status409Conflict, "ARTICLE_RECONCILIATION_IN_PROGRESS");
 
         await using var command = db.Database.GetDbConnection().CreateCommand();
         command.Transaction = transaction.GetDbTransaction();
@@ -91,19 +101,22 @@ public static class InventoryEndpoints
             ON CONFLICT ("CompanyId", "BranchId", "ProductId") DO UPDATE
                 SET "OnHand" = inventory.branch_inventory."OnHand" + EXCLUDED."OnHand"
                 WHERE inventory.branch_inventory."OnHand" + EXCLUDED."OnHand" >=
-                      inventory.branch_inventory."Reserved"
+                      inventory.branch_inventory."Reserved" + inventory.branch_inventory."Quarantined"
+                  AND (inventory.branch_inventory."ReconciliationLockExpiresAtUtc" IS NULL OR
+                       inventory.branch_inventory."ReconciliationLockExpiresAtUtc" <= @now)
             RETURNING 1;
             """;
         AddParameter(command, "companyId", context.CompanyId);
         AddParameter(command, "branchId", context.BranchId);
         AddParameter(command, "productId", request.ProductId);
         AddParameter(command, "delta", request.QuantityDelta);
+        AddParameter(command, "now", now);
         if (await command.ExecuteScalarAsync(cancellationToken) is null)
             return Error(StatusCodes.Status409Conflict, "STOCK_BELOW_RESERVED");
 
         db.InventoryMovements.Add(new InventoryMovement(context.CompanyId, context.BranchId,
             request.ProductId, context.UserId, request.OperationId, InventoryMovementKind.Adjustment,
-            request.QuantityDelta, reason, timeProvider.GetUtcNow()));
+            request.QuantityDelta, reason, now));
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
@@ -111,7 +124,7 @@ public static class InventoryEndpoints
             request.ProductId, cancellationToken);
         return Results.Ok(new StockAdjustmentResponse(
             request.OperationId, balanceAfter.OnHand, balanceAfter.Reserved,
-            balanceAfter.OnHand - balanceAfter.Reserved));
+            balanceAfter.Available));
     }
 
     private static Task<BranchInventoryBalance> GetBalanceAsync(
@@ -135,6 +148,7 @@ public static class InventoryEndpoints
 
     private sealed record AdjustStockRequest(Guid ProductId, Guid OperationId, decimal QuantityDelta, string? Reason);
     private sealed record StockItem(Guid ProductId, string Code, string Name, string Unit,
-        string SaleMode, decimal OnHand, decimal Reserved, decimal Available);
+        string SaleMode, decimal OnHand, decimal Reserved, decimal Available,
+        decimal Quarantined, bool ReconciliationLocked);
     private sealed record StockAdjustmentResponse(Guid OperationId, decimal OnHand, decimal Reserved, decimal Available);
 }

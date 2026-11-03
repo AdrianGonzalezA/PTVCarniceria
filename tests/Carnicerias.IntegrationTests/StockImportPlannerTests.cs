@@ -88,6 +88,35 @@ public sealed class StockImportPlannerTests
         Assert.Contains(plan.Issues, issue => issue.Code == "INVALID_DESCRIPTION");
     }
 
+    [Fact]
+    public void ExcelAdjustmentCannotConsumeHistoricalQuarantine()
+    {
+        var companyId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var product = Product(companyId, "2546", ProductSaleMode.Weight);
+        var balance = Balance(companyId, branchId, product.Id, 62m, 1m);
+        balance.SetQuantities(62m, 1m, 0.750m);
+
+        var plan = StockImportPlanner.Plan(companyId, branchId,
+            [Row(2, "2546", -60.251m)], [product], [balance]);
+
+        Assert.Empty(plan.Changes);
+        Assert.Contains(plan.Issues, issue => issue.Code == "STOCK_BELOW_RESERVED");
+        Assert.Equal(0.750m, balance.Quarantined);
+    }
+
+    [Fact]
+    public void ExistingBalanceUpdatePreservesQuarantinedWeight()
+    {
+        var balance = Balance(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 62m, 1m);
+        balance.SetQuantities(62m, 1m, 0.750m);
+
+        balance.SetQuantities(63m, balance.Reserved);
+
+        Assert.Equal(0.750m, balance.Quarantined);
+        Assert.Equal(61.250m, balance.Available);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(100001)]

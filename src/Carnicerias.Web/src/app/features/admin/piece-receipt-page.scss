@@ -30,10 +30,17 @@
 .piece-event-list { max-height: 12rem; overflow: auto; padding-left: 1.4rem; }
 .piece-event-list li { margin-bottom: .65rem; }
 .piece-release-form { display: grid; gap: .6rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--admin-abm-border); }
+.piece-reconciliation-form { display: grid; gap: .6rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--admin-abm-border); }
+.piece-reconciliation-form input, .piece-reconciliation-form select, .piece-reconciliation-form textarea { width: 100%; box-sizing: border-box; padding: .65rem; color: var(--admin-piece-ink); background: var(--admin-piece-control); border: 1px solid var(--admin-piece-border); border-radius: .25rem; font: inherit; }
+.piece-reconciliation-form input:focus-visible, .piece-reconciliation-form select:focus-visible, .piece-reconciliation-form textarea:focus-visible { outline: 3px solid var(--admin-piece-focus); outline-offset: 2px; }
+.piece-reconcile-actions, .piece-pagination { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.piece-stock-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin: 1rem 0; }
+.piece-stock-summary span { display: grid; padding: .55rem; border: 1px solid var(--admin-abm-border); border-radius: .25rem; }
+.piece-pagination { justify-content: flex-end; margin: .75rem 0; }
 .piece-release-form textarea { width: 100%; box-sizing: border-box; padding: .65rem; color: var(--admin-piece-ink); background: var(--admin-piece-control); border: 1px solid var(--admin-piece-border); border-radius: .25rem; font: inherit; }
 .piece-release-form textarea:focus-visible, .piece-dialog button:focus-visible { outline: 3px solid var(--admin-piece-focus); outline-offset: 2px; }
 :host-context(html[data-visual-theme='nocturno']) {
   .piece-form select { color-scheme: dark; }
   .piece-panel .panel-heading a { color: #e5b27f; }
 }
-@media (max-width: 36rem) { .piece-options { grid-template-columns: 1fr; } }
+@media (max-width: 36rem) { .piece-options, .piece-stock-summary { grid-template-columns: 1fr; } }

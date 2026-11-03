@@ -49,15 +49,29 @@ public sealed class PaymentSettlementTests
     }
 
     [Fact]
-    public void RejectsDuplicatePaymentMethods()
+    public void KeepsRepeatedMethodsAsIndependentPayments()
     {
-        var error = Assert.Throws<PaymentSettlementException>(() => PaymentSettlement.Calculate(875m,
+        var result = PaymentSettlement.Calculate(875m,
         [
             new PaymentTender(PaymentMethod.Debit, 400m),
             new PaymentTender(PaymentMethod.Debit, 475m)
-        ]));
+        ]);
 
-        Assert.Equal(PaymentSettlementError.DuplicateMethod, error.Error);
+        Assert.Equal(2, result.AppliedPayments.Count);
+        Assert.Equal(400m, result.AppliedPayments[0].AppliedAmount);
+        Assert.Equal(475m, result.AppliedPayments[1].AppliedAmount);
+    }
+
+    [Fact]
+    public void AllocatesChangeAcrossRepeatedCashOperations()
+    {
+        var result = PaymentSettlement.Calculate(875m,
+        [new PaymentTender(PaymentMethod.Cash, 500m), new PaymentTender(PaymentMethod.Cash, 500m)]);
+
+        Assert.Equal(125m, result.ChangeAmount);
+        Assert.Equal(2, result.AppliedPayments.Count);
+        Assert.All(result.AppliedPayments, payment => Assert.True(payment.AppliedAmount > 0));
+        Assert.Equal(875m, result.AppliedPayments.Sum(payment => payment.AppliedAmount));
     }
 
     [Fact]

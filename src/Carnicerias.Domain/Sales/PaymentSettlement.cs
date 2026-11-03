@@ -37,7 +37,7 @@ public sealed record PaymentSettlementResult(
 public static class PaymentSettlement
 {
     private const decimal MaximumAmount = 9_999_999_999.99m;
-    private const int MaximumMethods = 6;
+    private const int MaximumOperations = 20;
 
     public static PaymentSettlementResult CalculateWithAccountCharge(
         decimal saleTotal, IReadOnlyList<PaymentTender> tenders, decimal accountCharge,
@@ -64,24 +64,25 @@ public static class PaymentSettlement
     {
         ArgumentNullException.ThrowIfNull(tenders);
         ValidateAmount(saleTotal);
-        if (saleTotal == 0 || tenders.Count is < 1 or > MaximumMethods)
+        if (saleTotal == 0 || tenders.Count is < 1 or > MaximumOperations)
             throw new PaymentSettlementException(PaymentSettlementError.AmountPending);
 
-        var usedMethods = new HashSet<PaymentMethod>();
         decimal nonCashTotal = 0;
-        PaymentTender? cashTender = null;
+        decimal cashTendered = 0;
+        var cashCount = 0;
         foreach (var tender in tenders)
         {
             if (!Enum.IsDefined(tender.Method))
                 throw new PaymentSettlementException(PaymentSettlementError.InvalidPaymentMethod);
-            if (!usedMethods.Add(tender.Method))
-                throw new PaymentSettlementException(PaymentSettlementError.DuplicateMethod);
             ValidateAmount(tender.TenderedAmount);
             if (tender.TenderedAmount == 0)
                 throw new PaymentSettlementException(PaymentSettlementError.InvalidAmount);
 
             if (tender.Method == PaymentMethod.Cash)
-                cashTender = tender;
+            {
+                cashTendered += tender.TenderedAmount;
+                cashCount++;
+            }
             else
                 nonCashTotal += tender.TenderedAmount;
         }
@@ -90,14 +91,23 @@ public static class PaymentSettlement
             throw new PaymentSettlementException(PaymentSettlementError.NonCashOverpayment);
 
         var cashApplied = saleTotal - nonCashTotal;
-        if (cashTender is null && cashApplied != 0 || cashTender is not null && cashTender.TenderedAmount < cashApplied)
+        if (cashCount == 0 && cashApplied != 0 || cashCount > 0 &&
+            (cashTendered < cashApplied || cashApplied < cashCount * 0.01m))
             throw new PaymentSettlementException(PaymentSettlementError.AmountPending);
 
-        var appliedPayments = tenders.Select(tender => new AppliedPayment(
-            tender.Method,
-            tender.TenderedAmount,
-            tender.Method == PaymentMethod.Cash ? cashApplied : tender.TenderedAmount)).ToArray();
-        var change = cashTender is null ? 0 : cashTender.TenderedAmount - cashApplied;
+        var remainingCashApplied = cashApplied;
+        var remainingCashCount = cashCount;
+        var appliedPayments = tenders.Select(tender =>
+        {
+            if (tender.Method != PaymentMethod.Cash)
+                return new AppliedPayment(tender.Method, tender.TenderedAmount, tender.TenderedAmount);
+            remainingCashCount--;
+            var applied = Math.Min(tender.TenderedAmount,
+                remainingCashApplied - remainingCashCount * 0.01m);
+            remainingCashApplied -= applied;
+            return new AppliedPayment(tender.Method, tender.TenderedAmount, applied);
+        }).ToArray();
+        var change = cashTendered - cashApplied;
         return new PaymentSettlementResult(saleTotal, appliedPayments, change);
     }
 

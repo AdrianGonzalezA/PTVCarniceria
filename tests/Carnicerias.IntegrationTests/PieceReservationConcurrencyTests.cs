@@ -4,12 +4,17 @@ using Carnicerias.Infrastructure;
 using Carnicerias.PlatformAccess;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Xunit.Abstractions;
 
 namespace Carnicerias.IntegrationTests;
 
 [Collection("DatabaseIntegration")]
 public sealed class PieceReservationConcurrencyTests
 {
+    private readonly ITestOutputHelper _output;
+
+    public PieceReservationConcurrencyTests(ITestOutputHelper output) => _output = output;
+
     [I02ApprovedVisualWriteFact]
     [Trait("Category", "I02ApprovedDatabaseWrite")]
     public async Task TwoBoxesCannotReserveOrSellTheSamePiece()
@@ -41,11 +46,33 @@ public sealed class PieceReservationConcurrencyTests
         var piece = new InventoryPiece(company.Id, branch.Id, product.Id, profile.Id,
             firstCashier.Id, Guid.NewGuid(), movement.Id, "I02 fixture", suffix,
             "25066101000", 1.000m, now);
+        var transferredReceipt = new InventoryMovement(company.Id, branch.Id, product.Id,
+            firstCashier.Id, Guid.NewGuid(), InventoryMovementKind.PieceReceipt, 1.000m,
+            "Fixture I02", now);
+        var transferredPiece = new InventoryPiece(company.Id, branch.Id, product.Id, profile.Id,
+            firstCashier.Id, Guid.NewGuid(), transferredReceipt.Id, "I02 fixture", suffix + "T",
+            "25066101001", 1.000m, now);
+        transferredPiece.MarkTransferred(now.AddSeconds(1));
+        var consumedReceipt = new InventoryMovement(company.Id, branch.Id, product.Id,
+            firstCashier.Id, Guid.NewGuid(), InventoryMovementKind.PieceReceipt, 1.000m,
+            "Fixture I02", now);
+        var consumedPiece = new InventoryPiece(company.Id, branch.Id, product.Id, profile.Id,
+            firstCashier.Id, Guid.NewGuid(), consumedReceipt.Id, "I02 fixture", suffix + "C",
+            "25066101002", 1.000m, now);
+        consumedPiece.MarkConsumed(now.AddSeconds(1));
+        var transferOut = new InventoryMovement(company.Id, branch.Id, product.Id,
+            firstCashier.Id, Guid.NewGuid(), InventoryMovementKind.Adjustment, -1.000m,
+            "Fixture I02 transfer", now.AddSeconds(1));
+        var consumptionOut = new InventoryMovement(company.Id, branch.Id, product.Id,
+            firstCashier.Id, Guid.NewGuid(), InventoryMovementKind.Adjustment, -1.000m,
+            "Fixture I02 consumption", now.AddSeconds(1));
         var balance = new BranchInventoryBalance(company.Id, branch.Id, product.Id);
         balance.SetQuantities(1.000m, 0m);
         var firstDraft = new SaleDraft(company.Id, branch.Id, firstCashier.Id, priceList.Id, now);
         var secondDraft = new SaleDraft(company.Id, branch.Id, secondCashier.Id, priceList.Id, now);
         var seeded = false;
+        _output.WriteLine($"I02 fixture company={company.Id} code={company.Code} " +
+            $"salePiece={piece.Id} transferredPiece={transferredPiece.Id} consumedPiece={consumedPiece.Id}");
 
         try
         {
@@ -53,7 +80,9 @@ public sealed class PieceReservationConcurrencyTests
             {
                 await using var transaction = await db.Database.BeginTransactionAsync();
                 db.AddRange(company, branch, firstCashier, secondCashier, category, product,
-                    priceList, profile, movement, piece, balance, firstDraft, secondDraft);
+                    priceList, profile, movement, piece, transferredReceipt, transferredPiece,
+                    consumedReceipt, consumedPiece, transferOut, consumptionOut, balance,
+                    firstDraft, secondDraft);
                 await db.SaveChangesAsync();
                 // Also clean up if the commit response is lost after PostgreSQL committed.
                 seeded = true;
@@ -103,10 +132,19 @@ public sealed class PieceReservationConcurrencyTests
                     .SingleAsync(item => item.Id == piece.Id);
                 Assert.Equal(InventoryPieceStatus.Reserved, persisted.Status);
                 Assert.Equal(winningDraft.Id, persisted.ReservedBySaleDraftId);
+                Assert.Equal(SaleDraftStatus.Draft,
+                    (await recovered.SaleDrafts.AsNoTracking().SingleAsync(item =>
+                        item.Id == winningDraft.Id)).Status);
                 Assert.Single(await recovered.InventoryPieceStateEvents.AsNoTracking()
                     .Where(item => item.PieceId == piece.Id).ToArrayAsync());
                 Assert.False(await PieceReservationTransactions.ReserveAsync(recovered, persisted,
                     losingDraft.Id, losingCashier.Id, now.AddSeconds(2), CancellationToken.None));
+                Assert.False(await PieceReservationTransactions.SellAsync(recovered, persisted,
+                    losingDraft.Id, losingCashier.Id, now.AddSeconds(2), CancellationToken.None));
+                Assert.Throws<InvalidOperationException>(() =>
+                    persisted.MarkTransferred(now.AddSeconds(2)));
+                Assert.Throws<InvalidOperationException>(() =>
+                    persisted.MarkConsumed(now.AddSeconds(2)));
             }
 
             await using (var released = new PlatformAccessDbContext(options))
@@ -117,6 +155,8 @@ public sealed class PieceReservationConcurrencyTests
                 Assert.True(await PieceReservationTransactions.ReleaseAsync(released, persisted,
                     winningDraft.Id, winningCashier.Id, InventoryPieceEventKind.SaleReleased,
                     "Cancelación de prueba", now.AddSeconds(3), CancellationToken.None));
+                (await released.SaleDrafts.SingleAsync(item => item.Id == winningDraft.Id))
+                    .Cancel(winningCashier.Id, now.AddSeconds(3));
                 await released.SaveChangesAsync();
                 await transaction.CommitAsync();
             }
@@ -144,6 +184,25 @@ public sealed class PieceReservationConcurrencyTests
                     winningDraft.Id, winningCashier.Id, now.AddSeconds(6), CancellationToken.None));
                 Assert.Equal(4, await verified.InventoryPieceStateEvents.AsNoTracking()
                     .CountAsync(item => item.PieceId == piece.Id));
+                Assert.Equal(SaleDraftStatus.Cancelled,
+                    (await verified.SaleDrafts.AsNoTracking().SingleAsync(item =>
+                        item.Id == winningDraft.Id)).Status);
+                foreach (var terminal in new[]
+                         {
+                             (transferredPiece.Id, InventoryPieceStatus.Transferred),
+                             (consumedPiece.Id, InventoryPieceStatus.Consumed)
+                         })
+                {
+                    var terminalPiece = await verified.InventoryPieces.AsNoTracking()
+                        .SingleAsync(item => item.Id == terminal.Id);
+                    Assert.Equal(terminal.Item2, terminalPiece.Status);
+                    Assert.False(await PieceReservationTransactions.ReserveAsync(verified,
+                        terminalPiece, winningDraft.Id, winningCashier.Id,
+                        now.AddSeconds(6), CancellationToken.None));
+                    Assert.False(await PieceReservationTransactions.SellAsync(verified,
+                        terminalPiece, winningDraft.Id, winningCashier.Id,
+                        now.AddSeconds(6), CancellationToken.None));
+                }
             }
 
             // The stock write lease is scoped to this article and branch and expires without

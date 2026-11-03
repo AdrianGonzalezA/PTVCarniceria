@@ -1,6 +1,6 @@
 # I02 — Implementación preparada y puerta de despliegue
 
-**Actualizado:** 03/11/2026. **Estado:** código y migración preparados, sin aplicar en PostgreSQL. El PO autorizó exclusivamente I02 y prohibió ejecutar migraciones, modificar datos existentes o correr pruebas de integración con escrituras. Esta entrega no habilita I03 ni otro incremento.
+**Actualización posterior, 03/11/2026:** I02 fue aplicada y validada técnicamente por el PO en la base única. Ver [resultado de migración](../documentacion/despliegue/resultado-migracion-i02-20261103.md), [pruebas de dos conexiones](../documentacion/despliegue/resultados-pruebas-i02-20261103.md) y los pendientes de homologación del [plan vigente](PLAN_EJECUCION_AJUSTADO.md). Los apartados siguientes conservan la evidencia y las restricciones de la **etapa de preparación previa**; sus menciones a «no aplicada» o «prueba omitida» ya no describen el estado actual. I03 requiere diseño y autorización separados.
 
 ## Alcance implementado
 

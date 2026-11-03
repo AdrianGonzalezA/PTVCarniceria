@@ -9,6 +9,32 @@ namespace Carnicerias.IntegrationTests;
 public sealed class PlatformAccessDbContextModelTests
 {
     [Fact]
+    public void CheckoutOperationsHaveDurableOwnershipAndUniqueProviderLinks()
+    {
+        var options = new DbContextOptionsBuilder<PlatformAccessDbContext>()
+            .UseNpgsql("Host=localhost;Database=model_only;Username=postgres")
+            .Options;
+        using var db = new PlatformAccessDbContext(options);
+        var process = db.Model.FindEntityType(typeof(SaleCheckout));
+        var instrument = db.Model.FindEntityType(typeof(SaleCheckoutInstrument));
+        var intent = db.Model.FindEntityType(typeof(PointPaymentIntent));
+
+        Assert.NotNull(process);
+        Assert.NotNull(instrument);
+        Assert.NotNull(intent);
+        Assert.Equal("sale_payment_processes", process.GetTableName());
+        Assert.Contains(process.GetIndexes(), index => index.IsUnique &&
+            index.Properties.Select(property => property.Name).SequenceEqual([
+                nameof(SaleCheckout.CompanyId), nameof(SaleCheckout.SaleDraftId)]));
+        Assert.Contains(instrument.GetIndexes(), index => index.IsUnique &&
+            index.Properties.Select(property => property.Name).SequenceEqual([
+                nameof(SaleCheckoutInstrument.PointPaymentIntentId)]));
+        Assert.Contains(intent.GetIndexes(), index => index.IsUnique &&
+            index.Properties.Select(property => property.Name).SequenceEqual([
+                nameof(PointPaymentIntent.CheckoutInstrumentId)]));
+    }
+
+    [Fact]
     public void CompanyAccessCodeIsUniqueAndUserCredentialsAreScoped()
     {
         var options = new DbContextOptionsBuilder<PlatformAccessDbContext>()

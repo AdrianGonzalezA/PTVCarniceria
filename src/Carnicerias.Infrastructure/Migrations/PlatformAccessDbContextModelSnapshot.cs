@@ -1678,6 +1678,9 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<Guid>("CashierShiftId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("CheckoutInstrumentId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("CompanyId")
                         .HasColumnType("uuid");
 
@@ -1747,12 +1750,15 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.HasIndex("CashierId");
 
+                    b.HasIndex("CheckoutInstrumentId")
+                        .IsUnique()
+                        .HasFilter("\"CheckoutInstrumentId\" IS NOT NULL");
+
                     b.HasIndex("ConfirmedCollectionReceiptId")
                         .IsUnique()
                         .HasFilter("\"ConfirmedCollectionReceiptId\" IS NOT NULL");
 
                     b.HasIndex("ConfirmedSaleId")
-                        .IsUnique()
                         .HasFilter("\"ConfirmedSaleId\" IS NOT NULL");
 
                     b.HasIndex("IdempotencyKey")
@@ -1770,7 +1776,7 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.HasIndex("CompanyId", "SaleDraftId")
                         .IsUnique()
-                        .HasFilter("\"SaleDraftId\" IS NOT NULL AND \"Status\" IN (0, 1, 2, 6)");
+                        .HasFilter("\"SaleDraftId\" IS NOT NULL AND \"CheckoutInstrumentId\" IS NULL AND \"Status\" IN (0, 1, 2, 6)");
 
                     b.HasIndex("CompanyId", "BranchId", "PosTerminalId");
 
@@ -2087,6 +2093,187 @@ namespace Carnicerias.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Carnicerias.Infrastructure.SaleCheckout", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CashierId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CashierShiftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CommitKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CommittedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ConfirmedSaleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("DraftUpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PlanHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("PosTerminalId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SaleDraftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TermsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<decimal>("Total")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("CompanyId", "Id");
+
+                    b.HasIndex("CashierId");
+
+                    b.HasIndex("CommitKey")
+                        .IsUnique()
+                        .HasFilter("\"CommitKey\" IS NOT NULL");
+
+                    b.HasIndex("ConfirmedSaleId");
+
+                    b.HasIndex("CompanyId", "SaleDraftId")
+                        .IsUnique();
+
+                    b.HasIndex("CompanyId", "BranchId", "PosTerminalId");
+
+                    b.HasIndex("CompanyId", "CashierShiftId", "Status");
+
+                    b.ToTable("sale_payment_processes", "payments_cash", t =>
+                        {
+                            t.HasCheckConstraint("CK_sale_payment_processes_revision", "\"Revision\" >= 0");
+
+                            t.HasCheckConstraint("CK_sale_payment_processes_status", "\"Status\" BETWEEN 0 AND 4");
+
+                            t.HasCheckConstraint("CK_sale_payment_processes_total", "\"Total\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.SaleCheckoutEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FromStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid?>("InstrumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("SaleCheckoutId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ToStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("SaleCheckoutId", "CreatedAtUtc");
+
+                    b.ToTable("sale_payment_events", "payments_cash");
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.SaleCheckoutInstrument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<DateTimeOffset?>("ApprovedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Method")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("PointPaymentIntentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("SaleCheckoutId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PointPaymentIntentId")
+                        .IsUnique()
+                        .HasFilter("\"PointPaymentIntentId\" IS NOT NULL");
+
+                    b.HasIndex("SaleCheckoutId", "Status");
+
+                    b.ToTable("sale_payment_instruments", "payments_cash", t =>
+                        {
+                            t.HasCheckConstraint("CK_sale_payment_instruments_amount", "\"Amount\" > 0");
+
+                            t.HasCheckConstraint("CK_sale_payment_instruments_status", "\"Status\" BETWEEN 0 AND 4");
+                        });
+                });
+
             modelBuilder.Entity("Carnicerias.Infrastructure.SaleDraft", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2245,6 +2432,9 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 
+                    b.Property<Guid?>("CheckoutInstrumentId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("Method")
                         .HasColumnType("integer");
 
@@ -2256,6 +2446,10 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasColumnType("numeric(12,2)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CheckoutInstrumentId")
+                        .IsUnique()
+                        .HasFilter("\"CheckoutInstrumentId\" IS NOT NULL");
 
                     b.HasIndex("SaleId");
 
@@ -3295,6 +3489,11 @@ namespace Carnicerias.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Carnicerias.Infrastructure.SaleCheckoutInstrument", null)
+                        .WithMany()
+                        .HasForeignKey("CheckoutInstrumentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Carnicerias.Infrastructure.CustomerCollectionReceipt", null)
                         .WithMany()
                         .HasForeignKey("ConfirmedCollectionReceiptId")
@@ -3436,6 +3635,69 @@ namespace Carnicerias.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("Carnicerias.Infrastructure.SaleCheckout", b =>
+                {
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("CashierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.ConfirmedSale", null)
+                        .WithMany()
+                        .HasForeignKey("ConfirmedSaleId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.Infrastructure.CashierShift", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "CashierShiftId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.SaleDraft", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "SaleDraftId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.PosTerminal", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "BranchId", "PosTerminalId")
+                        .HasPrincipalKey("CompanyId", "BranchId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.SaleCheckoutEvent", b =>
+                {
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.Infrastructure.SaleCheckout", null)
+                        .WithMany("Events")
+                        .HasForeignKey("SaleCheckoutId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.SaleCheckoutInstrument", b =>
+                {
+                    b.HasOne("Carnicerias.Infrastructure.PointPaymentIntent", null)
+                        .WithMany()
+                        .HasForeignKey("PointPaymentIntentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.Infrastructure.SaleCheckout", null)
+                        .WithMany("Instruments")
+                        .HasForeignKey("SaleCheckoutId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Carnicerias.Infrastructure.SaleDraft", b =>
                 {
                     b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
@@ -3499,6 +3761,11 @@ namespace Carnicerias.Infrastructure.Migrations
 
             modelBuilder.Entity("Carnicerias.Infrastructure.SalePayment", b =>
                 {
+                    b.HasOne("Carnicerias.Infrastructure.SaleCheckoutInstrument", null)
+                        .WithMany()
+                        .HasForeignKey("CheckoutInstrumentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Carnicerias.Infrastructure.ConfirmedSale", null)
                         .WithMany("Payments")
                         .HasForeignKey("SaleId")
@@ -3654,6 +3921,13 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Navigation("Allocations");
 
                     b.Navigation("Payments");
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.SaleCheckout", b =>
+                {
+                    b.Navigation("Events");
+
+                    b.Navigation("Instruments");
                 });
 
             modelBuilder.Entity("Carnicerias.Infrastructure.SaleDraft", b =>

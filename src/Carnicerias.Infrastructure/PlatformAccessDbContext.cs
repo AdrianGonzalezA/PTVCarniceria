@@ -91,6 +91,10 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<SalePayment> SalePayments => Set<SalePayment>();
 
+    public DbSet<SaleCheckout> SaleCheckouts => Set<SaleCheckout>();
+    public DbSet<SaleCheckoutInstrument> SaleCheckoutInstruments => Set<SaleCheckoutInstrument>();
+    public DbSet<SaleCheckoutEvent> SaleCheckoutEvents => Set<SaleCheckoutEvent>();
+
     public DbSet<PointPaymentIntent> PointPaymentIntents => Set<PointPaymentIntent>();
 
     public DbSet<CashLedgerMovement> CashLedgerMovements => Set<CashLedgerMovement>();
@@ -1100,6 +1104,81 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<SaleCheckout>(entity =>
+        {
+            entity.ToTable("sale_payment_processes", "payments_cash", table =>
+            {
+                table.HasCheckConstraint("CK_sale_payment_processes_total", "\"Total\" > 0");
+                table.HasCheckConstraint("CK_sale_payment_processes_status", "\"Status\" BETWEEN 0 AND 4");
+                table.HasCheckConstraint("CK_sale_payment_processes_revision", "\"Revision\" >= 0");
+            });
+            entity.HasKey(item => item.Id);
+            entity.HasAlternateKey(item => new { item.CompanyId, item.Id });
+            entity.Property(item => item.Total).HasPrecision(12, 2);
+            entity.Property(item => item.Status).HasConversion<int>().IsRequired();
+            entity.Property(item => item.TermsJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(item => item.PlanHash).HasMaxLength(64).IsRequired();
+            entity.Ignore(item => item.Terms);
+            entity.Ignore(item => item.ApprovedAmount);
+            entity.Ignore(item => item.RemainingAmount);
+            entity.HasOne<SaleDraft>().WithMany()
+                .HasForeignKey(item => new { item.CompanyId, item.SaleDraftId })
+                .HasPrincipalKey(draft => new { draft.CompanyId, draft.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CashierShift>().WithMany()
+                .HasForeignKey(item => new { item.CompanyId, item.CashierShiftId })
+                .HasPrincipalKey(shift => new { shift.CompanyId, shift.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<PosTerminal>().WithMany()
+                .HasForeignKey(item => new { item.CompanyId, item.BranchId, item.PosTerminalId })
+                .HasPrincipalKey(terminal => new { terminal.CompanyId, terminal.BranchId, terminal.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(item => item.CashierId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ConfirmedSale>().WithMany()
+                .HasForeignKey(item => item.ConfirmedSaleId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(item => item.Instruments).WithOne()
+                .HasForeignKey(item => item.SaleCheckoutId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(item => item.Events).WithOne()
+                .HasForeignKey(item => item.SaleCheckoutId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(item => new { item.CompanyId, item.SaleDraftId }).IsUnique();
+            entity.HasIndex(item => new { item.CompanyId, item.CashierShiftId, item.Status });
+            entity.HasIndex(item => item.CommitKey).IsUnique()
+                .HasFilter("\"CommitKey\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<SaleCheckoutInstrument>(entity =>
+        {
+            entity.ToTable("sale_payment_instruments", "payments_cash", table =>
+            {
+                table.HasCheckConstraint("CK_sale_payment_instruments_amount", "\"Amount\" > 0");
+                table.HasCheckConstraint("CK_sale_payment_instruments_status", "\"Status\" BETWEEN 0 AND 4");
+            });
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Id).ValueGeneratedNever();
+            entity.Property(item => item.Method).HasConversion<int>().IsRequired();
+            entity.Property(item => item.Status).HasConversion<int>().IsRequired();
+            entity.Property(item => item.Amount).HasPrecision(12, 2);
+            entity.Property(item => item.Reference).HasMaxLength(200);
+            entity.HasOne<PointPaymentIntent>().WithMany()
+                .HasForeignKey(item => item.PointPaymentIntentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(item => item.PointPaymentIntentId).IsUnique()
+                .HasFilter("\"PointPaymentIntentId\" IS NOT NULL");
+            entity.HasIndex(item => new { item.SaleCheckoutId, item.Status });
+        });
+
+        modelBuilder.Entity<SaleCheckoutEvent>(entity =>
+        {
+            entity.ToTable("sale_payment_events", "payments_cash");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.FromStatus).HasMaxLength(32).IsRequired();
+            entity.Property(item => item.ToStatus).HasMaxLength(32).IsRequired();
+            entity.Property(item => item.Reference).HasMaxLength(200);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(item => item.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(item => new { item.SaleCheckoutId, item.CreatedAtUtc });
+        });
+
         modelBuilder.Entity<SalePayment>(entity =>
         {
             entity.ToTable("sale_payments", "payments_cash", table =>
@@ -1111,6 +1190,10 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(payment => payment.Method).HasConversion<int>().IsRequired();
             entity.Property(payment => payment.TenderedAmount).HasPrecision(12, 2);
             entity.Property(payment => payment.AppliedAmount).HasPrecision(12, 2);
+            entity.HasOne<SaleCheckoutInstrument>().WithMany()
+                .HasForeignKey(payment => payment.CheckoutInstrumentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(payment => payment.CheckoutInstrumentId).IsUnique()
+                .HasFilter("\"CheckoutInstrumentId\" IS NOT NULL");
         });
 
         modelBuilder.Entity<PointPaymentIntent>(entity =>
@@ -1154,11 +1237,16 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasOne<ConfirmedSale>().WithMany()
                 .HasForeignKey(intent => intent.ConfirmedSaleId)
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<SaleCheckoutInstrument>().WithMany()
+                .HasForeignKey(intent => intent.CheckoutInstrumentId)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<CustomerCollectionReceipt>().WithMany()
                 .HasForeignKey(intent => intent.ConfirmedCollectionReceiptId)
                 .OnDelete(DeleteBehavior.Restrict);
-            entity.HasIndex(intent => intent.ConfirmedSaleId).IsUnique()
+            entity.HasIndex(intent => intent.ConfirmedSaleId)
                 .HasFilter("\"ConfirmedSaleId\" IS NOT NULL");
+            entity.HasIndex(intent => intent.CheckoutInstrumentId).IsUnique()
+                .HasFilter("\"CheckoutInstrumentId\" IS NOT NULL");
             entity.HasIndex(intent => intent.ConfirmedCollectionReceiptId).IsUnique()
                 .HasFilter("\"ConfirmedCollectionReceiptId\" IS NOT NULL");
             entity.HasIndex(intent => intent.IdempotencyKey).IsUnique();
@@ -1166,7 +1254,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .HasFilter("\"ProviderOrderId\" IS NOT NULL");
             entity.HasIndex(intent => new { intent.CompanyId, intent.SaleDraftId, intent.CreatedAtUtc });
             entity.HasIndex(intent => new { intent.CompanyId, intent.SaleDraftId })
-                .IsUnique().HasFilter("\"SaleDraftId\" IS NOT NULL AND \"Status\" IN (0, 1, 2, 6)");
+                .IsUnique().HasFilter("\"SaleDraftId\" IS NOT NULL AND \"CheckoutInstrumentId\" IS NULL AND \"Status\" IN (0, 1, 2, 6)");
             entity.HasIndex(intent => new { intent.CompanyId, intent.CustomerCollectionOperationId })
                 .IsUnique().HasFilter("\"CustomerCollectionOperationId\" IS NOT NULL AND \"Status\" IN (0, 1, 2, 6)");
         });

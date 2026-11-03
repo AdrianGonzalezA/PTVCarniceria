@@ -171,11 +171,13 @@ public sealed class SalePayment
 {
     private SalePayment() { }
 
-    public SalePayment(PaymentMethod method, decimal tenderedAmount, decimal appliedAmount)
+    public SalePayment(PaymentMethod method, decimal tenderedAmount, decimal appliedAmount,
+        Guid? checkoutInstrumentId = null)
     {
         Method = method;
         TenderedAmount = tenderedAmount;
         AppliedAmount = appliedAmount;
+        CheckoutInstrumentId = checkoutInstrumentId;
     }
 
     public Guid Id { get; private set; }
@@ -183,6 +185,7 @@ public sealed class SalePayment
     public PaymentMethod Method { get; private set; }
     public decimal TenderedAmount { get; private set; }
     public decimal AppliedAmount { get; private set; }
+    public Guid? CheckoutInstrumentId { get; private set; }
 }
 
 public enum CashLedgerMovementKind

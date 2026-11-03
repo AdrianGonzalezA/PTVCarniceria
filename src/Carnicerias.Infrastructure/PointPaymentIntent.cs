@@ -84,6 +84,7 @@ public sealed class PointPaymentIntent
     public MercadoPagoOrderMode Mode { get; private set; }
     public string? QrData { get; private set; }
     public Guid? ConfirmedSaleId { get; private set; }
+    public Guid? CheckoutInstrumentId { get; private set; }
     public Guid? ConfirmedCollectionReceiptId { get; private set; }
     public decimal Amount { get; private set; }
     public Guid IdempotencyKey { get; private set; }
@@ -113,6 +114,14 @@ public sealed class PointPaymentIntent
             ConfirmedSaleId is not null && ConfirmedSaleId != saleId)
             throw new InvalidOperationException("Only one sale can use an accredited order.");
         ConfirmedSaleId = saleId;
+    }
+
+    public void AttachToCheckout(Guid instrumentId)
+    {
+        if (SaleDraftId is null || instrumentId == Guid.Empty ||
+            CheckoutInstrumentId is not null && CheckoutInstrumentId != instrumentId)
+            throw new InvalidOperationException("Only one checkout operation can own a Point intent.");
+        CheckoutInstrumentId = instrumentId;
     }
 
     public void ApplyToCollection(Guid receiptId)

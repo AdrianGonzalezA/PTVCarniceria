@@ -11,6 +11,8 @@ import { InventoryPieceClient, PosPieceLookup } from '../../core/inventory/inven
 import { PosTerminal, PosTerminalClient } from '../../core/pos/pos-terminal-client';
 import { POS_ELECTRON_MODE } from '../../core/pos/pos-electron-mode';
 import { SelectOnFocusDirective } from '../../shared/select-on-focus.directive';
+import { LocalizedDecimalInputDirective } from '../../shared/localized-decimal-input.directive';
+import { formatLocalizedDecimal, parseLocalizedDecimal } from '../../shared/localized-decimal';
 import { HasarSalePrintResult, PosDeviceAvailability, PosDeviceClient, SerialPrintResult } from '../../core/pos/pos-device-client';
 import { ConfirmedSale, SaleDocumentType, SaleDraft, SaleDraftClient, SaleDraftLine, SalePaymentMethod, SaleRecipientTaxStatus, SaleTicketSlot } from '../../core/sales/sale-draft-client';
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
@@ -95,7 +97,7 @@ const catalogRefreshIntervalMs = 15_000;
 
 @Component({
   selector: 'app-pos-page',
-  imports: [RouterLink, AccountCollectionDialog, DatePipe, SelectOnFocusDirective],
+  imports: [RouterLink, AccountCollectionDialog, DatePipe, SelectOnFocusDirective, LocalizedDecimalInputDirective],
   templateUrl: './pos-page.html',
 })
 export class PosPage implements OnInit {
@@ -210,13 +212,13 @@ export class PosPage implements OnInit {
     const product = this.selectedProduct();
     if (!product) return null;
     if (!this.isDemoPriceList() && this.liveDataProblem()) return this.liveDataProblem();
-    const quantity = Number(this.quantityDraft());
+    const quantity = parseLocalizedDecimal(this.quantityDraft(), product.mode === 'weight' ? 3 : 0) ?? NaN;
     if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 10000 ||
         Math.abs(Math.round(quantity * 1000) - quantity * 1000) > 0.000001)
-      return product.mode === 'weight' ? 'Ingresá un peso válido mayor a cero (hasta 3 decimales).' : 'Ingresá una cantidad válida mayor a cero.';
+      return product.mode === 'weight' ? 'Ingresá un peso válido mayor a cero (hasta 3 decimales).' : 'Ingresá una cantidad entera válida mayor a cero.';
     if (product.mode === 'unit' && !Number.isInteger(quantity)) return 'Ingresá una cantidad entera de unidades de venta.';
     if (product.mode === 'weight' && this.pieceCountDraft().trim()) {
-      const pieces = Number(this.pieceCountDraft());
+      const pieces = parseLocalizedDecimal(this.pieceCountDraft(), 0) ?? NaN;
       if (!Number.isInteger(pieces) || pieces < 1 || pieces > 10000)
         return 'Ingresá una cantidad de piezas entera entre 1 y 10000.';
     }
@@ -333,12 +335,12 @@ export class PosPage implements OnInit {
   protected readonly discountReason = signal('');
   private readonly persistedDiscountAmount = signal(0);
   private readonly persistedDiscountReason = signal('');
-  protected readonly discountAmount = computed(() => Number(this.discountDraft().replace(',', '.')));
+  protected readonly discountAmount = computed(() => this.decimalOrZero(this.discountDraft(), 2));
   protected readonly canDiscount = computed(() =>
     !!this.session()?.context?.permissions.includes('pos.discount.apply'));
-  protected readonly accountChargeAmount = computed(() => Number(this.accountChargeDraft().replace(',', '.')));
+  protected readonly accountChargeAmount = computed(() => this.decimalOrZero(this.accountChargeDraft(), 2));
   protected readonly creditAppliedDraft = signal('0');
-  protected readonly creditAppliedAmount = computed(() => Number(this.creditAppliedDraft().replace(',', '.')));
+  protected readonly creditAppliedAmount = computed(() => this.decimalOrZero(this.creditAppliedDraft(), 2));
   protected readonly dueNow = computed(() => this.subtotal() - this.accountChargeAmount() - this.creditAppliedAmount());
   protected readonly canChargeToAccount = computed(() =>
     !!this.session()?.context?.permissions.includes('pos.account.charge'));
@@ -1051,7 +1053,7 @@ export class PosPage implements OnInit {
       (event.target as HTMLInputElement).value = this.quantityDraft();
       return;
     }
-    this.quantityDraft.set((event.target as HTMLInputElement).value.replace(',', '.'));
+    this.quantityDraft.set((event.target as HTMLInputElement).value);
     this.scaleNotice.set(null);
   }
 
@@ -1088,7 +1090,7 @@ export class PosPage implements OnInit {
       return;
     }
     const product = this.selectedProduct();
-    const quantity = Number(this.quantityDraft());
+    const quantity = parseLocalizedDecimal(this.quantityDraft(), product?.mode === 'weight' ? 3 : 0) ?? NaN;
     if (!product || this.quantityProblem()) {
       this.errorMessage.set(this.quantityProblem());
       return;
@@ -1111,7 +1113,7 @@ export class PosPage implements OnInit {
       return;
     }
     const pieceCount = product.mode === 'weight' && this.pieceCountDraft().trim()
-      ? Number(this.pieceCountDraft()) : null;
+      ? parseLocalizedDecimal(this.pieceCountDraft(), 0) : null;
     this.addProductLine(product, quantity, pieceId, this.scannedPieceIdentifier(), pieceCount);
     this.selectedProduct.set(null);
     this.scannedPieceIdentifier.set(null);
@@ -1122,8 +1124,8 @@ export class PosPage implements OnInit {
   protected updateLineQuantity(lineId: string, event: Event): void {
     if (!this.canOperate()) return;
     const input = event.target as HTMLInputElement;
-    const quantity = Number(input.value.replace(',', '.'));
     const line = this.lines().find((item) => item.id === lineId);
+    const quantity = parseLocalizedDecimal(input.value, line?.product.mode === 'weight' ? 3 : 0) ?? NaN;
     if (!this.isDemoPriceList() && this.liveDataProblem()) {
       if (line) input.value = String(line.quantity);
       this.errorMessage.set(this.liveDataProblem());
@@ -1269,7 +1271,7 @@ export class PosPage implements OnInit {
   }
 
   protected updateAdjustmentQuantity(event: Event): void {
-    this.adjustmentQuantity.set((event.target as HTMLInputElement).value.replace(',', '.'));
+    this.adjustmentQuantity.set((event.target as HTMLInputElement).value);
   }
 
   protected updateAdjustmentProduct(event: Event): void {
@@ -1282,7 +1284,7 @@ export class PosPage implements OnInit {
 
   protected submitStockAdjustment(): void {
     if (!this.canOperate()) return;
-    const quantityDelta = Number(this.adjustmentQuantity());
+    const quantityDelta = parseLocalizedDecimal(this.adjustmentQuantity(), 3) ?? NaN;
     const reason = this.adjustmentReason().trim();
     if (!this.adjustmentProductId() || !Number.isFinite(quantityDelta) || quantityDelta === 0 ||
         Math.abs(quantityDelta) > 100000 || !reason) {
@@ -1574,8 +1576,17 @@ export class PosPage implements OnInit {
       : `No se pudo guardar el ticket (HTTP ${error.status}). El detalle se conserva; podés reintentar.`;
   }
 
+  protected formatQuantityDraft(): string {
+    const quantity = parseLocalizedDecimal(this.quantityDraft(), 3);
+    return quantity === null ? this.quantityDraft() : formatLocalizedDecimal(quantity, 3);
+  }
+
+  private decimalOrZero(value: string, fractionDigits: number): number {
+    return value.trim() === '' ? 0 : parseLocalizedDecimal(value, fractionDigits) ?? NaN;
+  }
+
   protected updateOpeningCash(event: Event): void {
-    this.shiftOpeningCash.set((event.target as HTMLInputElement).value.replace(',', '.'));
+    this.shiftOpeningCash.set((event.target as HTMLInputElement).value);
   }
 
   protected openShiftDialog(): void {
@@ -1587,7 +1598,7 @@ export class PosPage implements OnInit {
 
   protected openCashierShift(): void {
     if (!this.terminal()) return;
-    const amount = Number(this.shiftOpeningCash());
+    const amount = parseLocalizedDecimal(this.shiftOpeningCash(), 2) ?? NaN;
     if (!Number.isFinite(amount) || amount < 0 || amount > 9_999_999_999.99 || Math.round(amount * 100) !== amount * 100) {
       this.shiftError.set('Ingresá un fondo inicial válido (puede ser $0).');
       return;
@@ -1656,7 +1667,7 @@ export class PosPage implements OnInit {
 
   protected updatePaymentAmount(method: SalePaymentMethod, event: Event): void {
     if (this.checkoutCommitted()) return;
-    const amount = Number((event.target as HTMLInputElement).value.replace(',', '.'));
+    const amount = parseLocalizedDecimal((event.target as HTMLInputElement).value, 2) ?? NaN;
     let updated = false;
     this.selectedPayments.update((payments) => payments.map((payment) => {
       if (payment.method !== method || updated) return payment;
@@ -1675,7 +1686,7 @@ export class PosPage implements OnInit {
 
   protected updateOperationAmount(id: string, event: Event): void {
     if (this.checkoutCommitted()) return;
-    const amount = Number((event.target as HTMLInputElement).value.replace(',', '.'));
+    const amount = parseLocalizedDecimal((event.target as HTMLInputElement).value, 2) ?? NaN;
     this.selectedPayments.update((payments) => payments.map((item) =>
       item.id === id ? { ...item, amount } : item));
   }

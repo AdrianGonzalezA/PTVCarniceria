@@ -11,11 +11,12 @@ import {
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { AdminDetailDialog } from './admin-detail-dialog';
 import { AdminExcelImportActions } from './admin-excel-import-actions';
-import { SelectOnFocusDirective } from '../../shared/select-on-focus.directive';
+import { parseLocalizedDecimal } from '../../shared/localized-decimal';
+import { LocalizedDecimalInputDirective } from '../../shared/localized-decimal-input.directive';
 
 @Component({
   selector: 'app-price-lists-page',
-  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, AdminExcelImportActions, ReactiveFormsModule, DatePipe, DecimalPipe, SelectOnFocusDirective],
+  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, AdminExcelImportActions, ReactiveFormsModule, DatePipe, DecimalPipe, LocalizedDecimalInputDirective],
   templateUrl: './price-lists-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './price-lists-page.scss'],
 })
@@ -243,7 +244,7 @@ export class PriceListsPage implements OnInit {
   protected savePrice(): void {
     const list = this.selectedList();
     const product = this.priceEditing();
-    const amount = Number(this.priceForm.controls.amount.value.replace(',', '.'));
+    const amount = parseLocalizedDecimal(this.priceForm.controls.amount.value, 2) ?? NaN;
     if (!list || !product || this.priceSaving() || this.priceForm.invalid ||
         !Number.isFinite(amount) || amount <= 0) {
       this.priceForm.markAllAsTouched();

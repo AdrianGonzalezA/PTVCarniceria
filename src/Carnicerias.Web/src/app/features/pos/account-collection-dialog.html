@@ -83,7 +83,7 @@
         <p class="payment-guidance">Podés cobrar parcialmente. La propuesta aplica primero a las ventas más antiguas.</p>
         <label class="quantity-field" for="collection-amount">Importe a cobrar
           <input id="collection-amount" type="text" inputmode="decimal" placeholder="0,00"
-            [value]="amount()" [disabled]="mercadoPagoOrderActive()" (input)="updateAmount($event)" />
+            [appLocalizedDecimal]="amount()" [disabled]="mercadoPagoOrderActive()" (input)="updateAmount($event)" />
         </label>
         <h3 class="collection-payment-title">Medios de pago</h3>
         <div class="payment-methods collection-payment-methods" role="group" aria-label="Medios de pago del cobro">
@@ -93,9 +93,9 @@
                 [disabled]="mercadoPagoOrderActive() || mercadoPagoLoadState() === 'loading' || mercadoPagoLoadState() === 'error'"
                 (change)="togglePayment(item.id, $event)" /> {{ item.label }}</span>
               @if (hasPayment(item.id)) {
-                <input class="payment-amount" type="number" min="0.01" step="0.01"
+                <input class="payment-amount" type="text" inputmode="decimal"
                   [attr.data-method]="item.id" [attr.aria-label]="'Importe en ' + item.label"
-                  [value]="paymentAmount(item.id)" [disabled]="item.id === 'mercadoPago' && mercadoPagoOrderActive()"
+                  [appLocalizedDecimal]="paymentAmount(item.id)" [disabled]="item.id === 'mercadoPago' && mercadoPagoOrderActive()"
                   (input)="updatePaymentAmount(item.id, $event)" />
               }
             </label>
@@ -167,7 +167,7 @@
                   <span>Venta {{ sale.saleId.slice(0, 8) }} · {{ sale.chargedAtUtc.slice(0, 10) }}<br />
                     <small>Pendiente: {{ formatMoney(sale.outstandingAmount) }}</small></span>
                   <input type="text" inputmode="decimal" [attr.aria-label]="'Asignar a venta ' + sale.saleId.slice(0, 8)"
-                    [value]="allocations()[sale.saleId] ?? ''" (input)="updateAllocation(sale.saleId, $event)"
+                    [appLocalizedDecimal]="allocations()[sale.saleId] ?? ''" (input)="updateAllocation(sale.saleId, $event)"
                     placeholder="0,00" />
                 </label>
               }

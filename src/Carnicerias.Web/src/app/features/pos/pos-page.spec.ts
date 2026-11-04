@@ -144,9 +144,30 @@ describe('PosPage', () => {
     payment('Transferencia').querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
     fixture.detectChanges();
 
-    expect(payment('Transferencia').querySelector<HTMLInputElement>('.payment-amount')!.value).toBe('398.7');
+    expect(payment('Transferencia').querySelector<HTMLInputElement>('.payment-amount')!.value).toBe('398,70');
     expect((fixture.nativeElement as HTMLElement).querySelector('.checkout-dialog')!.textContent)
       .not.toContain('Completá cada medio de pago con un importe válido.');
+  });
+
+  it('interprets both separators as decimal in a payment and displays es-AR grouping', async () => {
+    const fixture = await checkoutWithGateways(null, false, [], 1234.5);
+    const dialog = fixture.nativeElement.querySelector('.checkout-dialog') as HTMLElement;
+    const cash = [...dialog.querySelectorAll<HTMLElement>('.payment-option')]
+      .find((option) => option.textContent?.includes('Efectivo'))!
+      .querySelector<HTMLInputElement>('.payment-amount')!;
+    expect(cash.value).toBe('1.234,50');
+    cash.focus();
+    cash.value = '1.234';
+    cash.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(dialog.textContent).toContain('Completá cada medio de pago con un importe válido.');
+
+    cash.value = '1234.50';
+    cash.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    cash.blur();
+    expect(cash.value).toBe('1.234,50');
+    expect(dialog.textContent).not.toContain('Completá cada medio de pago con un importe válido.');
   });
 
   it('keeps manual methods but fails closed for new integrated payments if availability fails', async () => {
@@ -244,7 +265,7 @@ describe('PosPage', () => {
     expect(dialog.querySelectorAll('.payment-operations .payment-operation')).toHaveLength(1);
     const transfer = [...dialog.querySelectorAll<HTMLElement>('.payment-option')]
       .find((option) => option.textContent?.includes('Transferencia'))!;
-    expect(transfer.querySelector<HTMLInputElement>('input[type="text"]')?.value).toBe('transfer-001');
+    expect(transfer.querySelector<HTMLInputElement>('input[aria-label="Referencia de Transferencia"]')?.value).toBe('transfer-001');
     expect((dialog.querySelector('.payment-option input[type="checkbox"]') as HTMLInputElement).disabled).toBe(true);
   });
 
@@ -1086,7 +1107,7 @@ describe('PosPage', () => {
     expect(ticketBody.querySelector('.sale-footer')).toBeNull();
     expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('Corte guardado');
     expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('12.345,67');
-    expect((fixture.nativeElement.querySelector('.quantity-input') as HTMLInputElement).value).toBe('1.25');
+    expect((fixture.nativeElement.querySelector('.quantity-input') as HTMLInputElement).value).toBe('1,250');
     (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#checkout-title').textContent).toContain('Cobrar venta');
@@ -1558,12 +1579,12 @@ describe('PosPage', () => {
 
     expect(fixture.nativeElement.querySelector('#product-dialog-title').textContent).toContain('Asado');
     const measuredQuantity = fixture.nativeElement.querySelector('#product-quantity') as HTMLInputElement;
-    expect(measuredQuantity.value).toBe('0.5');
+    expect(measuredQuantity.value).toBe('0,500');
     expect(measuredQuantity.readOnly).toBe(true);
     (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(save).toHaveBeenCalledWith('list-id', [expect.objectContaining({ productId: asado.id, quantity: 0.5, inventoryPieceId: 'piece-id' })], 'A', 0, null);
-    expect((fixture.nativeElement.querySelector('.quantity-input') as HTMLInputElement).value).toBe('0.5');
+    expect((fixture.nativeElement.querySelector('.quantity-input') as HTMLInputElement).value).toBe('0,500');
     expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('5.750,00');
 
     search.value = '2999002007507';
@@ -1576,8 +1597,8 @@ describe('PosPage', () => {
     expect(ticketRows).toHaveLength(2);
     expect(ticketRows[0].textContent).toContain('999001');
     expect(ticketRows[1].textContent).toContain('999002');
-    expect((ticketRows[0].querySelector('.quantity-input') as HTMLInputElement).value).toBe('0.5');
-    expect((ticketRows[1].querySelector('.quantity-input') as HTMLInputElement).value).toBe('0.75');
+    expect((ticketRows[0].querySelector('.quantity-input') as HTMLInputElement).value).toBe('0,500');
+    expect((ticketRows[1].querySelector('.quantity-input') as HTMLInputElement).value).toBe('0,750');
     expect(save).toHaveBeenLastCalledWith('list-id', [
       expect.objectContaining({ productId: asado.id, quantity: 0.5, inventoryPieceId: 'piece-id' }),
       expect.objectContaining({ productId: asado.id, quantity: 0.75, inventoryPieceId: 'piece-id-2' }),

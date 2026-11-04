@@ -66,7 +66,7 @@
               <input id="product-unit" formControlName="unit" maxlength="24" placeholder="kg o un" required />
             </label>
             <label>Costo (ARS)
-              <input id="product-cost" formControlName="cost" inputmode="decimal" placeholder="Opcional" appSelectOnFocus />
+              <input id="product-cost" formControlName="cost" inputmode="decimal" placeholder="Opcional" [appLocalizedDecimal]="editorForm.controls.cost.value" />
             </label>
           </div>
           @if (editorForm.touched && editorForm.invalid) {
@@ -159,14 +159,14 @@
         } @else {
           <div class="table-wrap">
             <table>
-              <thead><tr><th scope="col">Código / artículo</th><th scope="col">Categoría</th><th scope="col">Venta</th><th scope="col">Costo</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr></thead>
+              <thead><tr><th scope="col">Código / artículo</th><th scope="col">Categoría</th><th scope="col">Venta</th><th scope="col" class="numeric-value">Costo</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr></thead>
               <tbody>
                 @for (product of page.items; track product.id) {
                   <tr>
                     <td><strong>{{ product.name }}</strong><small>{{ product.code }} · {{ product.alternateCodeCount }} alternativos</small></td>
                     <td>{{ product.categoryName }}</td>
                     <td>{{ product.saleMode === 'weight' ? 'Por peso' : 'Por unidad' }} · {{ product.unit }}</td>
-                    <td>{{ product.cost === null ? 'Sin costo' : 'ARS ' + (product.cost | number:'1.2-2':'es-AR') }}</td>
+                    <td class="numeric-value">{{ product.cost === null ? 'Sin costo' : 'ARS ' + (product.cost | number:'1.2-2':'es-AR') }}</td>
                     <td><span class="status" [class.status-active]="product.isActive">{{ product.isActive ? 'Activo' : 'Inactivo' }}</span></td>
                     <td class="row-actions">
                       <button type="button" class="secondary-button edit-button" [disabled]="isSaving() || actionId() !== null" (click)="startEdit(product)">Editar</button>

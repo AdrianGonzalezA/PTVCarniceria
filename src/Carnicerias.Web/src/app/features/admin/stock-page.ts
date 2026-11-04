@@ -7,11 +7,12 @@ import { AdminDetailDialog } from './admin-detail-dialog';
 import { AdminExcelImportActions } from './admin-excel-import-actions';
 import { InventoryClient, InventoryStockItem } from '../../core/inventory/inventory-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
-import { SelectOnFocusDirective } from '../../shared/select-on-focus.directive';
+import { parseLocalizedDecimal } from '../../shared/localized-decimal';
+import { LocalizedDecimalInputDirective } from '../../shared/localized-decimal-input.directive';
 
 @Component({
   selector: 'app-stock-page',
-  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, AdminExcelImportActions, ReactiveFormsModule, SelectOnFocusDirective],
+  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, AdminExcelImportActions, ReactiveFormsModule, LocalizedDecimalInputDirective],
   templateUrl: './stock-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './stock-page.scss'],
 })
@@ -101,7 +102,7 @@ export class StockPage implements OnInit {
   protected saveAdjustment(): void {
     const item = this.selected();
     const raw = this.adjustmentForm.getRawValue();
-    const quantityDelta = Number(raw.quantityDelta);
+    const quantityDelta = parseLocalizedDecimal(raw.quantityDelta, item?.saleMode === 'unit' ? 0 : 3) ?? NaN;
     const reason = raw.reason.trim() || 'Ajuste manual';
     const precision = item?.saleMode === 'unit' ? 0 : 3;
     if (!item || this.saving() || this.adjustmentForm.invalid ||

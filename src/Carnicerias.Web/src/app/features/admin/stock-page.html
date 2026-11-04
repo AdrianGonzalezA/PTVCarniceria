@@ -49,15 +49,15 @@
       } @else {
         <div class="table-wrap">
           <table>
-            <thead><tr><th scope="col">Artículo</th><th scope="col">Existencia</th><th scope="col">Reservado</th><th scope="col">Inmovilizado</th><th scope="col">Disponible</th><th scope="col">Acción</th></tr></thead>
+            <thead><tr><th scope="col">Artículo</th><th scope="col" class="numeric-value">Existencia</th><th scope="col" class="numeric-value">Reservado</th><th scope="col" class="numeric-value">Inmovilizado</th><th scope="col" class="numeric-value">Disponible</th><th scope="col">Acción</th></tr></thead>
             <tbody>
               @for (item of visibleItems(); track item.productId) {
                 <tr class="stock-row">
                   <td><strong>{{ item.name }}</strong><small>{{ item.code }}</small></td>
-                  <td>{{ formatQuantity(item.onHand, item) }} {{ item.unit ?? 'u.' }}</td>
-                  <td>{{ formatQuantity(item.reserved, item) }} {{ item.unit ?? 'u.' }}</td>
-                  <td>{{ formatQuantity(item.quarantined ?? 0, item) }} {{ item.unit ?? 'u.' }}</td>
-                  <td>{{ item.reconciliationLocked ? 'En conteo' : formatQuantity(item.available, item) }} {{ item.reconciliationLocked ? '' : item.unit ?? 'u.' }}</td>
+                  <td class="numeric-value">{{ formatQuantity(item.onHand, item) }} {{ item.unit ?? 'u.' }}</td>
+                  <td class="numeric-value">{{ formatQuantity(item.reserved, item) }} {{ item.unit ?? 'u.' }}</td>
+                  <td class="numeric-value">{{ formatQuantity(item.quarantined ?? 0, item) }} {{ item.unit ?? 'u.' }}</td>
+                  <td class="numeric-value">{{ item.reconciliationLocked ? 'En conteo' : formatQuantity(item.available, item) }} {{ item.reconciliationLocked ? '' : item.unit ?? 'u.' }}</td>
                   <td><button type="button" class="secondary-button" [disabled]="saving() || item.reconciliationLocked" (click)="startAdjustment(item)">Ajustar</button></td>
                 </tr>
               }
@@ -73,7 +73,7 @@
           <h2 id="stock-adjustment-title">Ajustar {{ item.name }}</h2>
           <p>Actual: {{ formatQuantity(item.onHand, item) }} {{ item.unit ?? 'u.' }} · Reservado: {{ formatQuantity(item.reserved, item) }} · Inmovilizado: {{ formatQuantity(item.quarantined ?? 0, item) }} · Disponible: {{ formatQuantity(item.available, item) }}</p>
           <label for="stock-delta">Variación de cantidad (positiva para entrada, negativa para salida)</label>
-          <input id="stock-delta" type="text" [attr.inputmode]="item.saleMode === 'unit' ? 'numeric' : 'decimal'" formControlName="quantityDelta" aria-describedby="stock-delta-help" appSelectOnFocus required />
+          <input id="stock-delta" type="text" [attr.inputmode]="item.saleMode === 'unit' ? 'numeric' : 'decimal'" formControlName="quantityDelta" [appLocalizedDecimal]="adjustmentForm.controls.quantityDelta.value" [decimalPlaces]="item.saleMode === 'unit' ? 0 : 3" aria-describedby="stock-delta-help" required />
           <p id="stock-delta-help" class="field-hint">{{ item.saleMode === 'unit' ? 'Sólo unidades enteras.' : 'Hasta tres decimales.' }}</p>
           <label for="stock-reason">Descripción (opcional)</label>
           <input id="stock-reason" formControlName="reason" maxlength="240" autocomplete="off" />

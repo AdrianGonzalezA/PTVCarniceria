@@ -10,6 +10,23 @@ body {
   margin: 0;
 }
 
+input.numeric-entry,
+input[type='number'],
+input[inputmode='decimal'],
+input[inputmode='numeric'] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+th.numeric-value,
+td.numeric-value,
+.ticket-lines .ticket-line-quantity,
+.ticket-lines .ticket-line-price,
+.ticket-lines .ticket-line-total {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

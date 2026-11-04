@@ -290,10 +290,10 @@
                     <td class="ticket-line-quantity">
                       <input
                         class="quantity-input"
-                        type="number"
-                        [min]="line.product.mode === 'weight' ? 0.001 : 1"
-                        [step]="line.product.mode === 'weight' ? 0.001 : 1"
-                        [value]="line.quantity"
+                        type="text"
+                        [attr.inputmode]="line.product.mode === 'weight' ? 'decimal' : 'numeric'"
+                        [appLocalizedDecimal]="line.quantity"
+                        [decimalPlaces]="line.product.mode === 'weight' ? 3 : 0"
                         [readOnly]="!!line.inventoryPieceId"
                         [disabled]="!!liveDataProblem()"
                         [attr.aria-label]="line.product.mode === 'weight' ? 'Peso en kilogramos de ' + line.product.name : 'Cantidad de ' + unitLabel(line.product) + ' de ' + line.product.name"
@@ -330,8 +330,8 @@
         @if (lines().length > 0 && !isDemoPriceList() && canDiscount()) {
           <div class="sale-discount-fields">
             <label for="sale-discount-amount">Descuento del ticket ($)
-              <input id="sale-discount-amount" type="number" min="0" step="0.01" [disabled]="!!liveDataProblem()"
-                [max]="grossSubtotal()" [value]="discountDraft()" (change)="updateDiscountAmount($event)" />
+              <input id="sale-discount-amount" type="text" inputmode="decimal" [disabled]="!!liveDataProblem()"
+                [appLocalizedDecimal]="discountDraft()" (change)="updateDiscountAmount($event)" />
             </label>
             @if (discountAmount() > 0) {
               <label for="sale-discount-reason">Motivo del descuento
@@ -377,7 +377,7 @@
         </dl>
         @if (product.mode === 'weight') {
           @if (scannedPieceIdentifier(); as identifier) {
-            <p class="scale-status" role="status">Pieza {{ identifier }} · {{ quantityDraft() }} kg leídos de la etiqueta · peso fijo</p>
+            <p class="scale-status" role="status">Pieza {{ identifier }} · {{ formatQuantityDraft() }} kg leídos de la etiqueta · peso fijo</p>
             <p class="scale-status">La pieza se guarda por separado en el ticket; el saldo de stock se calcula por artículo.</p>
           } @else {
             <p class="scale-status">{{ devices().scale ? 'Peso manual o balanza serial asignada' :
@@ -393,16 +393,16 @@
             type="text"
             [attr.inputmode]="product.mode === 'weight' ? 'decimal' : 'numeric'"
             [readOnly]="!!scannedPieceIdentifier()"
-            [value]="quantityDraft()"
+            [appLocalizedDecimal]="quantityDraft()"
+            [decimalPlaces]="product.mode === 'weight' ? 3 : 0"
             (input)="updateQuantity($event)"
-            appSelectOnFocus
           />
         </label>
         @if (product.mode === 'weight') {
           <label class="quantity-field piece-count-field" for="product-piece-count">
             Piezas físicas (opcional)
-            <input id="product-piece-count" type="number" min="1" max="10000" step="1"
-              [readOnly]="!!scannedPieceId()" [value]="pieceCountDraft()"
+            <input id="product-piece-count" type="text" inputmode="numeric" [appLocalizedDecimal]="pieceCountDraft()" [decimalPlaces]="0"
+              [readOnly]="!!scannedPieceId()"
               (input)="updatePieceCount($event)" placeholder="Cantidad de piezas" />
           </label>
         }
@@ -474,7 +474,7 @@
             <label class="payment-option">
               <span><input type="checkbox" [checked]="hasPayment(method.id)" [disabled]="checkoutCommitted() || (method.id === 'mercadoPago' && mercadoPagoOrderActive())" (change)="togglePayment(method.id, $event)" /> {{ method.label }}</span>
               @if (firstPayment(method.id); as first) {
-                <input class="payment-amount" type="number" min="0.01" step="0.01" [attr.aria-label]="'Importe en ' + method.label" [value]="first.amount" [disabled]="checkoutCommitted() || (method.id === 'mercadoPago' && mercadoPagoOrderActive())" (input)="updatePaymentAmount(method.id, $event)" />
+                <input class="payment-amount" type="text" inputmode="decimal" [attr.aria-label]="'Importe en ' + method.label" [appLocalizedDecimal]="first.amount" [disabled]="checkoutCommitted() || (method.id === 'mercadoPago' && mercadoPagoOrderActive())" (input)="updatePaymentAmount(method.id, $event)" />
                 @if (method.id !== 'mercadoPago') {
                   <input type="text" maxlength="200" [attr.aria-label]="'Referencia de ' + method.label" [value]="first.reference ?? ''" [disabled]="checkoutCommitted()" (input)="updateOperationReference(first.id, $event)" />
                 }
@@ -488,8 +488,8 @@
             @for (payment of extraPayments(); track payment.id) {
               <div class="payment-operation">
                 <span>{{ paymentMethodName(payment.method) }} · {{ payment.status ?? 'Preparado' }}</span>
-                <input type="number" min="0.01" step="0.01" [attr.aria-label]="'Importe de operación ' + payment.id"
-                  [value]="payment.amount" [disabled]="checkoutCommitted()"
+                <input type="text" inputmode="decimal" [attr.aria-label]="'Importe de operación ' + payment.id"
+                  [appLocalizedDecimal]="payment.amount" [disabled]="checkoutCommitted()"
                   (input)="updateOperationAmount(payment.id, $event)" />
                 @if (payment.method !== 'mercadoPago') {
                   <input type="text" maxlength="200" [attr.aria-label]="'Referencia de operación ' + payment.id"
@@ -615,10 +615,10 @@
               <p role="status">No hay clientes habilitados en esta búsqueda.</p>
             }
             <label for="account-charge">Importe a cuenta corriente</label>
-            <input id="account-charge" type="number" min="0" step="0.01" [max]="subtotal()" [value]="accountChargeDraft()" [disabled]="checkoutBusy() || checkoutCommitted()" (input)="updateAccountCharge($event)" />
+            <input id="account-charge" type="text" inputmode="decimal" [appLocalizedDecimal]="accountChargeDraft()" [disabled]="checkoutBusy() || checkoutCommitted()" (input)="updateAccountCharge($event)" />
             <label for="credit-applied">Aplicar saldo a favor (parcial o total)</label>
-            <input id="credit-applied" type="number" min="0" step="0.01"
-              [max]="creditCustomerAccount()?.creditAvailable ?? 0" [value]="creditAppliedDraft()"
+            <input id="credit-applied" type="text" inputmode="decimal"
+              [appLocalizedDecimal]="creditAppliedDraft()"
               [disabled]="checkoutBusy() || checkoutCommitted() || !creditCustomerAccount()" (input)="updateCreditApplied($event)" />
           </section>
         }
@@ -782,7 +782,7 @@
           }
           <p>El turno queda asociado a tu usuario y esta sucursal. Ingresá el fondo real de caja; puede ser $0.</p>
           <label class="quantity-field" for="opening-cash">Fondo inicial en efectivo
-            <input id="opening-cash" type="number" min="0" step="0.01" [value]="shiftOpeningCash()" (input)="updateOpeningCash($event)" />
+            <input id="opening-cash" type="text" inputmode="decimal" [appLocalizedDecimal]="shiftOpeningCash()" (input)="updateOpeningCash($event)" />
           </label>
           @if (shiftError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
           <div class="dialog-actions">
@@ -821,7 +821,7 @@
             </select>
           </label>
           <label class="quantity-field" for="inventory-quantity">Ingreso / ajuste (+/-)
-            <input id="inventory-quantity" type="number" step="0.001" [value]="adjustmentQuantity()" (input)="updateAdjustmentQuantity($event)" />
+            <input id="inventory-quantity" type="text" inputmode="decimal" [appLocalizedDecimal]="adjustmentQuantity()" [decimalPlaces]="3" (input)="updateAdjustmentQuantity($event)" />
           </label>
           <label class="quantity-field" for="inventory-reason">Motivo
             <input id="inventory-reason" maxlength="240" [value]="adjustmentReason()" (input)="updateAdjustmentReason($event)" />

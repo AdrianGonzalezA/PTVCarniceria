@@ -73,13 +73,13 @@
         } @else {
           <div class="table-wrap">
             <table>
-              <thead><tr><th scope="col">Lista</th><th scope="col">Sucursales</th><th scope="col">Precios vigentes</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr></thead>
+              <thead><tr><th scope="col">Lista</th><th scope="col" class="numeric-value">Sucursales</th><th scope="col" class="numeric-value">Precios vigentes</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr></thead>
               <tbody>
                 @for (list of page.items; track list.id) {
                   <tr>
                     <td><strong>{{ list.name }}</strong></td>
-                    <td>{{ list.activeBranchCount }} {{ list.activeBranchCount === 1 ? 'sucursal' : 'sucursales' }}</td>
-                    <td>{{ list.currentPriceCount }} {{ list.currentPriceCount === 1 ? 'precio' : 'precios' }}</td>
+                    <td class="numeric-value">{{ list.activeBranchCount }} {{ list.activeBranchCount === 1 ? 'sucursal' : 'sucursales' }}</td>
+                    <td class="numeric-value">{{ list.currentPriceCount }} {{ list.currentPriceCount === 1 ? 'precio' : 'precios' }}</td>
                     <td><span class="status" [class.status-active]="list.isActive">{{ list.isActive ? 'Activa' : 'Inactiva' }}</span></td>
                     <td class="row-actions">
                       <button type="button" class="secondary-button" [disabled]="actionId() !== null" (click)="startEdit(list)">Editar</button>
@@ -165,13 +165,13 @@
             } @else {
               <div class="table-wrap">
                 <table>
-                  <thead><tr><th scope="col">Artículo</th><th scope="col">Costo</th><th scope="col">Precio vigente</th><th scope="col">Acciones</th></tr></thead>
+                  <thead><tr><th scope="col">Artículo</th><th scope="col" class="numeric-value">Costo</th><th scope="col" class="numeric-value">Precio vigente</th><th scope="col">Acciones</th></tr></thead>
                   <tbody>
                     @for (product of prices.items; track product.productId) {
                       <tr class="price-row">
                         <td><strong>{{ product.name }}</strong><small>{{ product.code }} · {{ product.unit }} {{ product.isActive ? '' : '· Inactivo' }}</small></td>
-                        <td>{{ product.cost === null ? 'Sin costo' : 'ARS ' + (product.cost | number:'1.2-2':'es-AR') }}</td>
-                        <td>{{ product.currentPrice === null ? 'Sin precio' : 'ARS ' + (product.currentPrice | number:'1.2-2':'es-AR') }}</td>
+                        <td class="numeric-value">{{ product.cost === null ? 'Sin costo' : 'ARS ' + (product.cost | number:'1.2-2':'es-AR') }}</td>
+                        <td class="numeric-value">{{ product.currentPrice === null ? 'Sin precio' : 'ARS ' + (product.currentPrice | number:'1.2-2':'es-AR') }}</td>
                         <td class="row-actions">
                           <button type="button" class="secondary-button set-price-button" (click)="editPrice(product)">Fijar precio</button>
                           <button type="button" class="secondary-button history-button" (click)="showHistory(product)">Historial</button>
@@ -203,7 +203,7 @@
           <h3 id="price-editor-title">Precio de {{ product.name }}</h3>
           <p>Costo actual: {{ product.cost === null ? 'Sin costo' : 'ARS ' + (product.cost | number:'1.2-2':'es-AR') }}. El nuevo precio será vigente desde ahora.</p>
           <label for="new-price">Nuevo precio (ARS)</label>
-          <input id="new-price" formControlName="amount" inputmode="decimal" placeholder="0,00" appSelectOnFocus required />
+          <input id="new-price" formControlName="amount" inputmode="decimal" placeholder="0,00" [appLocalizedDecimal]="priceForm.controls.amount.value" required />
           @if (priceForm.touched && priceForm.invalid) { <p class="field-error" role="alert">Ingresá un precio positivo de hasta dos decimales.</p> }
           @if (priceError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
           <div class="editor-actions">
@@ -226,13 +226,13 @@
                 <p>Este artículo todavía no tiene precios en la lista.</p>
               } @else {
                 <div class="table-wrap"><table>
-                  <thead><tr><th scope="col">Desde</th><th scope="col">Hasta</th><th scope="col">Precio</th><th scope="col">Registró</th></tr></thead>
+                  <thead><tr><th scope="col">Desde</th><th scope="col">Hasta</th><th scope="col" class="numeric-value">Precio</th><th scope="col">Registró</th></tr></thead>
                   <tbody>
                     @for (row of historyRows(); track row.id) {
                       <tr>
                         <td>{{ row.effectiveFromUtc | date:'dd/MM/yyyy HH:mm' }}</td>
                         <td>{{ row.effectiveToUtc ? (row.effectiveToUtc | date:'dd/MM/yyyy HH:mm') : 'Vigente' }}</td>
-                        <td>ARS {{ row.amount | number:'1.2-2':'es-AR' }}</td>
+                        <td class="numeric-value">ARS {{ row.amount | number:'1.2-2':'es-AR' }}</td>
                         <td>{{ row.changedByUsername }}</td>
                       </tr>
                     }

@@ -39,14 +39,14 @@
         @if (result.total === 0) { <p class="state-message">No hay clientes para esta búsqueda.</p> }
         @else {
           <div class="table-wrap"><table>
-            <thead><tr><th scope="col">Cliente</th><th scope="col">Estado</th><th scope="col">Deuda</th><th scope="col">Saldo a favor</th><th scope="col">Detalle</th></tr></thead>
+            <thead><tr><th scope="col">Cliente</th><th scope="col">Estado</th><th scope="col" class="numeric-value">Deuda</th><th scope="col" class="numeric-value">Saldo a favor</th><th scope="col">Detalle</th></tr></thead>
             <tbody>
               @for (customer of result.items; track customer.id) {
                 <tr>
                   <td><strong>{{ customer.name }}</strong><small>{{ customer.code }}</small></td>
                   <td>{{ customer.isActive ? 'Activo' : 'Inactivo' }} · {{ customer.creditEnabled ? 'Cuenta habilitada' : 'Sin crédito nuevo' }}</td>
-                  <td>{{ money(customer.totalDebt) }}</td>
-                  <td>{{ money(customer.creditAvailable) }}</td>
+                  <td class="numeric-value">{{ money(customer.totalDebt) }}</td>
+                  <td class="numeric-value">{{ money(customer.creditAvailable) }}</td>
                   <td><button class="secondary-button" type="button" (click)="selectCustomer(customer.id)">Ver estado</button></td>
                 </tr>
               }
@@ -84,11 +84,11 @@
             <h3 id="account-sales-title">Ventas a cuenta · {{ account.sales.total }}</h3>
             @if (account.sales.total === 0) { <p class="state-message">Sin ventas a cuenta.</p> }
             @else { <div class="table-wrap"><table>
-              <thead><tr><th scope="col">Fecha</th><th scope="col">Venta / turno</th><th scope="col">Cargo original</th><th scope="col">Pendiente</th></tr></thead>
+              <thead><tr><th scope="col">Fecha</th><th scope="col">Venta / turno</th><th scope="col" class="numeric-value">Cargo original</th><th scope="col" class="numeric-value">Pendiente</th></tr></thead>
               <tbody>@for (sale of account.sales.items; track sale.saleId) {
                 <tr><td>{{ sale.chargedAtUtc | date:'dd/MM/yyyy HH:mm' }}</td>
                   <td><small>Venta {{ sale.saleId.slice(0, 8) }} · sucursal {{ sale.branchId.slice(0, 8) }} · turno {{ sale.cashierShiftId.slice(0, 8) }}</small></td>
-                  <td>{{ money(sale.originalAmount) }}</td><td>{{ money(sale.outstandingAmount) }}</td></tr>
+                  <td class="numeric-value">{{ money(sale.originalAmount) }}</td><td class="numeric-value">{{ money(sale.outstandingAmount) }}</td></tr>
               }</tbody>
             </table></div> }
             <div class="account-pages">
@@ -105,7 +105,7 @@
             }
             @if (account.receipts.total === 0) { <p class="state-message">Sin cobranzas registradas.</p> }
             @else { <div class="table-wrap"><table>
-              <thead><tr><th scope="col">Recibo / fecha</th><th scope="col">Medio / turno</th><th scope="col">Recibido</th><th scope="col">Imputación</th><th scope="col">Estado</th><th scope="col">Acción</th></tr></thead>
+              <thead><tr><th scope="col">Recibo / fecha</th><th scope="col">Medio / turno</th><th scope="col" class="numeric-value">Recibido</th><th scope="col">Imputación</th><th scope="col">Estado</th><th scope="col">Acción</th></tr></thead>
               <tbody>@for (receipt of account.receipts.items; track receipt.id) {
                 <tr>
                   <td><strong>N.º {{ receipt.receiptNumber }}</strong><small>{{ receipt.createdAtUtc | date:'dd/MM/yyyy HH:mm' }}</small></td>
@@ -116,7 +116,7 @@
                     @if (receipt.changeAmount > 0) { <small>Vuelto: {{ money(receipt.changeAmount) }}</small> }
                     <small>{{ receipt.origin === 'reallocation' ? 'Reasignación · ' : '' }}turno {{ receipt.cashierShiftId.slice(0, 8) }}</small>
                   </td>
-                  <td>{{ money(receipt.amount) }}</td>
+                  <td class="numeric-value">{{ money(receipt.amount) }}</td>
                   <td><small>
                     @for (allocation of receipt.allocations; track allocation.saleId) {
                       Venta {{ allocation.saleId.slice(0, 8) }}: {{ money(allocation.amount) }}<br />
@@ -145,11 +145,11 @@
             <h3 id="account-credits-title">Anticipos aplicados a ventas · {{ account.creditApplications.total }}</h3>
             @if (account.creditApplications.total === 0) { <p class="state-message">Sin anticipos aplicados.</p> }
             @else { <div class="table-wrap"><table>
-              <thead><tr><th scope="col">Fecha</th><th scope="col">Venta / turno</th><th scope="col">Importe</th></tr></thead>
+              <thead><tr><th scope="col">Fecha</th><th scope="col">Venta / turno</th><th scope="col" class="numeric-value">Importe</th></tr></thead>
               <tbody>@for (application of account.creditApplications.items; track application.id) {
                 <tr><td>{{ application.createdAtUtc | date:'dd/MM/yyyy HH:mm' }}</td>
                   <td><small>Venta {{ application.saleId.slice(0, 8) }} · turno {{ application.cashierShiftId.slice(0, 8) }}</small></td>
-                  <td>{{ money(application.amount) }}</td></tr>
+                  <td class="numeric-value">{{ money(application.amount) }}</td></tr>
               }</tbody>
             </table></div> }
             <div class="account-pages">

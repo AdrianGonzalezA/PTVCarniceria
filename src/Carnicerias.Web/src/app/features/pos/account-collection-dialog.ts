@@ -6,6 +6,8 @@ import { CreditCustomerAccount, CreditCustomerClient, CreditCustomerOption,
   CustomerCollectionReceipt, CustomerCollectionRequest } from '../../core/customers/credit-customer-client';
 import { IntegratedGatewayClient } from '../../core/sales/integrated-gateway-client';
 import { MercadoPagoClient, MercadoPagoIntent, MercadoPagoMode } from '../../core/sales/mercado-pago-client';
+import { LocalizedDecimalInputDirective } from '../../shared/localized-decimal-input.directive';
+import { parseLocalizedDecimal } from '../../shared/localized-decimal';
 
 const methods = [
   { id: 'cash', label: 'Efectivo' },
@@ -30,6 +32,7 @@ interface CollectionMercadoPagoDraft {
 
 @Component({
   selector: 'app-account-collection-dialog',
+  imports: [LocalizedDecimalInputDirective],
   templateUrl: './account-collection-dialog.html',
 })
 export class AccountCollectionDialog implements OnInit {
@@ -254,7 +257,7 @@ export class AccountCollectionDialog implements OnInit {
   }
   protected updatePaymentAmount(method: CollectionPaymentMethod, event: Event): void {
     if (method === 'mercadoPago' && this.mercadoPagoOrderActive()) return;
-    const amount = Number((event.target as HTMLInputElement).value.replace(',', '.'));
+    const amount = parseLocalizedDecimal((event.target as HTMLInputElement).value, 2) ?? NaN;
     this.selectedPayments.update((payments) => payments.map((payment) =>
       payment.method === method ? { ...payment, amount } : payment));
     if (this.mercadoPagoOrderActive()) this.saveMercadoPagoDraft();
@@ -708,9 +711,7 @@ export class AccountCollectionDialog implements OnInit {
   }
 
   private parseMoney(value: string): number | null {
-    const normalized = value.trim();
-    if (!/^\d+(?:[.,]\d{1,2})?$/.test(normalized)) return null;
-    const parsed = Number(normalized.replace(',', '.'));
-    return Number.isFinite(parsed) ? parsed : null;
+    const parsed = parseLocalizedDecimal(value, 2);
+    return parsed !== null && parsed >= 0 ? parsed : null;
   }
 }

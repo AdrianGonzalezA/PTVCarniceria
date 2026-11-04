@@ -10,11 +10,12 @@ import { AdminCategoryClient, AdminCategoryOption } from '../../core/admin/admin
 import { AdminProductCode, AdminProductCodeClient } from '../../core/admin/admin-product-code-client';
 import { AdminCostHistory, AdminProduct, AdminProductClient, AdminProductPage, SaleMode } from '../../core/admin/admin-product-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
-import { SelectOnFocusDirective } from '../../shared/select-on-focus.directive';
+import { parseLocalizedDecimal } from '../../shared/localized-decimal';
+import { LocalizedDecimalInputDirective } from '../../shared/localized-decimal-input.directive';
 
 @Component({
   selector: 'app-products-page',
-  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, AdminExcelImportActions, ReactiveFormsModule, DatePipe, DecimalPipe, SelectOnFocusDirective],
+  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, AdminExcelImportActions, ReactiveFormsModule, DatePipe, DecimalPipe, LocalizedDecimalInputDirective],
   templateUrl: './products-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './products-page.scss'],
 })
@@ -173,7 +174,7 @@ export class ProductsPage implements OnInit {
 
   protected save(): void {
     const values = this.editorForm.getRawValue();
-    const cost = values.cost.trim() === '' ? null : Number(values.cost.replace(',', '.'));
+    const cost = values.cost.trim() === '' ? null : parseLocalizedDecimal(values.cost, 2) ?? NaN;
     const editing = this.editingProduct();
     if (this.editorForm.invalid || (cost !== null && (!Number.isFinite(cost) || cost <= 0)) ||
         (editing?.cost != null && cost === null) ||

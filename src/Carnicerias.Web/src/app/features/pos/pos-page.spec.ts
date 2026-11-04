@@ -1441,8 +1441,10 @@ describe('PosPage', () => {
       nonCashSales: 500, accountSales: 0, creditApplied: 0,
       cashCollections: 0, nonCashCollections: 0, salesTotal: 1500, cashBalance: 1100,
       openedAtUtc: '2026-10-06T15:00:00Z', closedAtUtc: null };
-    const closedShift = { ...openShift, closedAtUtc: '2026-10-06T17:00:00Z' };
+    const closedShift = { ...openShift, cashierName: 'cajero-anterior',
+      closedAtUtc: '2026-10-06T17:00:00Z' };
     let isOpen = true;
+    let reopenedCash: number | null = null;
     TestBed.configureTestingModule({ providers: [
       provideRouter([]),
       { provide: SessionClient, useValue: { current: () => of(session) } },
@@ -1452,6 +1454,11 @@ describe('PosPage', () => {
         current: () => of(isOpen ? openShift : null),
         lastClosed: () => of(isOpen ? null : closedShift),
         close: () => { isOpen = false; return of(closedShift); },
+        open: (openingCash: number) => {
+          reopenedCash = openingCash;
+          isOpen = true;
+          return of({ ...openShift, openingCash });
+        },
       } },
       { provide: InventoryClient, useValue: { stock: () => of([]) } },
     ] });
@@ -1473,7 +1480,16 @@ describe('PosPage', () => {
     await reopened.whenStable();
     (reopened.nativeElement.querySelector('.shift-status') as HTMLButtonElement).click();
     reopened.detectChanges();
-    expect(reopened.nativeElement.querySelector('.closed-shift-summary').textContent).toContain('1.100,00');
+    const previous = reopened.nativeElement.querySelector('.closed-shift-summary').textContent;
+    expect(previous).toContain('1.100,00');
+    expect(previous).toContain('cajero-anterior');
+    expect(previous).toContain('06/10/2026');
+    const opening = reopened.nativeElement.querySelector('#opening-cash') as HTMLInputElement;
+    opening.value = '44';
+    opening.dispatchEvent(new Event('input'));
+    reopened.detectChanges();
+    (reopened.nativeElement.querySelector('.shift-dialog .finish-button') as HTMLButtonElement).click();
+    expect(reopenedCash).toBe(44);
   });
 
   it('prefills kilograms from a received piece barcode before adding the product', async () => {

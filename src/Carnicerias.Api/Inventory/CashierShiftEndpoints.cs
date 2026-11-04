@@ -43,12 +43,19 @@ public static class CashierShiftEndpoints
         var context = accessor.Context;
         var shift = await db.CashierShifts.AsNoTracking()
             .Where(item => item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
-                item.CashierId == context.UserId && item.PosTerminalId == accessor.TerminalId &&
+                item.PosTerminalId == accessor.TerminalId &&
                 item.Status == CashierShiftStatus.Closed)
             .OrderByDescending(item => item.ClosedAtUtc)
+            .ThenByDescending(item => item.Id)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return shift is null ? Results.NoContent() : Results.Ok(await ToResponseAsync(db, shift, cancellationToken));
+        if (shift is null) return Results.NoContent();
+        var cashierName = await db.Users.AsNoTracking()
+            .Where(user => user.CompanyId == context.CompanyId && user.Id == shift.CashierId)
+            .Select(user => user.Username)
+            .SingleOrDefaultAsync(cancellationToken);
+        var response = await ToResponseAsync(db, shift, cancellationToken);
+        return Results.Ok(response with { CashierName = cashierName });
     }
 
     private static async Task<IResult> OpenAsync(
@@ -224,5 +231,8 @@ public static class CashierShiftEndpoints
         Guid Id, decimal OpeningCash, DateTimeOffset OpenedAtUtc, DateTimeOffset? ClosedAtUtc,
         decimal CashSales, decimal NonCashSales, decimal AccountSales, decimal SalesTotal, decimal CashBalance,
         decimal CashCollections, decimal NonCashCollections, decimal CreditApplied,
-        decimal PendingApprovedCash, decimal PendingApprovedNonCash);
+        decimal PendingApprovedCash, decimal PendingApprovedNonCash)
+    {
+        public string? CashierName { get; init; }
+    }
 }

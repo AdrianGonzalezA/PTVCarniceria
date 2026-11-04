@@ -760,7 +760,9 @@
         } @else {
           @if (lastClosedShift(); as closed) {
             <div class="shift-summary closed-shift-summary" role="status">
-              <h3 class="shift-summary-title">Último turno cerrado · {{ closed.id.slice(0, 8) }}</h3>
+              <h3 class="shift-summary-title">Último cierre de esta caja · {{ closed.id.slice(0, 8) }}</h3>
+              <span>Cajero anterior</span><strong>{{ closed.cashierName || 'Usuario no disponible' }}</strong>
+              <span>Fecha de cierre</span><strong>{{ closed.closedAtUtc | date:'dd/MM/yyyy HH:mm' }}</strong>
               <span>Fondo inicial</span><strong>{{ formatMoney(closed.openingCash) }}</strong>
               <span>Ventas registradas</span><strong>{{ formatMoney(closed.salesTotal) }}</strong>
               <span>De esas ventas, en efectivo</span><strong>{{ formatMoney(closed.cashSales) }}</strong>

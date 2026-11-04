@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { DatePipe } from '@angular/common';
 import { Component, computed, DestroyRef, ElementRef, inject, HostListener, OnInit, signal, ViewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
@@ -93,7 +94,7 @@ const catalogRefreshIntervalMs = 15_000;
 
 @Component({
   selector: 'app-pos-page',
-  imports: [RouterLink, AccountCollectionDialog],
+  imports: [RouterLink, AccountCollectionDialog, DatePipe],
   templateUrl: './pos-page.html',
 })
 export class PosPage implements OnInit {

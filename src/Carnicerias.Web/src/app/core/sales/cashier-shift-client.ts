@@ -16,6 +16,7 @@ export interface CashierShift {
   readonly pendingApprovedNonCash?: number;
   readonly openedAtUtc: string;
   readonly closedAtUtc: string | null;
+  readonly cashierName?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })

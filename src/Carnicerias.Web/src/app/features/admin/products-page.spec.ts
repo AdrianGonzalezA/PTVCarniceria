@@ -103,6 +103,31 @@ describe('ProductsPage', () => {
     expect(page.querySelector('tbody')?.textContent).toContain('Bondiola');
   });
 
+  it('creates an article with unknown cost and never renders it as zero', () => {
+    const { fixture, http, page } = load([]);
+    page.querySelector<HTMLButtonElement>('.create-button')!.click();
+    fixture.detectChanges();
+    for (const [id, value] of Object.entries({
+      'product-code': 'CER-002', 'product-name': 'Matambre', 'product-unit': 'kg',
+    })) {
+      const input = page.querySelector<HTMLInputElement>(`#${id}`)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+    }
+    fixture.detectChanges();
+    page.querySelector<HTMLFormElement>('.editor-form')!.dispatchEvent(new Event('submit'));
+    const request = http.expectOne('/api/admin/products');
+    expect(request.request.body.cost).toBeNull();
+    request.flush({ ...product, id: 'product-2', code: 'CER-002', name: 'Matambre', cost: null });
+    http.expectOne((candidate) => candidate.url === '/api/admin/products').flush({
+      items: [{ ...product, id: 'product-2', code: 'CER-002', name: 'Matambre', cost: null }],
+      page: 1, pageSize: 20, totalItems: 1, totalPages: 1,
+    });
+    fixture.detectChanges();
+    expect(page.querySelector('tbody')?.textContent).toContain('Sin costo');
+    expect(page.querySelector('tbody')?.textContent).not.toContain('ARS 0,00');
+  });
+
   it('keeps the principal code read-only while editing', () => {
     const { fixture, http, page } = load();
     page.querySelector<HTMLButtonElement>('tbody .edit-button')!.click();

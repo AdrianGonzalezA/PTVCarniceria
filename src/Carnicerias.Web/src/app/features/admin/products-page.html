@@ -66,11 +66,11 @@
               <input id="product-unit" formControlName="unit" maxlength="24" placeholder="kg o un" required />
             </label>
             <label>Costo (ARS)
-              <input id="product-cost" formControlName="cost" inputmode="decimal" placeholder="0,00" required />
+              <input id="product-cost" formControlName="cost" inputmode="decimal" placeholder="Opcional" />
             </label>
           </div>
           @if (editorForm.touched && editorForm.invalid) {
-            <p class="field-error" role="alert">Completá todos los campos. El costo debe ser positivo y tener hasta dos decimales.</p>
+            <p class="field-error" role="alert">Completá los campos obligatorios. Si informás un costo, debe ser positivo y tener hasta dos decimales.</p>
           }
           @if (actionError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
           <p class="editor-note">Los precios de venta se asignan por lista. Un artículo nuevo no se muestra en caja hasta tener precio y stock.</p>
@@ -166,7 +166,7 @@
                     <td><strong>{{ product.name }}</strong><small>{{ product.code }} · {{ product.alternateCodeCount }} alternativos</small></td>
                     <td>{{ product.categoryName }}</td>
                     <td>{{ product.saleMode === 'weight' ? 'Por peso' : 'Por unidad' }} · {{ product.unit }}</td>
-                    <td>ARS {{ product.cost | number:'1.2-2':'es-AR' }}</td>
+                    <td>{{ product.cost === null ? 'Sin costo' : 'ARS ' + (product.cost | number:'1.2-2':'es-AR') }}</td>
                     <td><span class="status" [class.status-active]="product.isActive">{{ product.isActive ? 'Activo' : 'Inactivo' }}</span></td>
                     <td class="row-actions">
                       <button type="button" class="secondary-button edit-button" [disabled]="isSaving() || actionId() !== null" (click)="startEdit(product)">Editar</button>

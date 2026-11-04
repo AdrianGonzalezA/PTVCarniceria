@@ -11,7 +11,7 @@ export interface AdminProduct {
   readonly name: string;
   readonly unit: string;
   readonly saleMode: SaleMode;
-  readonly cost: number;
+  readonly cost: number | null;
   readonly isActive: boolean;
   readonly alternateCodeCount: number;
 }
@@ -38,7 +38,7 @@ export interface AdminProductCreate {
   readonly name: string;
   readonly unit: string;
   readonly saleMode: SaleMode;
-  readonly cost: number;
+  readonly cost: number | null;
 }
 
 export interface AdminProductUpdate {

@@ -56,7 +56,7 @@ public sealed class CatalogProduct
         string name,
         string unit,
         ProductSaleMode saleMode,
-        decimal cost)
+        decimal? cost)
     {
         if (companyId == Guid.Empty || categoryId == Guid.Empty)
             throw new ArgumentException("Company and category ids are required.");
@@ -79,10 +79,10 @@ public sealed class CatalogProduct
     public string Name { get; private set; } = string.Empty;
     public string Unit { get; private set; } = string.Empty;
     public ProductSaleMode SaleMode { get; private set; }
-    public decimal Cost { get; private set; }
+    public decimal? Cost { get; private set; }
     public bool IsActive { get; private set; }
 
-    public void UpdateDetails(Guid categoryId, string name, string unit, ProductSaleMode saleMode, decimal cost)
+    public void UpdateDetails(Guid categoryId, string name, string unit, ProductSaleMode saleMode, decimal? cost)
     {
         if (categoryId == Guid.Empty) throw new ArgumentException("Category id is required.", nameof(categoryId));
         if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 200)
@@ -90,8 +90,10 @@ public sealed class CatalogProduct
         if (string.IsNullOrWhiteSpace(unit) || unit.Trim().Length > 24)
             throw new ArgumentException("Product unit is required and must not exceed 24 characters.", nameof(unit));
         if (!Enum.IsDefined(saleMode)) throw new ArgumentOutOfRangeException(nameof(saleMode));
-        var roundedCost = decimal.Round(cost, 2, MidpointRounding.AwayFromZero);
-        if (roundedCost <= 0 || roundedCost > 9_999_999_999.99m)
+        var roundedCost = cost.HasValue
+            ? decimal.Round(cost.Value, 2, MidpointRounding.AwayFromZero)
+            : (decimal?)null;
+        if (roundedCost is decimal knownCost && (knownCost <= 0 || knownCost > 9_999_999_999.99m))
             throw new ArgumentOutOfRangeException(nameof(cost), "Product cost must fit a positive 12,2 amount.");
 
         CategoryId = categoryId;

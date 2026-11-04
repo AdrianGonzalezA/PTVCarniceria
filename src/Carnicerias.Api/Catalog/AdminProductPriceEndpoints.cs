@@ -175,7 +175,7 @@ public static class AdminProductPriceEndpoints
 
     private sealed record PriceChangeRequest(decimal Amount);
     private sealed record ProductPriceRow(Guid ProductId, string Code, string Name, string Unit,
-        decimal Cost, bool IsActive, decimal? CurrentPrice, DateTimeOffset? EffectiveFromUtc);
+        decimal? Cost, bool IsActive, decimal? CurrentPrice, DateTimeOffset? EffectiveFromUtc);
     private sealed record ProductPricePage(IReadOnlyList<ProductPriceRow> Items, int Page, int PageSize,
         long TotalItems, long TotalPages);
     private sealed record PriceHistoryRow(Guid Id, decimal Amount, DateTimeOffset EffectiveFromUtc,

@@ -36,6 +36,18 @@ public sealed class ProductManagementTests
         Assert.Equal("VAC-001", product.Code);
     }
 
+    [Fact]
+    public void ProductCanStartWithoutCostAndReceiveItsFirstKnownCostLater()
+    {
+        var product = new CatalogProduct(Guid.NewGuid(), Guid.NewGuid(), "VAC-002",
+            "Aguja", "kg", ProductSaleMode.Weight, null);
+
+        Assert.Null(product.Cost);
+        product.UpdateDetails(product.CategoryId, product.Name, product.Unit,
+            product.SaleMode, 145.125m);
+        Assert.Equal(145.13m, product.Cost);
+    }
+
     [Theory]
     [InlineData("", "kg", 100)]
     [InlineData("Asado", "", 100)]

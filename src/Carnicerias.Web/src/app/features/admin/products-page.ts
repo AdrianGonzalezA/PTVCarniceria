@@ -31,7 +31,7 @@ export class ProductsPage implements OnInit {
     name: ['', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(200)]],
     unit: ['', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(24)]],
     saleMode: ['weight' as SaleMode, Validators.required],
-    cost: ['', [Validators.required, Validators.pattern(/^\d{1,10}(?:[,.]\d{1,2})?$/)]],
+    cost: ['', Validators.pattern(/^\d{1,10}(?:[,.]\d{1,2})?$/)],
   });
   protected readonly session = signal<CurrentSession | null>(null);
   protected readonly categories = signal<readonly AdminCategoryOption[]>([]);
@@ -133,7 +133,7 @@ export class ProductsPage implements OnInit {
   protected startEdit(product: AdminProduct): void {
     this.editingProduct.set(product);
     this.editorForm.reset({ categoryId: product.categoryId, code: product.code, name: product.name,
-      unit: product.unit, saleMode: product.saleMode, cost: product.cost.toFixed(2) });
+      unit: product.unit, saleMode: product.saleMode, cost: product.cost?.toFixed(2) ?? '' });
     this.actionError.set(null);
     this.actionMessage.set(null);
     this.editorOpen.set(true);
@@ -172,22 +172,26 @@ export class ProductsPage implements OnInit {
 
   protected save(): void {
     const values = this.editorForm.getRawValue();
-    const cost = Number(values.cost.replace(',', '.'));
-    if (this.editorForm.invalid || !Number.isFinite(cost) || cost <= 0 ||
+    const cost = values.cost.trim() === '' ? null : Number(values.cost.replace(',', '.'));
+    const editing = this.editingProduct();
+    if (this.editorForm.invalid || (cost !== null && (!Number.isFinite(cost) || cost <= 0)) ||
+        (editing?.cost != null && cost === null) ||
         this.isSaving() || this.codeSaving()) {
       this.editorForm.markAllAsTouched();
-      if (cost <= 0) this.actionError.set('Ingresá un costo mayor que cero.');
+      if (cost !== null && cost <= 0) this.actionError.set('Ingresá un costo mayor que cero.');
+      if (editing?.cost != null && cost === null)
+        this.actionError.set('Conservá el costo ya informado; no se puede borrar su vigencia.');
       return;
     }
     this.isSaving.set(true);
     this.actionError.set(null);
     this.actionMessage.set(null);
-    const editing = this.editingProduct();
     const details = { categoryId: values.categoryId, name: values.name.trim(),
-      unit: values.unit.trim(), saleMode: values.saleMode, cost };
+      unit: values.unit.trim(), saleMode: values.saleMode,
+      ...(cost === null ? {} : { cost }) };
     const operation = editing
       ? this.productsClient.update(editing.id, details)
-      : this.productsClient.create({ ...details, code: values.code.trim() });
+      : this.productsClient.create({ ...details, code: values.code.trim(), cost });
     operation.subscribe({
       next: (product) => {
         this.isSaving.set(false);

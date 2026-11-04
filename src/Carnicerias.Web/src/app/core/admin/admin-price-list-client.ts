@@ -29,7 +29,7 @@ export interface AdminProductPrice {
   readonly code: string;
   readonly name: string;
   readonly unit: string;
-  readonly cost: number;
+  readonly cost: number | null;
   readonly isActive: boolean;
   readonly currentPrice: number | null;
   readonly effectiveFromUtc: string | null;

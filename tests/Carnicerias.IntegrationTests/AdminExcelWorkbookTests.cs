@@ -44,6 +44,28 @@ public sealed class AdminExcelWorkbookTests
     }
 
     [Fact]
+    public void ProductWorkbookAllowsEmptyCostCellWithoutTreatingItAsZero()
+    {
+        var bytes = AdminExcelWorkbook.CreateTemplate("products");
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var sheet = workbook.Worksheet("Articulos");
+        sheet.Cell(2, 1).Value = "00124";
+        sheet.Cell(2, 2).Value = "Aguja";
+        sheet.Cell(2, 3).Value = "Carnes";
+        sheet.Cell(2, 4).Value = "weight";
+        sheet.Cell(2, 5).Value = "kg";
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+
+        var parsed = AdminExcelWorkbook.Read("products", stream.ToArray());
+
+        Assert.Empty(parsed.Issues);
+        var row = Assert.Single(parsed.Rows);
+        Assert.Equal("00124", row.Text("Codigo"));
+        Assert.Null(row.NumberValue("CostoARS"));
+    }
+
+    [Fact]
     public void FormulaIsRejectedWithoutEvaluation()
     {
         var bytes = AdminExcelWorkbook.CreateTemplate("categories");

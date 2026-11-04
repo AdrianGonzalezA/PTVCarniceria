@@ -210,12 +210,13 @@ public static class AdminExcelImportProcessor
             if (!ValidText(unit, 24)) AddIssue(issues, row, "Unidad", "INVALID_UNIT", "Unidad de hasta 24 caracteres requerida.");
             if (modeText is not ("weight" or "unit"))
                 AddIssue(issues, row, "ModalidadVenta", "INVALID_MODE", "Usá weight o unit.");
-            if (!ValidMoney(cost)) AddIssue(issues, row, "CostoARS", "INVALID_COST", "Costo positivo con hasta dos decimales requerido.");
+            if (cost is not null && !ValidMoney(cost))
+                AddIssue(issues, row, "CostoARS", "INVALID_COST", "Costo positivo con hasta dos decimales requerido.");
             if (!ValidText(categoryName, 120) || !categoriesByName.TryGetValue(categoryName!, out var matches) ||
                 matches.Length != 1 || !matches[0].IsActive)
                 AddIssue(issues, row, "Categoria", "CATEGORY_NOT_ACTIVE", "La categoría debe existir y estar activa en la empresa.");
             if (!ValidText(code, 80) || !ValidText(name, 200) || !ValidText(unit, 24) ||
-                modeText is not ("weight" or "unit") || !ValidMoney(cost) ||
+                modeText is not ("weight" or "unit") || (cost is not null && !ValidMoney(cost)) ||
                 !ValidText(categoryName, 120) || !categoriesByName.TryGetValue(categoryName!, out matches) ||
                 matches.Length != 1 || !matches[0].IsActive) continue;
             if (alternatesByCode.ContainsKey(normalized))
@@ -223,10 +224,11 @@ public static class AdminExcelImportProcessor
             else
             {
                 var product = new CatalogProduct(companyId, matches[0].Id, code!, name!, unit!,
-                    modeText == "weight" ? ProductSaleMode.Weight : ProductSaleMode.Unit, cost!.Value);
+                    modeText == "weight" ? ProductSaleMode.Weight : ProductSaleMode.Unit, cost);
                 productsByCode.Add(normalized, product);
                 newProducts.Add(product);
-                outcomes.Add(new ImportRowOutcome(row.Sheet, row.Number, "create", "Crear artículo y vigencia inicial de costo."));
+                outcomes.Add(new ImportRowOutcome(row.Sheet, row.Number, "create",
+                    cost is null ? "Crear artículo con costo desconocido." : "Crear artículo y vigencia inicial de costo."));
             }
         }
 
@@ -261,8 +263,9 @@ public static class AdminExcelImportProcessor
         if (apply && issues.Count == 0)
         {
             db.CatalogProducts.AddRange(newProducts);
-            db.ProductCostVersions.AddRange(newProducts.Select(product => new ProductCostVersion(
-                companyId, product.Id, product.Cost, now, userId)));
+            db.ProductCostVersions.AddRange(newProducts.Where(product => product.Cost.HasValue)
+                .Select(product => new ProductCostVersion(
+                    companyId, product.Id, product.Cost!.Value, now, userId)));
             db.ProductCodes.AddRange(newCodes);
         }
     }

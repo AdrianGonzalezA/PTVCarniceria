@@ -89,7 +89,7 @@ public static class AdminProductEndpoints
         if (request is null || request.CategoryId == Guid.Empty ||
             !ValidText(request.Code, 80) || !ValidText(request.Name, 200) ||
             !ValidText(request.Unit, 24) || !TryParseSaleMode(request.SaleMode, out var saleMode) ||
-            !ValidCost(request.Cost))
+            (request.Cost.HasValue && !ValidCost(request.Cost.Value)))
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var companyId = contextAccessor.Context.CompanyId;
@@ -106,8 +106,9 @@ public static class AdminProductEndpoints
         var product = new CatalogProduct(companyId, category.Id, request.Code,
             request.Name, request.Unit, saleMode, request.Cost);
         db.CatalogProducts.Add(product);
-        db.ProductCostVersions.Add(new ProductCostVersion(companyId, product.Id,
-            product.Cost, timeProvider.GetUtcNow(), contextAccessor.Context.UserId));
+        if (product.Cost is decimal initialCost)
+            db.ProductCostVersions.Add(new ProductCostVersion(companyId, product.Id,
+                initialCost, timeProvider.GetUtcNow(), contextAccessor.Context.UserId));
         try
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -168,23 +169,30 @@ public static class AdminProductEndpoints
             : product.Cost;
         if (nextCost != product.Cost)
         {
+            if (nextCost is not decimal knownCost)
+                return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
             var currentCost = await db.ProductCostVersions.SingleOrDefaultAsync(version =>
                 version.CompanyId == companyId && version.ProductId == productId &&
                 version.EffectiveToUtc == null, cancellationToken);
-            if (currentCost is null) return Error(StatusCodes.Status409Conflict, "COST_HISTORY_MISSING");
             var now = timeProvider.GetUtcNow();
-            if (now <= currentCost.EffectiveFromUtc)
-                return Error(StatusCodes.Status409Conflict, "COST_NOT_YET_EFFECTIVE");
-            currentCost.CloseAt(now);
-            await db.SaveChangesAsync(cancellationToken);
+            if (product.Cost is not null)
+            {
+                if (currentCost is null) return Error(StatusCodes.Status409Conflict, "COST_HISTORY_MISSING");
+                if (now <= currentCost.EffectiveFromUtc)
+                    return Error(StatusCodes.Status409Conflict, "COST_NOT_YET_EFFECTIVE");
+                currentCost.CloseAt(now);
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            else if (currentCost is not null)
+                return Error(StatusCodes.Status409Conflict, "COST_HISTORY_UNEXPECTED");
             db.ProductCostVersions.Add(new ProductCostVersion(companyId, productId,
-                nextCost, now, contextAccessor.Context.UserId));
+                knownCost, now, contextAccessor.Context.UserId));
         }
 
         if (request.CategoryId is not null || request.Name is not null || request.Unit is not null ||
             request.SaleMode is not null || request.Cost is not null)
             product.UpdateDetails(nextCategoryId, request.Name ?? product.Name, nextUnit,
-                nextMode, request.Cost ?? product.Cost);
+                nextMode, nextCost);
         if (request.IsActive is bool isActive)
         {
             if (isActive) product.Activate();
@@ -285,13 +293,13 @@ public static class AdminProductEndpoints
         statusCode: statusCode);
 
     private sealed record ProductCreateRequest(
-        Guid CategoryId, string Code, string Name, string Unit, string SaleMode, decimal Cost);
+        Guid CategoryId, string Code, string Name, string Unit, string SaleMode, decimal? Cost);
     private sealed record ProductUpdateRequest(
         Guid? CategoryId, string? Name, string? Unit, string? SaleMode, decimal? Cost,
         bool? IsActive, string? Code);
     private sealed record ProductResponse(
         Guid Id, Guid CategoryId, string CategoryName, string Code, string Name, string Unit,
-        string SaleMode, decimal Cost, bool IsActive, int AlternateCodeCount);
+        string SaleMode, decimal? Cost, bool IsActive, int AlternateCodeCount);
     private sealed record ProductPage(
         IReadOnlyList<ProductResponse> Items, int Page, int PageSize, long TotalItems, long TotalPages);
     private sealed record CostHistoryRow(Guid Id, decimal Amount, DateTimeOffset EffectiveFromUtc,

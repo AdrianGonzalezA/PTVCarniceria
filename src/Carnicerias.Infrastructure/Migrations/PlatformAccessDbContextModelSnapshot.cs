@@ -435,7 +435,7 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<Guid>("CompanyId")
                         .HasColumnType("uuid");
 
-                    b.Property<decimal>("Cost")
+                    b.Property<decimal?>("Cost")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 

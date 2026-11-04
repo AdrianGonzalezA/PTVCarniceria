@@ -72,6 +72,19 @@ describe('PriceListsPage', () => {
     expect(page.querySelector('tbody')?.textContent).toContain('1 precio');
   });
 
+  it('shows unknown cost without blocking a sale price', () => {
+    const { fixture, http, page } = load();
+    page.querySelector<HTMLButtonElement>('tbody .prices-button')!.click();
+    http.expectOne((request) => request.url === '/api/admin/price-lists/list-1/prices').flush({
+      items: [{ productId: 'product-1', code: 'VAC-002', name: 'Aguja', unit: 'kg',
+        cost: null, isActive: true, currentPrice: 600, effectiveFromUtc: '2026-10-08T00:00:00Z' }],
+      page: 1, pageSize: 20, totalItems: 1, totalPages: 1,
+    });
+    fixture.detectChanges();
+    expect(page.querySelector('.price-row')?.textContent).toContain('Sin costo');
+    expect(page.querySelector('.price-row')?.textContent).toContain('600,00');
+  });
+
   it('edits and changes list status in dialogs', () => {
     const { fixture, http, page } = load();
     page.querySelector<HTMLButtonElement>('tbody .row-actions button')!.click();

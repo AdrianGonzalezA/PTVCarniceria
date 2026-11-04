@@ -170,7 +170,7 @@
                     @for (product of prices.items; track product.productId) {
                       <tr class="price-row">
                         <td><strong>{{ product.name }}</strong><small>{{ product.code }} · {{ product.unit }} {{ product.isActive ? '' : '· Inactivo' }}</small></td>
-                        <td>ARS {{ product.cost | number:'1.2-2':'es-AR' }}</td>
+                        <td>{{ product.cost === null ? 'Sin costo' : 'ARS ' + (product.cost | number:'1.2-2':'es-AR') }}</td>
                         <td>{{ product.currentPrice === null ? 'Sin precio' : 'ARS ' + (product.currentPrice | number:'1.2-2':'es-AR') }}</td>
                         <td class="row-actions">
                           <button type="button" class="secondary-button set-price-button" (click)="editPrice(product)">Fijar precio</button>
@@ -201,7 +201,7 @@
       <app-admin-detail-dialog labelledBy="price-editor-title" [compact]="true" [canClose]="!priceSaving()" (closed)="cancelPrice()">
         <form class="price-form" [formGroup]="priceForm" (ngSubmit)="savePrice()">
           <h3 id="price-editor-title">Precio de {{ product.name }}</h3>
-          <p>Costo actual: ARS {{ product.cost | number:'1.2-2':'es-AR' }}. El nuevo precio será vigente desde ahora.</p>
+          <p>Costo actual: {{ product.cost === null ? 'Sin costo' : 'ARS ' + (product.cost | number:'1.2-2':'es-AR') }}. El nuevo precio será vigente desde ahora.</p>
           <label for="new-price">Nuevo precio (ARS)</label>
           <input id="new-price" formControlName="amount" inputmode="decimal" placeholder="0,00" required />
           @if (priceForm.touched && priceForm.invalid) { <p class="field-error" role="alert">Ingresá un precio positivo de hasta dos decimales.</p> }

@@ -232,9 +232,11 @@ public static class MercadoPagoPaymentEndpoints
             if (request.CheckoutInstrumentId is Guid linkedInstrumentId)
                 intent.AttachToCheckout(linkedInstrumentId);
             db.PointPaymentIntents.Add(intent);
-            try { await db.SaveChangesAsync(cancellationToken); }
-            catch (DbUpdateException) { return Error(409, "MERCADO_PAGO_ORDER_ACTIVE"); }
         }
+        if (!intent.TryClaimProviderCreate(clock.GetUtcNow()))
+            return Error(409, "MERCADO_PAGO_RECONCILIATION_REQUIRED");
+        try { await db.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateException) { return Error(409, "MERCADO_PAGO_ORDER_ACTIVE"); }
         if (request.CheckoutInstrumentId is Guid operationInstrumentId)
         {
             checkout!.LinkMercadoPago(operationInstrumentId, intent.Id, clock.GetUtcNow());
@@ -251,7 +253,7 @@ public static class MercadoPagoPaymentEndpoints
                 catch (Exception exception) when (exception is HttpRequestException or
                     TaskCanceledException or InvalidDataException or JsonException)
                 {
-                    if (intent.Status == PointPaymentStatus.Prepared)
+                    if (intent.ProviderOrderId is null && intent.QrData is null)
                     {
                         intent.RejectBeforeProviderOrder(clock.GetUtcNow());
                         await SyncCheckoutAsync(intent, db, clock, cancellationToken);

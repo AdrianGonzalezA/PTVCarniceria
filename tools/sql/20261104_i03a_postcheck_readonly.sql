@@ -42,8 +42,8 @@ SELECT (SELECT count(*) FROM payments_cash.point_payment_intents
        (SELECT count(*) FROM payments_cash.sale_payments
         WHERE "CheckoutInstrumentId" IS NOT NULL) AS linked_sale_payments;
 
-SELECT count(*) AS residual_i03a_fixture_companies
+SELECT count(*) AS residual_i03_fixture_companies
 FROM platform_access.companies
-WHERE "Code" LIKE 'I03A-%';
+WHERE "Code" LIKE 'I03A-%' OR "Code" LIKE 'I03B-%';
 
 COMMIT;

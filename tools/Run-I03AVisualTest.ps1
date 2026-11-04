@@ -1,4 +1,4 @@
-param([switch]$ModelOnly)
+param([switch]$ModelOnly, [switch]$MercadoPago)
 
 $ErrorActionPreference = 'Stop'
 $container = 'carnicerias-pos-test-20261007'
@@ -37,8 +37,11 @@ try {
     }
     else {
         $env:CARNICERIAS_I03A_WRITES_APPROVED = 'I03A_APPROVED'
+        $filter = if ($MercadoPago) {
+            'FullyQualifiedName~MercadoPagoCheckoutVisualEndpointTests'
+        } else { 'FullyQualifiedName~SaleCheckoutVisualEndpointTests' }
         & dotnet test (Join-Path $PSScriptRoot '..\tests\Carnicerias.IntegrationTests\Carnicerias.IntegrationTests.csproj') `
-            --no-restore --filter 'FullyQualifiedName~SaleCheckoutVisualEndpointTests' `
+            --no-restore --filter $filter `
             --logger 'console;verbosity=normal'
         if ($LASTEXITCODE -ne 0) { throw "Falló la prueba HTTP I03A: $LASTEXITCODE" }
     }

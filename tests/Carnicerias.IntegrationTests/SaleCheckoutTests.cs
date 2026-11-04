@@ -92,6 +92,7 @@ public sealed class SaleCheckoutTests
         checkout.LinkMercadoPago(operation, intentId, Now);
         checkout.SyncMercadoPago(operation, PointPaymentStatus.NeedsReconciliation,
             "order-001", Now);
+        checkout.LinkMercadoPago(operation, intentId, Now);
         Assert.Equal(SaleCheckoutStatus.Committed, checkout.Status);
         Assert.Throws<InvalidOperationException>(() => checkout.Complete(Guid.NewGuid(), Now));
 

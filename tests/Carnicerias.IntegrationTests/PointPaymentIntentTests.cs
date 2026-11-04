@@ -66,6 +66,13 @@ public sealed class PointPaymentIntentTests
         Assert.Null(intent.ProviderOrderId);
         Assert.Throws<InvalidOperationException>(() =>
             intent.RejectBeforeProviderOrder(DateTimeOffset.UtcNow));
+
+        var claimed = new PointPaymentIntent(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "SUC1CAJA1", 125m,
+            DateTimeOffset.UtcNow, MercadoPagoOrderMode.StaticQr);
+        Assert.True(claimed.TryClaimProviderCreate(DateTimeOffset.UtcNow));
+        claimed.RejectBeforeProviderOrder(DateTimeOffset.UtcNow);
+        Assert.Equal(PointPaymentStatus.Rejected, claimed.Status);
     }
 
     [Fact]
@@ -78,6 +85,42 @@ public sealed class PointPaymentIntentTests
         Assert.Equal(PointPaymentStatus.NeedsReconciliation, intent.Status);
         Assert.Null(intent.ProviderOrderId);
     }
+
+    [Fact]
+    public void ProviderCreateClaimBlocksConcurrentCallsAndKeepsTheSameIdempotencyKey()
+    {
+        var now = new DateTimeOffset(2026, 11, 4, 12, 0, 0, TimeSpan.Zero);
+        var intent = new PointPaymentIntent(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "SUC1CAJA1", 125m,
+            now, MercadoPagoOrderMode.DynamicQr);
+        var originalKey = intent.IdempotencyKey;
+
+        Assert.True(intent.TryClaimProviderCreate(now));
+        Assert.Equal(PointPaymentStatus.Pending, intent.Status);
+        Assert.False(intent.TryClaimProviderCreate(now.AddSeconds(30)));
+        Assert.True(intent.TryClaimProviderCreate(now.AddSeconds(61)));
+        Assert.Equal(originalKey, intent.IdempotencyKey);
+        intent.MarkUncertain(now.AddSeconds(62));
+        Assert.True(intent.TryClaimProviderCreate(now.AddSeconds(63)));
+        Assert.False(intent.TryClaimProviderCreate(now.AddHours(23)));
+    }
+
+    [Fact]
+    public void KnownOrFinalProviderOutcomesCannotBeClaimedAgain()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var intent = new PointPaymentIntent(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "SUC1CAJA1", 125m,
+            now, MercadoPagoOrderMode.DynamicQr);
+        Assert.True(intent.TryClaimProviderCreate(now));
+        intent.RecordProviderState("ORD1", "PAY1", "created", "created", null,
+            false, now.AddSeconds(1));
+        Assert.False(intent.TryClaimProviderCreate(now.AddMinutes(2)));
+        intent.RecordProviderState("ORD1", "PAY1", "processed", "processed", "accredited",
+            true, now.AddMinutes(3));
+        Assert.False(intent.TryClaimProviderCreate(now.AddMinutes(4)));
+    }
+
     private static PointPaymentIntent NewIntent() => new(
         Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
         Guid.NewGuid(), "TERMINAL_1", 2375m, DateTimeOffset.UtcNow);

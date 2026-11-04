@@ -142,9 +142,27 @@ public sealed class PointPaymentIntent
         UpdatedAtUtc = now.ToUniversalTime();
     }
 
+    /// <summary>Claims the provider create call before leaving the draft transaction.</summary>
+    public bool TryClaimProviderCreate(DateTimeOffset now)
+    {
+        var at = now.ToUniversalTime();
+        if (ProviderOrderId is not null || Status is not
+            (PointPaymentStatus.Prepared or PointPaymentStatus.Pending or
+             PointPaymentStatus.NeedsReconciliation) ||
+            at >= CreatedAtUtc.AddHours(23) ||
+            Status == PointPaymentStatus.Pending && at < UpdatedAtUtc.AddSeconds(60))
+            return false;
+        Status = PointPaymentStatus.Pending;
+        UpdatedAtUtc = at;
+        return true;
+    }
+
     public void RejectBeforeProviderOrder(DateTimeOffset now)
     {
-        if (Status != PointPaymentStatus.Prepared || ProviderOrderId is not null)
+        if (Status != PointPaymentStatus.Prepared &&
+            !(Status == PointPaymentStatus.Pending && Mode == MercadoPagoOrderMode.StaticQr &&
+              QrData is null) ||
+            ProviderOrderId is not null)
             throw new InvalidOperationException("Only an unsent payment may be rejected locally.");
         Status = PointPaymentStatus.Rejected;
         UpdatedAtUtc = now.ToUniversalTime();

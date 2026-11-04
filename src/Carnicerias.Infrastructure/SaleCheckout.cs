@@ -174,7 +174,8 @@ public sealed class SaleCheckout
     {
         if (Find(instrumentId).PointPaymentIntentId == intentId &&
             Find(instrumentId).Status is SaleCheckoutInstrumentStatus.InProcess or
-                SaleCheckoutInstrumentStatus.Approved) return;
+                SaleCheckoutInstrumentStatus.Approved or
+                SaleCheckoutInstrumentStatus.Uncertain) return;
         EnsureCommitted();
         Find(instrumentId).LinkMercadoPago(intentId, now);
         Events.Add(new SaleCheckoutEvent("Prepared", "InProcess", instrumentId, CashierId,

@@ -960,12 +960,27 @@ describe('PosPage', () => {
     fixture.detectChanges();
     (fixture.nativeElement.querySelector('.product-card') as HTMLButtonElement).click();
     fixture.detectChanges();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
     expect(fixture.nativeElement.querySelector('.scale-read-button')).toBeNull();
     expect(fixture.nativeElement.querySelector('.pos-dialog').textContent)
       .toContain('peso manualmente');
-    expect(fixture.nativeElement.querySelector('#product-quantity')).not.toBeNull();
+    const quantity = fixture.nativeElement.querySelector('#product-quantity') as HTMLInputElement;
+    expect(quantity.type).toBe('text');
+    expect(document.activeElement).toBe(quantity);
+    expect(quantity.selectionStart).toBe(0);
+    expect(quantity.selectionEnd).toBe(quantity.value.length);
     expect(readScale).not.toHaveBeenCalled();
+    (fixture.nativeElement.querySelector('.pos-dialog .dialog-close') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    const scan = fixture.nativeElement.querySelector('#product-search') as HTMLInputElement;
+    expect(document.activeElement).toBe(scan);
+    scan.value = '1002';
+    scan.blur();
+    scan.focus();
+    expect(scan.selectionStart).toBe(0);
+    expect(scan.selectionEnd).toBe(scan.value.length);
   });
 
   it('offers lists from the active branch without displaying demo prices as real prices', () => {
@@ -1217,7 +1232,7 @@ describe('PosPage', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.product-facts').textContent).toContain('/ paquete');
     quantity = fixture.nativeElement.querySelector('#product-quantity') as HTMLInputElement;
-    expect(quantity.step).toBe('1');
+    expect(quantity.inputMode).toBe('numeric');
     quantity.value = '3';
     quantity.dispatchEvent(new Event('input', { bubbles: true }));
     fixture.detectChanges();

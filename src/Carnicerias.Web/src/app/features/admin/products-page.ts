@@ -10,10 +10,11 @@ import { AdminCategoryClient, AdminCategoryOption } from '../../core/admin/admin
 import { AdminProductCode, AdminProductCodeClient } from '../../core/admin/admin-product-code-client';
 import { AdminCostHistory, AdminProduct, AdminProductClient, AdminProductPage, SaleMode } from '../../core/admin/admin-product-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
+import { SelectOnFocusDirective } from '../../shared/select-on-focus.directive';
 
 @Component({
   selector: 'app-products-page',
-  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, AdminExcelImportActions, ReactiveFormsModule, DatePipe, DecimalPipe],
+  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, AdminExcelImportActions, ReactiveFormsModule, DatePipe, DecimalPipe, SelectOnFocusDirective],
   templateUrl: './products-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './products-page.scss'],
 })

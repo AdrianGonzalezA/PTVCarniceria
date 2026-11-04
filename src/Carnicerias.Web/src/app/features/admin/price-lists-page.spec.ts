@@ -174,4 +174,21 @@ describe('PriceListsPage', () => {
     fixture.detectChanges();
     expect(page.querySelector('dialog[open] .detail-panel')).not.toBeNull();
   });
+
+  it('focuses the price field and selects its current value for replacement', () => {
+    const { fixture, http, page } = load();
+    page.querySelector<HTMLButtonElement>('tbody .prices-button')!.click();
+    http.expectOne((request) => request.url === '/api/admin/price-lists/list-1/prices').flush({
+      items: [{ productId: 'product-1', code: 'VAC-001', name: 'Asado', unit: 'kg',
+        cost: 500, isActive: true, currentPrice: 600, effectiveFromUtc: '2026-10-08T00:00:00Z' }],
+      page: 1, pageSize: 20, totalItems: 1, totalPages: 1,
+    });
+    fixture.detectChanges();
+    page.querySelector<HTMLButtonElement>('.price-row .set-price-button')!.click();
+    fixture.detectChanges();
+    const amount = page.querySelector<HTMLInputElement>('#new-price')!;
+    expect(document.activeElement).toBe(amount);
+    expect(amount.selectionStart).toBe(0);
+    expect(amount.selectionEnd).toBe(amount.value.length);
+  });
 });

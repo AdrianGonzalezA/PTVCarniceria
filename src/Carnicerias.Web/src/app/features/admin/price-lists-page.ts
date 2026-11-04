@@ -11,10 +11,11 @@ import {
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { AdminDetailDialog } from './admin-detail-dialog';
 import { AdminExcelImportActions } from './admin-excel-import-actions';
+import { SelectOnFocusDirective } from '../../shared/select-on-focus.directive';
 
 @Component({
   selector: 'app-price-lists-page',
-  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, AdminExcelImportActions, ReactiveFormsModule, DatePipe, DecimalPipe],
+  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, AdminExcelImportActions, ReactiveFormsModule, DatePipe, DecimalPipe, SelectOnFocusDirective],
   templateUrl: './price-lists-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './price-lists-page.scss'],
 })

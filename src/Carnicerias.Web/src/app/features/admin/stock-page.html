@@ -67,13 +67,13 @@
       }
     </section>
     @if (selected(); as item) {
-      <app-admin-detail-dialog labelledBy="stock-adjustment-title" [compact]="true"
+      <app-admin-detail-dialog labelledBy="stock-adjustment-title" initialFocusId="stock-delta" [compact]="true"
         [canClose]="!saving()" (closed)="cancelAdjustment()">
         <form class="editor-form stock-form" [formGroup]="adjustmentForm" (ngSubmit)="saveAdjustment()">
           <h2 id="stock-adjustment-title">Ajustar {{ item.name }}</h2>
           <p>Actual: {{ formatQuantity(item.onHand, item) }} {{ item.unit ?? 'u.' }} · Reservado: {{ formatQuantity(item.reserved, item) }} · Inmovilizado: {{ formatQuantity(item.quarantined ?? 0, item) }} · Disponible: {{ formatQuantity(item.available, item) }}</p>
           <label for="stock-delta">Variación de cantidad (positiva para entrada, negativa para salida)</label>
-          <input id="stock-delta" type="number" formControlName="quantityDelta" [attr.step]="item.saleMode === 'unit' ? '1' : '0.001'" aria-describedby="stock-delta-help" required />
+          <input id="stock-delta" type="text" [attr.inputmode]="item.saleMode === 'unit' ? 'numeric' : 'decimal'" formControlName="quantityDelta" aria-describedby="stock-delta-help" appSelectOnFocus required />
           <p id="stock-delta-help" class="field-hint">{{ item.saleMode === 'unit' ? 'Sólo unidades enteras.' : 'Hasta tres decimales.' }}</p>
           <label for="stock-reason">Descripción (opcional)</label>
           <input id="stock-reason" formControlName="reason" maxlength="240" autocomplete="off" />

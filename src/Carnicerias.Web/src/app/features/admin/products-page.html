@@ -39,7 +39,7 @@
       @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
 
       @if (editorOpen()) {
-        <app-admin-detail-dialog labelledBy="product-editor-title" [canClose]="!isSaving() && !codeSaving()" (closed)="cancelEdit()">
+        <app-admin-detail-dialog labelledBy="product-editor-title" [initialFocusId]="editingProduct() ? 'product-name' : 'product-code'" [canClose]="!isSaving() && !codeSaving()" (closed)="cancelEdit()">
         <form class="editor-form product-editor" [formGroup]="editorForm" (ngSubmit)="save()">
           <h3 id="product-editor-title">{{ editingProduct() ? 'Información del artículo' : 'Nuevo artículo' }}</h3>
           <div class="field-grid">
@@ -66,7 +66,7 @@
               <input id="product-unit" formControlName="unit" maxlength="24" placeholder="kg o un" required />
             </label>
             <label>Costo (ARS)
-              <input id="product-cost" formControlName="cost" inputmode="decimal" placeholder="Opcional" />
+              <input id="product-cost" formControlName="cost" inputmode="decimal" placeholder="Opcional" appSelectOnFocus />
             </label>
           </div>
           @if (editorForm.touched && editorForm.invalid) {

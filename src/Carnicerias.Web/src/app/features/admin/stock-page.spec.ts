@@ -67,6 +67,19 @@ describe('StockPage', () => {
     expect(page.querySelector('.stock-row')?.textContent).toContain('10,000 kg');
   });
 
+  it('focuses the quantity field on adjustment and selects it when revisited', () => {
+    const { fixture, page } = load();
+    page.querySelector<HTMLButtonElement>('.stock-row button')!.click();
+    fixture.detectChanges();
+    const quantity = page.querySelector<HTMLInputElement>('#stock-delta')!;
+    expect(document.activeElement).toBe(quantity);
+    quantity.value = '1.250';
+    page.querySelector<HTMLInputElement>('#stock-reason')!.focus();
+    quantity.focus();
+    expect(quantity.selectionStart).toBe(0);
+    expect(quantity.selectionEnd).toBe(quantity.value.length);
+  });
+
   it('shows branch stock and persists a positive adjustment with an operation id', () => {
     const { fixture, http, page } = load();
     expect(page.textContent).toContain('Centro');

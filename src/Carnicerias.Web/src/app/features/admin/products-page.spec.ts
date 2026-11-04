@@ -147,6 +147,18 @@ describe('ProductsPage', () => {
     expect(page.querySelector('tbody')?.textContent).toContain('Asado especial');
   });
 
+  it('focuses the editable name and selects a known cost when revisited', () => {
+    const { fixture, http, page } = load();
+    page.querySelector<HTMLButtonElement>('tbody .edit-button')!.click();
+    http.expectOne('/api/admin/products/product-1/codes').flush([]);
+    fixture.detectChanges();
+    expect(document.activeElement).toBe(page.querySelector('#product-name'));
+    const cost = page.querySelector<HTMLInputElement>('#product-cost')!;
+    cost.focus();
+    expect(cost.selectionStart).toBe(0);
+    expect(cost.selectionEnd).toBe(cost.value.length);
+  });
+
   it('adds an alternate code and preserves it when inactivated', () => {
     const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { fixture, http, page } = load();

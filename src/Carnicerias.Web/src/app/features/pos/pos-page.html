@@ -70,6 +70,7 @@
             [value]="searchText()"
             (input)="updateSearch($event)"
             (keydown.enter)="submitSearch($event)"
+            appSelectOnFocus
           />
           <span aria-hidden="true">⌕</span>
         </div>
@@ -387,13 +388,14 @@
         <label class="quantity-field" for="product-quantity">
           {{ product.mode === 'weight' ? 'Peso en kilogramos' : 'Cantidad (' + unitLabel(product) + ')' }}
           <input
+            #quantityInput
             id="product-quantity"
-            type="number"
-            [min]="product.mode === 'weight' ? 0.001 : 1"
-            [step]="product.mode === 'weight' ? 0.001 : 1"
+            type="text"
+            [attr.inputmode]="product.mode === 'weight' ? 'decimal' : 'numeric'"
             [readOnly]="!!scannedPieceIdentifier()"
             [value]="quantityDraft()"
             (input)="updateQuantity($event)"
+            appSelectOnFocus
           />
         </label>
         @if (product.mode === 'weight') {

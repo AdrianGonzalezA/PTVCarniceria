@@ -38,7 +38,7 @@
       @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
 
       @if (editorOpen()) {
-        <app-admin-detail-dialog labelledBy="price-list-editor-title" [compact]="true" [canClose]="!isSaving()" (closed)="cancelEdit()">
+        <app-admin-detail-dialog labelledBy="price-list-editor-title" initialFocusId="price-list-name" [compact]="true" [canClose]="!isSaving()" (closed)="cancelEdit()">
         <form class="editor-form" [formGroup]="editorForm" (ngSubmit)="save()">
           <h3 id="price-list-editor-title">{{ editingList() ? 'Editar lista' : 'Nueva lista' }}</h3>
           <label for="price-list-name">Nombre</label>
@@ -198,12 +198,12 @@
     }
 
     @if (priceEditing(); as product) {
-      <app-admin-detail-dialog labelledBy="price-editor-title" [compact]="true" [canClose]="!priceSaving()" (closed)="cancelPrice()">
+      <app-admin-detail-dialog labelledBy="price-editor-title" initialFocusId="new-price" [compact]="true" [canClose]="!priceSaving()" (closed)="cancelPrice()">
         <form class="price-form" [formGroup]="priceForm" (ngSubmit)="savePrice()">
           <h3 id="price-editor-title">Precio de {{ product.name }}</h3>
           <p>Costo actual: {{ product.cost === null ? 'Sin costo' : 'ARS ' + (product.cost | number:'1.2-2':'es-AR') }}. El nuevo precio será vigente desde ahora.</p>
           <label for="new-price">Nuevo precio (ARS)</label>
-          <input id="new-price" formControlName="amount" inputmode="decimal" placeholder="0,00" required />
+          <input id="new-price" formControlName="amount" inputmode="decimal" placeholder="0,00" appSelectOnFocus required />
           @if (priceForm.touched && priceForm.invalid) { <p class="field-error" role="alert">Ingresá un precio positivo de hasta dos decimales.</p> }
           @if (priceError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
           <div class="editor-actions">

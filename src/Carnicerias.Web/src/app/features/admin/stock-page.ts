@@ -7,10 +7,11 @@ import { AdminDetailDialog } from './admin-detail-dialog';
 import { AdminExcelImportActions } from './admin-excel-import-actions';
 import { InventoryClient, InventoryStockItem } from '../../core/inventory/inventory-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
+import { SelectOnFocusDirective } from '../../shared/select-on-focus.directive';
 
 @Component({
   selector: 'app-stock-page',
-  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, AdminExcelImportActions, ReactiveFormsModule],
+  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, AdminExcelImportActions, ReactiveFormsModule, SelectOnFocusDirective],
   templateUrl: './stock-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './stock-page.scss'],
 })

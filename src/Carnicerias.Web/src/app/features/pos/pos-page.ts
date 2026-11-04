@@ -10,6 +10,7 @@ import { InventoryClient, InventoryStockItem } from '../../core/inventory/invent
 import { InventoryPieceClient, PosPieceLookup } from '../../core/inventory/inventory-piece-client';
 import { PosTerminal, PosTerminalClient } from '../../core/pos/pos-terminal-client';
 import { POS_ELECTRON_MODE } from '../../core/pos/pos-electron-mode';
+import { SelectOnFocusDirective } from '../../shared/select-on-focus.directive';
 import { HasarSalePrintResult, PosDeviceAvailability, PosDeviceClient, SerialPrintResult } from '../../core/pos/pos-device-client';
 import { ConfirmedSale, SaleDocumentType, SaleDraft, SaleDraftClient, SaleDraftLine, SalePaymentMethod, SaleRecipientTaxStatus, SaleTicketSlot } from '../../core/sales/sale-draft-client';
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
@@ -94,7 +95,7 @@ const catalogRefreshIntervalMs = 15_000;
 
 @Component({
   selector: 'app-pos-page',
-  imports: [RouterLink, AccountCollectionDialog, DatePipe],
+  imports: [RouterLink, AccountCollectionDialog, DatePipe, SelectOnFocusDirective],
   templateUrl: './pos-page.html',
 })
 export class PosPage implements OnInit {
@@ -116,6 +117,7 @@ export class PosPage implements OnInit {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   @ViewChild('scanInput') private scanInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('quantityInput') private quantityInput?: ElementRef<HTMLInputElement>;
   private readonly draftOperations = new Subject<{
     readonly revision: number;
     readonly slot: SaleTicketSlot;
@@ -1038,6 +1040,10 @@ export class PosPage implements OnInit {
     this.pieceCountDraft.set(pieceId ? '1' : '');
     this.scaleNotice.set(null);
     this.scaleError.set(null);
+    if (!pieceIdentifier) setTimeout(() => {
+      if (this.selectedProduct()?.id === product.id && !this.scannedPieceIdentifier() && this.canOperate())
+        this.quantityInput?.nativeElement.focus();
+    }, 0);
   }
 
   protected updateQuantity(event: Event): void {

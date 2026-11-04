@@ -10,6 +10,7 @@ export class AdminDetailDialog implements AfterViewInit, OnDestroy {
   readonly labelledBy = input.required<string>();
   readonly compact = input(false);
   readonly canClose = input(true);
+  readonly initialFocusId = input<string>();
   readonly closed = output<void>();
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
 
@@ -17,6 +18,12 @@ export class AdminDetailDialog implements AfterViewInit, OnDestroy {
     const dialog = this.dialog().nativeElement;
     if (dialog.showModal) dialog.showModal();
     else dialog.setAttribute('open', ''); // jsdom does not implement showModal.
+    const focusId = this.initialFocusId();
+    const target = focusId ? dialog.querySelector<HTMLInputElement>(`#${focusId}`) : null;
+    if (target && !target.disabled && !target.readOnly) {
+      target.focus();
+      if (target.type === 'text' || target.type === 'search') target.select();
+    }
   }
 
   ngOnDestroy(): void {

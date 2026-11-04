@@ -15,6 +15,19 @@ export interface FiscalCustomerOption extends CreditCustomerOption {
   readonly fiscalProvince: string | null;
 }
 
+export interface FiscalLookupResult {
+  readonly source: 'local' | 'arca' | 'manual';
+  readonly customerId: string | null;
+  readonly customerCode: string | null;
+  readonly name: string | null;
+  readonly documentNumber: string;
+  readonly address: string | null;
+  readonly locality: string | null;
+  readonly province: string | null;
+  readonly taxStatus: FiscalCustomerOption['fiscalTaxStatus'] | null;
+  readonly notice: string | null;
+}
+
 export interface CreditCustomerAccount {
   readonly customerId: string;
   readonly customerCode: string;
@@ -75,6 +88,11 @@ export class CreditCustomerClient {
     if (search) params = params.set('search', search);
     return this.http.get<readonly FiscalCustomerOption[]>('/api/customers/fiscal-options',
       { params, withCredentials: true });
+  }
+
+  lookupFiscal(cuit: string) {
+    return this.http.get<FiscalLookupResult>('/api/customers/fiscal-lookup',
+      { params: new HttpParams().set('cuit', cuit), withCredentials: true });
   }
 
 

@@ -288,6 +288,9 @@ export class PosPage implements OnInit {
   protected readonly fiscalCustomerId = signal('');
   protected readonly fiscalCustomerLoading = signal(false);
   protected readonly fiscalCustomerError = signal<string | null>(null);
+  protected readonly fiscalRegistryLoading = signal(false);
+  protected readonly fiscalRegistryNotice = signal<string | null>(null);
+  private fiscalLookupRequestId = 0;
   protected readonly documentProblem = computed(() => {
     if (this.documentType() === 'nonFiscalTicket') return null;
     const name = this.recipientName().trim();
@@ -1394,6 +1397,9 @@ export class PosPage implements OnInit {
     this.fiscalCustomerSearch.set('');
     this.fiscalCustomerOptions.set([]);
     this.fiscalCustomerError.set(null);
+    this.fiscalRegistryNotice.set(null);
+    this.fiscalRegistryLoading.set(false);
+    this.fiscalLookupRequestId++;
     if (this.documentType() !== 'nonFiscalTicket') this.searchFiscalCustomers();
     if (this.canChargeToAccount()) this.searchCreditCustomers();
     this.checkoutError.set(null);
@@ -1930,6 +1936,62 @@ export class PosPage implements OnInit {
       error: () => {
         this.fiscalCustomerLoading.set(false);
         this.fiscalCustomerError.set('No se pudieron consultar las fichas fiscales.');
+      },
+    });
+  }
+
+  protected lookupFiscalCuit(): void {
+    const search = this.fiscalCustomerSearch().trim().replace(/[- ]/g, '');
+    const entered = this.recipientDocumentNumber().trim().replace(/[- ]/g, '');
+    const cuit = /^\d{11}$/.test(search) ? search : entered;
+    if (!this.validCuit(cuit)) {
+      this.fiscalRegistryNotice.set('Ingresá un CUIT válido para consultar ARCA.');
+      return;
+    }
+    const before = [this.documentType(), this.recipientTaxStatus(), this.fiscalCustomerSearch(),
+      this.recipientName(), this.recipientDocumentNumber(), this.recipientAddress(),
+      this.recipientLocality(), this.recipientProvince()].join('\u0000');
+    const requestId = ++this.fiscalLookupRequestId;
+    this.fiscalRegistryLoading.set(true);
+    this.fiscalRegistryNotice.set(null);
+    this.creditCustomerClient.lookupFiscal(cuit).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (result) => {
+        if (requestId !== this.fiscalLookupRequestId || !this.checkoutNotice() ||
+            this.checkoutCommitted()) return;
+        this.fiscalRegistryLoading.set(false);
+        const current = [this.documentType(), this.recipientTaxStatus(), this.fiscalCustomerSearch(),
+          this.recipientName(), this.recipientDocumentNumber(), this.recipientAddress(),
+          this.recipientLocality(), this.recipientProvince()].join('\u0000');
+        if (current !== before) {
+          this.fiscalRegistryNotice.set('Los datos se editaron durante la consulta; no se reemplazaron.');
+          return;
+        }
+        this.recipientName.set(result.name ?? this.recipientName());
+        this.recipientDocumentNumber.set(result.documentNumber);
+        this.recipientAddress.set(result.address ?? this.recipientAddress());
+        this.recipientLocality.set(result.locality ?? this.recipientLocality());
+        this.recipientProvince.set(result.province ?? this.recipientProvince());
+        if (result.taxStatus) this.recipientTaxStatus.set(result.taxStatus);
+        this.fiscalCustomerId.set(result.source === 'local' ? result.customerId ?? '' : '');
+        if (result.source === 'local' && result.customerId && result.customerCode && result.taxStatus) {
+          const option: FiscalCustomerOption = {
+            id: result.customerId, code: result.customerCode, name: result.name ?? '',
+            fiscalTaxStatus: result.taxStatus, fiscalDocumentNumber: result.documentNumber,
+            fiscalAddress: result.address, fiscalLocality: result.locality,
+            fiscalProvince: result.province,
+          };
+          this.fiscalCustomerOptions.update((options) =>
+            [option, ...options.filter((item) => item.id !== option.id)]);
+        }
+        this.fiscalRegistryNotice.set(result.notice ?? (result.source === 'local'
+          ? 'Ficha fiscal local encontrada.' : 'Datos de ARCA cargados; verificá antes de emitir.'));
+        this.rememberDocumentChoice();
+      },
+      error: () => {
+        if (requestId !== this.fiscalLookupRequestId || !this.checkoutNotice() ||
+            this.checkoutCommitted()) return;
+        this.fiscalRegistryLoading.set(false);
+        this.fiscalRegistryNotice.set('No se pudo consultar el CUIT. Completá los datos manualmente.');
       },
     });
   }

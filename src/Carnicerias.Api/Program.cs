@@ -43,6 +43,7 @@ builder.Services.AddSingleton(services => BranchServiceSettings.FromConfiguratio
 builder.Services.AddDataProtection().SetApplicationName("Carnicerias.Fiscal");
 builder.Services.AddHttpClient<ArcaWsaaClient>(client => client.Timeout = TimeSpan.FromSeconds(45));
 builder.Services.AddHttpClient<ArcaWsfeClient>(client => client.Timeout = TimeSpan.FromSeconds(45));
+builder.Services.AddHttpClient<ArcaRegistryClient>(client => client.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddHttpClient<MercadoPagoPointClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddHttpClient<MercadoPagoQrClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddHttpClient<MercadoPagoStaticQrClient>(client => client.Timeout = TimeSpan.FromSeconds(30))

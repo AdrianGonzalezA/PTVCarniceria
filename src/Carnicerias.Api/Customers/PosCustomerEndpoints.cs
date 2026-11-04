@@ -1,5 +1,6 @@
 using System.Text;
 using Carnicerias.Api.Contracts;
+using Carnicerias.Api.Fiscal;
 using Carnicerias.Api.Security;
 using Carnicerias.Infrastructure;
 using Carnicerias.PlatformAccess;
@@ -16,6 +17,8 @@ public static class PosCustomerEndpoints
         endpoints.MapGet("/api/customers/account-options", AccountOptionsAsync)
             .RequireOperationalPermission(PlatformPermissionCatalog.PosAccountCharge);
         endpoints.MapGet("/api/customers/fiscal-options", FiscalOptionsAsync)
+            .RequireOperationalContext();
+        endpoints.MapGet("/api/customers/fiscal-lookup", FiscalLookupAsync)
             .RequireOperationalContext();
         endpoints.MapGet("/api/customers/{customerId:guid}/account", AccountAsync)
             .RequireOperationalPermission(PlatformPermissionCatalog.PosAccountCharge);
@@ -146,6 +149,70 @@ public static class PosCustomerEndpoints
             customer.FiscalLocality, customer.FiscalProvince)).ToArray());
     }
 
+    private static async Task<IResult> FiscalLookupAsync(string? cuit,
+        PlatformAccessDbContext db, OperationalContextAccessor accessor,
+        ArcaSettingsResolver settingsResolver, ArcaHomologationTicketProvider ticketProvider,
+        ArcaRegistryClient registry, CancellationToken cancellationToken)
+    {
+        if (!FiscalCuit.IsValid(cuit))
+            return Results.Json(new ErrorResponse(new ApiError("VALIDATION_ERROR",
+                "Ingresá un CUIT válido de 11 dígitos", [])),
+                statusCode: StatusCodes.Status400BadRequest);
+
+        var local = await db.CustomerAccounts.AsNoTracking().Where(customer =>
+                customer.CompanyId == accessor.Context.CompanyId && customer.IsActive &&
+                customer.FiscalDocumentNumber == cuit)
+            .OrderBy(customer => customer.Id).FirstOrDefaultAsync(cancellationToken);
+        if (local is not null && local.FiscalTaxStatus is not null &&
+            !string.IsNullOrWhiteSpace(local.Name) &&
+            !string.IsNullOrWhiteSpace(local.FiscalAddress))
+            return Results.Ok(new FiscalLookupResponse("local", local.Id, local.Code, local.Name,
+                cuit!, local.FiscalAddress, local.FiscalLocality, local.FiscalProvince,
+                TaxStatus(local.FiscalTaxStatus), null));
+
+        try
+        {
+            var settings = await settingsResolver.ResolveAsync(accessor.Context.CompanyId,
+                cancellationToken);
+            if (!settings.IsConfigured) return ManualFallback(local, cuit!);
+            var ticket = await ticketProvider.GetAsync(settings,
+                ArcaWsaaClient.RegistryService, cancellationToken);
+            var person = await registry.GetPersonAsync(ticket, cuit!, cancellationToken);
+            if (person is null) return ManualFallback(local, cuit!);
+            return Results.Ok(new FiscalLookupResponse("arca", null, null,
+                local?.Name ?? person.Name, cuit!, local?.FiscalAddress ?? person.Address,
+                local?.FiscalLocality ?? person.Locality,
+                local?.FiscalProvince ?? person.Province,
+                TaxStatus(local?.FiscalTaxStatus) ?? person.TaxStatus,
+                person.TaxStatus is null || string.IsNullOrWhiteSpace(person.Name) ||
+                string.IsNullOrWhiteSpace(person.Address)
+                    ? "ARCA devolvió datos incompletos o ambiguos; verificá la ficha antes de emitir."
+                    : null));
+        }
+        catch (Exception error) when (!cancellationToken.IsCancellationRequested &&
+            error is HttpRequestException or TaskCanceledException or InvalidDataException or
+                InvalidOperationException or System.Xml.XmlException or
+                System.Security.Cryptography.CryptographicException or ArcaWsaaFaultException)
+        {
+            return ManualFallback(local, cuit!);
+        }
+    }
+
+    private static IResult ManualFallback(CustomerAccount? local, string cuit) =>
+        Results.Ok(new FiscalLookupResponse("manual", null, null, local?.Name, cuit,
+            local?.FiscalAddress, local?.FiscalLocality, local?.FiscalProvince,
+            TaxStatus(local?.FiscalTaxStatus),
+            "No se obtuvieron datos de ARCA. Completá y verificá la ficha manualmente."));
+
+    private static string? TaxStatus(SaleRecipientTaxStatus? status) => status switch
+    {
+        SaleRecipientTaxStatus.FinalConsumer => "finalConsumer",
+        SaleRecipientTaxStatus.Registered => "registered",
+        SaleRecipientTaxStatus.SmallTaxpayer => "smallTaxpayer",
+        SaleRecipientTaxStatus.Exempt => "exempt",
+        _ => null
+    };
+
     private static string EscapeLike(string value) =>
         value.Replace("\\", "\\\\", StringComparison.Ordinal)
             .Replace("%", "\\%", StringComparison.Ordinal)
@@ -155,6 +222,9 @@ public static class PosCustomerEndpoints
     private sealed record FiscalCustomerOption(Guid Id, string Code, string Name,
         string FiscalTaxStatus, string? FiscalDocumentNumber, string? FiscalAddress,
         string? FiscalLocality, string? FiscalProvince);
+    private sealed record FiscalLookupResponse(string Source, Guid? CustomerId, string? CustomerCode,
+        string? Name, string DocumentNumber, string? Address, string? Locality, string? Province,
+        string? TaxStatus, string? Notice);
     private sealed record AccountSale(Guid SaleId, DateTimeOffset ChargedAtUtc,
         decimal OriginalAmount, decimal OutstandingAmount);
     private sealed record CustomerAccountResponse(Guid CustomerId, string CustomerCode, string CustomerName,

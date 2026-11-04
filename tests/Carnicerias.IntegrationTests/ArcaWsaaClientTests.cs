@@ -53,6 +53,30 @@ public sealed class ArcaWsaaClientTests
         Assert.Equal("wsfe", loginRequest.Descendants("service").Single().Value);
     }
 
+    [Fact]
+    public async Task SignsRegistryTicketForItsOwnService()
+    {
+        using var key = RSA.Create(2048);
+        var request = new CertificateRequest("CN=RegistryTest", key,
+            HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        using var certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1),
+            DateTimeOffset.UtcNow.AddDays(1));
+        var handler = new FakeHandler();
+        var client = new ArcaWsaaClient(new HttpClient(handler), TimeProvider.System);
+
+        await client.RequestTicketAsync(certificate, "20111111112",
+            ArcaWsaaClient.RegistryService);
+
+        var envelope = XDocument.Parse(handler.Body);
+        var cms = new SignedCms();
+        cms.Decode(Convert.FromBase64String(envelope.Descendants()
+            .Single(element => element.Name.LocalName == "in0").Value));
+        cms.CheckSignature(true);
+        var login = XDocument.Parse(Encoding.UTF8.GetString(cms.ContentInfo.Content));
+        Assert.Equal(ArcaWsaaClient.RegistryService,
+            login.Descendants("service").Single().Value);
+    }
+
     private sealed class FakeHandler : HttpMessageHandler
     {
         public string Url { get; private set; } = "";

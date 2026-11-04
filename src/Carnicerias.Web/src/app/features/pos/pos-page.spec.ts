@@ -21,7 +21,7 @@ import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { AuthorizedFiscalDocument, FiscalDocumentClient } from '../../core/sales/fiscal-document-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { PosPage } from './pos-page';
-import { CreditCustomerClient } from '../../core/customers/credit-customer-client';
+import { CreditCustomerClient, FiscalLookupResult } from '../../core/customers/credit-customer-client';
 import { POS_ELECTRON_MODE } from '../../core/pos/pos-electron-mode';
 
 describe('PosPage', () => {
@@ -82,7 +82,8 @@ describe('PosPage', () => {
   });
 
   async function checkoutWithGateways(intent: MercadoPagoIntent | null, unavailable = false,
-    modes: readonly MercadoPagoMode[] = [], total = 2500, recovered?: SaleCheckout) {
+    modes: readonly MercadoPagoMode[] = [], total = 2500, recovered?: SaleCheckout,
+    fiscal = false) {
     const checkoutClient = checkoutClientMock();
     if (recovered) checkoutClient.current.mockReturnValue(of(recovered));
     const session: CurrentSession = {
@@ -112,6 +113,12 @@ describe('PosPage', () => {
     const fixture = TestBed.createComponent(PosPage);
     fixture.detectChanges();
     await fixture.whenStable();
+    if (fiscal) {
+      const documentType = fixture.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement;
+      documentType.value = 'electronicInvoice';
+      documentType.dispatchEvent(new Event('change', { bubbles: true }));
+      fixture.detectChanges();
+    }
     (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
     return fixture;
@@ -280,6 +287,9 @@ describe('PosPage', () => {
       }) } },
       { provide: InventoryPieceClient, useValue: { lookup: () => throwError(() => new HttpErrorResponse({ status: 404 })) } },
       { provide: CreditCustomerClient, useValue: { searchFiscal: () => of([]),
+        lookupFiscal: () => of({ source: 'manual', customerId: null, customerCode: null,
+          name: null, documentNumber: '20164755100', address: null,
+          locality: null, province: null, taxStatus: null, notice: null }),
         search: () => of([]) } },
       { provide: FiscalDocumentClient, useValue: { issue: () => NEVER } },
       { provide: MercadoPagoClient, useValue: { get: () => of(null),
@@ -290,6 +300,73 @@ describe('PosPage', () => {
         { provider: 'mercadoPago', modes: ['qr', 'point'] },
       ] }) } },
     ] });
+  });
+
+  it('loads an exact local CUIT profile without changing the open ticket', async () => {
+    const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, true);
+    const client = TestBed.inject(CreditCustomerClient);
+    const lookup = vi.spyOn(client, 'lookupFiscal').mockReturnValue(of({
+      source: 'local', customerId: 'customer-1', customerCode: 'CLI-1', name: 'Cliente fiscal',
+      documentNumber: '20164755100', address: 'Calle 123', locality: 'Córdoba',
+      province: 'Córdoba', taxStatus: 'registered', notice: null,
+    }));
+    const search = fixture.nativeElement.querySelector('#sale-fiscal-customer-search') as HTMLInputElement;
+    search.value = '20164755100';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.fiscal-customer-lookup button')]
+      .find((button) => button.textContent?.includes('Consultar CUIT'))!.click();
+    fixture.detectChanges();
+
+    expect(lookup).toHaveBeenCalledWith('20164755100');
+    expect((fixture.nativeElement.querySelector('#sale-recipient-name') as HTMLInputElement).value).toBe('Cliente fiscal');
+    expect((fixture.nativeElement.querySelector('#sale-recipient-address') as HTMLInputElement).value).toBe('Calle 123');
+    expect((fixture.nativeElement.querySelector('#sale-fiscal-customer') as HTMLSelectElement).value).toBe('customer-1');
+    expect(fixture.nativeElement.querySelector('.checkout-dialog')?.textContent).toContain('2.500,00');
+  });
+
+  it('keeps manual fiscal fields when registry lookup fails', async () => {
+    const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, true);
+    vi.spyOn(TestBed.inject(CreditCustomerClient), 'lookupFiscal')
+      .mockReturnValue(throwError(() => new HttpErrorResponse({ status: 503 })));
+    const name = fixture.nativeElement.querySelector('#sale-recipient-name') as HTMLInputElement;
+    name.value = 'Nombre manual';
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+    const search = fixture.nativeElement.querySelector('#sale-fiscal-customer-search') as HTMLInputElement;
+    search.value = '20164755100';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.fiscal-customer-lookup button')]
+      .find((button) => button.textContent?.includes('Consultar CUIT'))!.click();
+    fixture.detectChanges();
+
+    expect(name.value).toBe('Nombre manual');
+    expect(fixture.nativeElement.querySelector('.fiscal-customer-lookup')?.textContent)
+      .toContain('Completá los datos manualmente');
+  });
+
+  it('does not overwrite fiscal data edited while ARCA is responding', async () => {
+    const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, true);
+    const pending = new Subject<FiscalLookupResult>();
+    vi.spyOn(TestBed.inject(CreditCustomerClient), 'lookupFiscal')
+      .mockReturnValue(pending.asObservable());
+    const search = fixture.nativeElement.querySelector('#sale-fiscal-customer-search') as HTMLInputElement;
+    search.value = '20164755100';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.fiscal-customer-lookup button')]
+      .find((button) => button.textContent?.includes('Consultar CUIT'))!.click();
+    const name = fixture.nativeElement.querySelector('#sale-recipient-name') as HTMLInputElement;
+    name.value = 'Nombre corregido';
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+    pending.next({ source: 'arca', customerId: null, customerCode: null,
+      name: 'Nombre anterior', documentNumber: '20164755100', address: 'Calle 123',
+      locality: null, province: null, taxStatus: 'registered', notice: null });
+    fixture.detectChanges();
+
+    expect(name.value).toBe('Nombre corregido');
+    expect(fixture.nativeElement.querySelector('.fiscal-customer-lookup')?.textContent)
+      .toContain('no se reemplazaron');
   });
 
   it('requires fiscal recipient details before confirming an electronic invoice and keeps it pending', async () => {

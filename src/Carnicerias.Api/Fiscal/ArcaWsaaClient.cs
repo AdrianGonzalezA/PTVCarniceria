@@ -12,17 +12,25 @@ public sealed class ArcaWsaaFaultException(string code) : Exception($"WSAA fault
     public string Code { get; } = code;
 }
 
-/// <summary>Requests a WSAA access ticket for wsfe in homologation only.</summary>
+/// <summary>Requests a WSAA access ticket for an approved homologation service.</summary>
 public sealed class ArcaWsaaClient(HttpClient httpClient, TimeProvider timeProvider)
 {
     private const string Endpoint = "https://wsaahomo.afip.gov.ar/ws/services/LoginCms";
+    public const string InvoiceService = "wsfe";
+    public const string RegistryService = "ws_sr_constancia_inscripcion";
     private static readonly XNamespace Soap = "http://schemas.xmlsoap.org/soap/envelope/";
     private static readonly XNamespace Wsaa = "http://wsaa.view.sua.dvadac.desein.afip.gov";
 
-    public async Task<ArcaAccessTicket> RequestTicketAsync(X509Certificate2 certificate,
+    public Task<ArcaAccessTicket> RequestTicketAsync(X509Certificate2 certificate,
         string cuit, CancellationToken cancellationToken = default)
+        => RequestTicketAsync(certificate, cuit, InvoiceService, cancellationToken);
+
+    public async Task<ArcaAccessTicket> RequestTicketAsync(X509Certificate2 certificate,
+        string cuit, string service, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(certificate);
+        if (service is not (InvoiceService or RegistryService))
+            throw new ArgumentException("Unsupported WSAA service.", nameof(service));
         if (!certificate.HasPrivateKey || string.IsNullOrWhiteSpace(cuit) ||
             cuit.Length != 11 || !cuit.All(char.IsAsciiDigit))
             throw new ArgumentException("A certificate with private key and issuer CUIT are required.");
@@ -36,7 +44,7 @@ public sealed class ArcaWsaaClient(HttpClient httpClient, TimeProvider timeProvi
                 new XElement("uniqueId", unchecked((uint)now.ToUnixTimeSeconds())),
                 new XElement("generationTime", now.AddMinutes(-10).ToString("O", CultureInfo.InvariantCulture)),
                 new XElement("expirationTime", now.AddMinutes(10).ToString("O", CultureInfo.InvariantCulture))),
-            new XElement("service", "wsfe"));
+            new XElement("service", service));
         var cms = new SignedCms(new ContentInfo(Encoding.UTF8.GetBytes(
             requestXml.ToString(SaveOptions.DisableFormatting))));
         var signer = new CmsSigner(SubjectIdentifierType.IssuerAndSerialNumber, certificate)
@@ -87,9 +95,9 @@ public sealed class ArcaWsaaClient(HttpClient httpClient, TimeProvider timeProvi
                 DateTimeStyles.AssumeUniversal, out var expiry) ||
             expiry <= now.AddMinutes(1) || expiry > now.AddDays(1))
             throw new InvalidDataException("WSAA returned an expired or implausible ticket.");
-        var service = ticket.Descendants().SingleOrDefault(element =>
+        var returnedService = ticket.Descendants().SingleOrDefault(element =>
             element.Name.LocalName == "service")?.Value;
-        if (service is not null && service != "wsfe")
+        if (returnedService is not null && returnedService != service)
             throw new InvalidDataException("WSAA returned a ticket for another service.");
         return new ArcaAccessTicket(token, sign, cuit, expiry.ToUniversalTime());
     }

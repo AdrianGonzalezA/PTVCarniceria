@@ -442,12 +442,15 @@
                 (input)="updateFiscalCustomerSearch($event)" />
               <button type="button" [disabled]="fiscalCustomerLoading() || checkoutBusy() || checkoutCommitted()"
                 (click)="searchFiscalCustomers()">{{ fiscalCustomerLoading() ? 'Buscando…' : 'Buscar cliente' }}</button>
+              <button type="button" [disabled]="fiscalRegistryLoading() || checkoutBusy() || checkoutCommitted()"
+                (click)="lookupFiscalCuit()">{{ fiscalRegistryLoading() ? 'Consultando…' : 'Consultar CUIT en ARCA' }}</button>
+              @if (fiscalRegistryNotice(); as notice) { <p class="payment-guidance" role="status">{{ notice }}</p> }
               <label for="sale-fiscal-customer">Ficha fiscal guardada (opcional)</label>
-              <select id="sale-fiscal-customer" [value]="fiscalCustomerId()" [disabled]="checkoutBusy() || checkoutCommitted()"
+              <select id="sale-fiscal-customer" [disabled]="checkoutBusy() || checkoutCommitted()"
                 (change)="selectFiscalCustomer($event)">
-                <option value="">Ingresar datos manualmente</option>
+                <option value="" [selected]="!fiscalCustomerId()">Ingresar datos manualmente</option>
                 @for (customer of fiscalCustomerOptions(); track customer.id) {
-                  <option [value]="customer.id">{{ customer.code }} · {{ customer.name }}</option>
+                  <option [value]="customer.id" [selected]="customer.id === fiscalCustomerId()">{{ customer.code }} · {{ customer.name }}</option>
                 }
               </select>
               @if (fiscalCustomerError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }

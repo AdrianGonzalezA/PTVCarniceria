@@ -202,6 +202,15 @@
 .shift-dialog { max-height: min(90dvh, 48rem); overflow: auto; }
 .shift-dialog > p:not(.eyebrow) { line-height: 1.5; }
 .shift-dialog .quantity-field { margin-top: 0.75rem; }
+.shift-withdrawals { margin-top: 0.9rem; padding: 0.8rem; border: 1px solid var(--pos-border); border-radius: 0.3rem; background: var(--pos-panel); }
+.shift-withdrawals-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.shift-withdrawals-heading h3 { margin: 0; font-size: 0.95rem; }
+.shift-withdrawals-heading button { min-height: 2rem; }
+.shift-withdrawals p { font-size: 0.8rem; }
+.shift-withdrawals .finish-button { margin-top: 0.7rem; }
+.shift-withdrawal-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.2rem 0.6rem; padding: 0.5rem 0; border-top: 1px solid var(--pos-border); font-size: 0.8rem; }
+.shift-withdrawal-row strong { text-align: right; }
+.shift-withdrawal-row small { grid-column: 1 / -1; color: var(--pos-muted); }
 .account-collection-dialog { width: min(100%, 44rem); max-height: min(90dvh, 50rem); overflow: auto; }
 .account-collection-dialog .credit-customer-search input { box-sizing: border-box; flex: 1; min-width: 0; min-height: 2.3rem; padding: 0.4rem; border: 1px solid var(--pos-border); border-radius: 0.25rem; font: inherit; }
 .account-collection-dialog .quantity-field { margin-top: 0.75rem; }

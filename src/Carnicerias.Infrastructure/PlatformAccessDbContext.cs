@@ -100,6 +100,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
     public DbSet<PointPaymentIntent> PointPaymentIntents => Set<PointPaymentIntent>();
 
     public DbSet<CashLedgerMovement> CashLedgerMovements => Set<CashLedgerMovement>();
+    public DbSet<CashWithdrawalRequest> CashWithdrawalRequests => Set<CashWithdrawalRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1303,7 +1304,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.ToTable("cash_ledger", "payments_cash", table =>
             {
                 table.HasCheckConstraint("CK_cash_ledger_amount_nonzero", "\"AmountDelta\" <> 0");
-                table.HasCheckConstraint("CK_cash_ledger_kind", "\"Kind\" IN (0, 1, 2, 3, 4, 5)");
+                table.HasCheckConstraint("CK_cash_ledger_kind", "\"Kind\" IN (0, 1, 2, 3, 4, 5, 6)");
             });
             entity.HasKey(movement => movement.Id);
             entity.Property(movement => movement.Method).HasConversion<int>().IsRequired();
@@ -1331,6 +1332,51 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasIndex(movement => new { movement.CashierShiftId, movement.Method, movement.CreatedAtUtc });
             entity.HasIndex(movement => new { movement.CompanyId, movement.CreatedAtUtc });
             entity.HasIndex(movement => new { movement.CompanyId, movement.BranchId, movement.PosTerminalId, movement.CreatedAtUtc });
+        });
+
+        modelBuilder.Entity<CashWithdrawalRequest>(entity =>
+        {
+            entity.ToTable("cash_withdrawal_requests", "pos_sales", table =>
+            {
+                table.HasCheckConstraint("CK_cash_withdrawal_status", "\"Status\" IN (0, 1, 2)");
+                table.HasCheckConstraint("CK_cash_withdrawal_cash", "\"Method\" = 0 AND \"Amount\" > 0");
+                table.HasCheckConstraint("CK_cash_withdrawal_decision",
+                    "(\"Status\" = 0 AND \"DecidedByUserId\" IS NULL AND \"DecidedAtUtc\" IS NULL AND \"DecisionReason\" IS NULL AND \"LedgerMovementId\" IS NULL) OR (\"Status\" = 1 AND \"DecidedByUserId\" IS NOT NULL AND \"DecidedAtUtc\" IS NOT NULL AND \"DecisionReason\" IS NULL AND \"LedgerMovementId\" IS NOT NULL) OR (\"Status\" = 2 AND \"DecidedByUserId\" IS NOT NULL AND \"DecidedAtUtc\" IS NOT NULL AND \"DecisionReason\" IS NOT NULL AND \"LedgerMovementId\" IS NULL)");
+            });
+            entity.HasKey(request => request.Id);
+            entity.Property(request => request.Method).HasConversion<int>();
+            entity.Property(request => request.Status).HasConversion<int>();
+            entity.Property(request => request.Amount).HasPrecision(12, 2);
+            entity.Property(request => request.Reason).HasMaxLength(500).IsRequired();
+            entity.Property(request => request.DecisionReason).HasMaxLength(500);
+            entity.HasOne<CashierShift>().WithMany()
+                .HasForeignKey(request => new { request.CompanyId, request.CashierShiftId })
+                .HasPrincipalKey(shift => new { shift.CompanyId, shift.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Branch>().WithMany()
+                .HasForeignKey(request => new { request.CompanyId, request.BranchId })
+                .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<PosTerminal>().WithMany()
+                .HasForeignKey(request => new { request.CompanyId, request.BranchId, request.PosTerminalId })
+                .HasPrincipalKey(terminal => new { terminal.CompanyId, terminal.BranchId, terminal.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(request => request.RequestedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(request => request.DecidedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CashLedgerMovement>().WithMany()
+                .HasForeignKey(request => request.LedgerMovementId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(request => new { request.CompanyId, request.BranchId, request.OperationId })
+                .IsUnique();
+            entity.HasIndex(request => new { request.CompanyId, request.CashierShiftId, request.Status });
+            entity.HasIndex(request => new { request.CompanyId, request.BranchId, request.Status,
+                request.RequestedAtUtc });
+            entity.HasIndex(request => request.LedgerMovementId).IsUnique()
+                .HasFilter("\"LedgerMovementId\" IS NOT NULL");
         });
 
         modelBuilder.Entity<BranchInventoryBalance>(entity =>

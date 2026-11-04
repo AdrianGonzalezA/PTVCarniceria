@@ -11,6 +11,7 @@ import { PosDeviceClient } from '../../core/pos/pos-device-client';
 import { InventoryClient } from '../../core/inventory/inventory-client';
 import { InventoryPieceClient } from '../../core/inventory/inventory-piece-client';
 import { CashierShiftClient } from '../../core/sales/cashier-shift-client';
+import { CashWithdrawalClient } from '../../core/sales/cash-withdrawal-client';
 import { SaleDraftClient } from '../../core/sales/sale-draft-client';
 import { CheckoutTerms, SaleCheckout, SaleCheckoutClient } from '../../core/sales/sale-checkout-client';
 import { MercadoPagoClient } from '../../core/sales/mercado-pago-client';
@@ -25,6 +26,10 @@ import { CreditCustomerClient, FiscalLookupResult } from '../../core/customers/c
 import { POS_ELECTRON_MODE } from '../../core/pos/pos-electron-mode';
 
 describe('PosPage', () => {
+  beforeEach(() => TestBed.configureTestingModule({ providers: [
+    { provide: CashWithdrawalClient, useValue: { current: () => of([]), request: () => NEVER } },
+  ] }));
+
   function checkoutClientMock() {
     let checkout: SaleCheckout | null = null;
     return {
@@ -1585,7 +1590,7 @@ describe('PosPage', () => {
     expect(fixture.nativeElement.querySelector('.shift-summary').textContent).toContain('1.100,00');
     expect(fixture.nativeElement.querySelector('.shift-summary').textContent).toContain('Débito');
     expect(fixture.nativeElement.querySelector('.shift-summary').textContent).toContain('500,00');
-    (fixture.nativeElement.querySelector('.shift-dialog .finish-button') as HTMLButtonElement).click();
+    (fixture.nativeElement.querySelector('#close-shift-button') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(navigate).toHaveBeenCalledWith('/');
     expect(fixture.nativeElement.querySelector('.shift-dialog')).toBeNull();
@@ -1606,6 +1611,59 @@ describe('PosPage', () => {
     reopened.detectChanges();
     (reopened.nativeElement.querySelector('.shift-dialog .finish-button') as HTMLButtonElement).click();
     expect(reopenedCash).toBe(44);
+  });
+
+  it('keeps a pending withdrawal visible and reuses its operation id after a network failure', async () => {
+    const session: CurrentSession = {
+      userId: 'cashier-id', username: 'cajero', expiresAtUtc: '2026-11-04T22:00:00Z',
+      context: { userId: 'cashier-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const shift = { id: 'shift-id', openingCash: 1000, cashSales: 0, nonCashSales: 0,
+      accountSales: 0, creditApplied: 0, cashCollections: 0, nonCashCollections: 0,
+      salesTotal: 0, cashBalance: 900, cashWithdrawals: 100,
+      openedAtUtc: '2026-11-04T18:00:00Z', closedAtUtc: null, paymentBreakdown: [] };
+    const pending = { id: 'withdrawal-id', operationId: 'old-operation', cashierShiftId: 'shift-id',
+      method: 'cash' as const, amount: 100, reason: 'Rendición', status: 'pending' as const,
+      requestedByUserId: 'cashier-id', requesterName: 'cajero',
+      requestedAtUtc: '2026-11-04T18:30:00Z', decidedByUserId: null,
+      decisionByName: null, decidedAtUtc: null, decisionReason: null, ledgerMovementId: null };
+    const request = vi.fn().mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 0 })))
+      .mockReturnValueOnce(of({ ...pending, id: 'new-withdrawal' }));
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: { priceLists: () => of([]) } },
+      { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of(null) } },
+      { provide: CashierShiftClient, useValue: { current: () => of(shift), lastClosed: () => of(null) } },
+      { provide: CashWithdrawalClient, useValue: { current: () => of([pending]), request } },
+      { provide: InventoryClient, useValue: { stock: () => of([]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    (fixture.nativeElement.querySelector('.shift-status') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const dialog = fixture.nativeElement.querySelector('.shift-dialog') as HTMLElement;
+    expect(dialog.textContent).toContain('Rendición');
+    expect(dialog.textContent).toContain('100,00');
+    expect(dialog.querySelector<HTMLButtonElement>('#close-shift-button')!.disabled).toBe(true);
+    const amount = dialog.querySelector<HTMLInputElement>('#withdrawal-amount')!;
+    amount.value = '10,50';
+    amount.dispatchEvent(new Event('input', { bubbles: true }));
+    const reason = dialog.querySelector<HTMLInputElement>('#withdrawal-reason')!;
+    reason.value = 'Nuevo retiro';
+    reason.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    const send = [...dialog.querySelectorAll<HTMLButtonElement>('.shift-withdrawals .finish-button')][0];
+    send.click();
+    fixture.detectChanges();
+    expect(dialog.textContent).toContain('La solicitud puede haberse guardado');
+    send.click();
+    fixture.detectChanges();
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[0][0]).toBe(request.mock.calls[1][0]);
+    expect(request.mock.calls[0].slice(1)).toEqual([10.5, 'Nuevo retiro']);
   });
 
   it('prefills kilograms from a received piece barcode before adding the product', async () => {

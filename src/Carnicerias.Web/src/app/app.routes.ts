@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { WelcomePage } from './features/welcome/welcome-page';
 import { userAdminGuard } from './core/users/user-admin.guard';
 import { organizationAdminGuard } from './core/admin/organization-admin.guard';
+import { cashWithdrawalAdminGuard } from './core/admin/cash-withdrawal-admin.guard';
 import { inventoryAdminGuard } from './core/inventory/inventory-admin.guard';
 import { catalogAdminGuard } from './core/admin/catalog-admin.guard';
 import { posCanDeactivateGuard, posGuard } from './core/pos/pos.guard';
@@ -25,6 +26,7 @@ export const routes: Routes = [
   { path: 'admin/barcode-layouts', loadComponent: () => import('./features/admin/barcode-layout-page').then((page) => page.BarcodeLayoutPage), canActivate: [inventoryAdminGuard] },
   { path: 'admin/pieces', loadComponent: () => import('./features/admin/piece-receipt-page').then((page) => page.PieceReceiptPage), canActivate: [inventoryAdminGuard] },
   { path: 'admin/history', loadComponent: () => import('./features/admin/history-page').then((page) => page.HistoryPage), canActivate: [organizationAdminGuard] },
+  { path: 'admin/cash-withdrawals', loadComponent: () => import('./features/admin/cash-withdrawals-page').then((page) => page.CashWithdrawalsPage), canActivate: [cashWithdrawalAdminGuard] },
   { path: 'admin/accounts', loadComponent: () => import('./features/admin/accounts-page').then((page) => page.AccountsPage), canActivate: [organizationAdminGuard] },
   { path: 'pos', loadComponent: () => import('./features/pos/pos-page').then((page) => page.PosPage), canActivate: [posGuard], canDeactivate: [posCanDeactivateGuard] },
   { path: '**', redirectTo: '' },

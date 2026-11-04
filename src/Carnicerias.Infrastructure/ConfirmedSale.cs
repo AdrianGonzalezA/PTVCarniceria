@@ -195,7 +195,8 @@ public enum CashLedgerMovementKind
     Change,
     AccountCollection,
     AccountCollectionRefund,
-    AccountCollectionChange
+    AccountCollectionChange,
+    ExtraordinaryWithdrawal
 }
 
 public sealed class CashLedgerMovement
@@ -209,6 +210,9 @@ public sealed class CashLedgerMovement
     {
         if (posTerminalId == Guid.Empty)
             throw new ArgumentException("Terminal id cannot be empty.", nameof(posTerminalId));
+        if (kind == CashLedgerMovementKind.ExtraordinaryWithdrawal &&
+            (method != PaymentMethod.Cash || amountDelta >= 0 || saleId is not null))
+            throw new ArgumentException("Extraordinary withdrawals must debit cash without a sale.");
         Id = Guid.NewGuid();
         CompanyId = companyId;
         BranchId = branchId;

@@ -1,0 +1,98 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" routerLink="/admin" aria-label="Volver a administración">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Administración</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+
+  <div class="workspace">
+    <app-admin-area-tabs area="business" />
+    <a class="back-link" routerLink="/admin">← Volver a negocio</a>
+    <p class="eyebrow">Caja</p>
+    <h1>Retiros de efectivo</h1>
+    <p class="intro">Las solicitudes pendientes deben ser aprobadas o rechazadas por otro administrador antes del cierre del turno.</p>
+
+    @if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Contexto de retiros">
+        <div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Sucursal</span><strong>{{ context.branchName }}</strong></div>
+      </section>
+    }
+
+    <section class="category-panel" aria-labelledby="withdrawal-list-title" [attr.aria-busy]="loading()">
+      <header class="panel-heading">
+        <div><h2 id="withdrawal-list-title">Solicitudes de la sucursal</h2><p>El movimiento de caja se registra una sola vez al aprobar.</p></div>
+      </header>
+      <div class="withdrawal-filters">
+        <label for="withdrawal-status">Estado</label>
+        <select id="withdrawal-status" [value]="status()" (change)="filter($event)">
+          <option value="pending">Pendientes</option>
+          <option value="approved">Aprobadas</option>
+          <option value="rejected">Rechazadas</option>
+          <option value="">Todas</option>
+        </select>
+        <button class="secondary-button" type="button" [disabled]="loading()" (click)="load()">Actualizar</button>
+      </div>
+      @if (loading()) { <p class="withdrawal-state" role="status">Consultando retiros…</p> }
+      @else if (loadError(); as error) { <p class="withdrawal-state field-error" role="alert">{{ error }}</p> }
+      @else if (data(); as result) {
+        @if (!result.items.length) { <p class="withdrawal-state">No hay solicitudes para este estado.</p> }
+        @else {
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th scope="col">Solicitud</th><th scope="col">Solicitante / turno</th><th scope="col">Motivo</th><th scope="col" class="numeric-value">Importe</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr></thead>
+              <tbody>
+                @for (item of result.items; track item.id) {
+                  <tr>
+                    <td>{{ item.requestedAtUtc | date:'dd/MM/yyyy HH:mm' }}</td>
+                    <td>{{ item.requesterName || item.requestedByUserId.slice(0, 8) }} · {{ item.cashierShiftId.slice(0, 8) }}</td>
+                    <td>{{ item.reason }}</td>
+                    <td class="numeric-value">$ {{ formatMoney(item.amount) }}</td>
+                    <td>{{ item.status === 'pending' ? 'Pendiente' : item.status === 'approved' ? 'Aprobado' : 'Rechazado' }}
+                      @if (item.decidedAtUtc) { <small>{{ item.decisionByName || 'Administrador' }} · {{ item.decidedAtUtc | date:'dd/MM/yyyy HH:mm' }}</small> }
+                      @if (item.decisionReason) { <small>Motivo: {{ item.decisionReason }}</small> }
+                    </td>
+                    <td>
+                      @if (item.status === 'pending') {
+                        <div class="row-actions">
+                          <button type="button" [disabled]="item.requestedByUserId === session()?.userId" (click)="openDecision(item, 'approve')">Aprobar</button>
+                          <button type="button" class="secondary-button" [disabled]="item.requestedByUserId === session()?.userId" (click)="openDecision(item, 'reject')">Rechazar</button>
+                        </div>
+                      } @else { <span>—</span> }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <nav class="withdrawal-pagination" aria-label="Páginas de retiros">
+            <button type="button" [disabled]="page() <= 1 || loading()" (click)="goToPage(page() - 1)">Anterior</button>
+            <span>Página {{ page() }} de {{ totalPages() }} · {{ result.totalItems }} solicitudes</span>
+            <button type="button" [disabled]="page() >= totalPages() || loading()" (click)="goToPage(page() + 1)">Siguiente</button>
+          </nav>
+        }
+      }
+    </section>
+
+    @if (selected(); as item) {
+      <app-admin-detail-dialog labelledBy="withdrawal-decision-title" [compact]="true" [canClose]="!deciding()" (closed)="closeDecision()">
+        <section class="withdrawal-decision">
+          <h2 id="withdrawal-decision-title">{{ action() === 'approve' ? 'Aprobar retiro' : 'Rechazar retiro' }}</h2>
+          <p><strong>$ {{ formatMoney(item.amount) }}</strong> · {{ item.reason }}</p>
+          <p>Solicitante: {{ item.requesterName || item.requestedByUserId.slice(0, 8) }}. Turno {{ item.cashierShiftId.slice(0, 8) }}.</p>
+          @if (action() === 'reject') {
+            <label for="withdrawal-rejection-reason">Motivo del rechazo</label>
+            <textarea id="withdrawal-rejection-reason" maxlength="500" [value]="decisionReason()" (input)="updateReason($event)"></textarea>
+          } @else { <p>Se descontará del efectivo registrado al confirmar la aprobación.</p> }
+          @if (decisionError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
+          <div class="row-actions">
+            <button type="button" [disabled]="deciding()" (click)="decide()">{{ deciding() ? 'Guardando…' : 'Confirmar' }}</button>
+            <button type="button" class="secondary-button" [disabled]="deciding()" (click)="closeDecision()">Cancelar</button>
+          </div>
+        </section>
+      </app-admin-detail-dialog>
+    }
+  </div>
+</main>

@@ -283,6 +283,7 @@ public static class AdminHistoryEndpoints
                 CashLedgerMovementKind.AccountCollection => "accountCollection",
                 CashLedgerMovementKind.AccountCollectionRefund => "accountCollectionRefund",
                 CashLedgerMovementKind.AccountCollectionChange => "accountCollectionChange",
+                CashLedgerMovementKind.ExtraordinaryWithdrawal => "extraordinaryWithdrawal",
                 _ => "unknown"
             }, PaymentMethodName(row.Method), row.AmountDelta)).ToArray(), page, pageSize, total));
     }

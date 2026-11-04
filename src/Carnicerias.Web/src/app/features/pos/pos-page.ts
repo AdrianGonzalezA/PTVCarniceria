@@ -18,6 +18,7 @@ import { ConfirmedSale, SaleDocumentType, SaleDraft, SaleDraftClient, SaleDraftL
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { AuthorizedFiscalDocument, FiscalDocumentClient } from '../../core/sales/fiscal-document-client';
 import { CashierShift, CashierShiftClient } from '../../core/sales/cashier-shift-client';
+import { CashWithdrawal, CashWithdrawalClient } from '../../core/sales/cash-withdrawal-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { CreditCustomerAccount, CreditCustomerClient, CreditCustomerOption, FiscalCustomerOption } from '../../core/customers/credit-customer-client';
 import { AccountCollectionDialog } from './account-collection-dialog';
@@ -112,6 +113,7 @@ export class PosPage implements OnInit {
   private readonly fiscalDocumentClient = inject(FiscalDocumentClient);
   private readonly posDeviceClient = inject(PosDeviceClient);
   private readonly cashierShiftClient = inject(CashierShiftClient);
+  private readonly cashWithdrawalClient = inject(CashWithdrawalClient);
   private readonly inventoryClient = inject(InventoryClient);
   private readonly pieceClient = inject(InventoryPieceClient);
   private readonly terminalClient = inject(PosTerminalClient);
@@ -237,6 +239,15 @@ export class PosPage implements OnInit {
   protected readonly shiftOpeningCash = signal('0');
   protected readonly shiftBusy = signal(false);
   protected readonly shiftError = signal<string | null>(null);
+  protected readonly withdrawalAmount = signal('');
+  protected readonly withdrawalReason = signal('');
+  protected readonly withdrawals = signal<readonly CashWithdrawal[]>([]);
+  protected readonly hasPendingWithdrawal = computed(() =>
+    this.withdrawals().some(withdrawal => withdrawal.status === 'pending'));
+  protected readonly withdrawalLoading = signal(false);
+  protected readonly withdrawalBusy = signal(false);
+  protected readonly withdrawalError = signal<string | null>(null);
+  private withdrawalOperationId: string | null = null;
   protected readonly draftId = signal('');
   protected readonly ticketSlots: readonly SaleTicketSlot[] = ['A', 'B', 'C', 'D'];
   protected readonly activeTicketSlot = signal<SaleTicketSlot>('A');
@@ -1602,6 +1613,63 @@ export class PosPage implements OnInit {
     this.loadCashierShift();
   }
 
+  protected updateWithdrawalAmount(event: Event): void {
+    this.withdrawalAmount.set((event.target as HTMLInputElement).value);
+    this.withdrawalOperationId = null;
+  }
+
+  protected updateWithdrawalReason(event: Event): void {
+    this.withdrawalReason.set((event.target as HTMLInputElement).value);
+    this.withdrawalOperationId = null;
+  }
+
+  protected requestWithdrawal(): void {
+    if (this.withdrawalBusy() || !this.cashierShift()) return;
+    const amount = parseLocalizedDecimal(this.withdrawalAmount(), 2);
+    const reason = this.withdrawalReason().trim();
+    if (amount === null || amount <= 0 || amount > 9_999_999_999.99 ||
+        reason.length === 0 || reason.length > 500) {
+      this.withdrawalError.set('Ingresá un importe positivo y un motivo de hasta 500 caracteres.');
+      return;
+    }
+    this.withdrawalOperationId ??= crypto.randomUUID();
+    this.withdrawalBusy.set(true);
+    this.withdrawalError.set(null);
+    this.cashWithdrawalClient.request(this.withdrawalOperationId, amount, reason).subscribe({
+      next: () => {
+        this.withdrawalBusy.set(false);
+        this.withdrawalOperationId = null;
+        this.withdrawalAmount.set('');
+        this.withdrawalReason.set('');
+        this.loadWithdrawals();
+      },
+      error: (error: HttpErrorResponse) => {
+        this.withdrawalBusy.set(false);
+        this.withdrawalError.set(error.status === 0
+          ? 'No hay conexión. La solicitud puede haberse guardado; reintentá sin cambiar los datos.'
+          : error.error?.error?.code === 'CASHIER_SHIFT_REQUIRED'
+            ? 'El turno ya no está abierto. Actualizá su estado.'
+            : 'No se pudo registrar el retiro. Reintentá con los mismos datos.');
+      },
+    });
+  }
+
+  protected loadWithdrawals(): void {
+    if (!this.cashierShift() || this.withdrawalLoading()) return;
+    this.withdrawalLoading.set(true);
+    this.cashWithdrawalClient.current().subscribe({
+      next: (items) => {
+        this.withdrawals.set(items);
+        this.withdrawalLoading.set(false);
+        this.withdrawalError.set(null);
+      },
+      error: () => {
+        this.withdrawalLoading.set(false);
+        this.withdrawalError.set('No se pudieron consultar los retiros de este turno. Reintentá.');
+      },
+    });
+  }
+
   protected openCashierShift(): void {
     if (!this.terminal()) return;
     const amount = parseLocalizedDecimal(this.shiftOpeningCash(), 2) ?? NaN;
@@ -1647,6 +1715,8 @@ export class PosPage implements OnInit {
         this.shiftBusy.set(false);
         this.shiftError.set(error.error?.error?.code === 'CASHIER_SHIFT_HAS_DRAFT'
           ? 'Hay un ticket guardado pendiente. Confirmalo o cancelalo antes de cerrar el turno.'
+          : error.error?.error?.code === 'CASHIER_SHIFT_HAS_PENDING_WITHDRAWAL'
+            ? 'Hay un retiro pendiente de aprobación. Un administrador debe aprobarlo o rechazarlo antes del cierre.'
           : error.status === 409 ? 'El turno cambió. Actualizá su estado e intentá de nuevo.'
             : 'No se pudo cerrar el turno. Intentá de nuevo.');
       },
@@ -2314,7 +2384,9 @@ export class PosPage implements OnInit {
         if (shift) {
           this.restoreActiveTicket(shift.id);
           this.loadTicketSlots();
+          if (this.shiftDialog()) this.loadWithdrawals();
         } else {
+          this.withdrawals.set([]);
           this.ticketSlotsRequestRevision++;
           this.savedTicketSlots.set(new Set());
           this.ticketSlotsLoadState.set('idle');

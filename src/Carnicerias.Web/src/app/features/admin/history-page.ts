@@ -183,7 +183,8 @@ export class HistoryPage implements OnInit {
   protected cashKindLabel(kind: CashHistoryItem['kind']): string {
     return { opening: 'Apertura', salePayment: 'Cobro de venta', change: 'Vuelto de venta',
       accountCollection: 'Cobro de cuenta', accountCollectionRefund: 'Devolución de cuenta',
-      accountCollectionChange: 'Vuelto de cuenta' }[kind];
+      accountCollectionChange: 'Vuelto de cuenta',
+      extraordinaryWithdrawal: 'Retiro extraordinario' }[kind];
   }
 
   protected stockKindLabel(kind: StockHistoryItem['kind']): string {

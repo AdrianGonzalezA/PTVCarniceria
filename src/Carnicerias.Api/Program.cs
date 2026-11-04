@@ -177,6 +177,7 @@ app.MapBarcodePreviewEndpoints();
 app.MapBarcodeProfileEndpoints();
 app.MapInventoryPieceEndpoints();
 app.MapCashierShiftEndpoints();
+app.MapCashWithdrawalEndpoints();
 app.MapPosTerminalEndpoints();
 
 if (serveWeb)

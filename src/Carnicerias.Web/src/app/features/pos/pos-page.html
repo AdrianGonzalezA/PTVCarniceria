@@ -756,14 +756,39 @@
             @for (payment of shift.paymentBreakdown ?? []; track payment.method) {
               <span>Cobros netos · {{ paymentMethodName(payment.method) }}</span><strong>{{ formatMoney(payment.amount) }}</strong>
             }
+            <span>Retiros extraordinarios de efectivo</span><strong>{{ formatMoney(shift.cashWithdrawals ?? 0) }}</strong>
             <span>Efectivo registrado en caja</span><strong>{{ formatMoney(shift.cashBalance) }}</strong>
             <small>Turno {{ shift.id.slice(0, 8) }} · El saldo no es un arqueo físico.</small>
           </div>
+          <section class="shift-withdrawals" aria-labelledby="withdrawals-title">
+            <div class="shift-withdrawals-heading">
+              <h3 id="withdrawals-title">Retiros de efectivo</h3>
+              <button type="button" [disabled]="withdrawalLoading()" (click)="loadCashierShift()">Actualizar</button>
+            </div>
+            <p>El administrador de la sucursal debe aprobar la solicitud. El efectivo se descuenta al aprobarla.</p>
+            <label class="quantity-field" for="withdrawal-amount">Importe
+              <input id="withdrawal-amount" type="text" inputmode="decimal" [appLocalizedDecimal]="withdrawalAmount()" (input)="updateWithdrawalAmount($event)" />
+            </label>
+            <label class="quantity-field" for="withdrawal-reason">Motivo
+              <input id="withdrawal-reason" type="text" maxlength="500" [value]="withdrawalReason()" (input)="updateWithdrawalReason($event)" />
+            </label>
+            <button class="finish-button" type="button" [disabled]="withdrawalBusy()" (click)="requestWithdrawal()">{{ withdrawalBusy() ? 'Solicitando…' : 'Solicitar retiro' }}</button>
+            @if (withdrawalError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
+            @if (withdrawalLoading()) { <p role="status">Consultando retiros…</p> }
+            @for (withdrawal of withdrawals(); track withdrawal.id) {
+              <div class="shift-withdrawal-row">
+                <span>{{ withdrawal.requestedAtUtc | date:'dd/MM/yyyy HH:mm' }} · {{ withdrawal.reason }}</span>
+                <strong>{{ formatMoney(withdrawal.amount) }}</strong>
+                <small>{{ withdrawal.status === 'pending' ? 'Pendiente' : withdrawal.status === 'approved' ? 'Aprobado' : 'Rechazado' }}</small>
+              </div>
+            }
+          </section>
           @if (lines().length > 0) { <p class="price-list-lock">Hay un ticket abierto. Cerralo o cancelalo antes de cerrar el turno.</p> }
+          @if (hasPendingWithdrawal()) { <p class="price-list-lock">Hay un retiro pendiente de aprobación. El turno permanecerá abierto.</p> }
           @if (shiftError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
           <div class="dialog-actions">
             <button class="dialog-cancel" type="button" (click)="shiftDialog.set(false)">Volver al POS</button>
-            <button class="finish-button" type="button" [disabled]="shiftBusy() || lines().length > 0" (click)="closeCashierShift()">{{ shiftBusy() ? 'Procesando…' : 'Cerrar turno' }}</button>
+            <button id="close-shift-button" class="finish-button" type="button" [disabled]="shiftBusy() || lines().length > 0 || hasPendingWithdrawal()" (click)="closeCashierShift()">{{ shiftBusy() ? 'Procesando…' : 'Cerrar turno' }}</button>
           </div>
         } @else {
           @if (lastClosedShift(); as closed) {

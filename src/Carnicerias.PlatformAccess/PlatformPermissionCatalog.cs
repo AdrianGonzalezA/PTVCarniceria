@@ -11,6 +11,7 @@ public static class PlatformPermissionCatalog
     public const string PosAccountCharge = "pos.account.charge";
     public const string PosAccountCorrect = "pos.account.correct";
     public const string PosDiscountApply = "pos.discount.apply";
+    public const string CashWithdrawalApprove = "cash.withdrawal.approve";
 
     public static IReadOnlyCollection<PermissionDefinition> CreateDefaultPermissions() =>
     [
@@ -22,6 +23,7 @@ public static class PlatformPermissionCatalog
         new PermissionDefinition(OrganizationManage, "Administrar empresas, sucursales y terminales"),
         new PermissionDefinition(PosAccountCharge, "Cargar el saldo de una venta a la cuenta corriente de un cliente"),
         new PermissionDefinition(PosAccountCorrect, "Corregir cobranzas de cuenta corriente con constancia interna"),
-        new PermissionDefinition(PosDiscountApply, "Aplicar descuentos comerciales al ticket")
+        new PermissionDefinition(PosDiscountApply, "Aplicar descuentos comerciales al ticket"),
+        new PermissionDefinition(CashWithdrawalApprove, "Aprobar o rechazar retiros extraordinarios de efectivo")
     ];
 }

@@ -1,0 +1,11 @@
+.withdrawal-filters { display: flex; flex-wrap: wrap; gap: 0.65rem; align-items: center; padding: 1rem 1.25rem; }
+.withdrawal-filters label { font-weight: 700; }
+.withdrawal-filters select { min-height: 2.5rem; padding: 0.4rem; font: inherit; color: var(--admin-abm-ink); background: var(--admin-abm-control); border: 1px solid var(--admin-abm-control-border); }
+.withdrawal-state { padding: 0.8rem 1.25rem; }
+.numeric-value { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td small { display: block; margin-top: 0.25rem; }
+.withdrawal-pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; padding: 1rem; }
+.withdrawal-decision { display: grid; gap: 0.7rem; min-width: min(35rem, 85vw); padding: 1.25rem; color: var(--admin-abm-ink); background: var(--admin-abm-surface); }
+.withdrawal-decision h2, .withdrawal-decision p { margin: 0; }
+.withdrawal-decision textarea { min-height: 5rem; padding: 0.5rem; font: inherit; color: var(--admin-abm-ink); background: var(--admin-abm-control); border: 1px solid var(--admin-abm-control-border); }
+@media (max-width: 600px) { .withdrawal-pagination { flex-wrap: wrap; } }

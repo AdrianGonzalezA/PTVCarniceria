@@ -119,6 +119,10 @@ public static class CashierShiftEndpoints
                     item.CashierShiftId == shift.Id && item.Status != SaleCheckoutStatus.Completed &&
                     item.Status != SaleCheckoutStatus.Canceled, cancellationToken))
                 return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_HAS_PENDING_PAYMENT");
+            if (await db.CashWithdrawalRequests.AnyAsync(item =>
+                    item.CompanyId == context.CompanyId && item.CashierShiftId == shift.Id &&
+                    item.Status == CashWithdrawalStatus.Pending, cancellationToken))
+                return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_HAS_PENDING_WITHDRAWAL");
 
             var now = timeProvider.GetUtcNow();
             shift.Close(context.UserId, now);
@@ -178,7 +182,10 @@ public static class CashierShiftEndpoints
                     movement.Kind == CashLedgerMovementKind.AccountCollectionRefund ||
                     (movement.Kind == CashLedgerMovementKind.AccountCollectionChange &&
                      movement.Method == PaymentMethod.Cash))
-                    .Sum(movement => movement.AmountDelta)
+                    .Sum(movement => movement.AmountDelta),
+                Withdrawals = group.Where(movement =>
+                    movement.Kind == CashLedgerMovementKind.ExtraordinaryWithdrawal)
+                    .Sum(movement => -movement.AmountDelta)
             })
             .ToArrayAsync(cancellationToken);
         var cash = byMethod.SingleOrDefault(item => item.Method == PaymentMethod.Cash);
@@ -219,7 +226,8 @@ public static class CashierShiftEndpoints
             cash?.Collections ?? 0,
             byMethod.Where(item => item.Method != PaymentMethod.Cash)
                 .Sum(item => item.Collections), creditApplied,
-            pending?.Cash ?? 0, pending?.NonCash ?? 0, paymentBreakdown);
+            pending?.Cash ?? 0, pending?.NonCash ?? 0,
+            cash?.Withdrawals ?? 0, paymentBreakdown);
     }
 
     private static string PaymentMethodCode(PaymentMethod method) => method switch
@@ -243,6 +251,7 @@ public static class CashierShiftEndpoints
         decimal CashSales, decimal NonCashSales, decimal AccountSales, decimal SalesTotal, decimal CashBalance,
         decimal CashCollections, decimal NonCashCollections, decimal CreditApplied,
         decimal PendingApprovedCash, decimal PendingApprovedNonCash,
+        decimal CashWithdrawals,
         IReadOnlyList<PaymentBreakdownItem> PaymentBreakdown)
     {
         public string? CashierName { get; init; }

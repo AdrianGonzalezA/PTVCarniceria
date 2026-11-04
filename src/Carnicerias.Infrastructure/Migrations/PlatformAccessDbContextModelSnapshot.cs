@@ -359,7 +359,91 @@ namespace Carnicerias.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_cash_ledger_amount_nonzero", "\"AmountDelta\" <> 0");
 
-                            t.HasCheckConstraint("CK_cash_ledger_kind", "\"Kind\" IN (0, 1, 2, 3, 4, 5)");
+                            t.HasCheckConstraint("CK_cash_ledger_kind", "\"Kind\" IN (0, 1, 2, 3, 4, 5, 6)");
+                        });
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.CashWithdrawalRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CashierShiftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DecidedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DecisionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("LedgerMovementId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Method")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("PosTerminalId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("RequestedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DecidedByUserId");
+
+                    b.HasIndex("LedgerMovementId")
+                        .IsUnique()
+                        .HasFilter("\"LedgerMovementId\" IS NOT NULL");
+
+                    b.HasIndex("RequestedByUserId");
+
+                    b.HasIndex("CompanyId", "BranchId", "OperationId")
+                        .IsUnique();
+
+                    b.HasIndex("CompanyId", "BranchId", "PosTerminalId");
+
+                    b.HasIndex("CompanyId", "CashierShiftId", "Status");
+
+                    b.HasIndex("CompanyId", "BranchId", "Status", "RequestedAtUtc");
+
+                    b.ToTable("cash_withdrawal_requests", "pos_sales", t =>
+                        {
+                            t.HasCheckConstraint("CK_cash_withdrawal_cash", "\"Method\" = 0 AND \"Amount\" > 0");
+
+                            t.HasCheckConstraint("CK_cash_withdrawal_decision", "(\"Status\" = 0 AND \"DecidedByUserId\" IS NULL AND \"DecidedAtUtc\" IS NULL AND \"DecisionReason\" IS NULL AND \"LedgerMovementId\" IS NULL) OR (\"Status\" = 1 AND \"DecidedByUserId\" IS NOT NULL AND \"DecidedAtUtc\" IS NOT NULL AND \"DecisionReason\" IS NULL AND \"LedgerMovementId\" IS NOT NULL) OR (\"Status\" = 2 AND \"DecidedByUserId\" IS NOT NULL AND \"DecidedAtUtc\" IS NOT NULL AND \"DecisionReason\" IS NOT NULL AND \"LedgerMovementId\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_cash_withdrawal_status", "\"Status\" IN (0, 1, 2)");
                         });
                 });
 
@@ -1311,11 +1395,11 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 
-                    b.Property<decimal>("VatAmount")
+                    b.Property<decimal>("Total")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 
-                    b.Property<decimal>("Total")
+                    b.Property<decimal>("VatAmount")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 
@@ -3051,6 +3135,45 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasForeignKey("CompanyId", "SaleId")
                         .HasPrincipalKey("CompanyId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.Infrastructure.PosTerminal", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "BranchId", "PosTerminalId")
+                        .HasPrincipalKey("CompanyId", "BranchId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.CashWithdrawalRequest", b =>
+                {
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("DecidedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.Infrastructure.CashLedgerMovement", null)
+                        .WithMany()
+                        .HasForeignKey("LedgerMovementId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.PlatformAccess.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "BranchId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.CashierShift", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "CashierShiftId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.HasOne("Carnicerias.Infrastructure.PosTerminal", null)
                         .WithMany()

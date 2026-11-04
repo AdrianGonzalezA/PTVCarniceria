@@ -147,7 +147,7 @@ export interface CashHistoryItem {
   readonly shiftId: string;
   readonly saleId: string | null;
   readonly kind: 'opening' | 'salePayment' | 'change' | 'accountCollection' |
-    'accountCollectionRefund' | 'accountCollectionChange';
+    'accountCollectionRefund' | 'accountCollectionChange' | 'extraordinaryWithdrawal';
   readonly method: string;
   readonly amountDelta: number;
 }

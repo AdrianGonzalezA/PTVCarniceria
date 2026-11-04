@@ -128,6 +128,9 @@
             }
             <a class="module-link" routerLink="/users"><span><strong>Usuarios</strong><small>Consultar cuentas, modificar datos y controlar el acceso.</small></span><span aria-hidden="true">→</span></a>
           } @else {
+            @if (context.permissions.includes('cash.withdrawal.approve')) {
+              <a class="module-link" routerLink="/admin/cash-withdrawals"><span><strong>Retiros de efectivo</strong><small>Aprobar o rechazar solicitudes pendientes de las cajas.</small></span><span aria-hidden="true">→</span></a>
+            }
             @if (context.permissions.includes('organization.manage')) {
               <a class="module-link" routerLink="/admin/history"><span><strong>Ventas e historial</strong><small>Consultar tickets, pagos, turnos y movimientos por sucursal y caja.</small></span><span aria-hidden="true">→</span></a>
               <a class="module-link" routerLink="/admin/accounts"><span><strong>Estados de cuenta</strong><small>Deuda por venta, cobranzas, anticipos y correcciones de clientes.</small></span><span aria-hidden="true">→</span></a>

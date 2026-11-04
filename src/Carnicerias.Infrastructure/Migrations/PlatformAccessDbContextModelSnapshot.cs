@@ -1291,6 +1291,70 @@ namespace Carnicerias.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Carnicerias.Infrastructure.FiscalDocumentSnapshot", b =>
+                {
+                    b.Property<Guid>("FiscalDocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("ExemptAmount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal>("NotTaxedAmount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<int>("ReceiverVatConditionCode")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("TaxableBase")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal>("VatAmount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal>("Total")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.HasKey("FiscalDocumentId");
+
+                    b.ToTable("fiscal_document_snapshots", "pos_sales", t =>
+                        {
+                            t.HasCheckConstraint("CK_fiscal_document_snapshots_amounts", "\"Total\" > 0 AND \"TaxableBase\" >= 0 AND \"VatAmount\" >= 0 AND \"ExemptAmount\" >= 0 AND \"NotTaxedAmount\" >= 0 AND \"ReceiverVatConditionCode\" > 0 AND \"Total\" = \"TaxableBase\" + \"VatAmount\" + \"ExemptAmount\" + \"NotTaxedAmount\"");
+                        });
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.FiscalDocumentVatLine", b =>
+                {
+                    b.Property<Guid>("FiscalDocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ArcaRateCode")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("RatePercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("TaxAmount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal>("TaxableBase")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.HasKey("FiscalDocumentId", "ArcaRateCode");
+
+                    b.ToTable("fiscal_document_vat_lines", "pos_sales", t =>
+                        {
+                            t.HasCheckConstraint("CK_fiscal_document_vat_lines_amounts", "\"ArcaRateCode\" > 0 AND \"RatePercent\" >= 0 AND \"TaxableBase\" > 0 AND \"TaxAmount\" >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Carnicerias.Infrastructure.InventoryMovement", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3332,6 +3396,24 @@ namespace Carnicerias.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Carnicerias.Infrastructure.FiscalDocumentSnapshot", b =>
+                {
+                    b.HasOne("Carnicerias.Infrastructure.FiscalDocument", null)
+                        .WithOne("Snapshot")
+                        .HasForeignKey("Carnicerias.Infrastructure.FiscalDocumentSnapshot", "FiscalDocumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.FiscalDocumentVatLine", b =>
+                {
+                    b.HasOne("Carnicerias.Infrastructure.FiscalDocumentSnapshot", null)
+                        .WithMany("VatLines")
+                        .HasForeignKey("FiscalDocumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Carnicerias.Infrastructure.InventoryMovement", b =>
                 {
                     b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
@@ -3920,6 +4002,16 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Navigation("Allocations");
 
                     b.Navigation("Payments");
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.FiscalDocument", b =>
+                {
+                    b.Navigation("Snapshot");
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.FiscalDocumentSnapshot", b =>
+                {
+                    b.Navigation("VatLines");
                 });
 
             modelBuilder.Entity("Carnicerias.Infrastructure.SaleCheckout", b =>

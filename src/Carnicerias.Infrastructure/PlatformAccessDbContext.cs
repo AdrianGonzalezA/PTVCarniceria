@@ -86,6 +86,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
     public DbSet<ConfirmedSale> ConfirmedSales => Set<ConfirmedSale>();
 
     public DbSet<FiscalDocument> FiscalDocuments => Set<FiscalDocument>();
+    public DbSet<FiscalDocumentSnapshot> FiscalDocumentSnapshots => Set<FiscalDocumentSnapshot>();
+    public DbSet<FiscalDocumentVatLine> FiscalDocumentVatLines => Set<FiscalDocumentVatLine>();
 
     public DbSet<ConfirmedSaleLine> ConfirmedSaleLines => Set<ConfirmedSaleLine>();
 
@@ -1068,6 +1070,42 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             }).IsUnique();
             entity.HasIndex(document => new { document.CompanyId, document.SaleId })
                 .IsUnique().HasFilter("\"Status\" <> 2");
+        });
+
+        modelBuilder.Entity<FiscalDocumentSnapshot>(entity =>
+        {
+            entity.ToTable("fiscal_document_snapshots", "pos_sales", table =>
+            {
+                table.HasCheckConstraint("CK_fiscal_document_snapshots_amounts",
+                    "\"Total\" > 0 AND \"TaxableBase\" >= 0 AND \"VatAmount\" >= 0 AND \"ExemptAmount\" >= 0 AND \"NotTaxedAmount\" >= 0 AND \"ReceiverVatConditionCode\" > 0 AND \"Total\" = \"TaxableBase\" + \"VatAmount\" + \"ExemptAmount\" + \"NotTaxedAmount\"");
+            });
+            entity.HasKey(snapshot => snapshot.FiscalDocumentId);
+            entity.Property(snapshot => snapshot.Total).HasPrecision(12, 2);
+            entity.Property(snapshot => snapshot.TaxableBase).HasPrecision(12, 2);
+            entity.Property(snapshot => snapshot.VatAmount).HasPrecision(12, 2);
+            entity.Property(snapshot => snapshot.ExemptAmount).HasPrecision(12, 2);
+            entity.Property(snapshot => snapshot.NotTaxedAmount).HasPrecision(12, 2);
+            entity.HasOne<FiscalDocument>().WithOne(document => document.Snapshot)
+                .HasForeignKey<FiscalDocumentSnapshot>(snapshot => snapshot.FiscalDocumentId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(snapshot => snapshot.VatLines).WithOne()
+                .HasForeignKey(line => line.FiscalDocumentId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.Navigation(snapshot => snapshot.VatLines)
+                .UsePropertyAccessMode(PropertyAccessMode.Field);
+        });
+
+        modelBuilder.Entity<FiscalDocumentVatLine>(entity =>
+        {
+            entity.ToTable("fiscal_document_vat_lines", "pos_sales", table =>
+            {
+                table.HasCheckConstraint("CK_fiscal_document_vat_lines_amounts",
+                    "\"ArcaRateCode\" > 0 AND \"RatePercent\" >= 0 AND \"TaxableBase\" > 0 AND \"TaxAmount\" >= 0");
+            });
+            entity.HasKey(line => new { line.FiscalDocumentId, line.ArcaRateCode });
+            entity.Property(line => line.RatePercent).HasPrecision(5, 2);
+            entity.Property(line => line.TaxableBase).HasPrecision(12, 2);
+            entity.Property(line => line.TaxAmount).HasPrecision(12, 2);
         });
 
         modelBuilder.Entity<ConfirmedSaleLine>(entity =>

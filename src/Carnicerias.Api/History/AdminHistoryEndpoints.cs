@@ -1,4 +1,5 @@
 using Carnicerias.Api.Contracts;
+using Carnicerias.Api.Fiscal;
 using Carnicerias.Api.Security;
 using Carnicerias.Domain.Sales;
 using Carnicerias.Infrastructure;
@@ -149,6 +150,14 @@ public static class AdminHistoryEndpoints
             .SingleOrDefaultAsync(item => item.Id == saleId &&
                 item.CompanyId == accessor.Context.CompanyId, cancellationToken);
         if (sale is null) return Error(StatusCodes.Status404NotFound, "SALE_NOT_FOUND");
+        var fiscal = await db.FiscalDocuments.AsNoTracking()
+            .Include(document => document.Snapshot)
+            .ThenInclude(snapshot => snapshot!.VatLines)
+            .Where(document => document.CompanyId == sale.CompanyId &&
+                document.SaleId == sale.Id)
+            .OrderByDescending(document => document.CreatedAtUtc)
+            .ThenByDescending(document => document.Number)
+            .FirstOrDefaultAsync(cancellationToken);
         return Results.Ok(new SaleDetail(
             sale.Id,
             sale.ConfirmedAtUtc,
@@ -191,7 +200,17 @@ public static class AdminHistoryEndpoints
                 line.OrderDiscountAmount, line.NetAfterDiscount, line.TaxTreatment?.ToString(),
                 line.TaxRatePercent, line.TaxableBase, line.TaxAmount)).ToArray(),
             sale.Payments.OrderBy(payment => payment.Method).Select(payment => new SalePaymentItem(
-                PaymentMethodName(payment.Method), payment.TenderedAmount, payment.AppliedAmount)).ToArray()));
+                PaymentMethodName(payment.Method), payment.TenderedAmount, payment.AppliedAmount)).ToArray(),
+            fiscal is null ? null : new FiscalDocumentDetail(
+                fiscal.Id, fiscal.Status.ToString(), fiscal.PointOfSale,
+                fiscal.VoucherType, fiscal.Number, fiscal.IssueDate, fiscal.Total,
+                fiscal.Cae, FiscalDocumentEndpoints.SnapshotStatus(fiscal),
+                fiscal.Snapshot?.TaxableBase,
+                fiscal.Snapshot?.VatAmount,
+                fiscal.Snapshot?.ExemptAmount, fiscal.Snapshot?.NotTaxedAmount,
+                fiscal.Snapshot?.VatLines.OrderBy(line => line.ArcaRateCode)
+                    .Select(line => new FiscalVatLineDetail(line.ArcaRateCode,
+                        line.RatePercent, line.TaxableBase, line.TaxAmount)).ToArray())));
     }
 
     private static async Task<IResult> ListShiftsAsync(
@@ -360,7 +379,14 @@ public static class AdminHistoryEndpoints
         string? PurchaseOrderNumber,
         string TaxSnapshotStatus, decimal? TaxableBase, decimal? TaxAmount,
         decimal? ExemptAmount, decimal? NotTaxedAmount,
-        SaleLineItem[] Lines, SalePaymentItem[] Payments);
+        SaleLineItem[] Lines, SalePaymentItem[] Payments,
+        FiscalDocumentDetail? FiscalDocument);
+    private sealed record FiscalDocumentDetail(Guid Id, string Status, int PointOfSale,
+        int VoucherType, long Number, DateOnly IssueDate, decimal Total, string? Cae,
+        string SnapshotStatus, decimal? TaxableBase, decimal? TaxAmount,
+        decimal? ExemptAmount, decimal? NotTaxedAmount, FiscalVatLineDetail[]? VatLines);
+    private sealed record FiscalVatLineDetail(int ArcaRateCode, decimal RatePercent,
+        decimal TaxableBase, decimal TaxAmount);
     private sealed record SaleLineItem(string Code, string Name, string Unit, string SaleMode,
         decimal Quantity, decimal UnitPrice, decimal LineTotal,
         string? PieceIdentifier, int? PieceCount,

@@ -126,6 +126,7 @@ public static class FiscalDocumentEndpoints
                     "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
                     System.Globalization.DateTimeStyles.None, out var activityStartDate)
                     ? activityStartDate : null);
+            document.AttachSnapshot(FiscalSnapshotFactory.Create(document, request));
             db.FiscalDocuments.Add(document);
             try { await db.SaveChangesAsync(cancellationToken); }
             catch (DbUpdateException exception) when (IsUniqueConflict(exception))
@@ -169,6 +170,9 @@ public static class FiscalDocumentEndpoints
         lookup.ReceiverDocumentType == attempt.ReceiverDocumentType &&
         lookup.ReceiverDocumentNumber == attempt.ReceiverDocumentNumber;
 
+    public static string SnapshotStatus(FiscalDocument? document) => document is null
+        ? "notIssued" : document.Snapshot is null ? "legacyIncomplete" : "complete";
+
     private static int VoucherType(ConfirmedSale sale) => sale.RecipientTaxStatus is
         SaleRecipientTaxStatus.Registered or SaleRecipientTaxStatus.SmallTaxpayer ? 1 : 6;
 
@@ -188,6 +192,8 @@ public static class FiscalDocumentEndpoints
 
     private static Task<FiscalDocument?> LatestAsync(PlatformAccessDbContext db,
         ConfirmedSale sale, CancellationToken cancellationToken) => db.FiscalDocuments
+            .Include(document => document.Snapshot)
+            .ThenInclude(snapshot => snapshot!.VatLines)
             .Where(document => document.CompanyId == sale.CompanyId && document.SaleId == sale.Id)
             .OrderByDescending(document => document.CreatedAtUtc)
             .ThenByDescending(document => document.Number)
@@ -211,6 +217,18 @@ public static class FiscalDocumentEndpoints
             number = document?.Number,
             issueDate = document?.IssueDate,
             total = sale.Total,
+            fiscalSnapshotStatus = SnapshotStatus(document),
+            fiscalTaxableBase = document?.Snapshot?.TaxableBase,
+            fiscalExemptAmount = document?.Snapshot?.ExemptAmount,
+            fiscalNotTaxedAmount = document?.Snapshot?.NotTaxedAmount,
+            fiscalVatBreakdown = document?.Snapshot?.VatLines.OrderBy(line => line.ArcaRateCode)
+                .Select(line => new
+                {
+                    arcaRateCode = line.ArcaRateCode,
+                    ratePercent = line.RatePercent,
+                    taxableBase = line.TaxableBase,
+                    taxAmount = line.TaxAmount
+                }).ToArray(),
             receiverName = sale.RecipientName,
             receiverAddress = sale.RecipientAddress,
             receiverTaxStatus = sale.RecipientTaxStatus switch

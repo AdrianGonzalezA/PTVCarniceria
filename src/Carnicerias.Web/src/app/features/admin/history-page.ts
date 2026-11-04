@@ -4,7 +4,7 @@ import { Router, RouterLink } from '@angular/router';
 import { AdminAreaTabs } from './admin-area-tabs';
 import { AdminBranch, AdminOrganizationClient } from '../../core/admin/admin-organization-client';
 import { AdminTerminal, AdminTerminalClient } from '../../core/admin/admin-terminal-client';
-import { AdminHistoryClient, CashHistoryItem, HistoryFilters, HistoryPage as HistoryPageData, SaleDetail,
+import { AdminHistoryClient, CashHistoryItem, FiscalDocumentDetail, HistoryFilters, HistoryPage as HistoryPageData, SaleDetail,
   SaleHistoryItem, ShiftHistoryItem, StockHistoryItem, HistorySaleDocumentType } from '../../core/admin/admin-history-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { AdminDetailDialog } from './admin-detail-dialog';
@@ -173,6 +173,11 @@ export class HistoryPage implements OnInit {
 
   protected taxTreatmentLabel(treatment: string): string {
     return { Taxed: 'Gravado', Exempt: 'Exento', NotTaxed: 'No alcanzado' }[treatment] ?? treatment;
+  }
+
+  protected fiscalStatusLabel(status: FiscalDocumentDetail['status']): string {
+    return { Prepared: 'preparado', NeedsReconciliation: 'pendiente de conciliación',
+      Rejected: 'rechazado', Authorized: 'autorizado' }[status];
   }
 
   protected cashKindLabel(kind: CashHistoryItem['kind']): string {

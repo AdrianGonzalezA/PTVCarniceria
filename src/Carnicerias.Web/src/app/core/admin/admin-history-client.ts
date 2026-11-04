@@ -74,6 +74,7 @@ export interface SaleDetail {
   readonly taxAmount: number | null;
   readonly exemptAmount: number | null;
   readonly notTaxedAmount: number | null;
+  readonly fiscalDocument?: FiscalDocumentDetail | null;
   readonly lines: readonly {
     readonly code: string;
     readonly name: string;
@@ -96,6 +97,28 @@ export interface SaleDetail {
     readonly tenderedAmount: number;
     readonly appliedAmount: number;
   }[];
+}
+
+export interface FiscalDocumentDetail {
+  readonly id: string;
+  readonly status: 'Prepared' | 'NeedsReconciliation' | 'Rejected' | 'Authorized';
+  readonly pointOfSale: number;
+  readonly voucherType: number;
+  readonly number: number;
+  readonly issueDate: string;
+  readonly total: number;
+  readonly cae: string | null;
+  readonly snapshotStatus: 'legacyIncomplete' | 'complete';
+  readonly taxableBase: number | null;
+  readonly taxAmount: number | null;
+  readonly exemptAmount: number | null;
+  readonly notTaxedAmount: number | null;
+  readonly vatLines: readonly {
+    readonly arcaRateCode: number;
+    readonly ratePercent: number;
+    readonly taxableBase: number;
+    readonly taxAmount: number;
+  }[] | null;
 }
 
 export interface ShiftHistoryItem {

@@ -187,6 +187,18 @@
           } @else if (ticket.taxSnapshotStatus === 'unconfigured') {
             <p>Snapshot impositivo incompleto: uno o más artículos no tenían clasificación fiscal configurada. No emitir factura con este cálculo.</p>
           } @else { <p>Venta anterior al registro de snapshots impositivos. No recalcularla con reglas actuales.</p> }
+          @if (ticket.fiscalDocument; as fiscal) {
+            <h4>Comprobante fiscal {{ fiscal.voucherType === 1 ? 'A' : fiscal.voucherType === 6 ? 'B' : fiscal.voucherType }}</h4>
+            <p>Intento {{ fiscal.pointOfSale }}-{{ fiscal.number }} · Estado {{ fiscalStatusLabel(fiscal.status) }}
+              @if (fiscal.cae) { · CAE {{ fiscal.cae }} }
+            </p>
+            @if (fiscal.snapshotStatus === 'complete') {
+              <p>Base gravada $ {{ fiscal.taxableBase | number:'1.2-2' }} · IVA $ {{ fiscal.taxAmount | number:'1.2-2' }} · Exento $ {{ fiscal.exemptAmount | number:'1.2-2' }} · No gravado $ {{ fiscal.notTaxedAmount | number:'1.2-2' }}.</p>
+              <ul>@for (vat of fiscal.vatLines ?? []; track vat.arcaRateCode) {
+                <li>IVA {{ vat.ratePercent | number:'1.0-2' }} % · Base $ {{ vat.taxableBase | number:'1.2-2' }} · Impuesto $ {{ vat.taxAmount | number:'1.2-2' }}</li>
+              }</ul>
+            } @else { <p>Intento histórico sin snapshot fiscal: importes no reconstruidos.</p> }
+          }
           <h4>Pagos</h4>
           <ul>@for (payment of ticket.payments; track payment.method) {
             <li>{{ paymentLabel(payment.method) }}: $ {{ payment.appliedAmount | number:'1.2-2' }} aplicado

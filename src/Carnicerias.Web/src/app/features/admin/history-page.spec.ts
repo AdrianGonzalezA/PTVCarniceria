@@ -86,6 +86,38 @@ describe('HistoryPage', () => {
     expect(page.querySelector('tbody button')).toBe(trigger);
   });
 
+  it('distinguishes an issued fiscal snapshot from an older incomplete attempt', () => {
+    const { fixture, http, page } = load();
+    page.querySelector<HTMLButtonElement>('tbody button')!.click();
+    http.expectOne('/api/admin/history/sales/sale-1').flush({ id: 'sale-1',
+      confirmedAtUtc: '2026-10-08T10:00:00Z', total: 121,
+      lines: [], payments: [], fiscalDocument: {
+        id: 'fiscal-1', status: 'Authorized', pointOfSale: 99,
+        voucherType: 6, number: 43, issueDate: '2026-10-08', total: 121,
+        cae: '12345678901234', snapshotStatus: 'complete', taxableBase: 100,
+        taxAmount: 21, exemptAmount: 0, notTaxedAmount: 0,
+        vatLines: [{ arcaRateCode: 5, ratePercent: 21, taxableBase: 100, taxAmount: 21 }],
+      } });
+    fixture.detectChanges();
+    expect(page.querySelector('.ticket-detail')?.textContent).toContain('CAE 12345678901234');
+    expect(page.querySelector('.ticket-detail')?.textContent).toContain('Base gravada');
+    expect(page.querySelector('.ticket-detail')?.textContent).toContain('Estado autorizado');
+
+    page.querySelector<HTMLButtonElement>('dialog button')!.click();
+    page.querySelector<HTMLButtonElement>('tbody button')!.click();
+    http.expectOne('/api/admin/history/sales/sale-1').flush({ id: 'sale-1',
+      confirmedAtUtc: '2026-10-08T10:00:00Z', total: 121,
+      lines: [], payments: [], fiscalDocument: {
+        id: 'fiscal-old', status: 'Authorized', pointOfSale: 99,
+        voucherType: 6, number: 42, issueDate: '2026-10-07', total: 121,
+        cae: '12345678901234', snapshotStatus: 'legacyIncomplete',
+        taxableBase: null, taxAmount: null, exemptAmount: null,
+        notTaxedAmount: null, vatLines: null,
+      } });
+    fixture.detectChanges();
+    expect(page.querySelector('.ticket-detail')?.textContent).toContain('sin snapshot fiscal');
+  });
+
   it('labels account collections and their cash change separately from sales', () => {
     const { fixture, http, page } = load();
     const cashTab = Array.from(page.querySelectorAll<HTMLButtonElement>('.history-tabs button'))

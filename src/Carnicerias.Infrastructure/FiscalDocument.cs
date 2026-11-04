@@ -63,6 +63,15 @@ public sealed class FiscalDocument
     public DateOnly? CaeExpiry { get; private set; }
     public DateTimeOffset? AuthorizedAtUtc { get; private set; }
     public string? ErrorCodes { get; private set; }
+    public FiscalDocumentSnapshot? Snapshot { get; private set; }
+
+    public void AttachSnapshot(FiscalDocumentSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (Snapshot is not null || snapshot.FiscalDocumentId != Id)
+            throw new InvalidOperationException("Fiscal snapshot cannot be replaced or reassigned.");
+        Snapshot = snapshot;
+    }
 
     public void RequireReconciliation()
     {

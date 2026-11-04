@@ -1171,6 +1171,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
         {
             entity.ToTable("sale_payment_events", "payments_cash");
             entity.HasKey(item => item.Id);
+            entity.Property(item => item.Id).ValueGeneratedNever();
             entity.Property(item => item.FromStatus).HasMaxLength(32).IsRequired();
             entity.Property(item => item.ToStatus).HasMaxLength(32).IsRequired();
             entity.Property(item => item.Reference).HasMaxLength(200);

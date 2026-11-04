@@ -2189,7 +2189,6 @@ namespace Carnicerias.Infrastructure.Migrations
             modelBuilder.Entity("Carnicerias.Infrastructure.SaleCheckoutEvent", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid?>("ActorUserId")

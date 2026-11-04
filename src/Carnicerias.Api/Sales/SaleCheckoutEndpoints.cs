@@ -125,7 +125,7 @@ public static class SaleCheckoutEndpoints
                     accessor.Context.BranchId, draftId, cancellationToken))
                 return Error(404, "DRAFT_NOT_FOUND");
             var checkout = await OwnedAsync(db, accessor, draftId, checkoutId, true, cancellationToken);
-            var draft = await db.SaleDrafts.AsNoTracking().SingleOrDefaultAsync(item =>
+            var draft = await db.SaleDrafts.AsNoTracking().Include(item => item.Lines).SingleOrDefaultAsync(item =>
                 item.Id == draftId && item.Status == SaleDraftStatus.Draft, cancellationToken);
             var shift = await OpenShiftAsync(db, accessor, cancellationToken);
             if (checkout is null || draft is null) return Error(404, "CHECKOUT_NOT_FOUND");
@@ -270,9 +270,12 @@ public static class SaleCheckoutEndpoints
     private static bool ValidTerms(SaleCheckoutTerms terms) =>
         terms.DocumentType is { Length: > 0 and <= 32 } &&
         terms.RecipientTaxStatus is { Length: > 0 and <= 32 } &&
-        terms.RecipientName?.Length <= 200 && terms.RecipientDocumentNumber?.Length <= 20 &&
-        terms.RecipientAddress?.Length <= 200 && terms.RecipientLocality?.Length <= 100 &&
-        terms.RecipientProvince?.Length <= 100 && terms.PurchaseOrderNumber?.Length <= 80 &&
+        terms.RecipientName is null or { Length: <= 200 } &&
+        terms.RecipientDocumentNumber is null or { Length: <= 20 } &&
+        terms.RecipientAddress is null or { Length: <= 200 } &&
+        terms.RecipientLocality is null or { Length: <= 100 } &&
+        terms.RecipientProvince is null or { Length: <= 100 } &&
+        terms.PurchaseOrderNumber is null or { Length: <= 80 } &&
         (terms.AccountChargeAmount == 0 || terms.AccountChargeConfirmed) &&
         (terms.CustomerId is not null || terms.AccountChargeAmount == 0 &&
             terms.CreditAppliedAmount == 0) &&

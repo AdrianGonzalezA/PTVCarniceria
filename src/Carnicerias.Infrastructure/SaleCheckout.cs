@@ -5,7 +5,7 @@ using Carnicerias.Domain.Sales;
 
 namespace Carnicerias.Infrastructure;
 
-public enum SaleCheckoutStatus { Prepared, Committed, PendingBalance, Ready, Completed }
+public enum SaleCheckoutStatus { Prepared, Committed, PendingBalance, Ready, Completed, Canceled }
 
 public enum SaleCheckoutInstrumentStatus { Prepared, InProcess, Approved, Rejected, Uncertain }
 
@@ -75,7 +75,8 @@ public sealed class SaleCheckout
         Terms.CreditAppliedAmount - ApprovedAmount);
 
     public void Prepare(int expectedRevision, SaleCheckoutTerms terms,
-        IReadOnlyList<SaleCheckoutPayment> payments, DateTimeOffset now)
+        IReadOnlyList<SaleCheckoutPayment> payments, DateTimeOffset now,
+        decimal? updatedTotal = null, DateTimeOffset? updatedDraftAtUtc = null)
     {
         ArgumentNullException.ThrowIfNull(terms);
         ArgumentNullException.ThrowIfNull(payments);
@@ -83,8 +84,12 @@ public sealed class SaleCheckout
             payments.Count > 20 || payments.Any(item => item.Id == Guid.Empty ||
                 item.Reference?.Length > 200) || payments.Select(item => item.Id).Distinct().Count() != payments.Count ||
             terms.CustomerId == Guid.Empty || terms.FiscalCustomerId == Guid.Empty ||
+            updatedTotal is <= 0 or > 9_999_999_999.99m ||
+            updatedTotal is not null && decimal.Round(updatedTotal.Value, 2) != updatedTotal ||
             (terms.CustomerId is null && (terms.AccountChargeAmount != 0 || terms.CreditAppliedAmount != 0)))
             throw new InvalidOperationException("Checkout preparation conflicts with its current revision.");
+        Total = updatedTotal ?? Total;
+        DraftUpdatedAtUtc = updatedDraftAtUtc?.ToUniversalTime() ?? DraftUpdatedAtUtc;
         PaymentSettlement.CalculateWithAccountCharge(Total,
             payments.Select(item => new PaymentTender(item.Method, item.Amount)).ToArray(),
             terms.AccountChargeAmount, terms.CreditAppliedAmount);
@@ -113,6 +118,16 @@ public sealed class SaleCheckout
             "Payment plan committed", UpdatedAtUtc));
     }
 
+    public void CancelPrepared(DateTimeOffset now)
+    {
+        if (Status != SaleCheckoutStatus.Prepared)
+            throw new InvalidOperationException("A committed payment plan cannot be discarded.");
+        Status = SaleCheckoutStatus.Canceled;
+        UpdatedAtUtc = now.ToUniversalTime();
+        Events.Add(new SaleCheckoutEvent("Prepared", "Canceled", null, CashierId,
+            "Draft cancelled before payment", UpdatedAtUtc));
+    }
+
     public void ApproveManual(Guid instrumentId, string? reference, DateTimeOffset now)
     {
         var instrument = Find(instrumentId);
@@ -131,7 +146,8 @@ public sealed class SaleCheckout
     {
         EnsureCommitted();
         var instrument = Find(instrumentId);
-        if (instrument.Method == PaymentMethod.MercadoPago || string.IsNullOrWhiteSpace(reason))
+        if (instrument.Method == PaymentMethod.MercadoPago || string.IsNullOrWhiteSpace(reason) ||
+            reason.Length > 200)
             throw new InvalidOperationException("A manual payment needs a rejection reason.");
         instrument.Reject(now);
         Events.Add(new SaleCheckoutEvent("Prepared", "Rejected", instrumentId, CashierId,

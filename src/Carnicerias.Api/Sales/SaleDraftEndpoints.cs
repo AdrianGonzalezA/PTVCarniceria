@@ -124,6 +124,11 @@ public static class SaleDraftEndpoints
                 return Error(StatusCodes.Status409Conflict, "DRAFT_BELONGS_TO_OTHER_SHIFT");
             if (draft is not null && draft.PriceListId != request.PriceListId)
                 return Error(StatusCodes.Status409Conflict, "DRAFT_PRICE_LIST_LOCKED");
+            if (draft is not null && await db.SaleCheckouts.AnyAsync(item =>
+                    item.CompanyId == context.CompanyId && item.SaleDraftId == draft.Id &&
+                    item.Status != SaleCheckoutStatus.Prepared &&
+                    item.Status != SaleCheckoutStatus.Canceled, cancellationToken))
+                return Error(StatusCodes.Status409Conflict, "CHECKOUT_IN_PROGRESS");
             if (draft is not null && await HasActiveMercadoPagoOrderAsync(db, draft.Id, cancellationToken))
                 return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_ORDER_ACTIVE");
 
@@ -298,6 +303,11 @@ public static class SaleDraftEndpoints
                     context.CompanyId, context.BranchId, draft.Id, cancellationToken))
                 return Error(StatusCodes.Status409Conflict, "SALE_DRAFT_CONFLICT");
             if (draft is null) return Results.NoContent();
+            var checkout = await db.SaleCheckouts.SingleOrDefaultAsync(item =>
+                item.CompanyId == context.CompanyId && item.SaleDraftId == draft.Id,
+                cancellationToken);
+            if (checkout is not null && checkout.Status != SaleCheckoutStatus.Prepared)
+                return Error(StatusCodes.Status409Conflict, "CHECKOUT_IN_PROGRESS");
             if (await HasActiveMercadoPagoOrderAsync(db, draft.Id, cancellationToken))
                 return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_ORDER_ACTIVE");
             foreach (var productId in draft.Lines.Select(line => line.ProductId).Distinct().Order())
@@ -326,6 +336,7 @@ public static class SaleDraftEndpoints
                 if (updated == 0)
                     return Error(StatusCodes.Status409Conflict, "STOCK_RESERVATION_MISSING");
             }
+            checkout?.CancelPrepared(now);
             draft.Cancel(context.UserId, now);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);

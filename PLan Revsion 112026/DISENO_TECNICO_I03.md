@@ -1,6 +1,6 @@
 # I03 — Diseño propuesto para cobro preparado y venta pendiente
 
-**Fecha:** 03/11/2026. **Estado:** propuesta para revisión arquitectónica del Product Owner. **No autorizada para implementación.** No se modificaron código de pagos, esquema ni registros comerciales en esta etapa.
+**Fecha de propuesta:** 03/11/2026. **Estado al 04/11/2026:** las cinco decisiones funcionales y la implementación de código de **I03a** fueron autorizadas por el PO. La migración aditiva `20261103193100_AddSaleCheckoutProcess` está preparada y **no aplicada**. No se modificaron datos comerciales. La propuesta original se conserva abajo como antecedente; prevalece la sección de implementación al final. I03b requiere autorización separada.
 
 ## Alcance exacto del plan
 
@@ -81,4 +81,36 @@ Antes de una migración futura: inventario de intentos activos y borradores, res
 4. **Contabilidad de aprobados pendientes:** ¿cómo debe figurar un valor cobrado por MP en la caja/turno antes de la venta definitiva? No puede omitirse ni registrarse dos veces cuando se cierre el ticket.
 5. **Contrato de finalización:** ¿el endpoint de confirmación existente acepta el ID del proceso comprometido o se crea una ruta nueva, manteniendo la ruta vieja solo para operaciones anteriores? Es una decisión de arquitectura y compatibilidad.
 
-**Puerta:** la migración necesaria y estas decisiones impiden aplicar la autorización condicional de implementación. Solicitar aprobación del diseño y autorización separada para código/migración preparada; la ejecución sobre PostgreSQL requerirá otra puerta de respaldo y prevuelo. No comenzar I03a, I03b ni I06 antes de esa aprobación.
+**Puerta resuelta para I03a:** el PO aprobó las cinco decisiones y autorizó código y archivo de migración. Continúa prohibido aplicar la migración, escribir en PostgreSQL o iniciar I03b sin nueva autorización.
+
+## Implementación I03a preparada — 04/11/2026
+
+Las cinco decisiones vigentes son: venta solo finalizada con pago íntegro y confirmado; turno bloqueado mientras haya ventas pendientes; varias operaciones del mismo medio con ID, importe, referencia y estado propios; aprobados registrados inmediatamente como cobros pendientes e imputados a la venta solo al confirmarla; confirmación final transaccional e idempotente.
+
+### Persistencia y transiciones
+
+- `SaleCheckout` guarda el plan por borrador con empresa, sucursal, caja, cajero y turno; revisión, hash y clave de commit. `Prepared` permite editar instrumentos y no llama a proveedores. `Committed` congela el plan antes de ejecutar un cargo; `PendingBalance` conserva pagos parciales; `Ready` exige cobertura íntegra y resultados ciertos; `Completed` se fija en la misma transacción que la venta, stock, cuenta corriente y ledger. `Canceled` solo se admite antes del commit al cancelar el borrador.
+- Cada `SaleCheckoutInstrument` tiene ID propio, medio, importe, referencia y estado `Prepared`, `InProcess`, `Approved`, `Rejected` o `Uncertain`. Un rechazo permite agregar una operación de reemplazo sin borrar el aprobado. Los eventos conservan actor, hora y transición. Los intentos MP reutilizan clave idempotente, consulta de estado, webhook y conciliación existentes.
+- La migración añade `payments_cash.sale_payment_processes`, `sale_payment_instruments` y `sale_payment_events`, vínculos opcionales a `point_payment_intents` y `sale_payments`, índices únicos de operación y clave de commit. Las ventas históricas quedan con vínculo nulo. El índice de MP por borrador conserva la regla del flujo viejo y permite instrumentos distintos en el checkout nuevo. `Down` se niega si existen procesos para impedir pérdida accidental de cobros.
+
+### Contratos y permisos implementados
+
+| Ruta | Función |
+| --- | --- |
+| `GET /api/sales/drafts/{draftId}/checkout` | Recupera plan y estados, o 204 si no existe. |
+| `PUT /api/sales/drafts/{draftId}/checkout` | Prepara/revisa términos e instrumentos con `expectedRevision`; valida borrador, turno, cliente, documento y montos. |
+| `POST /api/sales/drafts/{draftId}/checkout/{checkoutId}/commit` | Congela la revisión con `key` idempotente; no inicia el proveedor. |
+| `POST .../instruments/{instrumentId}/approve` y `/reject` | Registra el resultado de un medio manual con referencia; MP se decide por respuesta del proveedor. |
+| `POST .../instruments` | Agrega una operación tras un rechazo sin eliminar aprobados. |
+| `POST .../instruments/{instrumentId}/execute` y `GET .../payment` | Inicia o recupera un intento MP vinculado al instrumento. `/check`, `/cancel` y webhooks existentes sincronizan su estado. |
+| `POST /api/sales/drafts/{draftId}/checkout/{checkoutId}/confirmation` | Confirma una sola venta si el proceso está `Ready`; conserva una fila y un ID de ledger por operación. |
+
+Todas las rutas de venta exigen contexto operativo de empresa/sucursal/caja/cajero; se verifica turno abierto y propiedad del borrador en servidor. El cargo a cuenta conserva `pos.account.charge` y el descuento `pos.discount.apply`. La ruta histórica `/confirmation` sigue disponible para borradores sin checkout, pero no puede confirmar uno que ya tiene proceso I03a. No se exponen datos de tarjeta ni secretos de proveedor en los nuevos contratos.
+
+### Recuperación, consistencia y despliegue pendiente
+
+Al reabrir el ticket A/B/C/D, el POS consulta el checkout, recupera cada operación y los intentos MP vinculados. Un error de red conserva el plan y los pagos aprobados; no habilita volver a cobrar una operación incierta. El turno no cierra con borradores o procesos pendientes. El saldo de caja incluye efectivo aprobado pendiente en un campo separado y deja la imputación a venta para la confirmación; los importes sin efectivo pendientes también se muestran por separado. La confirmación usa la transacción serializable y bloqueo por borrador existentes, con hash de solicitud estable y vínculos únicos, para evitar duplicar venta, stock o ledger en reintentos.
+
+**Antes de desplegar:** autorización específica, prevuelo de la única base `carnicerias_test_visual:55433`, inventario de intentos/borradores activos, respaldo verificable, revisión SQL y corte coordinado de escritores; aplicar solo la migración I03a, verificar esquema, luego desplegar API/POS compatibles. No volver a una API vieja mientras haya procesos nuevos pendientes. La restauración o conciliación de pagos exige decisión separada; no usar `Down` para borrar procesos.
+
+**Verificaciones sin escribir PostgreSQL:** 27 pruebas .NET focalizadas (modelo de cobro, reparto y metadatos EF), 54 pruebas del POS, 224 del frontend completo, build API/Web y `dotnet ef migrations has-pending-model-changes` correctos. Faltan pruebas HTTP contra esquema migrado, concurrencia con dos cajas, MP sandbox y recuperación real en Electron; dependen de autorización de migración y escrituras controladas. No son evidencia de operación de I03a en PostgreSQL.

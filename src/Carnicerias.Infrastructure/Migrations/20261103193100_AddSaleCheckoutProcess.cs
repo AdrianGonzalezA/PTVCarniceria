@@ -72,7 +72,7 @@ namespace Carnicerias.Infrastructure.Migrations
                     table.PrimaryKey("PK_sale_payment_processes", x => x.Id);
                     table.UniqueConstraint("AK_sale_payment_processes_CompanyId_Id", x => new { x.CompanyId, x.Id });
                     table.CheckConstraint("CK_sale_payment_processes_revision", "\"Revision\" >= 0");
-                    table.CheckConstraint("CK_sale_payment_processes_status", "\"Status\" BETWEEN 0 AND 4");
+                    table.CheckConstraint("CK_sale_payment_processes_status", "\"Status\" BETWEEN 0 AND 5");
                     table.CheckConstraint("CK_sale_payment_processes_total", "\"Total\" > 0");
                     table.ForeignKey(
                         name: "FK_sale_payment_processes_cashier_shifts_CompanyId_CashierShif~",

@@ -165,6 +165,7 @@ app.MapCustomerCollectionEndpoints();
 app.MapCustomerCollectionCorrectionEndpoints();
 app.MapAdminAccountEndpoints();
 app.MapSaleDraftEndpoints();
+app.MapSaleCheckoutEndpoints();
 app.MapSaleConfirmationEndpoints();
 app.MapMercadoPagoPaymentEndpoints();
 app.MapIntegratedGatewayAvailabilityEndpoints();

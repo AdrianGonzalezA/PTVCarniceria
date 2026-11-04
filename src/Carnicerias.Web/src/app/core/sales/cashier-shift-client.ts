@@ -12,6 +12,8 @@ export interface CashierShift {
   readonly creditApplied: number;
   readonly salesTotal: number;
   readonly cashBalance: number;
+  readonly pendingApprovedCash?: number;
+  readonly pendingApprovedNonCash?: number;
   readonly openedAtUtc: string;
   readonly closedAtUtc: string | null;
 }

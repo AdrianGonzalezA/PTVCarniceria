@@ -44,6 +44,31 @@ public static class MercadoPagoPaymentEndpoints
             CancelAsync(draftId, null, intentId, db, accessor, settings, point, qr, lookup,
                 clock, context, cancellationToken)).RequireOperationalContext();
 
+        var checkoutPayments = endpoints.MapGroup(
+            "/api/sales/drafts/{draftId:guid}/checkout/{checkoutId:guid}/instruments/{instrumentId:guid}");
+        checkoutPayments.MapGet("/payment", async (Guid draftId, Guid checkoutId,
+            Guid instrumentId, PlatformAccessDbContext db, OperationalContextAccessor accessor,
+            CancellationToken cancellationToken) =>
+        {
+            var intent = await db.PointPaymentIntents.AsNoTracking().SingleOrDefaultAsync(item =>
+                item.CheckoutInstrumentId == instrumentId && item.SaleDraftId == draftId &&
+                item.CompanyId == accessor.Context.CompanyId && item.BranchId == accessor.Context.BranchId &&
+                item.CashierId == accessor.Context.UserId && item.PosTerminalId == accessor.TerminalId &&
+                db.SaleCheckoutInstruments.Any(instrument => instrument.Id == instrumentId &&
+                    instrument.SaleCheckoutId == checkoutId), cancellationToken);
+            return intent is null ? Results.NoContent() : Results.Ok(ToResponse(intent));
+        }).RequireOperationalContext();
+        checkoutPayments.MapPost("/execute", (Guid draftId, Guid checkoutId, Guid instrumentId,
+            StartRequest? request, PlatformAccessDbContext db, OperationalContextAccessor accessor,
+            MercadoPagoSettingsResolver settings, MercadoPagoPointClient point, MercadoPagoQrClient qr,
+            MercadoPagoStaticQrClient staticQr, MercadoPagoOrderLookupClient lookup,
+            TimeProvider clock, HttpContext context, CancellationToken cancellationToken) =>
+            StartAsync(draftId, null, request is null ? null : request with
+            {
+                CheckoutId = checkoutId, CheckoutInstrumentId = instrumentId
+            }, db, accessor, settings, point, qr, staticQr, lookup, clock, context,
+                cancellationToken)).RequireOperationalContext();
+
         var collections = endpoints.MapGroup(
             "/api/customers/collections/operations/{operationId:guid}/mercado-pago");
         collections.MapGet("", (Guid operationId, PlatformAccessDbContext db,
@@ -110,13 +135,16 @@ public static class MercadoPagoPaymentEndpoints
             request.Mode is not "point" and not "qr" and not "qrStatic" ||
             (draftId is null) == (operationId is null) ||
             (draftId is null) != (request.CustomerId is not null) ||
-            request.CustomerId == Guid.Empty)
+            request.CustomerId == Guid.Empty ||
+            (request.CheckoutId is null) != (request.CheckoutInstrumentId is null) ||
+            request.CheckoutId is not null && draftId is null)
             return Error(400, "VALIDATION_ERROR");
         if (request.Mode == "point" && request.Amount < 15m)
             return Error(400, "MERCADO_PAGO_AMOUNT_TOO_SMALL");
         await using var dbTransaction = await db.Database.BeginTransactionAsync(
             IsolationLevel.Serializable, cancellationToken);
         SaleDraft? draft = null;
+        SaleCheckout? checkout = null;
         if (draftId is Guid saleDraftId)
         {
             if (!await SaleDraftTransactionLock.AcquireAsync(db,
@@ -126,6 +154,21 @@ public static class MercadoPagoPaymentEndpoints
             draft = await OwnedDraftAsync(saleDraftId, db, accessor, cancellationToken);
             if (draft is null || draft.Lines.Count == 0 || draft.TotalAfterDiscount < request.Amount)
                 return Error(409, "DRAFT_NOT_CONFIRMABLE");
+            checkout = await db.SaleCheckouts.Include(item => item.Instruments)
+                .SingleOrDefaultAsync(item => item.CompanyId == accessor.Context.CompanyId &&
+                    item.SaleDraftId == saleDraftId, cancellationToken);
+            if (request.CheckoutInstrumentId is Guid checkoutInstrumentId)
+            {
+                if (checkout is null || checkout.Id != request.CheckoutId || checkout.Status is not
+                    (SaleCheckoutStatus.Committed or SaleCheckoutStatus.PendingBalance or
+                     SaleCheckoutStatus.Ready) ||
+                    checkout.Instruments.SingleOrDefault(item => item.Id == checkoutInstrumentId) is not
+                    { Method: Carnicerias.Domain.Sales.PaymentMethod.MercadoPago } instrument ||
+                    instrument.Amount != request.Amount)
+                    return Error(409, "CHECKOUT_OPERATION_CONFLICT");
+            }
+            else if (checkout is not null)
+                return Error(409, "CHECKOUT_REQUIRED");
         }
         else
         {
@@ -142,7 +185,8 @@ public static class MercadoPagoPaymentEndpoints
             item.CompanyId == accessor.Context.CompanyId && item.BranchId == accessor.Context.BranchId &&
             item.CashierId == accessor.Context.UserId && item.PosTerminalId == terminalId &&
             item.Status == CashierShiftStatus.Open, cancellationToken);
-        if (shift is null || draft is not null && draft.CashierShiftId != shift.Id)
+        if (shift is null || draft is not null && draft.CashierShiftId != shift.Id ||
+            checkout is not null && checkout.CashierShiftId != shift.Id)
             return Error(409, "CASHIER_SHIFT_REQUIRED");
         var mapping = await db.MercadoPagoRegisterSettings.AsNoTracking().SingleOrDefaultAsync(item =>
             item.CompanyId == accessor.Context.CompanyId && item.BranchId == accessor.Context.BranchId &&
@@ -163,6 +207,7 @@ public static class MercadoPagoPaymentEndpoints
         var intent = await db.PointPaymentIntents.Where(item =>
             item.CompanyId == accessor.Context.CompanyId && item.SaleDraftId == draftId &&
             item.CustomerCollectionOperationId == operationId &&
+            item.CheckoutInstrumentId == request.CheckoutInstrumentId &&
             (item.Status == PointPaymentStatus.Prepared || item.Status == PointPaymentStatus.Pending ||
              item.Status == PointPaymentStatus.Approved || item.Status == PointPaymentStatus.NeedsReconciliation))
             .OrderByDescending(item => item.CreatedAtUtc).FirstOrDefaultAsync(cancellationToken);
@@ -170,6 +215,8 @@ public static class MercadoPagoPaymentEndpoints
             intent.TerminalId != deviceId || intent.CustomerId != request.CustomerId ||
             intent.CashierShiftId != shift.Id || intent.CashierId != accessor.Context.UserId ||
             intent.PosTerminalId != terminalId)) return Error(409, "MERCADO_PAGO_ORDER_ACTIVE");
+        if (intent is null && checkout?.Status == SaleCheckoutStatus.Ready)
+            return Error(409, "CHECKOUT_OPERATION_CONFLICT");
         if (intent?.ProviderOrderId is not null) return Results.Ok(ToResponse(intent));
         var retry = intent is not null;
         if (intent is null)
@@ -182,9 +229,16 @@ public static class MercadoPagoPaymentEndpoints
                     accessor.Context.BranchId, request.CustomerId!.Value, operationId!.Value,
                     shift.Id, accessor.Context.UserId, terminalId, deviceId,
                     request.Amount, clock.GetUtcNow(), mode);
+            if (request.CheckoutInstrumentId is Guid linkedInstrumentId)
+                intent.AttachToCheckout(linkedInstrumentId);
             db.PointPaymentIntents.Add(intent);
             try { await db.SaveChangesAsync(cancellationToken); }
             catch (DbUpdateException) { return Error(409, "MERCADO_PAGO_ORDER_ACTIVE"); }
+        }
+        if (request.CheckoutInstrumentId is Guid operationInstrumentId)
+        {
+            checkout!.LinkMercadoPago(operationInstrumentId, intent.Id, clock.GetUtcNow());
+            await db.SaveChangesAsync(cancellationToken);
         }
         await dbTransaction.CommitAsync(cancellationToken);
 
@@ -200,6 +254,7 @@ public static class MercadoPagoPaymentEndpoints
                     if (intent.Status == PointPaymentStatus.Prepared)
                     {
                         intent.RejectBeforeProviderOrder(clock.GetUtcNow());
+                        await SyncCheckoutAsync(intent, db, clock, cancellationToken);
                         await db.SaveChangesAsync(cancellationToken);
                         return Error(exception is InvalidDataException ? 409 : 503,
                             "MERCADO_PAGO_STATIC_QR_UNAVAILABLE");
@@ -230,6 +285,7 @@ public static class MercadoPagoPaymentEndpoints
                 if (mode == MercadoPagoOrderMode.DynamicQr && result.QrData is not null)
                     intent.SetQrData(result.QrData);
             }
+            await SyncCheckoutAsync(intent, db, clock, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             return Results.Ok(ToResponse(intent));
         }
@@ -243,6 +299,7 @@ public static class MercadoPagoPaymentEndpoints
                 PointPaymentStatus.NeedsReconciliation)
             {
                 saved.MarkUncertain(clock.GetUtcNow());
+                await SyncCheckoutAsync(saved, db, clock, cancellationToken);
                 await db.SaveChangesAsync(cancellationToken);
             }
             return Error(503, "MERCADO_PAGO_RECONCILIATION_REQUIRED");
@@ -295,6 +352,7 @@ public static class MercadoPagoPaymentEndpoints
                 if (intent.Mode == MercadoPagoOrderMode.DynamicQr && result.QrData is not null)
                     intent.SetQrData(result.QrData);
             }
+            await SyncCheckoutAsync(intent, db, clock, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             return Results.Ok(ToResponse(intent));
         }
@@ -358,6 +416,7 @@ public static class MercadoPagoPaymentEndpoints
                 intent.RecordProviderState(result.Id, result.PaymentId, result.Status,
                     result.PaymentStatus, result.PaymentStatusDetail, result.IsApproved, clock.GetUtcNow());
             }
+            await SyncCheckoutAsync(intent, db, clock, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             return Results.Ok(ToResponse(intent));
         }
@@ -398,8 +457,32 @@ public static class MercadoPagoPaymentEndpoints
             if (intent.Mode == MercadoPagoOrderMode.DynamicQr && order.QrData is not null)
                 intent.SetQrData(order.QrData);
         }
+        await SyncCheckoutAsync(intent, db, clock, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    internal static async Task SyncCheckoutAsync(PointPaymentIntent intent,
+        PlatformAccessDbContext db, TimeProvider clock, CancellationToken cancellationToken)
+    {
+        if (intent.CheckoutInstrumentId is not Guid instrumentId) return;
+        foreach (var entry in db.ChangeTracker.Entries<SaleCheckout>().ToArray())
+            entry.State = EntityState.Detached;
+        foreach (var entry in db.ChangeTracker.Entries<SaleCheckoutInstrument>().ToArray())
+            entry.State = EntityState.Detached;
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable, cancellationToken);
+        if (intent.SaleDraftId is not Guid draftId ||
+            !await SaleDraftTransactionLock.AcquireAsync(db, intent.CompanyId,
+                intent.BranchId, draftId, cancellationToken))
+            throw new InvalidOperationException("Checkout draft was not found.");
+        var checkout = await db.SaleCheckouts.Include(item => item.Instruments)
+            .SingleAsync(item => item.Instruments.Any(instrument => instrument.Id == instrumentId),
+                cancellationToken);
+        checkout.SyncMercadoPago(instrumentId, intent.Status, intent.ProviderOrderId,
+            clock.GetUtcNow());
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     private static Task<bool> OwnsDraftAsync(Guid id, PlatformAccessDbContext db,
@@ -441,5 +524,6 @@ public static class MercadoPagoPaymentEndpoints
         error = new { code, message = "No se pudo completar el cobro de Mercado Pago" }
     }, statusCode: status);
 
-    private sealed record StartRequest(string Mode, decimal Amount, Guid? CustomerId = null);
+    private sealed record StartRequest(string Mode, decimal Amount, Guid? CustomerId = null,
+        Guid? CheckoutId = null, Guid? CheckoutInstrumentId = null);
 }

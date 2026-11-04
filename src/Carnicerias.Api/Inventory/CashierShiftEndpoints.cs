@@ -108,6 +108,10 @@ public static class CashierShiftEndpoints
                 (accessor.TerminalId == null || draft.CashierShiftId == shift.Id) &&
                 draft.Status == SaleDraftStatus.Draft, cancellationToken);
             if (hasDraft) return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_HAS_DRAFT");
+            if (await db.SaleCheckouts.AnyAsync(item => item.CompanyId == context.CompanyId &&
+                    item.CashierShiftId == shift.Id && item.Status != SaleCheckoutStatus.Completed &&
+                    item.Status != SaleCheckoutStatus.Canceled, cancellationToken))
+                return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_HAS_PENDING_PAYMENT");
 
             var now = timeProvider.GetUtcNow();
             shift.Close(context.UserId, now);
@@ -191,9 +195,24 @@ public static class CashierShiftEndpoints
             .Where(application => application.CompanyId == shift.CompanyId &&
                 application.BranchId == shift.BranchId && application.CashierShiftId == shift.Id)
             .SumAsync(application => (decimal?)application.Amount, cancellationToken) ?? 0;
+        var pending = await db.SaleCheckouts.AsNoTracking()
+            .Where(checkout => checkout.CompanyId == shift.CompanyId &&
+                checkout.CashierShiftId == shift.Id && checkout.Status != SaleCheckoutStatus.Completed &&
+                checkout.Status != SaleCheckoutStatus.Canceled)
+            .SelectMany(checkout => checkout.Instruments)
+            .Where(instrument => instrument.Status == SaleCheckoutInstrumentStatus.Approved)
+            .GroupBy(instrument => 1)
+            .Select(group => new
+            {
+                Cash = group.Where(item => item.Method == PaymentMethod.Cash).Sum(item => item.Amount),
+                NonCash = group.Where(item => item.Method != PaymentMethod.Cash).Sum(item => item.Amount)
+            })
+            .SingleOrDefaultAsync(cancellationToken);
         return new ShiftResponse(shift.Id, shift.OpeningCash, shift.OpenedAtUtc, shift.ClosedAtUtc,
-            cashSales, collectedSales - cashSales, accountSales, salesTotal, totals?.CashBalance ?? 0,
-            totals?.CashCollections ?? 0, totals?.NonCashCollections ?? 0, creditApplied);
+            cashSales, collectedSales - cashSales, accountSales, salesTotal,
+            (totals?.CashBalance ?? 0) + (pending?.Cash ?? 0),
+            totals?.CashCollections ?? 0, totals?.NonCashCollections ?? 0, creditApplied,
+            pending?.Cash ?? 0, pending?.NonCash ?? 0);
     }
 
     private static IResult Error(int statusCode, string code) => Results.Json(
@@ -204,5 +223,6 @@ public static class CashierShiftEndpoints
     private sealed record ShiftResponse(
         Guid Id, decimal OpeningCash, DateTimeOffset OpenedAtUtc, DateTimeOffset? ClosedAtUtc,
         decimal CashSales, decimal NonCashSales, decimal AccountSales, decimal SalesTotal, decimal CashBalance,
-        decimal CashCollections, decimal NonCashCollections, decimal CreditApplied);
+        decimal CashCollections, decimal NonCashCollections, decimal CreditApplied,
+        decimal PendingApprovedCash, decimal PendingApprovedNonCash);
 }

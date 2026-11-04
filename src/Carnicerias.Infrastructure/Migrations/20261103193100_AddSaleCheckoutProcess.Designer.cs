@@ -2183,7 +2183,7 @@ namespace Carnicerias.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_sale_payment_processes_revision", "\"Revision\" >= 0");
 
-                            t.HasCheckConstraint("CK_sale_payment_processes_status", "\"Status\" BETWEEN 0 AND 4");
+                            t.HasCheckConstraint("CK_sale_payment_processes_status", "\"Status\" BETWEEN 0 AND 5");
 
                             t.HasCheckConstraint("CK_sale_payment_processes_total", "\"Total\" > 0");
                         });

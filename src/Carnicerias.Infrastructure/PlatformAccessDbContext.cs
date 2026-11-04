@@ -1109,7 +1109,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.ToTable("sale_payment_processes", "payments_cash", table =>
             {
                 table.HasCheckConstraint("CK_sale_payment_processes_total", "\"Total\" > 0");
-                table.HasCheckConstraint("CK_sale_payment_processes_status", "\"Status\" BETWEEN 0 AND 4");
+                table.HasCheckConstraint("CK_sale_payment_processes_status", "\"Status\" BETWEEN 0 AND 5");
                 table.HasCheckConstraint("CK_sale_payment_processes_revision", "\"Revision\" >= 0");
             });
             entity.HasKey(item => item.Id);

@@ -17,9 +17,41 @@ public static class SaleConfirmationEndpoints
 {
     public static IEndpointRouteBuilder MapSaleConfirmationEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapPost("/api/sales/drafts/{draftId:guid}/confirmation", ConfirmAsync)
+        endpoints.MapPost("/api/sales/drafts/{draftId:guid}/confirmation", ConfirmLegacyAsync)
             .RequireOperationalContext();
+        endpoints.MapPost("/api/sales/drafts/{draftId:guid}/checkout/{checkoutId:guid}/confirmation",
+            ConfirmCheckoutAsync).RequireOperationalContext();
         return endpoints;
+    }
+
+    private static Task<IResult> ConfirmLegacyAsync(Guid draftId, ConfirmSaleRequest? request,
+        PlatformAccessDbContext db, OperationalContextAccessor accessor, TimeProvider timeProvider,
+        CancellationToken cancellationToken) =>
+        request?.CheckoutId is not null
+            ? Task.FromResult(Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR"))
+            : ConfirmAsync(draftId, request, db, accessor, timeProvider, cancellationToken);
+
+    private static async Task<IResult> ConfirmCheckoutAsync(Guid draftId, Guid checkoutId,
+        PlatformAccessDbContext db, OperationalContextAccessor accessor, TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var checkout = await db.SaleCheckouts.AsNoTracking().Include(item => item.Instruments)
+            .SingleOrDefaultAsync(item => item.Id == checkoutId && item.SaleDraftId == draftId &&
+                item.CompanyId == accessor.Context.CompanyId && item.BranchId == accessor.Context.BranchId &&
+                item.CashierId == accessor.Context.UserId && item.PosTerminalId == accessor.TerminalId,
+                cancellationToken);
+        if (checkout is null) return Error(StatusCodes.Status404NotFound, "CHECKOUT_NOT_FOUND");
+        var terms = checkout.Terms;
+        var approved = checkout.Instruments.Where(item =>
+            item.Status == SaleCheckoutInstrumentStatus.Approved).OrderBy(item => item.Id).ToArray();
+        var request = new ConfirmSaleRequest(approved.Select(item =>
+            new PaymentRequest(MethodName(item.Method), item.Amount)).ToArray(),
+            terms.CustomerId, terms.AccountChargeAmount, terms.AccountChargeConfirmed,
+            terms.CreditAppliedAmount, terms.DocumentType, terms.RecipientTaxStatus,
+            terms.RecipientName, terms.RecipientDocumentNumber, terms.RecipientAddress,
+            null, terms.FiscalCustomerId, terms.RecipientLocality, terms.RecipientProvince,
+            terms.PurchaseOrderNumber, checkout.Id, approved.Select(item => item.Id).ToArray());
+        return await ConfirmAsync(draftId, request, db, accessor, timeProvider, cancellationToken);
     }
 
     private static async Task<IResult> ConfirmAsync(
@@ -30,7 +62,8 @@ public static class SaleConfirmationEndpoints
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
-        if (draftId == Guid.Empty || request?.Payments is null || request.Payments.Count > 6 ||
+        if (draftId == Guid.Empty || request?.Payments is null ||
+            request.Payments.Count > (request.CheckoutId is null ? 6 : 20) ||
             request.Payments.Any(payment => payment is null) || request.CustomerId == Guid.Empty ||
             (request.CustomerId is not null && request.AccountChargeAmount <= 0 && request.CreditAppliedAmount <= 0) ||
             (request.CustomerId is null && (request.AccountChargeAmount != 0 || request.CreditAppliedAmount != 0)) ||
@@ -83,6 +116,27 @@ public static class SaleConfirmationEndpoints
             if (shift is null) return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_REQUIRED");
             if (accessor.TerminalId is not null && draft.CashierShiftId != shift.Id)
                 return Error(StatusCodes.Status409Conflict, "SALE_NOT_CONFIRMABLE");
+
+            SaleCheckout? checkout = null;
+            if (request.CheckoutId is Guid checkoutId)
+            {
+                checkout = await db.SaleCheckouts.Include(item => item.Instruments)
+                    .SingleOrDefaultAsync(item => item.Id == checkoutId && item.SaleDraftId == draftId &&
+                        item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
+                        item.CashierId == context.UserId && item.CashierShiftId == shift.Id &&
+                        item.PosTerminalId == accessor.TerminalId, cancellationToken);
+                if (checkout?.Status != SaleCheckoutStatus.Ready ||
+                    checkout.Total != draft.TotalAfterDiscount ||
+                    checkout.DraftUpdatedAtUtc != draft.UpdatedAtUtc ||
+                    checkout.CommitKey is null ||
+                    !checkout.Instruments.Where(item => item.Status == SaleCheckoutInstrumentStatus.Approved)
+                        .OrderBy(item => item.Id).Select(item => item.Id)
+                        .SequenceEqual(request.CheckoutInstrumentIds ?? []))
+                    return Error(StatusCodes.Status409Conflict, "CHECKOUT_NOT_READY");
+            }
+            else if (await db.SaleCheckouts.AnyAsync(item => item.CompanyId == context.CompanyId &&
+                         item.SaleDraftId == draftId, cancellationToken))
+                return Error(StatusCodes.Status409Conflict, "CHECKOUT_REQUIRED");
 
             if (draft.DiscountAmount > 0 &&
                 !context.Permissions.Contains(PlatformPermissionCatalog.PosDiscountApply))
@@ -159,7 +213,37 @@ public static class SaleConfirmationEndpoints
                 .Where(payment => payment.Method == PaymentMethod.MercadoPago)
                 .Sum(payment => payment.AppliedAmount);
             PointPaymentIntent? mercadoPagoIntent = null;
-            if (mercadoPagoAmount > 0)
+            var checkoutIntents = new List<PointPaymentIntent>();
+            if (checkout is not null)
+            {
+                foreach (var instrument in checkout.Instruments.Where(item =>
+                             item.Status == SaleCheckoutInstrumentStatus.Approved &&
+                             item.Method == PaymentMethod.MercadoPago))
+                {
+                    if (instrument.PointPaymentIntentId is not Guid intentId)
+                        return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_APPROVAL_REQUIRED");
+                    var intent = await db.PointPaymentIntents.SingleOrDefaultAsync(item =>
+                        item.Id == intentId && item.CheckoutInstrumentId == instrument.Id &&
+                        item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
+                        item.SaleDraftId == draftId && item.CashierShiftId == shift.Id &&
+                        item.CashierId == context.UserId && item.PosTerminalId == accessor.TerminalId &&
+                        item.Amount == instrument.Amount && item.Status == PointPaymentStatus.Approved &&
+                        item.ConfirmedSaleId == null && item.ProviderOrderId != null &&
+                        item.ProviderPaymentId != null, cancellationToken);
+                    if (intent is null)
+                        return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_APPROVAL_REQUIRED");
+                    checkoutIntents.Add(intent);
+                }
+                if (checkoutIntents.Sum(item => item.Amount) != mercadoPagoAmount ||
+                    await db.PointPaymentIntents.AnyAsync(item => item.CompanyId == context.CompanyId &&
+                        item.SaleDraftId == draftId && item.CheckoutInstrumentId == null &&
+                        (item.Status == PointPaymentStatus.Prepared ||
+                         item.Status == PointPaymentStatus.Pending ||
+                         item.Status == PointPaymentStatus.Approved ||
+                         item.Status == PointPaymentStatus.NeedsReconciliation), cancellationToken))
+                    return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_ORDER_ACTIVE");
+            }
+            else if (mercadoPagoAmount > 0)
             {
                 if (request.MercadoPagoIntentId is not Guid intentId || intentId == Guid.Empty)
                     return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_APPROVAL_REQUIRED");
@@ -176,7 +260,7 @@ public static class SaleConfirmationEndpoints
             }
             else if (request.MercadoPagoIntentId is not null)
                 return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
-            if (mercadoPagoAmount == 0 && await db.PointPaymentIntents.AnyAsync(item =>
+            if (checkout is null && mercadoPagoAmount == 0 && await db.PointPaymentIntents.AnyAsync(item =>
                     item.CompanyId == context.CompanyId && item.SaleDraftId == draftId &&
                     (item.Status == PointPaymentStatus.Prepared || item.Status == PointPaymentStatus.Pending ||
                      item.Status == PointPaymentStatus.Approved ||
@@ -206,6 +290,7 @@ public static class SaleConfirmationEndpoints
                 request.CreditAppliedAmount, draft.DiscountAmount, draft.DiscountReason, documentChoice,
                 fiscalCustomer?.Id, fiscalCustomer?.Code, request.PurchaseOrderNumber);
             mercadoPagoIntent?.ApplyToSale(sale.Id);
+            foreach (var intent in checkoutIntents) intent.ApplyToSale(sale.Id);
             sale.Lines.AddRange(draft.Lines.Select(line => new ConfirmedSaleLine(
                 context.CompanyId, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
                 line.SaleMode, line.Quantity, line.UnitPrice, line.InventoryPieceId, line.PieceIdentifier,
@@ -229,8 +314,10 @@ public static class SaleConfirmationEndpoints
                 taxRules.TryGetValue(line.ProductId, out var rule);
                 line.SetAmountSnapshot(amounts[line.Id], rule);
             }
-            sale.Payments.AddRange(settlement.AppliedPayments.Select(payment => new SalePayment(
-                payment.Method, payment.TenderedAmount, payment.AppliedAmount)));
+            sale.Payments.AddRange(settlement.AppliedPayments.Select((payment, index) => new SalePayment(
+                payment.Method, payment.TenderedAmount, payment.AppliedAmount,
+                request.CheckoutInstrumentIds is { Count: > 0 }
+                    ? request.CheckoutInstrumentIds[index] : null)));
             db.ConfirmedSales.Add(sale);
             if (request.CustomerId is Guid customerId && request.AccountChargeAmount > 0)
                 db.CustomerSaleCharges.Add(new CustomerSaleCharge(context.CompanyId, context.BranchId,
@@ -260,14 +347,17 @@ public static class SaleConfirmationEndpoints
                     $"Egreso por venta {sale.Id:N}", now));
             }
 
-            foreach (var payment in settlement.AppliedPayments)
+            for (var paymentIndex = 0; paymentIndex < settlement.AppliedPayments.Count; paymentIndex++)
             {
+                var payment = settlement.AppliedPayments[paymentIndex];
                 var amount = payment.Method == PaymentMethod.Cash
                     ? payment.TenderedAmount
                     : payment.AppliedAmount;
                 db.CashLedgerMovements.Add(new CashLedgerMovement(
                     context.CompanyId, context.BranchId, shift.Id, context.UserId,
-                    Guid.NewGuid(), payment.Method, CashLedgerMovementKind.SalePayment,
+                    request.CheckoutInstrumentIds is { Count: > 0 }
+                        ? request.CheckoutInstrumentIds[paymentIndex] : Guid.NewGuid(),
+                    payment.Method, CashLedgerMovementKind.SalePayment,
                     amount, now, sale.Id, accessor.TerminalId));
             }
             if (settlement.ChangeAmount > 0)
@@ -277,6 +367,7 @@ public static class SaleConfirmationEndpoints
                     -settlement.ChangeAmount, now, sale.Id, accessor.TerminalId));
 
             draft.Confirm(sale.Id, now);
+            checkout?.Complete(sale.Id, now);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return Results.Created($"/api/sales/{sale.Id}", ToResponse(sale, settlement.ChangeAmount));
@@ -328,6 +419,9 @@ public static class SaleConfirmationEndpoints
         }
         if (request.MercadoPagoIntentId is Guid mercadoPagoIntentId)
             canonical += $"|mercadoPago:{mercadoPagoIntentId:N}";
+        if (request.CheckoutId is Guid checkoutId)
+            canonical += $"|checkout:{checkoutId:N}:" + string.Join(',',
+                request.CheckoutInstrumentIds?.Select(id => id.ToString("N")) ?? []);
         if (request.FiscalCustomerId is Guid fiscalCustomerId)
             canonical += $"|fiscalCustomer:{fiscalCustomerId:N}";
         if (request.PurchaseOrderNumber is not null || request.RecipientLocality is not null ||
@@ -436,7 +530,8 @@ public static class SaleConfirmationEndpoints
         string? RecipientDocumentNumber = null, string? RecipientAddress = null,
         Guid? MercadoPagoIntentId = null, Guid? FiscalCustomerId = null,
         string? RecipientLocality = null, string? RecipientProvince = null,
-        string? PurchaseOrderNumber = null);
+        string? PurchaseOrderNumber = null, Guid? CheckoutId = null,
+        IReadOnlyList<Guid>? CheckoutInstrumentIds = null);
     private sealed record PaymentRequest(string? Method, decimal Amount);
     private sealed record SaleConfirmationResponse(Guid Id, decimal Total, decimal ChangeAmount,
         DateTimeOffset ConfirmedAtUtc, Guid? CustomerId, decimal AccountChargeAmount,

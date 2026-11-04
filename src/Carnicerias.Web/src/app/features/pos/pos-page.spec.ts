@@ -12,6 +12,7 @@ import { InventoryClient } from '../../core/inventory/inventory-client';
 import { InventoryPieceClient } from '../../core/inventory/inventory-piece-client';
 import { CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { SaleDraftClient } from '../../core/sales/sale-draft-client';
+import { CheckoutTerms, SaleCheckout, SaleCheckoutClient } from '../../core/sales/sale-checkout-client';
 import { MercadoPagoClient } from '../../core/sales/mercado-pago-client';
 import type { MercadoPagoIntent } from '../../core/sales/mercado-pago-client';
 import type { MercadoPagoMode } from '../../core/sales/mercado-pago-client';
@@ -24,6 +25,46 @@ import { CreditCustomerClient } from '../../core/customers/credit-customer-clien
 import { POS_ELECTRON_MODE } from '../../core/pos/pos-electron-mode';
 
 describe('PosPage', () => {
+  function checkoutClientMock() {
+    let checkout: SaleCheckout | null = null;
+    return {
+      current: vi.fn(() => of(checkout)),
+      prepare: vi.fn((draftId: string, expectedRevision: number, terms: CheckoutTerms,
+        payments: readonly { id: string; method: 'cash' | 'debit' | 'credit' | 'transfer' | 'mercadoPago' | 'cheque'; amount: number }[]) => {
+        checkout = { id: 'checkout-id', saleDraftId: draftId, status: 'Prepared', revision: expectedRevision + 1,
+          total: payments.reduce((sum, payment) => sum + payment.amount, 0), planHash: 'hash',
+          commitKey: null, approvedAmount: 0, remainingAmount: payments.reduce((sum, payment) => sum + payment.amount, 0),
+          confirmedSaleId: null, terms,
+          instruments: payments.map((payment) => ({ ...payment, status: 'Prepared' as const,
+            reference: null, pointPaymentIntentId: null, approvedAtUtc: null })) };
+        return of(checkout);
+      }),
+      commit: vi.fn((_draftId: string, _checkoutId: string, _revision: number, key: string) => {
+        checkout = { ...checkout!, status: 'Committed', commitKey: key };
+        return of(checkout);
+      }),
+      approve: vi.fn((_draftId: string, _checkoutId: string, instrumentId: string) => {
+        const instruments = checkout!.instruments.map((item) => item.id === instrumentId
+          ? { ...item, status: 'Approved' as const } : item);
+        checkout = { ...checkout!, instruments, status: 'Ready',
+          approvedAmount: instruments.reduce((sum, item) => sum + (item.status === 'Approved' ? item.amount : 0), 0),
+          remainingAmount: 0 };
+        return of(checkout);
+      }),
+      confirm: vi.fn((draftId: string) => TestBed.inject(SaleDraftClient).confirm(draftId,
+        checkout!.instruments.map(({ method, amount }) => ({ method, amount })),
+        checkout!.terms.customerId ? { customerId: checkout!.terms.customerId,
+          amount: checkout!.terms.accountChargeAmount,
+          creditAppliedAmount: checkout!.terms.creditAppliedAmount } : undefined,
+        { documentType: checkout!.terms.documentType as 'nonFiscalTicket' | 'fiscalTicket' | 'electronicInvoice',
+          recipientTaxStatus: checkout!.terms.recipientTaxStatus as 'finalConsumer' | 'registered' | 'smallTaxpayer' | 'exempt',
+          ...(checkout!.terms.recipientName ? { recipientName: checkout!.terms.recipientName } : {}),
+          ...(checkout!.terms.recipientDocumentNumber ? { recipientDocumentNumber: checkout!.terms.recipientDocumentNumber } : {}),
+          ...(checkout!.terms.recipientAddress ? { recipientAddress: checkout!.terms.recipientAddress } : {}),
+        }, undefined)),
+    };
+  }
+
   it('does not offer branch switching from the menu of an Electron box', () => {
     TestBed.configureTestingModule({ providers: [
       provideRouter([]), provideHttpClient(),
@@ -41,7 +82,9 @@ describe('PosPage', () => {
   });
 
   async function checkoutWithGateways(intent: MercadoPagoIntent | null, unavailable = false,
-    modes: readonly MercadoPagoMode[] = [], total = 2500) {
+    modes: readonly MercadoPagoMode[] = [], total = 2500, recovered?: SaleCheckout) {
+    const checkoutClient = checkoutClientMock();
+    if (recovered) checkoutClient.current.mockReturnValue(of(recovered));
     const session: CurrentSession = {
       userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-14T20:00:00Z',
       context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
@@ -58,7 +101,9 @@ describe('PosPage', () => {
           unit: 'kg', saleMode: 'weight', quantity: 1, unitPrice: total }],
       }) } },
       { provide: MercadoPagoClient, useValue: { get: () => of(intent),
-        start: () => NEVER, check: () => NEVER, cancel: () => NEVER } },
+        start: () => NEVER, executeCheckout: () => NEVER,
+        check: () => NEVER, cancel: () => NEVER } },
+      { provide: SaleCheckoutClient, useValue: checkoutClient },
       { provide: IntegratedGatewayClient, useValue: { available: () => unavailable
         ? throwError(() => new HttpErrorResponse({ status: 503 })) : of({ gateways: modes.length
           ? [{ provider: 'mercadoPago', modes }] : [] }) } },
@@ -145,7 +190,7 @@ describe('PosPage', () => {
 
   it('requests a static QR order when the cashier selects the permanent code', async () => {
     const fixture = await checkoutWithGateways(null, false, ['qr', 'qrStatic']);
-    const start = vi.spyOn(TestBed.inject(MercadoPagoClient), 'start').mockReturnValue(NEVER);
+    const start = vi.spyOn(TestBed.inject(MercadoPagoClient), 'executeCheckout').mockReturnValue(NEVER);
     const options = fixture.nativeElement.querySelectorAll('.payment-option input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
     options[0].click();
     options[4].click();
@@ -154,7 +199,53 @@ describe('PosPage', () => {
     selector.value = 'qrStatic';
     selector.dispatchEvent(new Event('change', { bubbles: true }));
     (fixture.nativeElement.querySelector('.mercado-pago-actions button') as HTMLButtonElement).click();
-    expect(start).toHaveBeenCalledWith('draft-id', 'qrStatic', 2500);
+    await fixture.whenStable();
+    expect(start).toHaveBeenCalledWith('draft-id', 'checkout-id', expect.any(String), 'qrStatic', 2500);
+  });
+
+  it('never calls Mercado Pago when the durable checkout commit fails', async () => {
+    const fixture = await checkoutWithGateways(null, false, ['qr']);
+    const checkout = TestBed.inject(SaleCheckoutClient);
+    const commit = vi.spyOn(checkout, 'commit').mockReturnValue(throwError(() =>
+      new HttpErrorResponse({ status: 503 })));
+    const execute = vi.spyOn(TestBed.inject(MercadoPagoClient), 'executeCheckout');
+    const options = fixture.nativeElement.querySelectorAll('.payment-option input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+    options[0].click();
+    options[4].click();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.mercado-pago-actions button') as HTMLButtonElement).click();
+    await fixture.whenStable();
+
+    expect(vi.mocked(checkout.prepare)).toHaveBeenCalledOnce();
+    expect(commit).toHaveBeenCalledOnce();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('restores independent repeated-method payments from the saved checkout after reopening', async () => {
+    const recovered: SaleCheckout = {
+      id: 'checkout-id', saleDraftId: 'draft-id', status: 'PendingBalance', revision: 1,
+      total: 2500, planHash: 'hash', commitKey: 'commit-key', approvedAmount: 1000,
+      remainingAmount: 1500, confirmedSaleId: null,
+      terms: { customerId: null, accountChargeAmount: 0, creditAppliedAmount: 0,
+        accountChargeConfirmed: false, documentType: 'nonFiscalTicket', recipientTaxStatus: 'finalConsumer' },
+      instruments: [
+        { id: 'operation-1', method: 'transfer', amount: 1000, status: 'Approved',
+          reference: 'transfer-001', pointPaymentIntentId: null, approvedAtUtc: '2026-10-13T15:01:00Z' },
+        { id: 'operation-2', method: 'transfer', amount: 1500, status: 'Prepared',
+          reference: null, pointPaymentIntentId: null, approvedAtUtc: null },
+      ],
+    };
+    const fixture = await checkoutWithGateways(null, false, [], 2500, recovered);
+    fixture.detectChanges();
+    const dialog = fixture.nativeElement.querySelector('.checkout-dialog') as HTMLElement;
+
+    expect(dialog.textContent).toContain('1.000,00');
+    expect(dialog.textContent).toContain('1.500,00');
+    expect(dialog.querySelectorAll('.payment-operations .payment-operation')).toHaveLength(1);
+    const transfer = [...dialog.querySelectorAll<HTMLElement>('.payment-option')]
+      .find((option) => option.textContent?.includes('Transferencia'))!;
+    expect(transfer.querySelector<HTMLInputElement>('input[type="text"]')?.value).toBe('transfer-001');
+    expect((dialog.querySelector('.payment-option input[type="checkbox"]') as HTMLInputElement).disabled).toBe(true);
   });
 
   beforeEach(() => {
@@ -171,7 +262,9 @@ describe('PosPage', () => {
         search: () => of([]) } },
       { provide: FiscalDocumentClient, useValue: { issue: () => NEVER } },
       { provide: MercadoPagoClient, useValue: { get: () => of(null),
-        start: () => NEVER, check: () => NEVER, cancel: () => NEVER } },
+        start: () => NEVER, executeCheckout: () => NEVER,
+        check: () => NEVER, cancel: () => NEVER } },
+      { provide: SaleCheckoutClient, useValue: checkoutClientMock() },
       { provide: IntegratedGatewayClient, useValue: { available: () => of({ gateways: [
         { provider: 'mercadoPago', modes: ['qr', 'point'] },
       ] }) } },
@@ -244,6 +337,7 @@ describe('PosPage', () => {
     input('sale-recipient-address', 'Calle 123');
     expect((fixture.nativeElement.querySelector('.checkout-dialog .finish-button') as HTMLButtonElement).disabled).toBe(false);
     (fixture.nativeElement.querySelector('.checkout-dialog .finish-button') as HTMLButtonElement).click();
+    await fixture.whenStable();
     fixture.detectChanges();
     expect(confirm).toHaveBeenCalledWith('draft-id', [{ method: 'cash', amount: 2500 }], undefined,
       { documentType: 'electronicInvoice', recipientTaxStatus: 'registered', recipientName: 'Cliente',
@@ -982,6 +1076,7 @@ describe('PosPage', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#checkout-title').textContent).toContain('Cobrar venta');
     (fixture.nativeElement.querySelector('.checkout-dialog .finish-button') as HTMLButtonElement).click();
+    await fixture.whenStable();
     expect(confirmedDraftId).toBe('draft-id');
   });
 
@@ -1507,7 +1602,8 @@ describe('PosPage', () => {
         lines: [{ id: 'line-id', productId: 'product-id', productCode: '1001', productName: 'Asado',
           unit: 'kg', saleMode: 'weight', quantity: 1, unitPrice: 2500 }],
       }) } },
-      { provide: MercadoPagoClient, useValue: { get: () => of(null), start, check,
+      { provide: MercadoPagoClient, useValue: { get: () => of(null), start,
+        executeCheckout: start, check,
         cancel: () => NEVER } },
       { provide: InventoryClient, useValue: { stock: () => of([]) } },
     ] });
@@ -1525,6 +1621,7 @@ describe('PosPage', () => {
     mode.dispatchEvent(new Event('change', { bubbles: true }));
     const request = fixture.nativeElement.querySelector('.mercado-pago-actions button') as HTMLButtonElement;
     request.click();
+    await fixture.whenStable();
     fixture.detectChanges();
     if (paymentMode === 'qr') await vi.waitFor(() => {
       fixture.detectChanges();
@@ -1537,7 +1634,7 @@ describe('PosPage', () => {
     if (paymentMode === 'qr') expect(fixture.nativeElement.querySelector('.mercado-pago-qr')).toBeNull();
     expect(request.disabled).toBe(false);
     expect(mode.disabled).toBe(false);
-    expect(start).toHaveBeenCalledWith('draft-id', paymentMode, 2500);
+    expect(start).toHaveBeenCalledWith('draft-id', 'checkout-id', expect.any(String), paymentMode, 2500);
     expect(check).toHaveBeenCalledWith('draft-id', 'intent-id');
   });
 

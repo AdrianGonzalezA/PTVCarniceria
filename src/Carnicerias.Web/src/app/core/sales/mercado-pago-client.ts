@@ -28,6 +28,19 @@ export class MercadoPagoClient {
       { withCredentials: true });
   }
 
+  checkoutPayment(draftId: string, checkoutId: string, instrumentId: string) {
+    return this.http.get<MercadoPagoIntent | null>(
+      `${this.url(draftId).replace('/mercado-pago', '')}/checkout/${checkoutId}/instruments/${instrumentId}/payment`,
+      { withCredentials: true });
+  }
+
+  executeCheckout(draftId: string, checkoutId: string, instrumentId: string,
+    mode: MercadoPagoMode, amount: number) {
+    return this.http.post<MercadoPagoIntent>(
+      `${this.url(draftId).replace('/mercado-pago', '')}/checkout/${checkoutId}/instruments/${instrumentId}/execute`,
+      { mode, amount }, { withCredentials: true });
+  }
+
   check(draftId: string, intentId: string) {
     return this.http.post<MercadoPagoIntent>(`${this.url(draftId)}/${intentId}/check`, {},
       { withCredentials: true });

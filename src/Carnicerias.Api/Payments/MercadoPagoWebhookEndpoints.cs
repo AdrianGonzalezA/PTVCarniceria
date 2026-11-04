@@ -50,6 +50,7 @@ public static class MercadoPagoWebhookEndpoints
                 intent.RecordProviderState(order.Id, order.PaymentId, order.Status,
                     order.PaymentStatus, order.PaymentStatusDetail, order.IsApproved, clock.GetUtcNow());
             }
+            await MercadoPagoPaymentEndpoints.SyncCheckoutAsync(intent, db, clock, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             return Results.Ok();
         }

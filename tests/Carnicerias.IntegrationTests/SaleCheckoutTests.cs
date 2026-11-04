@@ -101,6 +101,21 @@ public sealed class SaleCheckoutTests
         Assert.Equal(intentId, checkout.Instruments.Single().PointPaymentIntentId);
     }
 
+    [Fact]
+    public void PreparedCheckoutCanBeCancelledButCommittedPaymentCannot()
+    {
+        var checkout = NewCheckout(100m);
+        checkout.Prepare(0, Terms(), [new(Guid.NewGuid(), PaymentMethod.Cash, 100m)], Now);
+        checkout.CancelPrepared(Now);
+        Assert.Equal(SaleCheckoutStatus.Canceled, checkout.Status);
+        Assert.Throws<InvalidOperationException>(() => checkout.Commit(1, Guid.NewGuid(), Now));
+
+        var committed = NewCheckout(100m);
+        committed.Prepare(0, Terms(), [new(Guid.NewGuid(), PaymentMethod.Cash, 100m)], Now);
+        committed.Commit(1, Guid.NewGuid(), Now);
+        Assert.Throws<InvalidOperationException>(() => committed.CancelPrepared(Now));
+    }
+
     private static SaleCheckout NewCheckout(decimal total) => new(Guid.NewGuid(), Guid.NewGuid(),
         Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), total, Now, Now);
 

@@ -436,12 +436,12 @@
             <div class="fiscal-customer-lookup">
               <label for="sale-fiscal-customer-search">Cliente con ficha fiscal</label>
               <input id="sale-fiscal-customer-search" maxlength="100" autocomplete="off"
-                [value]="fiscalCustomerSearch()" [disabled]="checkoutBusy()"
+                [value]="fiscalCustomerSearch()" [disabled]="checkoutBusy() || checkoutCommitted()"
                 (input)="updateFiscalCustomerSearch($event)" />
-              <button type="button" [disabled]="fiscalCustomerLoading() || checkoutBusy()"
+              <button type="button" [disabled]="fiscalCustomerLoading() || checkoutBusy() || checkoutCommitted()"
                 (click)="searchFiscalCustomers()">{{ fiscalCustomerLoading() ? 'Buscando…' : 'Buscar cliente' }}</button>
               <label for="sale-fiscal-customer">Ficha fiscal guardada (opcional)</label>
-              <select id="sale-fiscal-customer" [value]="fiscalCustomerId()" [disabled]="checkoutBusy()"
+              <select id="sale-fiscal-customer" [value]="fiscalCustomerId()" [disabled]="checkoutBusy() || checkoutCommitted()"
                 (change)="selectFiscalCustomer($event)">
                 <option value="">Ingresar datos manualmente</option>
                 @for (customer of fiscalCustomerOptions(); track customer.id) {
@@ -452,17 +452,17 @@
             </div>
             <div class="sale-document-fields">
               <label for="sale-recipient-name">Nombre o razón social @if (recipientTaxStatus() !== 'finalConsumer') { (obligatorio) }</label>
-              <input id="sale-recipient-name" maxlength="200" autocomplete="off" [value]="recipientName()" [disabled]="checkoutBusy()" (input)="updateRecipientName($event)" />
+              <input id="sale-recipient-name" maxlength="200" autocomplete="off" [value]="recipientName()" [disabled]="checkoutBusy() || checkoutCommitted()" (input)="updateRecipientName($event)" />
               <label for="sale-recipient-document-number">{{ recipientTaxStatus() === 'finalConsumer' ? 'DNI o CUIT' : 'CUIT (obligatorio)' }}</label>
-              <input id="sale-recipient-document-number" inputmode="numeric" maxlength="20" autocomplete="off" [value]="recipientDocumentNumber()" [disabled]="checkoutBusy()" (input)="updateRecipientDocumentNumber($event)" />
+              <input id="sale-recipient-document-number" inputmode="numeric" maxlength="20" autocomplete="off" [value]="recipientDocumentNumber()" [disabled]="checkoutBusy() || checkoutCommitted()" (input)="updateRecipientDocumentNumber($event)" />
               <label for="sale-recipient-address">Domicilio @if (recipientTaxStatus() !== 'finalConsumer') { (obligatorio) }</label>
-              <input id="sale-recipient-address" maxlength="200" autocomplete="off" [value]="recipientAddress()" [disabled]="checkoutBusy()" (input)="updateRecipientAddress($event)" />
+              <input id="sale-recipient-address" maxlength="200" autocomplete="off" [value]="recipientAddress()" [disabled]="checkoutBusy() || checkoutCommitted()" (input)="updateRecipientAddress($event)" />
               <label for="sale-recipient-locality">Localidad (opcional)</label>
-              <input id="sale-recipient-locality" maxlength="100" autocomplete="off" [value]="recipientLocality()" [disabled]="checkoutBusy()" (input)="updateRecipientLocality($event)" />
+              <input id="sale-recipient-locality" maxlength="100" autocomplete="off" [value]="recipientLocality()" [disabled]="checkoutBusy() || checkoutCommitted()" (input)="updateRecipientLocality($event)" />
               <label for="sale-recipient-province">Provincia (opcional)</label>
-              <input id="sale-recipient-province" maxlength="100" autocomplete="off" [value]="recipientProvince()" [disabled]="checkoutBusy()" (input)="updateRecipientProvince($event)" />
+              <input id="sale-recipient-province" maxlength="100" autocomplete="off" [value]="recipientProvince()" [disabled]="checkoutBusy() || checkoutCommitted()" (input)="updateRecipientProvince($event)" />
               <label for="sale-purchase-order">Pedido u orden de compra (opcional)</label>
-              <input id="sale-purchase-order" maxlength="80" autocomplete="off" [value]="purchaseOrderNumber()" [disabled]="checkoutBusy()" (input)="updatePurchaseOrderNumber($event)" />
+              <input id="sale-purchase-order" maxlength="80" autocomplete="off" [value]="purchaseOrderNumber()" [disabled]="checkoutBusy() || checkoutCommitted()" (input)="updatePurchaseOrderNumber($event)" />
             </div>
             @if (documentProblem(); as problem) { <p class="pos-error" role="alert">{{ problem }}</p> }
           }
@@ -470,13 +470,52 @@
         <div class="payment-methods" aria-label="Medios de pago">
           @for (method of visiblePaymentMethods(); track method.id) {
             <label class="payment-option">
-              <span><input type="checkbox" [checked]="hasPayment(method.id)" [disabled]="method.id === 'mercadoPago' && mercadoPagoOrderActive()" (change)="togglePayment(method.id, $event)" /> {{ method.label }}</span>
-              @if (hasPayment(method.id)) {
-                <input class="payment-amount" type="number" min="0.01" step="0.01" [attr.aria-label]="'Importe en ' + method.label" [value]="paymentAmount(method.id)" [disabled]="method.id === 'mercadoPago' && mercadoPagoOrderActive()" (input)="updatePaymentAmount(method.id, $event)" />
+              <span><input type="checkbox" [checked]="hasPayment(method.id)" [disabled]="checkoutCommitted() || (method.id === 'mercadoPago' && mercadoPagoOrderActive())" (change)="togglePayment(method.id, $event)" /> {{ method.label }}</span>
+              @if (firstPayment(method.id); as first) {
+                <input class="payment-amount" type="number" min="0.01" step="0.01" [attr.aria-label]="'Importe en ' + method.label" [value]="first.amount" [disabled]="checkoutCommitted() || (method.id === 'mercadoPago' && mercadoPagoOrderActive())" (input)="updatePaymentAmount(method.id, $event)" />
+                @if (method.id !== 'mercadoPago') {
+                  <input type="text" maxlength="200" [attr.aria-label]="'Referencia de ' + method.label" [value]="first.reference ?? ''" [disabled]="checkoutCommitted()" (input)="updateOperationReference(first.id, $event)" />
+                }
+                @if (!checkoutCommitted()) { <button type="button" (click)="addPaymentOperation(method.id)">Otro pago</button> }
               }
             </label>
           }
         </div>
+        @if (extraPayments().length > 0) {
+          <div class="payment-operations" aria-label="Operaciones adicionales">
+            @for (payment of extraPayments(); track payment.id) {
+              <div class="payment-operation">
+                <span>{{ paymentMethodName(payment.method) }} · {{ payment.status ?? 'Preparado' }}</span>
+                <input type="number" min="0.01" step="0.01" [attr.aria-label]="'Importe de operación ' + payment.id"
+                  [value]="payment.amount" [disabled]="checkoutCommitted()"
+                  (input)="updateOperationAmount(payment.id, $event)" />
+                @if (payment.method !== 'mercadoPago') {
+                  <input type="text" maxlength="200" [attr.aria-label]="'Referencia de operación ' + payment.id"
+                    [value]="payment.reference ?? ''" [disabled]="checkoutCommitted()"
+                    (input)="updateOperationReference(payment.id, $event)" />
+                }
+                @if (!checkoutCommitted()) { <button type="button" (click)="removePaymentOperation(payment.id)">Quitar</button> }
+              </div>
+            }
+          </div>
+        }
+        @if (checkoutCommitted() && checkout(); as process) {
+          <p class="payment-guidance" role="status">Proceso {{ process.status }} · acreditado {{ formatMoney(process.approvedAmount) }} · pendiente {{ formatMoney(process.remainingAmount) }}. El turno permanece abierto hasta resolverlo.</p>
+        }
+        @if (hasRejectedPayment() && checkout(); as process) {
+          <div class="payment-operation">
+            <label for="replacement-method">Reemplazar pago rechazado</label>
+            <select id="replacement-method" [value]="replacementMethod()"
+              (change)="replacementMethod.set($any($event.target).value)">
+              @for (method of visiblePaymentMethods(); track method.id) {
+                <option [value]="method.id">{{ method.label }}</option>
+              }
+            </select>
+            <span>Saldo: {{ formatMoney(process.remainingAmount) }}</span>
+            <button type="button" [disabled]="checkoutBusy() || process.remainingAmount <= 0"
+              (click)="addReplacement()">Agregar operación</button>
+          </div>
+        }
         @if (gatewayLoadState() === 'loading') { <p class="checkout-context" role="status">Consultando pasarelas de esta caja…</p> }
         @if (gatewayLoadState() === 'error') { <p class="checkout-context" role="alert">No se pudieron consultar las pasarelas. Los cobros integrados nuevos no están disponibles; los medios manuales siguen operativos.</p> }
         @if (hasPayment('mercadoPago')) {
@@ -495,8 +534,8 @@
               <p>El QR fijo de la caja se habilita para este importe al solicitar el cobro. Pedile al cliente que lo escanee después.</p>
             }
             <div class="mercado-pago-actions">
-              <button type="button" [disabled]="mercadoPagoBusy() || (mercadoPagoOrderActive() && !!mercadoPagoIntent()?.providerOrderId) || paymentAmount('mercadoPago') <= 0"
-                (click)="startMercadoPago()">{{ mercadoPagoBusy() ? 'Consultando…' : 'Solicitar cobro' }}</button>
+              <button type="button" [disabled]="mercadoPagoBusy() || checkoutLoadState() !== 'ready' || (mercadoPagoOrderActive() && !!mercadoPagoIntent()?.providerOrderId) || paymentAmount('mercadoPago') <= 0"
+                (click)="startMercadoPago()">{{ mercadoPagoBusy() ? 'Consultando…' : 'Confirmar medios y solicitar cobro' }}</button>
               @if (mercadoPagoIntent()) {
                 <button type="button" [disabled]="mercadoPagoBusy()" (click)="checkMercadoPago()">Consultar pago</button>
                 @if (!mercadoPagoIntent()?.approved && mercadoPagoIntent()?.providerOrderId &&
@@ -522,6 +561,24 @@
               }
             }
             @if (mercadoPagoMessage(); as message) { <p class="mercado-pago-state" role="status">{{ message }}</p> }
+            @for (payment of mercadoPagoPayments().slice(1); track payment.id) {
+              <div class="payment-operation">
+                <strong>Mercado Pago · {{ formatMoney(payment.amount) }}</strong>
+                <span>{{ payment.status ?? 'Preparado' }} · {{ paymentIntent(payment.id)?.providerOrderId ?? 'sin orden' }}</span>
+                @if (payment.status === 'Prepared') {
+                  <button type="button" [disabled]="mercadoPagoBusy()" (click)="startMercadoPago(payment.id)">Solicitar este cobro</button>
+                }
+                @if (paymentIntent(payment.id)) {
+                  <button type="button" [disabled]="mercadoPagoBusy()" (click)="checkMercadoPago(payment.id)">Consultar este pago</button>
+                  @if (!paymentIntent(payment.id)?.approved && paymentIntent(payment.id)?.providerOrderId &&
+                    paymentIntent(payment.id)?.status !== 'Canceled' &&
+                    paymentIntent(payment.id)?.status !== 'Expired' &&
+                    paymentIntent(payment.id)?.status !== 'Rejected') {
+                    <button type="button" [disabled]="mercadoPagoBusy()" (click)="cancelMercadoPago(payment.id)">Cancelar esta orden</button>
+                  }
+                }
+              </div>
+            }
           </section>
         }
         @if (canChargeToAccount()) {
@@ -531,13 +588,13 @@
             <form class="credit-customer-search" (submit)="$event.preventDefault(); searchCreditCustomers()">
               <label for="credit-customer-search">Buscar cliente habilitado</label>
               <div>
-                <input id="credit-customer-search" type="search" maxlength="100" [value]="creditCustomerSearch()" (input)="updateCreditSearch($event)" placeholder="Código o nombre" />
-                <button type="submit" [disabled]="creditCustomerLoading() || checkoutBusy()">Buscar</button>
+                <input id="credit-customer-search" type="search" maxlength="100" [value]="creditCustomerSearch()" [disabled]="checkoutCommitted()" (input)="updateCreditSearch($event)" placeholder="Código o nombre" />
+                <button type="submit" [disabled]="creditCustomerLoading() || checkoutBusy() || checkoutCommitted()">Buscar</button>
               </div>
             </form>
             @if (creditCustomerLoadError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
             <label for="credit-customer">Cliente</label>
-            <select id="credit-customer" [value]="creditCustomerId()" [disabled]="checkoutBusy()" (change)="selectCreditCustomer($event)">
+            <select id="credit-customer" [value]="creditCustomerId()" [disabled]="checkoutBusy() || checkoutCommitted()" (change)="selectCreditCustomer($event)">
               <option value="">Seleccioná un cliente</option>
               @for (customer of creditCustomerOptions(); track customer.id) {
                 <option [value]="customer.id">{{ customer.code }} · {{ customer.name }}</option>
@@ -556,11 +613,11 @@
               <p role="status">No hay clientes habilitados en esta búsqueda.</p>
             }
             <label for="account-charge">Importe a cuenta corriente</label>
-            <input id="account-charge" type="number" min="0" step="0.01" [max]="subtotal()" [value]="accountChargeDraft()" [disabled]="checkoutBusy()" (input)="updateAccountCharge($event)" />
+            <input id="account-charge" type="number" min="0" step="0.01" [max]="subtotal()" [value]="accountChargeDraft()" [disabled]="checkoutBusy() || checkoutCommitted()" (input)="updateAccountCharge($event)" />
             <label for="credit-applied">Aplicar saldo a favor (parcial o total)</label>
             <input id="credit-applied" type="number" min="0" step="0.01"
               [max]="creditCustomerAccount()?.creditAvailable ?? 0" [value]="creditAppliedDraft()"
-              [disabled]="checkoutBusy() || !creditCustomerAccount()" (input)="updateCreditApplied($event)" />
+              [disabled]="checkoutBusy() || checkoutCommitted() || !creditCustomerAccount()" (input)="updateCreditApplied($event)" />
           </section>
         }
         @if (discountAmount() > 0) {
@@ -579,7 +636,7 @@
         @if (checkoutError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
         <div class="dialog-actions">
           <button class="dialog-cancel" type="button" [disabled]="checkoutBusy()" (click)="closeCheckout()">Volver</button>
-          <button class="finish-button" type="button" [disabled]="checkoutBusy() || !!paymentProblem() || !!documentProblem()" (click)="confirmSale()">{{ checkoutBusy() ? 'Confirmando…' : 'Confirmar venta' }}</button>
+          <button class="finish-button" type="button" [disabled]="checkoutBusy() || !!paymentProblem() || !!documentProblem()" (click)="confirmSale()">{{ checkoutBusy() ? 'Confirmando…' : 'Registrar pagos y confirmar venta' }}</button>
         </div>
       </section>
     </div>
@@ -686,6 +743,10 @@
             <span>A cuenta corriente (sin ingreso de caja)</span><strong>{{ formatMoney(shift.accountSales) }}</strong>
             <span>Saldo a favor aplicado (sin ingreso de caja)</span><strong>{{ formatMoney(shift.creditApplied) }}</strong>
             <span>Cobranzas de cuenta en efectivo</span><strong>{{ formatMoney(shift.cashCollections) }}</strong>
+            @if ((shift.pendingApprovedCash ?? 0) > 0 || (shift.pendingApprovedNonCash ?? 0) > 0) {
+              <span>Cobros aprobados pendientes de venta · efectivo</span><strong>{{ formatMoney(shift.pendingApprovedCash ?? 0) }}</strong>
+              <span>Cobros aprobados pendientes de venta · otros medios</span><strong>{{ formatMoney(shift.pendingApprovedNonCash ?? 0) }}</strong>
+            }
             <span>Cobranzas de cuenta por otros medios</span><strong>{{ formatMoney(shift.nonCashCollections) }}</strong>
             <span>Efectivo registrado en caja</span><strong>{{ formatMoney(shift.cashBalance) }}</strong>
             <small>Turno {{ shift.id.slice(0, 8) }} · El saldo no es un arqueo físico.</small>

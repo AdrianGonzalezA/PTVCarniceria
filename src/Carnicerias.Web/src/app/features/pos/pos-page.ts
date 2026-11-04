@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, DestroyRef, ElementRef, inject, HostListener, OnInit, signal, ViewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
-import { Observable, of, Subject } from 'rxjs';
+import { firstValueFrom, Observable, of, Subject } from 'rxjs';
 import { catchError, concatMap, finalize, map, timeout } from 'rxjs/operators';
 import { CatalogCategory, CatalogClient, PriceListOption } from '../../core/catalog/catalog-client';
 import { InventoryClient, InventoryStockItem } from '../../core/inventory/inventory-client';
@@ -20,8 +20,18 @@ import { AccountCollectionDialog } from './account-collection-dialog';
 import QRCode from 'qrcode';
 import { MercadoPagoClient, MercadoPagoIntent, MercadoPagoMode } from '../../core/sales/mercado-pago-client';
 import { IntegratedGatewayClient } from '../../core/sales/integrated-gateway-client';
+import { CheckoutInstrumentStatus, SaleCheckout, SaleCheckoutClient } from '../../core/sales/sale-checkout-client';
 
 type SaleMode = 'weight' | 'unit';
+
+interface SelectedPayment {
+  readonly id: string;
+  readonly method: SalePaymentMethod;
+  readonly amount: number;
+  readonly reference?: string | null;
+  readonly status?: CheckoutInstrumentStatus;
+  readonly pointPaymentIntentId?: string | null;
+}
 
 interface PosProduct {
   readonly id: string;
@@ -91,6 +101,7 @@ export class PosPage implements OnInit {
   private readonly sessionClient = inject(SessionClient);
   private readonly catalogClient = inject(CatalogClient);
   private readonly saleDraftClient = inject(SaleDraftClient);
+  private readonly saleCheckoutClient = inject(SaleCheckoutClient);
   private readonly mercadoPagoClient = inject(MercadoPagoClient);
   private readonly integratedGatewayClient = inject(IntegratedGatewayClient);
   private readonly receiptPdfClient = inject(ReceiptPdfClient);
@@ -228,6 +239,27 @@ export class PosPage implements OnInit {
   protected readonly ticketSlotsLoadState = signal<'idle' | 'loading' | 'ready' | 'error'>('idle');
   protected readonly checkoutBusy = signal(false);
   protected readonly checkoutError = signal<string | null>(null);
+  protected readonly checkout = signal<SaleCheckout | null>(null);
+  private readonly legacyPayment = signal(false);
+  protected readonly checkoutLoadState = signal<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  protected readonly checkoutCommitted = computed(() => !!this.checkout() &&
+    this.checkout()!.status !== 'Prepared');
+  protected readonly extraPayments = computed(() => {
+    const seen = new Set<SalePaymentMethod>();
+    return this.selectedPayments().filter((payment) => {
+      if (seen.has(payment.method)) return true;
+      seen.add(payment.method);
+      return false;
+    });
+  });
+  protected readonly mercadoPagoPayments = computed(() =>
+    this.selectedPayments().filter((payment) => payment.method === 'mercadoPago'));
+  protected readonly hasRejectedPayment = computed(() =>
+    this.checkout()?.instruments.some((item) => item.status === 'Rejected') ?? false);
+  protected readonly replacementMethod = signal<SalePaymentMethod>('cash');
+  private checkoutCommitKey: string | null = null;
+  private mercadoPagoPollIndex = 0;
+  private readonly mercadoPagoIntentsByOperation = signal<Record<string, MercadoPagoIntent>>({});
   protected readonly mercadoPagoIntent = signal<MercadoPagoIntent | null>(null);
   protected readonly mercadoPagoMode = signal<MercadoPagoMode>('qr');
   protected readonly availableMercadoPagoModes = signal<readonly MercadoPagoMode[]>([]);
@@ -285,7 +317,7 @@ export class PosPage implements OnInit {
   protected readonly serialPrintBusy = signal(false);
   protected readonly serialPrintResult = signal<SerialPrintResult | HasarSalePrintResult | null>(null);
   protected readonly serialPrintError = signal<string | null>(null);
-  protected readonly selectedPayments = signal<readonly { method: SalePaymentMethod; amount: number }[]>([]);
+  protected readonly selectedPayments = signal<readonly SelectedPayment[]>([]);
   protected readonly creditCustomerOptions = signal<readonly CreditCustomerOption[]>([]);
   protected readonly creditCustomerSearch = signal('');
   protected readonly creditCustomerId = signal('');
@@ -324,14 +356,19 @@ export class PosPage implements OnInit {
   });
   protected readonly changePreview = computed(() => {
     const selected = this.selectedPayments();
-    const cash = selected.find((payment) => payment.method === 'cash')?.amount ?? 0;
+    const cash = selected.filter((payment) => payment.method === 'cash')
+      .reduce((sum, payment) => sum + payment.amount, 0);
     const nonCash = selected.filter((payment) => payment.method !== 'cash').reduce((sum, payment) => sum + payment.amount, 0);
     const dueNow = this.dueNow();
     return nonCash > dueNow ? 0 : Math.max(0, Math.round((cash + nonCash - dueNow) * 100) / 100);
   });
-  protected readonly paymentBalance = computed(() => Math.max(0, Math.round((this.dueNow() -
+  protected readonly paymentBalance = computed(() => this.checkoutCommitted()
+    ? this.checkout()?.remainingAmount ?? 0 : Math.max(0, Math.round((this.dueNow() -
     this.selectedPayments().reduce((sum, payment) => sum + payment.amount, 0)) * 100) / 100));
   protected readonly paymentProblem = computed(() => {
+    if (this.checkoutLoadState() === 'loading') return 'Recuperando el proceso de cobro.';
+    if (this.checkoutLoadState() === 'error') return 'No se pudo recuperar el proceso de cobro.';
+    if (this.checkoutCommitted()) return null;
     if (!this.isDemoPriceList() && this.liveDataProblem()) return this.liveDataProblem();
     if (this.mercadoPagoLoadState() === 'loading') return 'Consultando si hay un cobro de Mercado Pago previo.';
     if (this.mercadoPagoLoadState() === 'error') return 'No se pudo verificar el cobro previo. Reabrí la ventana de cobro.';
@@ -358,11 +395,12 @@ export class PosPage implements OnInit {
       .reduce((sum, payment) => sum + payment.amount, 0);
     if (nonCash > this.dueNow()) return 'Los medios sin efectivo no pueden superar el importe a cobrar ahora.';
     if (this.paymentBalance() > 0) return 'Los medios de pago todavía no cubren el total.';
-    const mercadoPago = payments.find((payment) => payment.method === 'mercadoPago');
-    if (mercadoPago && (!this.mercadoPagoIntent()?.approved ||
-        this.mercadoPagoIntent()?.amount !== mercadoPago.amount))
+    const mercadoPago = payments.filter((payment) => payment.method === 'mercadoPago');
+    if (mercadoPago.some((payment) => !this.mercadoPagoIntentsByOperation()[payment.id ?? '']?.approved &&
+        !(this.mercadoPagoIntent()?.approved && mercadoPago.length === 1 &&
+          this.mercadoPagoIntent()?.amount === payment.amount)))
       return 'Confirmá el cobro de Mercado Pago antes de cerrar la venta.';
-    if (!mercadoPago && this.mercadoPagoOrderActive())
+    if (mercadoPago.length === 0 && this.mercadoPagoOrderActive())
       return 'Hay una orden de Mercado Pago activa. Consultá su estado antes de cambiar el medio.';
     return null;
   });
@@ -1322,7 +1360,13 @@ export class PosPage implements OnInit {
       this.shiftError.set('Abrí tu turno de caja para poder cobrar esta venta.');
       return;
     }
-    this.selectedPayments.set([{ method: 'cash', amount: this.subtotal() }]);
+    this.selectedPayments.set([this.newPayment('cash', this.subtotal())]);
+    this.checkout.set(null);
+    this.legacyPayment.set(false);
+    this.checkoutLoadState.set('loading');
+    this.checkoutCommitKey = null;
+    this.mercadoPagoIntentsByOperation.set({});
+    this.mercadoPagoPollIndex = 0;
     this.accountChargeDraft.set('0');
     this.creditAppliedDraft.set('0');
     this.creditCustomerId.set('');
@@ -1367,20 +1411,133 @@ export class PosPage implements OnInit {
         this.gatewayLoadState.set('error');
       },
     });
-    this.mercadoPagoClient.get(this.draftId()).subscribe({
+    const openedDraftId = this.draftId();
+    this.saleCheckoutClient.current(openedDraftId).subscribe({
+      next: (checkout) => {
+        if (!this.checkoutNotice() || this.draftId() !== openedDraftId) return;
+        this.checkoutLoadState.set('ready');
+        if (checkout) {
+          this.restoreCheckout(checkout);
+          this.mercadoPagoLoadState.set('ready');
+        } else this.recoverLegacyMercadoPago(openedDraftId);
+      },
+      error: () => {
+        this.checkoutLoadState.set('error');
+        this.mercadoPagoLoadState.set('error');
+        this.checkoutError.set('No se pudo recuperar el proceso de cobro. Cerrá y volvé a abrir el ticket.');
+      },
+    });
+  }
+
+  private recoverLegacyMercadoPago(draftId: string): void {
+    this.mercadoPagoClient.get(draftId).subscribe({
       next: (intent) => {
         this.mercadoPagoLoadState.set('ready');
         if (!intent) return;
+        this.legacyPayment.set(true);
         this.acceptMercadoPagoIntent(intent);
         const rest = Math.round((this.subtotal() - intent.amount) * 100) / 100;
-        this.selectedPayments.set([{ method: 'mercadoPago', amount: intent.amount },
-          ...(rest > 0 ? [{ method: 'cash' as const, amount: rest }] : [])]);
+        this.selectedPayments.set([this.newPayment('mercadoPago', intent.amount),
+          ...(rest > 0 ? [this.newPayment('cash', rest)] : [])]);
       },
       error: () => {
         this.mercadoPagoLoadState.set('error');
         this.mercadoPagoMessage.set('No se pudo recuperar el cobro anterior de Mercado Pago.');
       },
     });
+  }
+
+  private newPayment(method: SalePaymentMethod, amount: number): SelectedPayment {
+    return { id: crypto.randomUUID(), method, amount };
+  }
+
+  private restoreCheckout(checkout: SaleCheckout): void {
+    this.checkout.set(checkout);
+    this.checkoutCommitKey = checkout.commitKey;
+    this.legacyPayment.set(false);
+    this.selectedPayments.set(checkout.instruments.map((item) => ({
+      id: item.id, method: item.method, amount: item.amount, reference: item.reference,
+      status: item.status, pointPaymentIntentId: item.pointPaymentIntentId,
+    })));
+    const terms = checkout.terms;
+    this.accountChargeDraft.set(String(terms.accountChargeAmount));
+    this.creditAppliedDraft.set(String(terms.creditAppliedAmount));
+    this.creditCustomerId.set(terms.customerId ?? '');
+    if (terms.customerId && this.creditCustomerAccount()?.customerId !== terms.customerId) {
+      this.creditCustomerAccountStatus.set('loading');
+      this.creditCustomerClient.account(terms.customerId).subscribe({
+        next: (account) => {
+          if (this.creditCustomerId() === terms.customerId) {
+            this.creditCustomerAccount.set(account);
+            this.creditCustomerAccountStatus.set('idle');
+          }
+        },
+        error: () => this.creditCustomerAccountStatus.set('error'),
+      });
+    }
+    this.documentType.set(terms.documentType as SaleDocumentType);
+    this.recipientTaxStatus.set(terms.recipientTaxStatus as SaleRecipientTaxStatus);
+    this.recipientName.set(terms.recipientName ?? '');
+    this.recipientDocumentNumber.set(terms.recipientDocumentNumber ?? '');
+    this.recipientAddress.set(terms.recipientAddress ?? '');
+    this.recipientLocality.set(terms.recipientLocality ?? '');
+    this.recipientProvince.set(terms.recipientProvince ?? '');
+    this.fiscalCustomerId.set(terms.fiscalCustomerId ?? '');
+    this.purchaseOrderNumber.set(terms.purchaseOrderNumber ?? '');
+    for (const payment of checkout.instruments.filter((item) => item.pointPaymentIntentId)) {
+      this.mercadoPagoClient.checkoutPayment(checkout.saleDraftId, checkout.id, payment.id).subscribe({
+        next: (intent) => { if (intent) this.acceptMercadoPagoIntent(intent, payment.id); },
+        error: () => this.mercadoPagoMessage.set('No se pudo recuperar una orden de Mercado Pago.'),
+      });
+    }
+  }
+
+  private checkoutTerms() {
+    return {
+      customerId: this.creditCustomerId() || null,
+      accountChargeAmount: this.accountChargeAmount(),
+      creditAppliedAmount: this.creditAppliedAmount(),
+      accountChargeConfirmed: this.accountChargeAmount() > 0,
+      documentType: this.documentType(), recipientTaxStatus: this.recipientTaxStatus(),
+      recipientName: this.recipientName().trim() || null,
+      recipientDocumentNumber: this.recipientDocumentNumber().trim() || null,
+      recipientAddress: this.recipientAddress().trim() || null,
+      recipientLocality: this.recipientLocality().trim() || null,
+      recipientProvince: this.recipientProvince().trim() || null,
+      fiscalCustomerId: this.fiscalCustomerId() || null,
+      purchaseOrderNumber: this.purchaseOrderNumber().trim() || null,
+    };
+  }
+
+  private async ensureCheckoutCommitted(): Promise<SaleCheckout> {
+    const draftId = this.draftId();
+    if (!draftId) throw new Error('No hay un ticket guardado para cobrar.');
+    const remote = await firstValueFrom(this.saleCheckoutClient.current(draftId));
+    if (remote && remote.status !== 'Prepared') {
+      this.restoreCheckout(remote);
+      if (remote.status === 'Canceled' || remote.status === 'Completed')
+        throw new Error('El proceso de cobro ya terminó. Recuperá el ticket.');
+      return remote;
+    }
+    const prepared = await firstValueFrom(this.saleCheckoutClient.prepare(draftId,
+      remote?.revision ?? 0, this.checkoutTerms(), this.selectedPayments().map((payment) => ({
+        id: payment.id ?? crypto.randomUUID(), method: payment.method,
+        amount: payment.amount, reference: payment.reference,
+      }))));
+    this.restoreCheckout(prepared);
+    const key = this.checkoutCommitKey ?? crypto.randomUUID();
+    this.checkoutCommitKey = key;
+    const committed = await firstValueFrom(this.saleCheckoutClient.commit(draftId,
+      prepared.id, prepared.revision, key));
+    this.restoreCheckout(committed);
+    return committed;
+  }
+
+  private async refreshCheckout(): Promise<SaleCheckout | null> {
+    if (!this.draftId()) return null;
+    const checkout = await firstValueFrom(this.saleCheckoutClient.current(this.draftId()));
+    if (checkout) this.restoreCheckout(checkout);
+    return checkout;
   }
 
   protected retryDraftSave(): void {
@@ -1474,22 +1631,80 @@ export class PosPage implements OnInit {
 
   protected togglePayment(method: SalePaymentMethod, event: Event): void {
     const checked = (event.target as HTMLInputElement).checked;
+    if (this.checkoutCommitted()) {
+      (event.target as HTMLInputElement).checked = this.hasPayment(method);
+      return;
+    }
     if (method === 'mercadoPago' && (this.mercadoPagoOrderActive() ||
         checked && this.availableMercadoPagoModes().length === 0)) {
       (event.target as HTMLInputElement).checked = this.hasPayment(method);
       return;
     }
     this.selectedPayments.update((payments) => checked
-      ? [...payments, { method, amount: method === 'cash' ? this.dueNow() :
-        Math.max(0, Math.round((this.dueNow() - payments.reduce((sum, item) => sum + item.amount, 0)) * 100) / 100) }]
+      ? [...payments, this.newPayment(method, method === 'cash' ? this.dueNow() :
+        Math.max(0, Math.round((this.dueNow() - payments.reduce((sum, item) => sum + item.amount, 0)) * 100) / 100))]
       : payments.filter((payment) => payment.method !== method));
     this.checkoutError.set(null);
   }
 
   protected updatePaymentAmount(method: SalePaymentMethod, event: Event): void {
+    if (this.checkoutCommitted()) return;
     const amount = Number((event.target as HTMLInputElement).value.replace(',', '.'));
-    this.selectedPayments.update((payments) => payments.map((payment) => payment.method === method ? { ...payment, amount } : payment));
+    let updated = false;
+    this.selectedPayments.update((payments) => payments.map((payment) => {
+      if (payment.method !== method || updated) return payment;
+      updated = true;
+      return { ...payment, amount };
+    }));
     this.checkoutError.set(null);
+  }
+
+  protected addPaymentOperation(method: SalePaymentMethod): void {
+    if (this.checkoutCommitted()) return;
+    const remaining = Math.max(0, Math.round((this.dueNow() -
+      this.selectedPayments().reduce((sum, item) => sum + item.amount, 0)) * 100) / 100);
+    this.selectedPayments.update((payments) => [...payments, this.newPayment(method, remaining)]);
+  }
+
+  protected updateOperationAmount(id: string, event: Event): void {
+    if (this.checkoutCommitted()) return;
+    const amount = Number((event.target as HTMLInputElement).value.replace(',', '.'));
+    this.selectedPayments.update((payments) => payments.map((item) =>
+      item.id === id ? { ...item, amount } : item));
+  }
+
+  protected updateOperationReference(id: string, event: Event): void {
+    if (this.checkoutCommitted()) return;
+    const reference = (event.target as HTMLInputElement).value;
+    this.selectedPayments.update((payments) => payments.map((item) =>
+      item.id === id ? { ...item, reference } : item));
+  }
+
+  protected removePaymentOperation(id: string): void {
+    if (this.checkoutCommitted()) return;
+    this.selectedPayments.update((payments) => payments.filter((item) => item.id !== id));
+  }
+
+  protected paymentIntent(id: string): MercadoPagoIntent | null {
+    return this.mercadoPagoIntentsByOperation()[id] ?? null;
+  }
+
+  protected firstPayment(method: SalePaymentMethod): SelectedPayment | null {
+    return this.selectedPayments().find((item) => item.method === method) ?? null;
+  }
+
+  protected async addReplacement(): Promise<void> {
+    const checkout = this.checkout();
+    if (!checkout || !this.draftId() || !this.hasRejectedPayment() || this.checkoutBusy()) return;
+    this.checkoutBusy.set(true);
+    try {
+      const updated = await firstValueFrom(this.saleCheckoutClient.addReplacement(this.draftId(),
+        checkout.id, this.newPayment(this.replacementMethod(), checkout.remainingAmount)));
+      this.restoreCheckout(updated);
+      this.checkoutError.set(null);
+    } catch {
+      this.checkoutError.set('No se pudo agregar el pago de reemplazo. Recuperá el cobro e intentá de nuevo.');
+    } finally { this.checkoutBusy.set(false); }
   }
 
   protected selectMercadoPagoMode(event: Event): void {
@@ -1497,20 +1712,30 @@ export class PosPage implements OnInit {
     if (this.availableMercadoPagoModes().includes(mode)) this.mercadoPagoMode.set(mode);
   }
 
-  protected startMercadoPago(): void {
-    const amount = this.paymentAmount('mercadoPago');
-    if (!this.draftId() || !Number.isFinite(amount) || amount <= 0 || this.mercadoPagoBusy() ||
+  protected async startMercadoPago(operationId?: string): Promise<void> {
+    const payment = this.mercadoPagoPayments().find((item) => operationId
+      ? item.id === operationId : item.status !== 'Rejected' && item.status !== 'Approved');
+    if (!payment || !this.draftId() || !Number.isFinite(payment.amount) || payment.amount <= 0 ||
+        this.mercadoPagoBusy() || this.documentProblem() ||
         !this.availableMercadoPagoModes().includes(this.mercadoPagoMode())) return;
     this.mercadoPagoBusy.set(true);
     this.mercadoPagoMessage.set(null);
-    this.mercadoPagoClient.start(this.draftId(), this.mercadoPagoMode(), amount).subscribe({
-      next: (intent) => {
-        this.mercadoPagoBusy.set(false);
-        this.acceptMercadoPagoIntent(intent);
-      },
-      error: (response: HttpErrorResponse) => {
-        this.mercadoPagoBusy.set(false);
-        const code = response.error?.error?.code;
+    try {
+      const draftId = this.draftId();
+      const intent = this.legacyPayment()
+        ? await firstValueFrom(this.mercadoPagoClient.start(draftId,
+          this.mercadoPagoMode(), payment.amount))
+        : await (async () => {
+          const checkout = await this.ensureCheckoutCommitted();
+          const operation = checkout.instruments.find((item) => item.id === payment.id);
+          if (!operation) throw new Error('El medio cambió durante la confirmación. Recuperá el cobro.');
+          return firstValueFrom(this.mercadoPagoClient.executeCheckout(draftId,
+            checkout.id, operation.id, this.mercadoPagoMode(), operation.amount));
+        })();
+      this.acceptMercadoPagoIntent(intent, payment.id);
+      if (!this.legacyPayment()) await this.refreshCheckout();
+    } catch (error) {
+        const code = (error as HttpErrorResponse).error?.error?.code;
         this.mercadoPagoMessage.set(code === 'MERCADO_PAGO_REGISTER_NOT_CONFIGURED'
           ? 'Esta caja no tiene configurado ese modo de Mercado Pago en Administración.'
           : code === 'MERCADO_PAGO_STATIC_QR_UNAVAILABLE'
@@ -1522,17 +1747,15 @@ export class PosPage implements OnInit {
             : code === 'MERCADO_PAGO_ORDER_ACTIVE'
               ? 'Ya hay una orden activa con otro importe o modo. Consultá su estado.'
               : 'No se confirmó la creación de la orden. Reintentá con la misma operación o consultá su estado.');
-        this.mercadoPagoClient.get(this.draftId()).subscribe({
-          next: (intent) => { if (intent) this.acceptMercadoPagoIntent(intent); },
-          error: () => this.mercadoPagoMessage.set(
-            'No se pudo recuperar la orden. Consultá de nuevo antes de cambiar el medio de pago.'),
-        });
-      },
-    });
+        if (!this.legacyPayment()) await this.refreshCheckout().catch(() => undefined);
+    } finally {
+      this.mercadoPagoBusy.set(false);
+    }
   }
 
-  protected checkMercadoPago(): void {
-    const intent = this.mercadoPagoIntent();
+  protected checkMercadoPago(operationId?: string): void {
+    const intent = operationId
+      ? this.mercadoPagoIntentsByOperation()[operationId] : this.mercadoPagoIntent();
     const draftId = this.draftId();
     if (!intent || !draftId || this.mercadoPagoBusy()) return;
     this.mercadoPagoBusy.set(true);
@@ -1540,12 +1763,14 @@ export class PosPage implements OnInit {
     this.mercadoPagoClient.check(draftId, intent.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (updated) => {
         this.mercadoPagoBusy.set(false);
-        if (this.checkoutNotice() && this.draftId() === draftId && this.mercadoPagoIntent()?.id === intent.id)
-          this.acceptMercadoPagoIntent(updated);
+        if (this.checkoutNotice() && this.draftId() === draftId) {
+          this.acceptMercadoPagoIntent(updated, operationId);
+          if (this.checkout()) void this.refreshCheckout();
+        }
       },
       error: () => {
         this.mercadoPagoBusy.set(false);
-        if (this.checkoutNotice() && this.draftId() === draftId && this.mercadoPagoIntent()?.id === intent.id) {
+        if (this.checkoutNotice() && this.draftId() === draftId) {
           this.mercadoPagoMessage.set('No se pudo verificar el estado en Mercado Pago. No cierres la venta todavía.');
           this.scheduleMercadoPagoPoll(15000);
         }
@@ -1553,15 +1778,17 @@ export class PosPage implements OnInit {
     });
   }
 
-  protected cancelMercadoPago(): void {
-    const intent = this.mercadoPagoIntent();
+  protected cancelMercadoPago(operationId?: string): void {
+    const intent = operationId
+      ? this.mercadoPagoIntentsByOperation()[operationId] : this.mercadoPagoIntent();
     if (!intent || !this.draftId() || this.mercadoPagoBusy() || intent.approved) return;
     this.mercadoPagoBusy.set(true);
     this.mercadoPagoMessage.set(null);
     this.mercadoPagoClient.cancel(this.draftId(), intent.id).subscribe({
       next: (updated) => {
         this.mercadoPagoBusy.set(false);
-        this.acceptMercadoPagoIntent(updated);
+        this.acceptMercadoPagoIntent(updated, operationId);
+        if (this.checkout()) void this.refreshCheckout();
       },
       error: () => {
         this.mercadoPagoBusy.set(false);
@@ -1570,7 +1797,13 @@ export class PosPage implements OnInit {
     });
   }
 
-  private acceptMercadoPagoIntent(intent: MercadoPagoIntent): void {
+  private acceptMercadoPagoIntent(intent: MercadoPagoIntent, operationId?: string): void {
+    if (operationId) this.mercadoPagoIntentsByOperation.update((items) =>
+      ({ ...items, [operationId]: intent }));
+    if (operationId && operationId !== this.mercadoPagoPayments()[0]?.id) {
+      this.scheduleMercadoPagoPoll();
+      return;
+    }
     this.mercadoPagoIntent.set(intent);
     this.mercadoPagoMode.set(intent.mode);
     this.mercadoPagoMessage.set(intent.approved ? 'Pago acreditado. Ya podés confirmar la venta.'
@@ -1592,12 +1825,15 @@ export class PosPage implements OnInit {
 
   private scheduleMercadoPagoPoll(delayMs = 5000): void {
     this.clearMercadoPagoPoll();
-    if (!this.checkoutNotice() || !this.draftId() || !this.mercadoPagoOrderActive() ||
-        this.mercadoPagoIntent()?.approved) return;
+    if (!this.checkoutNotice() || !this.draftId()) return;
+    const pending = Object.entries(this.mercadoPagoIntentsByOperation()).filter(([, intent]) =>
+      !intent.approved && !['Rejected', 'Expired', 'Canceled', 'Refunded'].includes(intent.status));
+    if (pending.length === 0 && (!this.mercadoPagoOrderActive() || this.mercadoPagoIntent()?.approved)) return;
     this.mercadoPagoPollTimer = setTimeout(() => {
       this.mercadoPagoPollTimer = null;
       if (this.mercadoPagoBusy()) this.scheduleMercadoPagoPoll();
-      else this.checkMercadoPago();
+      else this.checkMercadoPago(pending.length > 0
+        ? pending[this.mercadoPagoPollIndex++ % pending.length][0] : undefined);
     }, delayMs);
   }
 
@@ -1764,11 +2000,12 @@ export class PosPage implements OnInit {
     const payments = this.selectedPayments();
     if (payments.length === 1 && payments[0].method === 'cash' && payments[0].amount === previousDueNow &&
         Number.isFinite(newDueNow) && newDueNow >= 0) {
-      this.selectedPayments.set(newDueNow === 0 ? [] : [{ method: 'cash', amount: newDueNow }]);
+      this.selectedPayments.set(newDueNow === 0 ? [] : [
+        { ...payments[0], amount: newDueNow }]);
     }
   }
 
-  protected confirmSale(): void {
+  protected async confirmSale(): Promise<void> {
     if (!this.draftId() || !this.canOperate() || this.checkoutBusy()) return;
     const problem = this.documentProblem() ?? this.paymentProblem();
     if (problem) {
@@ -1784,28 +2021,52 @@ export class PosPage implements OnInit {
     )) return;
     this.checkoutBusy.set(true);
     this.checkoutError.set(null);
-    this.saleDraftClient.confirm(this.draftId(), payments,
-      accountCharge > 0 || creditApplied > 0
-        ? { customerId: this.creditCustomerId(), amount: accountCharge, creditAppliedAmount: creditApplied }
-        : undefined,
-      { documentType: this.documentType(), recipientTaxStatus: this.recipientTaxStatus(),
-        recipientName: this.recipientName().trim() || undefined,
-        recipientDocumentNumber: this.recipientDocumentNumber().trim() || undefined,
-        recipientAddress: this.recipientAddress().trim() || undefined,
-        recipientLocality: this.recipientLocality().trim() || undefined,
-        recipientProvince: this.recipientProvince().trim() || undefined,
-        purchaseOrderNumber: this.purchaseOrderNumber().trim() || undefined,
-        fiscalCustomerId: this.fiscalCustomerId() || undefined },
-      this.mercadoPagoIntent()?.approved ? this.mercadoPagoIntent()!.id : undefined).subscribe({
-      next: (sale) => this.finishConfirmedSale(sale),
-      error: (error: HttpErrorResponse) => {
-        this.checkoutBusy.set(false);
-        this.checkoutError.set(error.status === 409 || error.status === 400 || error.status === 403
-          ? this.checkoutConflictMessage(error)
-          : 'No se pudo confirmar la venta. El ticket sigue guardado; revisá e intentá de nuevo.');
-        if (error.status === 409) { this.loadCashierShift(); this.loadPriceLists(); }
-      },
-    });
+    try {
+      if (this.legacyPayment()) {
+        const sale = await firstValueFrom(this.saleDraftClient.confirm(this.draftId(),
+          payments.map(({ method, amount }) => ({ method, amount })),
+          accountCharge > 0 || creditApplied > 0
+            ? { customerId: this.creditCustomerId(), amount: accountCharge, creditAppliedAmount: creditApplied }
+            : undefined,
+          { documentType: this.documentType(), recipientTaxStatus: this.recipientTaxStatus(),
+            recipientName: this.recipientName().trim() || undefined,
+            recipientDocumentNumber: this.recipientDocumentNumber().trim() || undefined,
+            recipientAddress: this.recipientAddress().trim() || undefined,
+            recipientLocality: this.recipientLocality().trim() || undefined,
+            recipientProvince: this.recipientProvince().trim() || undefined,
+            purchaseOrderNumber: this.purchaseOrderNumber().trim() || undefined,
+            fiscalCustomerId: this.fiscalCustomerId() || undefined },
+          this.mercadoPagoIntent()?.approved ? this.mercadoPagoIntent()!.id : undefined));
+        this.finishConfirmedSale(sale);
+        return;
+      }
+      let checkout = await this.ensureCheckoutCommitted();
+      for (const operation of checkout.instruments.filter((item) =>
+        item.status === 'Prepared' && item.method !== 'mercadoPago')) {
+        checkout = await firstValueFrom(this.saleCheckoutClient.approve(this.draftId(),
+          checkout.id, operation.id, operation.reference));
+        this.restoreCheckout(checkout);
+      }
+      if (checkout.status !== 'Ready') {
+        this.checkoutError.set(checkout.instruments.some((item) => item.status === 'Uncertain')
+          ? 'Hay un pago con resultado incierto. Consultá su estado antes de continuar.'
+          : `Venta pendiente: faltan ${this.formatMoney(checkout.remainingAmount)} por acreditar. El turno seguirá abierto.`);
+        return;
+      }
+      const sale = await firstValueFrom(this.saleCheckoutClient.confirm(this.draftId(), checkout.id));
+      this.finishConfirmedSale(sale);
+    } catch (response) {
+      const error = response as HttpErrorResponse;
+      this.checkoutError.set(error.status === 409 || error.status === 400 || error.status === 403
+        ? this.checkoutConflictMessage(error)
+        : response instanceof Error && !(response instanceof HttpErrorResponse)
+          ? response.message
+          : 'No se pudo confirmar la venta. Los pagos aprobados siguen registrados; recuperá el cobro.');
+      if (error.status === 409) { this.loadCashierShift(); this.loadPriceLists(); }
+      await this.refreshCheckout().catch(() => undefined);
+    } finally {
+      this.checkoutBusy.set(false);
+    }
   }
 
   protected closeCheckout(): void {
@@ -1835,6 +2096,11 @@ export class PosPage implements OnInit {
     this.draftId.set('');
     this.draftStatus.set('saved');
     this.selectedPayments.set([]);
+    this.checkout.set(null);
+    this.checkoutLoadState.set('idle');
+    this.checkoutCommitKey = null;
+    this.mercadoPagoIntentsByOperation.set({});
+    this.mercadoPagoPollIndex = 0;
     this.mercadoPagoIntent.set(null);
     this.mercadoPagoQrImage.set(null);
     this.mercadoPagoLoadState.set('idle');

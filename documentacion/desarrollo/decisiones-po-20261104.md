@@ -15,3 +15,12 @@
 ## Límite de la respuesta sobre costo
 
 «No vamos a usar costo por este momento» descarta trabajo adicional de costo en esta etapa. No se interpreta como instrucción para borrar datos, vigencias o quitar el campo del esquema. Si más adelante se desea retirar el costo de la interfaz o permitir volver de valor conocido a desconocido, hará falta definir ese cambio de alcance.
+
+## Consultas técnicas abiertas tras contrastar los contratos reales
+
+1. I10: cuando ya existe déficit o reserva genérica sin respaldo, definir si la primera pieza trazable debe esperar regularización antes de recibirse, conservando la alternativa A, o si se separa el déficit en otro modelo.
+2. I13a: confirmar tablas aditivas de snapshot e IVA por intento de emisión frente a columnas/JSON en `fiscal_documents`.
+3. I16: confirmar solicitud persistente con estados y débito único de efectivo en el ledger al aprobar, bloqueando cierre con solicitudes pendientes.
+4. I18a: el POST legado de pieza no envía proveedor. Definir si su documento unitario admite una excepción auditada sin ficha de catálogo, usando `sourceSystem` como origen, mientras las recepciones nuevas exigen proveedor del catálogo.
+
+Estas consultas no reabren las siete decisiones funcionales; delimitan la estructura y la compatibilidad necesarias antes de preparar sus migraciones.

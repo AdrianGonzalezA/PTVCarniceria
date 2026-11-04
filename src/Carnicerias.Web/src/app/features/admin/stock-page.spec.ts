@@ -62,6 +62,11 @@ describe('StockPage', () => {
     expect(page.querySelector('.stock-row')?.textContent).not.toContain('Chorizo');
   });
 
+  it('shows kilograms with three decimals and Argentine separators', () => {
+    const { page } = load();
+    expect(page.querySelector('.stock-row')?.textContent).toContain('10,000 kg');
+  });
+
   it('shows branch stock and persists a positive adjustment with an operation id', () => {
     const { fixture, http, page } = load();
     expect(page.textContent).toContain('Centro');
@@ -86,7 +91,7 @@ describe('StockPage', () => {
     request.flush({ operationId: request.request.body.operationId, onHand: 11.5,
       reserved: 2, available: 9.5 });
     fixture.detectChanges();
-    expect(page.querySelector('.stock-row')?.textContent).toContain('11.5 kg');
+    expect(page.querySelector('.stock-row')?.textContent).toContain('11,500 kg');
   });
 
   it('lets an adjustment omit its description and records a default audit reason', () => {

@@ -136,6 +136,7 @@ export interface StockHistoryItem {
   readonly branchName: string;
   readonly productId: string;
   readonly productName: string;
+  readonly saleMode: 'weight' | 'unit';
   readonly userId: string;
   readonly username: string;
   readonly kind: 'openingBalance' | 'adjustment' | 'sale';

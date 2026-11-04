@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -14,7 +14,7 @@ import { AdminExcelImportActions } from './admin-excel-import-actions';
 
 @Component({
   selector: 'app-price-lists-page',
-  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, AdminExcelImportActions, ReactiveFormsModule, DatePipe],
+  imports: [RouterLink, AdminAreaTabs, AdminDetailDialog, AdminExcelImportActions, ReactiveFormsModule, DatePipe, DecimalPipe],
   templateUrl: './price-lists-page.html',
   styleUrls: ['./admin-page.scss', './categories-page.scss', './price-lists-page.scss'],
 })

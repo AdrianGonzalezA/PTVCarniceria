@@ -54,10 +54,10 @@
               @for (item of visibleItems(); track item.productId) {
                 <tr class="stock-row">
                   <td><strong>{{ item.name }}</strong><small>{{ item.code }}</small></td>
-                  <td>{{ item.onHand }} {{ item.unit ?? 'u.' }}</td>
-                  <td>{{ item.reserved }} {{ item.unit ?? 'u.' }}</td>
-                  <td>{{ item.quarantined ?? 0 }} {{ item.unit ?? 'u.' }}</td>
-                  <td>{{ item.reconciliationLocked ? 'En conteo' : item.available }} {{ item.reconciliationLocked ? '' : item.unit ?? 'u.' }}</td>
+                  <td>{{ formatQuantity(item.onHand, item) }} {{ item.unit ?? 'u.' }}</td>
+                  <td>{{ formatQuantity(item.reserved, item) }} {{ item.unit ?? 'u.' }}</td>
+                  <td>{{ formatQuantity(item.quarantined ?? 0, item) }} {{ item.unit ?? 'u.' }}</td>
+                  <td>{{ item.reconciliationLocked ? 'En conteo' : formatQuantity(item.available, item) }} {{ item.reconciliationLocked ? '' : item.unit ?? 'u.' }}</td>
                   <td><button type="button" class="secondary-button" [disabled]="saving() || item.reconciliationLocked" (click)="startAdjustment(item)">Ajustar</button></td>
                 </tr>
               }
@@ -71,7 +71,7 @@
         [canClose]="!saving()" (closed)="cancelAdjustment()">
         <form class="editor-form stock-form" [formGroup]="adjustmentForm" (ngSubmit)="saveAdjustment()">
           <h2 id="stock-adjustment-title">Ajustar {{ item.name }}</h2>
-          <p>Actual: {{ item.onHand }} {{ item.unit ?? 'u.' }} · Reservado: {{ item.reserved }} · Inmovilizado: {{ item.quarantined ?? 0 }} · Disponible: {{ item.available }}</p>
+          <p>Actual: {{ formatQuantity(item.onHand, item) }} {{ item.unit ?? 'u.' }} · Reservado: {{ formatQuantity(item.reserved, item) }} · Inmovilizado: {{ formatQuantity(item.quarantined ?? 0, item) }} · Disponible: {{ formatQuantity(item.available, item) }}</p>
           <label for="stock-delta">Variación de cantidad (positiva para entrada, negativa para salida)</label>
           <input id="stock-delta" type="number" formControlName="quantityDelta" [attr.step]="item.saleMode === 'unit' ? '1' : '0.001'" aria-describedby="stock-delta-help" required />
           <p id="stock-delta-help" class="field-hint">{{ item.saleMode === 'unit' ? 'Sólo unidades enteras.' : 'Hasta tres decimales.' }}</p>

@@ -1,3 +1,5 @@
+import { registerLocaleData } from '@angular/common';
+import localeEsAr from '@angular/common/locales/es-AR';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
@@ -5,6 +7,7 @@ import { provideRouter } from '@angular/router';
 import { PriceListsPage } from './price-lists-page';
 
 describe('PriceListsPage', () => {
+  beforeAll(() => registerLocaleData(localeEsAr));
   const session = {
     userId: 'admin-id', username: 'visual-admin', expiresAtUtc: '2026-10-09T00:00:00Z',
     context: { userId: 'admin-id', companyId: 'company-id', companyName: 'Empresa Visual',
@@ -47,12 +50,12 @@ describe('PriceListsPage', () => {
         page: 1, pageSize: 20, totalItems: 1, totalPages: 1,
       });
       fixture.detectChanges();
-      expect(page.querySelector('dialog[open] .price-row')?.textContent).toContain('600.00');
+      expect(page.querySelector('dialog[open] .price-row')?.textContent).toContain('600,00');
 
       root.dataset['visualTheme'] = 'nocturno';
       expect(getComputedStyle(page).getPropertyValue('--admin-prices-panel').trim()).toBe('#24282e');
       expect(getComputedStyle(page).getPropertyValue('--admin-prices-nested').trim()).toBe('#2d3239');
-      expect(page.querySelector('dialog[open] .price-row')?.textContent).toContain('600.00');
+      expect(page.querySelector('dialog[open] .price-row')?.textContent).toContain('600,00');
       http.expectNone((request) => request.method !== 'GET');
       fixture.destroy();
     } finally {
@@ -144,7 +147,7 @@ describe('PriceListsPage', () => {
     expect(change.request.body).toEqual({ amount: 700.5 });
     change.flush({ id: 'price-2', amount: 700.5, effectiveFromUtc: '2026-10-08T01:00:00Z' });
     fixture.detectChanges();
-    expect(page.querySelector('.price-row')?.textContent).toContain('700.50');
+    expect(page.querySelector('.price-row')?.textContent).toContain('700,50');
     page.querySelector<HTMLButtonElement>('.price-row .history-button')!.click();
     http.expectOne('/api/admin/price-lists/list-1/products/product-1/history').flush([
       { id: 'price-2', amount: 700.5, effectiveFromUtc: '2026-10-08T01:00:00Z',

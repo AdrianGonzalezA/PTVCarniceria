@@ -1,3 +1,5 @@
+import { registerLocaleData } from '@angular/common';
+import localeEsAr from '@angular/common/locales/es-AR';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
@@ -5,6 +7,7 @@ import { provideRouter } from '@angular/router';
 import { HistoryPage } from './history-page';
 
 describe('HistoryPage', () => {
+  beforeAll(() => registerLocaleData(localeEsAr));
   beforeEach(() => TestBed.configureTestingModule({
     imports: [HistoryPage],
     providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
@@ -127,6 +130,28 @@ describe('HistoryPage', () => {
     stock.flush({ items: [], page: 1, pageSize: 30, totalItems: 0 });
     fixture.detectChanges();
     expect(page.textContent).toContain('No hay registros');
+  });
+
+  it('shows weight movements with three decimals and unit movements as integers', () => {
+    const { fixture, http, page } = load();
+    const stockTab = Array.from(page.querySelectorAll<HTMLButtonElement>('.history-tabs button'))
+      .find((button) => button.textContent?.includes('stock'))!;
+    stockTab.click();
+    http.expectOne((request) => request.url === '/api/admin/history/stock-movements').flush({
+      items: [
+        { id: 'move-1', createdAtUtc: '2026-10-08T10:00:00Z', branchId: 'branch-1',
+          branchName: 'Centro', productId: 'p-1', productName: 'Asado', saleMode: 'weight',
+          userId: 'admin-id', username: 'admin', kind: 'adjustment', quantityDelta: 1.5,
+          reason: 'Ingreso' },
+        { id: 'move-2', createdAtUtc: '2026-10-08T10:00:00Z', branchId: 'branch-1',
+          branchName: 'Centro', productId: 'p-2', productName: 'Chorizo', saleMode: 'unit',
+          userId: 'admin-id', username: 'admin', kind: 'adjustment', quantityDelta: 2,
+          reason: 'Ingreso' },
+      ], page: 1, pageSize: 30, totalItems: 2,
+    });
+    fixture.detectChanges();
+    expect(page.querySelector('tbody')?.textContent).toContain('1,500');
+    expect(page.querySelector('tbody')?.textContent).not.toContain('2,000');
   });
 
   it('combines document type with branch, terminal, dates and pagination for sales', () => {

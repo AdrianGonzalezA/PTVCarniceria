@@ -75,6 +75,13 @@ export class StockPage implements OnInit {
     this.search.set((event.target as HTMLInputElement).value);
   }
 
+  protected formatQuantity(value: number, item: InventoryStockItem): string {
+    const digits = item.saleMode === 'weight' ? 3 : 0;
+    return value.toLocaleString('es-AR', {
+      minimumFractionDigits: digits, maximumFractionDigits: digits,
+    });
+  }
+
   protected startAdjustment(item: InventoryStockItem): void {
     this.selected.set(item);
     this.adjustmentForm.reset({ quantityDelta: '', reason: '' });

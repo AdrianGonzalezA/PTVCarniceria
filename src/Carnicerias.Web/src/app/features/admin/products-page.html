@@ -84,7 +84,7 @@
                   @if (costHistoryError(); as error) { <p role="alert">{{ error }}</p> }
                   <ul>
                     @for (version of costHistoryRows(); track version.id) {
-                      <li>ARS {{ version.amount.toFixed(2) }} · desde {{ version.effectiveFromUtc | date:'short' }}
+                      <li>ARS {{ version.amount | number:'1.2-2':'es-AR' }} · desde {{ version.effectiveFromUtc | date:'short' }}
                         @if (version.effectiveToUtc) { hasta {{ version.effectiveToUtc | date:'short' }} }
                         · {{ version.changedByUsername ?? 'Costo inicial anterior al historial' }}</li>
                     }
@@ -166,7 +166,7 @@
                     <td><strong>{{ product.name }}</strong><small>{{ product.code }} · {{ product.alternateCodeCount }} alternativos</small></td>
                     <td>{{ product.categoryName }}</td>
                     <td>{{ product.saleMode === 'weight' ? 'Por peso' : 'Por unidad' }} · {{ product.unit }}</td>
-                    <td>ARS {{ product.cost.toFixed(2) }}</td>
+                    <td>ARS {{ product.cost | number:'1.2-2':'es-AR' }}</td>
                     <td><span class="status" [class.status-active]="product.isActive">{{ product.isActive ? 'Activo' : 'Inactivo' }}</span></td>
                     <td class="row-actions">
                       <button type="button" class="secondary-button edit-button" [disabled]="isSaving() || actionId() !== null" (click)="startEdit(product)">Editar</button>

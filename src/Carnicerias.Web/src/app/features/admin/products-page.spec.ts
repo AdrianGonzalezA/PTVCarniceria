@@ -1,3 +1,5 @@
+import { registerLocaleData } from '@angular/common';
+import localeEsAr from '@angular/common/locales/es-AR';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
@@ -5,6 +7,7 @@ import { provideRouter } from '@angular/router';
 import { ProductsPage } from './products-page';
 
 describe('ProductsPage', () => {
+  beforeAll(() => registerLocaleData(localeEsAr));
   const adminSession = {
     userId: 'admin-id', username: 'visual-admin', expiresAtUtc: '2026-10-09T00:00:00Z',
     context: {

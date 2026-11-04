@@ -126,7 +126,7 @@
                     <tr><td>{{ movement.createdAtUtc | date:'dd/MM/yyyy HH:mm' }}</td>
                       <td>{{ movement.branchName }}</td><td>{{ movement.productName }}</td>
                       <td>{{ movement.username }}</td><td>{{ stockKindLabel(movement.kind) }}</td>
-                      <td>{{ movement.quantityDelta | number:'1.0-3' }}</td><td>{{ movement.reason }}</td></tr>
+                      <td>{{ movement.quantityDelta | number:(movement.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }}</td><td>{{ movement.reason }}</td></tr>
                   }
                 </tbody>
               </table>
@@ -171,7 +171,7 @@
           @if (ticket.discountAmount > 0) { <p>Descuento global: − $ {{ ticket.discountAmount | number:'1.2-2' }} · {{ ticket.discountReason }}</p> }
           <h4>Artículos</h4>
           <ul>@for (line of ticket.lines; track $index) {
-            <li>{{ line.name }} · {{ line.quantity }} {{ line.unit }} × $ {{ line.unitPrice | number:'1.2-2' }} = $ {{ line.lineTotal | number:'1.2-2' }}
+            <li>{{ line.name }} · {{ line.saleMode === 'weight' ? (line.quantity | number:'1.3-3') : (line.quantity | number:'1.0-0') }} {{ line.unit }} × $ {{ line.unitPrice | number:'1.2-2' }} = $ {{ line.lineTotal | number:'1.2-2' }}
               @if (line.pieceIdentifier) { <br />Pieza trazable: {{ line.pieceIdentifier }} }
               @if (line.pieceCount !== null && line.pieceCount !== undefined) { <br />Piezas físicas: {{ line.pieceCount }} }
               @if (line.netAfterDiscount !== null) {

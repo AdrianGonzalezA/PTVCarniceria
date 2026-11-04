@@ -289,13 +289,16 @@ public static class AdminHistoryEndpoints
                     .Select(branch => branch.Name).FirstOrDefault() ?? "",
                 item.ProductId, db.CatalogProducts.Where(product => product.Id == item.ProductId)
                     .Select(product => product.Name).FirstOrDefault() ?? "",
+                db.CatalogProducts.Where(product => product.Id == item.ProductId)
+                    .Select(product => product.SaleMode).First(),
                 item.UserId, db.Users.Where(user => user.Id == item.UserId)
                     .Select(user => user.Username).FirstOrDefault() ?? "",
                 item.Kind, item.QuantityDelta, item.Reason))
             .ToArrayAsync(cancellationToken);
         return Results.Ok(new HistoryPage<StockItem>(rows.Select(row => new StockItem(
             row.Id, row.CreatedAtUtc, row.BranchId, row.BranchName, row.ProductId,
-            row.ProductName, row.UserId, row.Username, row.Kind switch
+            row.ProductName, row.SaleMode == ProductSaleMode.Unit ? "unit" : "weight",
+            row.UserId, row.Username, row.Kind switch
             {
                 InventoryMovementKind.OpeningBalance => "openingBalance",
                 InventoryMovementKind.Adjustment => "adjustment",
@@ -377,9 +380,9 @@ public static class AdminHistoryEndpoints
         Guid? TerminalId, string? TerminalName, Guid CashierId, string CashierName,
         Guid ShiftId, Guid? SaleId, string Kind, string Method, decimal AmountDelta);
     private sealed record StockRow(Guid Id, DateTimeOffset CreatedAtUtc, Guid BranchId, string BranchName,
-        Guid ProductId, string ProductName, Guid UserId, string Username,
+        Guid ProductId, string ProductName, ProductSaleMode SaleMode, Guid UserId, string Username,
         InventoryMovementKind Kind, decimal QuantityDelta, string Reason);
     private sealed record StockItem(Guid Id, DateTimeOffset CreatedAtUtc, Guid BranchId, string BranchName,
-        Guid ProductId, string ProductName, Guid UserId, string Username,
+        Guid ProductId, string ProductName, string SaleMode, Guid UserId, string Username,
         string Kind, decimal QuantityDelta, string Reason);
 }

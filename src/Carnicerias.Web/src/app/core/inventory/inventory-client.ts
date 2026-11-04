@@ -4,6 +4,7 @@ import { inject, Injectable } from '@angular/core';
 export interface InventoryStockItem {
   readonly productId: string;
   readonly code: string;
+  readonly alternateCodes?: readonly string[];
   readonly name: string;
   readonly unit?: string;
   readonly saleMode?: 'weight' | 'unit';

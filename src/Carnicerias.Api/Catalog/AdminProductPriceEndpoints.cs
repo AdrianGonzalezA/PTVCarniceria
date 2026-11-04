@@ -42,7 +42,10 @@ public static class AdminProductPriceEndpoints
         {
             var pattern = $"%{EscapeLikePattern(normalizedSearch)}%";
             products = products.Where(product => EF.Functions.ILike(product.Name, pattern, "\\") ||
-                EF.Functions.ILike(product.Code, pattern, "\\"));
+                EF.Functions.ILike(product.Code, pattern, "\\") ||
+                db.ProductCodes.Any(code => code.CompanyId == companyId &&
+                    code.ProductId == product.Id && code.IsActive &&
+                    EF.Functions.ILike(code.Code, pattern, "\\")));
         }
 
         var totalItems = await products.LongCountAsync(cancellationToken);

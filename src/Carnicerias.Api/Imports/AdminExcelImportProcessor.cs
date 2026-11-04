@@ -57,15 +57,21 @@ public static class AdminExcelImportProcessor
         var codes = rows.Select(row => row.Text("CodigoArticulo"))
             .Where(code => !string.IsNullOrWhiteSpace(code))
             .Select(code => NormalizeCode(code!)).Distinct(StringComparer.Ordinal).ToArray();
+        var alternatives = await db.ProductCodes.AsNoTracking().Where(code =>
+            code.CompanyId == companyId && code.IsActive && codes.Contains(code.NormalizedCode))
+            .ToArrayAsync(cancellationToken);
+        var alternateProductIds = alternatives.Select(code => code.ProductId).ToArray();
         var products = await db.CatalogProducts.AsNoTracking().Where(product =>
-            product.CompanyId == companyId && codes.Contains(product.NormalizedCode))
+            product.CompanyId == companyId &&
+            (codes.Contains(product.NormalizedCode) || alternateProductIds.Contains(product.Id)))
             .ToArrayAsync(cancellationToken);
         var productIds = products.Select(product => product.Id).ToArray();
         var balanceQuery = db.BranchInventoryBalances.Where(balance => balance.CompanyId == companyId &&
             balance.BranchId == branchId && productIds.Contains(balance.ProductId));
         var balances = apply ? await balanceQuery.ToArrayAsync(cancellationToken) :
             await balanceQuery.AsNoTracking().ToArrayAsync(cancellationToken);
-        var plan = StockImportPlanner.Plan(companyId, branchId, rows, products, balances, now);
+        var plan = StockImportPlanner.Plan(companyId, branchId, rows, products, balances,
+            now, alternatives);
         outcomes.AddRange(plan.Outcomes);
         issues.AddRange(plan.Issues);
         if (!apply || issues.Count != 0) return;
@@ -297,15 +303,27 @@ public static class AdminExcelImportProcessor
         var productCodes = priceRows.Select(row => row.Text("CodigoArticulo"))
             .Where(code => !string.IsNullOrWhiteSpace(code)).Select(code => NormalizeCode(code!))
             .Distinct(StringComparer.Ordinal).ToArray();
-        var products = await db.CatalogProducts.AsNoTracking()
-            .Where(product => product.CompanyId == companyId && productCodes.Contains(product.NormalizedCode))
-            .ToDictionaryAsync(product => product.NormalizedCode, cancellationToken);
+        var alternateCodes = await db.ProductCodes.AsNoTracking().Where(code =>
+            code.CompanyId == companyId && code.IsActive &&
+            productCodes.Contains(code.NormalizedCode)).ToArrayAsync(cancellationToken);
+        var alternateProductIdsForPrices = alternateCodes.Select(code => code.ProductId).ToArray();
+        var matchingProducts = await db.CatalogProducts.AsNoTracking()
+            .Where(product => product.CompanyId == companyId &&
+                (productCodes.Contains(product.NormalizedCode) ||
+                 alternateProductIdsForPrices.Contains(product.Id)))
+            .ToArrayAsync(cancellationToken);
+        var products = matchingProducts.Where(product => productCodes.Contains(product.NormalizedCode))
+            .ToDictionary(product => product.NormalizedCode, StringComparer.Ordinal);
+        var matchingById = matchingProducts.ToDictionary(product => product.Id);
+        foreach (var code in alternateCodes)
+            if (matchingById.TryGetValue(code.ProductId, out var article))
+                products.TryAdd(code.NormalizedCode, article);
         var branches = await db.Branches.AsNoTracking().Where(branch => branch.CompanyId == companyId)
             .ToArrayAsync(cancellationToken);
         var branchGroups = branches.GroupBy(branch => branch.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
         var listIds = lists.Values.Select(list => list.Id).ToArray();
-        var productIds = products.Values.Select(product => product.Id).ToArray();
+        var productIds = products.Values.Select(product => product.Id).Distinct().ToArray();
         var currentPrices = await db.ProductPrices.Where(price => price.CompanyId == companyId &&
             listIds.Contains(price.PriceListId) && productIds.Contains(price.ProductId) &&
             price.EffectiveToUtc == null).ToArrayAsync(cancellationToken);

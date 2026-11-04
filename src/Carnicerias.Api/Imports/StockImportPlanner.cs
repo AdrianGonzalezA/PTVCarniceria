@@ -12,14 +12,21 @@ public static class StockImportPlanner
 {
     public static StockImportPlan Plan(Guid companyId, Guid branchId, IReadOnlyList<ImportRow> rows,
         IReadOnlyList<CatalogProduct> products, IReadOnlyList<BranchInventoryBalance> balances,
-        DateTimeOffset? now = null)
+        DateTimeOffset? now = null, IReadOnlyList<ProductCode>? alternativeCodes = null)
     {
         var byCode = products.Where(product => product.CompanyId == companyId)
             .ToDictionary(product => product.NormalizedCode, StringComparer.Ordinal);
+        var byId = products.Where(product => product.CompanyId == companyId)
+            .ToDictionary(product => product.Id);
+        foreach (var code in alternativeCodes ?? [])
+            if (code.CompanyId == companyId && code.IsActive &&
+                byId.TryGetValue(code.ProductId, out var article))
+                byCode.TryAdd(code.NormalizedCode, article);
         var byProduct = balances.Where(balance => balance.CompanyId == companyId &&
                 balance.BranchId == branchId)
             .ToDictionary(balance => balance.ProductId);
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seenCodes = new HashSet<string>(StringComparer.Ordinal);
+        var seenProducts = new HashSet<Guid>();
         var changes = new List<StockImportChange>();
         var outcomes = new List<ImportRowOutcome>();
         var issues = new List<ImportIssue>();
@@ -31,17 +38,22 @@ public static class StockImportPlanner
             var description = row.Text("Descripcion");
             if (string.IsNullOrWhiteSpace(code) || code.Length > 80)
             {
-                AddIssue(row, "CodigoArticulo", "INVALID_CODE", "Ingresá el código principal del artículo (hasta 80 caracteres).");
+                AddIssue(row, "CodigoArticulo", "INVALID_CODE", "Ingresá un código del artículo (hasta 80 caracteres).");
                 continue;
             }
             var normalized = code.Trim().ToUpperInvariant();
-            if (!seen.Add(normalized))
+            if (!seenCodes.Add(normalized))
             {
                 AddIssue(row, "CodigoArticulo", "DUPLICATE_ROW", "El artículo está repetido en el archivo.");
                 continue;
             }
             if (!byCode.TryGetValue(normalized, out var product) || !product.IsActive)
                 AddIssue(row, "CodigoArticulo", "PRODUCT_NOT_AVAILABLE", "El artículo debe existir y estar activo en la empresa.");
+            else if (!seenProducts.Add(product.Id))
+            {
+                AddIssue(row, "CodigoArticulo", "DUPLICATE_ROW", "El artículo está repetido en el archivo.");
+                continue;
+            }
             if (quantity is null or 0 or > 100000 or < -100000 ||
                 decimal.Round(quantity.Value, 3) != quantity.Value)
                 AddIssue(row, "Variacion", "INVALID_VARIATION", "Ingresá una variación distinta de cero, entre -100.000 y 100.000, con hasta tres decimales.");

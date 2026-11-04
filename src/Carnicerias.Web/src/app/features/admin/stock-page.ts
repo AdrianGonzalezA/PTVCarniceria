@@ -32,7 +32,8 @@ export class StockPage implements OnInit {
   protected readonly visibleItems = computed(() => {
     const term = this.search().trim().toLocaleLowerCase();
     return term ? this.items().filter((item) =>
-      item.name.toLocaleLowerCase().includes(term) || item.code.toLocaleLowerCase().includes(term))
+      item.name.toLocaleLowerCase().includes(term) || item.code.toLocaleLowerCase().includes(term) ||
+      item.alternateCodes?.some((code) => code.toLocaleLowerCase().includes(term)))
       : this.items();
   });
   protected readonly adjustmentForm = this.formBuilder.nonNullable.group({

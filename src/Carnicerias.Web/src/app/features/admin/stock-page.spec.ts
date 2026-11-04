@@ -21,7 +21,7 @@ describe('StockPage', () => {
         branchId: 'branch-1', branchName: 'Centro', sessionId: 'session-id',
         permissions: ['inventory.stock.manage'] },
     });
-    http.expectOne('/api/inventory/stock').flush([{ productId: 'product-1', code: 'P1',
+    http.expectOne('/api/inventory/stock').flush([{ productId: 'product-1', code: 'P1', alternateCodes: ['ALT-P1'],
       name: 'Asado', unit: 'kg', saleMode: 'weight', onHand: 10, reserved: 2, available: 8 },
     { productId: 'product-2', code: 'P2', name: 'Chorizo', unit: 'u.', saleMode: 'unit',
       onHand: 5, reserved: 0, available: 5 }]);
@@ -49,6 +49,17 @@ describe('StockPage', () => {
       if (previousTheme === null) root.removeAttribute('data-visual-theme');
       else root.setAttribute('data-visual-theme', previousTheme);
     }
+  });
+
+  it('finds stock by an active alternate code without changing the item', () => {
+    const { fixture, page } = load();
+    const search = page.querySelector<HTMLInputElement>('#stock-search')!;
+    search.value = 'alt-p1';
+    search.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(page.querySelectorAll('.stock-row')).toHaveLength(1);
+    expect(page.querySelector('.stock-row')?.textContent).toContain('Asado');
+    expect(page.querySelector('.stock-row')?.textContent).not.toContain('Chorizo');
   });
 
   it('shows branch stock and persists a positive adjustment with an operation id', () => {

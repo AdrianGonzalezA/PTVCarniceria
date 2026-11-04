@@ -43,6 +43,26 @@ public sealed class StockImportPlannerTests
     }
 
     [Fact]
+    public void ActiveAlternateResolvesSameArticleAndDuplicateMainCodeIsRejected()
+    {
+        var companyId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var product = Product(companyId, "2546", ProductSaleMode.Weight);
+        var active = new ProductCode(companyId, product.Id, "02546");
+        var inactive = new ProductCode(companyId, product.Id, "OLD2546");
+        inactive.Deactivate();
+
+        var plan = StockImportPlanner.Plan(companyId, branchId,
+            [Row(2, "02546", 1m), Row(3, "2546", 2m), Row(4, "OLD2546", 3m)],
+            [product], [], alternativeCodes: [active, inactive]);
+
+        Assert.Single(plan.Changes);
+        Assert.Equal(product.Id, plan.Changes[0].Product.Id);
+        Assert.Contains(plan.Issues, issue => issue.Row == 3 && issue.Code == "DUPLICATE_ROW");
+        Assert.Contains(plan.Issues, issue => issue.Row == 4 && issue.Code == "PRODUCT_NOT_AVAILABLE");
+    }
+
+    [Fact]
     public void RejectsFractionalUnitsAndUnknownOrInactiveArticle()
     {
         var companyId = Guid.NewGuid();

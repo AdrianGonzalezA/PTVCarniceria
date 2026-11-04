@@ -48,7 +48,8 @@ public static class AdminProductEndpoints
                 EF.Functions.ILike(product.Name, pattern, "\\") ||
                 EF.Functions.ILike(product.Code, pattern, "\\") ||
                 db.ProductCodes.Any(code => code.CompanyId == companyId &&
-                    code.ProductId == product.Id && EF.Functions.ILike(code.Code, pattern, "\\")));
+                    code.ProductId == product.Id && code.IsActive &&
+                    EF.Functions.ILike(code.Code, pattern, "\\")));
         }
 
         var totalItems = await products.LongCountAsync(cancellationToken);

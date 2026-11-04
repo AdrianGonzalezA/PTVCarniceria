@@ -21,7 +21,7 @@ public sealed class CashierShiftPreviousVisualEndpointTests
 {
     [I15ApprovedVisualWriteFact]
     [Trait("Category", "I15ApprovedDatabaseWrite")]
-    public async Task PreviousCloseFollowsPhysicalTerminalAcrossCashiersAndNewFundIsIndependent()
+    public async Task PreviousCloseAndLiveBreakdownFollowPhysicalTerminal()
     {
         var connectionString = Environment.GetEnvironmentVariable("CARNICERIAS_VISUAL_CONNECTION_STRING")!;
         var target = new NpgsqlConnectionStringBuilder(connectionString);
@@ -93,10 +93,42 @@ public sealed class CashierShiftPreviousVisualEndpointTests
                 new { openingCash = 40m });
             Assert.Equal(HttpStatusCode.Created, opened.StatusCode);
             using var openedBody = JsonDocument.Parse(await opened.Content.ReadAsStringAsync());
+            var openShiftId = openedBody.RootElement.GetProperty("id").GetGuid();
             Assert.Equal(40m, openedBody.RootElement.GetProperty("openingCash").GetDecimal());
             Assert.Equal(40m, openedBody.RootElement.GetProperty("cashBalance").GetDecimal());
             Assert.Equal(previous.Id,
                 (await GetLastClosedAsync(cashierAOnA)).GetProperty("id").GetGuid());
+
+            await using (var db = new PlatformAccessDbContext(options))
+            {
+                var now = DateTimeOffset.UtcNow;
+                foreach (var (method, kind, amount) in new[]
+                {
+                    (PaymentMethod.Cash, CashLedgerMovementKind.SalePayment, 100m),
+                    (PaymentMethod.Cash, CashLedgerMovementKind.Change, -20m),
+                    (PaymentMethod.Debit, CashLedgerMovementKind.SalePayment, 50m),
+                    (PaymentMethod.MercadoPago, CashLedgerMovementKind.SalePayment, 60m),
+                    (PaymentMethod.Cash, CashLedgerMovementKind.AccountCollection, 30m),
+                    (PaymentMethod.Transfer, CashLedgerMovementKind.AccountCollection, 40m),
+                    (PaymentMethod.Transfer, CashLedgerMovementKind.AccountCollectionRefund, -10m)
+                })
+                    db.CashLedgerMovements.Add(new CashLedgerMovement(company.Id, branch.Id,
+                        openShiftId, cashierA.Id, Guid.NewGuid(), method, kind, amount,
+                        now, posTerminalId: terminalA.Id));
+                await db.SaveChangesAsync();
+            }
+            using var current = await cashierAOnA.GetAsync("/api/cashier-shifts/current");
+            Assert.Equal(HttpStatusCode.OK, current.StatusCode);
+            using var currentBody = JsonDocument.Parse(await current.Content.ReadAsStringAsync());
+            Assert.Equal(150m, currentBody.RootElement.GetProperty("cashBalance").GetDecimal());
+            var breakdown = currentBody.RootElement.GetProperty("paymentBreakdown")
+                .EnumerateArray().ToDictionary(row => row.GetProperty("method").GetString()!,
+                    row => row.GetProperty("amount").GetDecimal());
+            Assert.Equal(4, breakdown.Count);
+            Assert.Equal(110m, breakdown["cash"]);
+            Assert.Equal(50m, breakdown["debit"]);
+            Assert.Equal(60m, breakdown["mercadoPago"]);
+            Assert.Equal(30m, breakdown["transfer"]);
         }
         finally
         {

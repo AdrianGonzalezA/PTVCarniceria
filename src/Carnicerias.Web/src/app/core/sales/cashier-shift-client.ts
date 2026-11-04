@@ -1,5 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
+import type { SalePaymentMethod } from './sale-draft-client';
 
 export interface CashierShift {
   readonly id: string;
@@ -17,6 +18,7 @@ export interface CashierShift {
   readonly openedAtUtc: string;
   readonly closedAtUtc: string | null;
   readonly cashierName?: string | null;
+  readonly paymentBreakdown?: readonly { readonly method: SalePaymentMethod; readonly amount: number }[];
 }
 
 @Injectable({ providedIn: 'root' })

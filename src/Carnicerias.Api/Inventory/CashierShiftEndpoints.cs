@@ -160,36 +160,34 @@ public static class CashierShiftEndpoints
     private static async Task<ShiftResponse> ToResponseAsync(
         PlatformAccessDbContext db, CashierShift shift, CancellationToken cancellationToken)
     {
-        var totals = await db.CashLedgerMovements.AsNoTracking()
+        var byMethod = await db.CashLedgerMovements.AsNoTracking()
             .Where(movement => movement.CompanyId == shift.CompanyId &&
                 movement.BranchId == shift.BranchId && movement.CashierId == shift.CashierId &&
                 movement.CashierShiftId == shift.Id)
-            .GroupBy(movement => movement.CashierShiftId)
+            .GroupBy(movement => movement.Method)
             .Select(group => new
             {
-                CashBalance = group.Where(movement => movement.Method == PaymentMethod.Cash)
+                Method = group.Key,
+                Balance = group.Sum(movement => movement.AmountDelta),
+                Sales = group.Where(movement =>
+                    movement.Kind == CashLedgerMovementKind.SalePayment ||
+                    movement.Kind == CashLedgerMovementKind.Change)
                     .Sum(movement => movement.AmountDelta),
-                CashSales = group.Where(movement => movement.Method == PaymentMethod.Cash &&
-                    (movement.Kind == CashLedgerMovementKind.SalePayment ||
-                     movement.Kind == CashLedgerMovementKind.Change))
-                    .Sum(movement => movement.AmountDelta),
-                CollectedSales = group.Where(movement =>
-                    (movement.Kind == CashLedgerMovementKind.SalePayment ||
-                     movement.Kind == CashLedgerMovementKind.Change))
-                    .Sum(movement => movement.AmountDelta),
-                CashCollections = group.Where(movement => movement.Method == PaymentMethod.Cash &&
-                    (movement.Kind == CashLedgerMovementKind.AccountCollection ||
-                     movement.Kind == CashLedgerMovementKind.AccountCollectionRefund ||
-                     movement.Kind == CashLedgerMovementKind.AccountCollectionChange))
-                    .Sum(movement => movement.AmountDelta),
-                NonCashCollections = group.Where(movement => movement.Method != PaymentMethod.Cash &&
-                    (movement.Kind == CashLedgerMovementKind.AccountCollection ||
-                     movement.Kind == CashLedgerMovementKind.AccountCollectionRefund))
+                Collections = group.Where(movement =>
+                    movement.Kind == CashLedgerMovementKind.AccountCollection ||
+                    movement.Kind == CashLedgerMovementKind.AccountCollectionRefund ||
+                    (movement.Kind == CashLedgerMovementKind.AccountCollectionChange &&
+                     movement.Method == PaymentMethod.Cash))
                     .Sum(movement => movement.AmountDelta)
             })
-            .SingleOrDefaultAsync(cancellationToken);
-        var cashSales = totals?.CashSales ?? 0;
-        var collectedSales = totals?.CollectedSales ?? 0;
+            .ToArrayAsync(cancellationToken);
+        var cash = byMethod.SingleOrDefault(item => item.Method == PaymentMethod.Cash);
+        var cashSales = cash?.Sales ?? 0;
+        var collectedSales = byMethod.Sum(item => item.Sales);
+        var paymentBreakdown = byMethod.OrderBy(item => item.Method)
+            .Select(item => new PaymentBreakdownItem(
+                PaymentMethodCode(item.Method), item.Sales + item.Collections))
+            .Where(item => item.Amount != 0).ToArray();
         var salesTotal = await db.ConfirmedSales.AsNoTracking()
             .Where(sale => sale.CompanyId == shift.CompanyId && sale.BranchId == shift.BranchId &&
                 sale.CashierId == shift.CashierId && sale.CashierShiftId == shift.Id)
@@ -217,10 +215,23 @@ public static class CashierShiftEndpoints
             .SingleOrDefaultAsync(cancellationToken);
         return new ShiftResponse(shift.Id, shift.OpeningCash, shift.OpenedAtUtc, shift.ClosedAtUtc,
             cashSales, collectedSales - cashSales, accountSales, salesTotal,
-            (totals?.CashBalance ?? 0) + (pending?.Cash ?? 0),
-            totals?.CashCollections ?? 0, totals?.NonCashCollections ?? 0, creditApplied,
-            pending?.Cash ?? 0, pending?.NonCash ?? 0);
+            (cash?.Balance ?? 0) + (pending?.Cash ?? 0),
+            cash?.Collections ?? 0,
+            byMethod.Where(item => item.Method != PaymentMethod.Cash)
+                .Sum(item => item.Collections), creditApplied,
+            pending?.Cash ?? 0, pending?.NonCash ?? 0, paymentBreakdown);
     }
+
+    private static string PaymentMethodCode(PaymentMethod method) => method switch
+    {
+        PaymentMethod.Cash => "cash",
+        PaymentMethod.Debit => "debit",
+        PaymentMethod.Credit => "credit",
+        PaymentMethod.Transfer => "transfer",
+        PaymentMethod.MercadoPago => "mercadoPago",
+        PaymentMethod.Cheque => "cheque",
+        _ => throw new ArgumentOutOfRangeException(nameof(method))
+    };
 
     private static IResult Error(int statusCode, string code) => Results.Json(
         new ErrorResponse(new ApiError(code, "No se pudo completar la solicitud", [])),
@@ -231,8 +242,11 @@ public static class CashierShiftEndpoints
         Guid Id, decimal OpeningCash, DateTimeOffset OpenedAtUtc, DateTimeOffset? ClosedAtUtc,
         decimal CashSales, decimal NonCashSales, decimal AccountSales, decimal SalesTotal, decimal CashBalance,
         decimal CashCollections, decimal NonCashCollections, decimal CreditApplied,
-        decimal PendingApprovedCash, decimal PendingApprovedNonCash)
+        decimal PendingApprovedCash, decimal PendingApprovedNonCash,
+        IReadOnlyList<PaymentBreakdownItem> PaymentBreakdown)
     {
         public string? CashierName { get; init; }
     }
+
+    private sealed record PaymentBreakdownItem(string Method, decimal Amount);
 }

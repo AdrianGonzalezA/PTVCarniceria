@@ -748,6 +748,9 @@
               <span>Cobros aprobados pendientes de venta · otros medios</span><strong>{{ formatMoney(shift.pendingApprovedNonCash ?? 0) }}</strong>
             }
             <span>Cobranzas de cuenta por otros medios</span><strong>{{ formatMoney(shift.nonCashCollections) }}</strong>
+            @for (payment of shift.paymentBreakdown ?? []; track payment.method) {
+              <span>Cobros netos · {{ paymentMethodName(payment.method) }}</span><strong>{{ formatMoney(payment.amount) }}</strong>
+            }
             <span>Efectivo registrado en caja</span><strong>{{ formatMoney(shift.cashBalance) }}</strong>
             <small>Turno {{ shift.id.slice(0, 8) }} · El saldo no es un arqueo físico.</small>
           </div>

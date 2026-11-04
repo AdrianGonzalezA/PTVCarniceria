@@ -1440,6 +1440,7 @@ describe('PosPage', () => {
     const openShift = { id: 'shift-id', openingCash: 100, cashSales: 1000,
       nonCashSales: 500, accountSales: 0, creditApplied: 0,
       cashCollections: 0, nonCashCollections: 0, salesTotal: 1500, cashBalance: 1100,
+      paymentBreakdown: [{ method: 'cash', amount: 1000 }, { method: 'debit', amount: 500 }],
       openedAtUtc: '2026-10-06T15:00:00Z', closedAtUtc: null };
     const closedShift = { ...openShift, cashierName: 'cajero-anterior',
       closedAtUtc: '2026-10-06T17:00:00Z' };
@@ -1469,6 +1470,8 @@ describe('PosPage', () => {
     (fixture.nativeElement.querySelector('.shift-status') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.shift-summary').textContent).toContain('1.100,00');
+    expect(fixture.nativeElement.querySelector('.shift-summary').textContent).toContain('Débito');
+    expect(fixture.nativeElement.querySelector('.shift-summary').textContent).toContain('500,00');
     (fixture.nativeElement.querySelector('.shift-dialog .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(navigate).toHaveBeenCalledWith('/');

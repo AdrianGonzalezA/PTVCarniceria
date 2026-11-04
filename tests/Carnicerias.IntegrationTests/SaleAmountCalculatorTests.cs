@@ -55,4 +55,27 @@ public sealed class SaleAmountCalculatorTests
             line with { LineDiscount = 100.01m }
         ], 0m));
     }
+
+    [Fact]
+    public void RoundsEachWeightedLineAwayFromHalfCentBeforeSummingVatAndTotal()
+    {
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        var exempt = Guid.NewGuid();
+        var result = SaleAmountCalculator.Calculate([
+            new SaleAmountInput(first, 0.125m, 10.60m, 0m, SaleTaxTreatment.Taxed, 21m),
+            new SaleAmountInput(second, 0.125m, 10.60m, 0m, SaleTaxTreatment.Taxed, 21m),
+            new SaleAmountInput(exempt, 1m, 1.01m, 0m, SaleTaxTreatment.Exempt, 0m)
+        ], 0m);
+
+        Assert.Equal(1.33m, result.Lines.Single(line => line.LineId == first).Total);
+        Assert.Equal(1.33m, result.Lines.Single(line => line.LineId == second).Total);
+        Assert.Equal(3.67m, result.Total);
+        Assert.Equal(result.Lines.Sum(line => line.Total), result.Total);
+        Assert.Equal(2.20m, result.TaxableBase);
+        Assert.Equal(0.46m, result.TaxAmount);
+        Assert.Equal(1.01m, result.ExemptAmount);
+        Assert.Equal(result.Total,
+            result.TaxableBase + result.TaxAmount + result.ExemptAmount);
+    }
 }

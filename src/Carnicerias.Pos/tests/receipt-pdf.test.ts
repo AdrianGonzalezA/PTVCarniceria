@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createReceiptHtml, validateReceiptRequest } from '../src/receipt-pdf';
 import { createFiscalInvoiceHtml, createFiscalQrUrl } from '../src/fiscal-invoice';
+import { formatEscPosReceipt } from '../src/escpos-receipt';
 
 const validRequest = {
   saleId: 'sale-123', branch: 'Sucursal Centro', terminal: 'Caja 1', cashier: 'cajero1',
@@ -10,6 +11,45 @@ const validRequest = {
 };
 
 describe('virtual receipt PDF content', () => {
+  it('keeps line-rounded weighted totals and IVA identical in invoice and thermal output', async () => {
+    const rounded = validateReceiptRequest({ ...validRequest,
+      documentType: 'electronicInvoice', total: 3.67,
+      payments: [{ method: 'cash', tenderedAmount: 3.67, appliedAmount: 3.67 }],
+      lines: [
+        { code: '1', name: 'Corte A', unit: 'kg', quantity: 0.125, unitPrice: 10.60,
+          lineTotal: 1.33, netAfterDiscount: 1.33, taxTreatment: 'taxed',
+          taxRatePercent: 21, taxableBase: 1.10, taxAmount: 0.23 },
+        { code: '2', name: 'Corte B', unit: 'kg', quantity: 0.125, unitPrice: 10.60,
+          lineTotal: 1.33, netAfterDiscount: 1.33, taxTreatment: 'taxed',
+          taxRatePercent: 21, taxableBase: 1.10, taxAmount: 0.23 },
+        { code: '3', name: 'Exento', unit: 'unidad', quantity: 1, unitPrice: 1.01,
+          lineTotal: 1.01, netAfterDiscount: 1.01, taxTreatment: 'exempt',
+          taxRatePercent: 0, taxableBase: 0, taxAmount: 0 },
+      ],
+      fiscal: {
+        saleId: 'sale-123', status: 'Authorized', total: 3.67,
+        saleDocumentType: 'ElectronicInvoice', issuerCuit: '30710106513',
+        issuerName: 'Empresa de prueba', issuerAddress: 'Domicilio de prueba',
+        issuerIibb: null, issuerActivityStartDate: null, pointOfSale: 99,
+        voucherType: 6, number: 27, issueDate: '2026-11-04', receiverName: null,
+        receiverAddress: null, receiverTaxStatus: 'finalConsumer',
+        receiverDocumentType: 99, receiverDocumentNumber: 0,
+        vatBreakdown: [{ ratePercent: 21, taxableBase: 2.20, taxAmount: 0.46 }],
+        exemptAmount: 1.01, notTaxedAmount: 0,
+        cae: '86410975393203', caeExpiry: '2026-11-14',
+      },
+    });
+
+    const invoice = await createFiscalInvoiceHtml(rounded);
+    const thermal = formatEscPosReceipt(rounded, 80).toString('ascii');
+    for (const output of [invoice, thermal]) {
+      expect(output).toContain('0,125');
+      expect(output).toContain('1,33');
+      expect(output).toContain('2,20');
+      expect(output).toContain('0,46');
+      expect(output).toContain('3,67');
+    }
+  });
   it('renders a confirmed sale with a prominent non-fiscal notice', () => {
     const html = createReceiptHtml(validateReceiptRequest(validRequest));
     expect(html).toContain('DOCUMENTO DE PRUEBA');

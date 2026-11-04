@@ -52,6 +52,60 @@ public sealed class FiscalRequestBuilderTests
             FiscalRequestBuilder.Build(sale, 99, 19, new DateOnly(2026, 10, 9)));
     }
 
+    [Theory]
+    [InlineData("registered", 1)]
+    [InlineData("finalConsumer", 6)]
+    public void PreservesWeightedLineRoundingAndMixedTaxSnapshotInArcaRequest(
+        string recipientStatus, int expectedVoucherType)
+    {
+        var companyId = Guid.NewGuid();
+        var inputs = new[]
+        {
+            (Guid.NewGuid(), 0.125m, 10.60m, SaleTaxTreatment.Taxed, 21m),
+            (Guid.NewGuid(), 0.125m, 10.60m, SaleTaxTreatment.Taxed, 21m),
+            (Guid.NewGuid(), 1m, 1.01m, SaleTaxTreatment.Exempt, 0m)
+        };
+        var amounts = SaleAmountCalculator.Calculate(inputs.Select(line =>
+            new SaleAmountInput(line.Item1, line.Item2, line.Item3, 0m,
+                line.Item4, line.Item5)).ToArray(), 0m);
+        var document = SaleDocumentChoice.Create("electronicInvoice", recipientStatus,
+            recipientStatus == "finalConsumer" ? null : "Cliente de prueba",
+            recipientStatus == "finalConsumer" ? null : "20000000001",
+            recipientStatus == "finalConsumer" ? null : "Domicilio de prueba",
+            amounts.Total);
+        var sale = new ConfirmedSale(companyId, Guid.NewGuid(), Guid.NewGuid(),
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), amounts.Total,
+            new string('a', 64), DateTimeOffset.UtcNow,
+            posTerminalId: Guid.NewGuid(), documentChoice: document);
+        foreach (var (productId, quantity, unitPrice, treatment, rate) in inputs)
+        {
+            var line = new ConfirmedSaleLine(companyId, productId, productId.ToString("N"),
+                "Corte", treatment == SaleTaxTreatment.Exempt ? "un" : "kg",
+                treatment == SaleTaxTreatment.Exempt ? ProductSaleMode.Unit : ProductSaleMode.Weight,
+                quantity, unitPrice);
+            // Match the immutable line ID from the confirmed sale when calculating the snapshot.
+            var amount = SaleAmountCalculator.Calculate([
+                new SaleAmountInput(line.Id, quantity, unitPrice, 0m, treatment, rate)
+            ], 0m).Lines[0];
+            var rule = new ProductTaxRule(companyId, productId, treatment, rate,
+                Guid.NewGuid(), DateTimeOffset.UtcNow.AddDays(-1));
+            line.SetAmountSnapshot(amount, rule);
+            sale.Lines.Add(line);
+        }
+        var request = FiscalRequestBuilder.Build(sale, 99, 27, new DateOnly(2026, 11, 4));
+
+        Assert.Equal(expectedVoucherType, request.VoucherType);
+        Assert.Equal(3.67m, request.Total);
+        Assert.Equal(2.20m, request.TaxableBase);
+        Assert.Equal(1.01m, request.ExemptAmount);
+        Assert.Equal(0m, request.NotTaxedAmount);
+        var vat = Assert.Single(request.VatAmounts);
+        Assert.Equal(5, vat.ArcaRateCode);
+        Assert.Equal(0.46m, vat.TaxAmount);
+        Assert.Equal(request.Total,
+            request.TaxableBase + vat.TaxAmount + request.ExemptAmount);
+    }
+
     private static ConfirmedSale Sale(string recipientStatus, string? recipientDocument,
         SaleTaxTreatment? treatment, decimal rate)
     {

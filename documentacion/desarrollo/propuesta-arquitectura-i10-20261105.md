@@ -1,6 +1,6 @@
 # I10 — propuesta de separación del saldo genérico y las piezas protegidas
 
-**Estado:** propuesta técnica para revisión del PO; sin cambios de código, esquema ni datos I10. Continúa la alternativa A ya elegida: un artículo/sucursal con piezas protegidas bloquea nuevas ventas genéricas sin saldo, mientras una pieza individual nunca admite saldo negativo. El PO permitió recibir la primera pieza aunque exista déficit genérico previo.
+**Estado:** arquitectura aprobada por el PO el 05/11/2026: agregar `ProtectedOnHand` y `ProtectedReserved` para separar déficit genérico de piezas protegidas. El diseño todavía no está implementado ni migrado. Continúa la alternativa A ya elegida: un artículo/sucursal con piezas protegidas bloquea nuevas ventas genéricas sin saldo, mientras una pieza individual nunca admite saldo negativo. El PO permitió recibir la primera pieza aunque exista déficit genérico previo.
 
 ## Problema comprobado en el código
 
@@ -49,6 +49,6 @@ Una reserva genérica creada **antes** de recibir la primera pieza se mantiene y
 - Conciliación `HistoricalUnverified` hacia disponible o no disponible con conteo: comparar saldo contable, protegido, genérico y ledger antes/después.
 - Reportes POS/administración muestran por separado disponibilidad genérica y trazable cuando el total contable es negativo.
 
-## Revisión solicitada al PO
+## Decisión del PO
 
-Confirmar esta separación de dos columnas protegidas y el orden de despliegue antes de modificar el modelo o preparar la migración I10. La decisión funcional ya está cerrada; esta revisión es únicamente de arquitectura e invariantes.
+El 05/11/2026 el PO confirmó la separación de dos columnas protegidas. Se mantiene el orden de despliegue, las guardas de datos y la reversión descritos arriba. No se infieren asociaciones históricas entre piezas y ventas.

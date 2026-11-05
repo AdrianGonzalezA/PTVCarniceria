@@ -67,6 +67,27 @@ describe('StockPage', () => {
     expect(page.querySelector('.stock-row')?.textContent).toContain('10,000 kg');
   });
 
+  it('shows generic and traceable availability separately when generic stock is in debt', () => {
+    const fixture = TestBed.createComponent(StockPage);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/sessions/current').flush({
+      userId: 'admin-id', username: 'admin', expiresAtUtc: '2026-10-09T00:00:00Z',
+      context: { userId: 'admin-id', companyId: 'company-1', companyName: 'Carnicería',
+        branchId: 'branch-1', branchName: 'Centro', sessionId: 'session-id',
+        permissions: ['inventory.stock.manage'] },
+    });
+    http.expectOne('/api/inventory/stock').flush([{ productId: 'product-1', code: 'P1',
+      name: 'Asado', unit: 'kg', saleMode: 'weight', onHand: -3, reserved: 0,
+      quarantined: 0, available: -3, genericAvailable: -5, protectedAvailable: 2,
+      allowSaleWithoutStock: true, hasProtectedPieces: true }]);
+    fixture.detectChanges();
+    const row = (fixture.nativeElement as HTMLElement).querySelector('.stock-row')!;
+    expect(row.textContent).toContain('-3,000 kg');
+    expect(row.textContent).toContain('-5,000 kg');
+    expect(row.textContent).toContain('2,000 kg');
+  });
+
   it('focuses the quantity field on adjustment and selects it when revisited', () => {
     const { fixture, page } = load();
     page.querySelector<HTMLButtonElement>('.stock-row button')!.click();

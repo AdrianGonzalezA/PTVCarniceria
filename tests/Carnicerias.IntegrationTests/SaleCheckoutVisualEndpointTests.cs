@@ -19,6 +19,181 @@ namespace Carnicerias.IntegrationTests;
 [Collection("DatabaseIntegration")]
 public sealed class SaleCheckoutVisualEndpointTests
 {
+    [I10ApprovedVisualWriteFact]
+    [Trait("Category", "I10ApprovedDatabaseWrite")]
+    public async Task GenericDebtRemainsSeparateWhenAProtectedPieceArrives()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("CARNICERIAS_VISUAL_CONNECTION_STRING")!;
+        var target = new NpgsqlConnectionStringBuilder(connectionString);
+        Assert.Equal("127.0.0.1", target.Host);
+        Assert.Equal(55433, target.Port);
+        Assert.Equal("carnicerias_test_visual", target.Database);
+        var options = new DbContextOptionsBuilder<PlatformAccessDbContext>()
+            .UseNpgsql(connectionString).Options;
+        var suffix = Guid.NewGuid().ToString("N")[..10];
+        var company = new Company($"I10 HTTP fixture {suffix}", $"I10-{suffix}");
+        var branch = new Branch(company.Id, "Sucursal I10");
+        var role = new Role($"I10-{suffix}", "I10 cashier");
+        var password = $"I10-{Guid.NewGuid():N}!";
+        var user = UserIdentity.CreateForCompany(company.Id, $"i10-{suffix}",
+            $"i10-{suffix}@example.test", new Argon2idPasswordHasher().Hash(password));
+        var credential = PosTerminalCredential.Issue();
+        var terminal = new PosTerminal(company.Id, branch.Id, "Caja I10");
+        terminal.AssignCredentialHash(credential.Hash);
+        var category = new ProductCategory(company.Id, "Prueba I10");
+        var product = new CatalogProduct(company.Id, category.Id, $"I10-{suffix}",
+            "Producto sin stock", "kg", ProductSaleMode.Weight, null);
+        var list = new PriceList(company.Id, "Lista I10");
+        var profile = new BarcodeProfile(company.Id, "I10 test", 1,
+            "pro_identif(6) peso(5)", "peso", 3, DateTime.UtcNow);
+        var seeded = false;
+        try
+        {
+            await using (var db = new PlatformAccessDbContext(options))
+            {
+                Assert.Empty(await db.Database.GetPendingMigrationsAsync());
+                var stockPermissionId = await db.Permissions.Where(item =>
+                    item.Code == PlatformPermissionCatalog.InventoryStockManage)
+                    .Select(item => item.Id).SingleAsync();
+                db.AddRange(company, branch, role, user,
+                    new UserAssignment(user.Id, role.Id, company.Id), terminal,
+                    new RoleCapability(role.Id, stockPermissionId),
+                    category, product, list, profile,
+                    new BranchPriceList(company.Id, branch.Id, list.Id),
+                    new ProductPrice(company.Id, list.Id, product.Id, 100m,
+                        DateTimeOffset.UtcNow.AddMinutes(-1), user.Id));
+                await db.SaveChangesAsync();
+                seeded = true;
+            }
+
+            using var factory = new VisualApiFactory(connectionString);
+            using var cashier = CreateClient(factory);
+            await LoginAsync(cashier, user.Username, password, credential.Token,
+                company.Id, branch.Id);
+            await OkAsync(await cashier.PostAsJsonAsync("/api/cashier-shifts",
+                new { openingCash = 0m }), HttpStatusCode.Created);
+            var stockBefore = await OkAsync(await cashier.GetAsync($"/api/inventory/stock?productId={product.Id}"));
+            Assert.True(stockBefore[0].GetProperty("allowSaleWithoutStock").GetBoolean());
+            Assert.Equal(0m, stockBefore[0].GetProperty("genericAvailable").GetDecimal());
+
+            var draft = await OkAsync(await cashier.PutAsJsonAsync("/api/sales/draft",
+                new { priceListId = list.Id, lines = new[] { new { productId = product.Id, quantity = 2m } } }));
+            var draftId = draft.GetProperty("id").GetGuid();
+            var instrumentId = Guid.NewGuid();
+            var checkoutPath = $"/api/sales/drafts/{draftId}/checkout";
+            var prepared = await OkAsync(await cashier.PutAsJsonAsync(checkoutPath, new
+            {
+                expectedRevision = 0,
+                terms = new SaleCheckoutTerms(null, 0m, 0m, false,
+                    "nonFiscalTicket", "finalConsumer"),
+                payments = new[] { new { id = instrumentId, method = "transfer",
+                    amount = 200m, reference = "I10-test" } }
+            }));
+            var checkoutId = prepared.GetProperty("id").GetGuid();
+            var commitKey = Guid.NewGuid();
+            await OkAsync(await cashier.PostAsJsonAsync(
+                $"{checkoutPath}/{checkoutId}/commit",
+                new { expectedRevision = 1, key = commitKey }));
+            await OkAsync(await cashier.PostAsJsonAsync(
+                $"{checkoutPath}/{checkoutId}/instruments/{instrumentId}/approve",
+                new { reference = "I10-approved" }));
+            var confirmationPath = $"{checkoutPath}/{checkoutId}/confirmation";
+            var sale = await OkAsync(await cashier.PostAsync(confirmationPath, null),
+                HttpStatusCode.Created);
+            var repeated = await OkAsync(await cashier.PostAsync(confirmationPath, null));
+            Assert.Equal(sale.GetProperty("id").GetGuid(), repeated.GetProperty("id").GetGuid());
+
+            await using (var db = new PlatformAccessDbContext(options))
+            {
+                var balance = await db.BranchInventoryBalances.SingleAsync(item =>
+                    item.CompanyId == company.Id && item.ProductId == product.Id);
+                Assert.Equal(-2m, balance.OnHand);
+                Assert.Equal(-2m, balance.GenericAvailable);
+                Assert.Equal(0m, balance.ProtectedOnHand);
+                Assert.Equal(0m, balance.Reserved);
+                Assert.Single(await db.ConfirmedSales.Where(item => item.CompanyId == company.Id).ToArrayAsync());
+                Assert.Single(await db.InventoryMovements.Where(item =>
+                    item.CompanyId == company.Id && item.Kind == InventoryMovementKind.Sale).ToArrayAsync());
+            }
+            var receipt = await OkAsync(await cashier.PostAsJsonAsync("/api/inventory/pieces", new
+            {
+                operationId = Guid.NewGuid(), productId = product.Id, barcodeProfileId = profile.Id,
+                sourceSystem = "I10 fixture", identifierField = "pro_identif", code = "99900102000"
+            }), HttpStatusCode.Created);
+            var pieceId = receipt.GetProperty("id").GetGuid();
+            await using (var db = new PlatformAccessDbContext(options))
+            {
+                var balance = await db.BranchInventoryBalances.SingleAsync(item =>
+                    item.CompanyId == company.Id && item.ProductId == product.Id);
+                Assert.Equal(0m, balance.OnHand);
+                Assert.Equal(-2m, balance.GenericAvailable);
+                Assert.Equal(2m, balance.ProtectedAvailable);
+            }
+            using var rejected = await cashier.PutAsJsonAsync("/api/sales/draft", new
+            {
+                priceListId = list.Id,
+                lines = new[] { new { productId = product.Id, quantity = 1m } }
+            });
+            Assert.Equal(HttpStatusCode.Conflict, rejected.StatusCode);
+            Assert.Contains("INSUFFICIENT_STOCK", await rejected.Content.ReadAsStringAsync());
+
+            var pieceDraft = await OkAsync(await cashier.PutAsJsonAsync("/api/sales/draft", new
+            {
+                priceListId = list.Id,
+                lines = new[] { new { productId = product.Id, quantity = 2m,
+                    inventoryPieceId = pieceId } }
+            }));
+            Assert.Equal(pieceId, pieceDraft.GetProperty("lines")[0]
+                .GetProperty("inventoryPieceId").GetGuid());
+            await using (var db = new PlatformAccessDbContext(options))
+            {
+                var balance = await db.BranchInventoryBalances.SingleAsync(item =>
+                    item.CompanyId == company.Id && item.ProductId == product.Id);
+                Assert.Equal(2m, balance.ProtectedReserved);
+                Assert.Equal(-2m, balance.GenericAvailable);
+            }
+            using (var canceled = await cashier.DeleteAsync("/api/sales/draft"))
+                Assert.Equal(HttpStatusCode.NoContent, canceled.StatusCode);
+            await using (var db = new PlatformAccessDbContext(options))
+            {
+                var balance = await db.BranchInventoryBalances.SingleAsync(item =>
+                    item.CompanyId == company.Id && item.ProductId == product.Id);
+                Assert.Equal(0m, balance.ProtectedReserved);
+                Assert.Equal(-2m, balance.GenericAvailable);
+                var savedProduct = await db.CatalogProducts.SingleAsync(item => item.Id == product.Id);
+                savedProduct.SetAllowSaleWithoutStock(false);
+                await db.SaveChangesAsync();
+            }
+            using var disabled = await cashier.PutAsJsonAsync("/api/sales/draft", new
+            {
+                priceListId = list.Id,
+                lines = new[] { new { productId = product.Id, quantity = 1m } }
+            });
+            Assert.Equal(HttpStatusCode.Conflict, disabled.StatusCode);
+            Assert.Contains("INSUFFICIENT_STOCK", await disabled.Content.ReadAsStringAsync());
+            var adjustmentId = Guid.NewGuid();
+            var adjustmentRequest = new { productId = product.Id,
+                operationId = adjustmentId, quantityDelta = 1m, reason = "I10 regularización" };
+            var adjusted = await OkAsync(await cashier.PostAsJsonAsync(
+                "/api/inventory/adjustments", adjustmentRequest));
+            Assert.Equal(1m, adjusted.GetProperty("onHand").GetDecimal());
+            Assert.Equal(-1m, adjusted.GetProperty("genericAvailable").GetDecimal());
+            Assert.Equal(2m, adjusted.GetProperty("protectedAvailable").GetDecimal());
+            var repeatedAdjustment = await OkAsync(await cashier.PostAsJsonAsync(
+                "/api/inventory/adjustments", adjustmentRequest));
+            Assert.Equal(1m, repeatedAdjustment.GetProperty("onHand").GetDecimal());
+            using var blockedAdjustment = await cashier.PostAsJsonAsync("/api/inventory/adjustments",
+                new { productId = product.Id, operationId = Guid.NewGuid(),
+                    quantityDelta = -1m, reason = "I10 salida rechazada" });
+            Assert.Equal(HttpStatusCode.Conflict, blockedAdjustment.StatusCode);
+            Assert.Contains("STOCK_BELOW_RESERVED", await blockedAdjustment.Content.ReadAsStringAsync());
+        }
+        finally
+        {
+            if (seeded) await RemoveFixtureAsync(options, company.Id, role.Id, user.Id);
+        }
+    }
+
     [I03AApprovedVisualWriteFact]
     [Trait("Category", "I03AApprovedDatabaseWrite")]
     public async Task PartialRepeatedPaymentsRecoverAndConfirmOnce()
@@ -202,17 +377,23 @@ public sealed class SaleCheckoutVisualEndpointTests
         await db.CashLedgerMovements.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.ConfirmedSaleLines.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.ConfirmedSales.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
-        await db.InventoryMovements.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
+        await db.InventoryReceiptLines.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
+        await db.InventoryReceipts.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
+        await db.InventoryPieceStateEvents.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.Set<SaleDraftLine>().Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.SaleDrafts.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
+        await db.InventoryPieces.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
+        await db.InventoryMovements.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.CashierShifts.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.BranchInventoryBalances.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.ProductPrices.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.BranchPriceLists.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.CatalogProducts.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.ProductCategories.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
+        await db.BarcodeProfiles.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.PriceLists.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.UserAssignments.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
+        await db.RolePermissions.Where(item => item.RoleId == roleId).ExecuteDeleteAsync();
         await db.PosTerminals.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.Users.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
         await db.Branches.Where(item => item.CompanyId == companyId).ExecuteDeleteAsync();
@@ -247,5 +428,15 @@ public sealed class I03AApprovedVisualWriteFactAttribute : FactAttribute
         if (Environment.GetEnvironmentVariable("CARNICERIAS_I03A_WRITES_APPROVED") != "I03A_APPROVED" ||
             string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("CARNICERIAS_VISUAL_CONNECTION_STRING")))
             Skip = "Requires authorization for isolated I03A writes in the single visual database.";
+    }
+}
+
+public sealed class I10ApprovedVisualWriteFactAttribute : FactAttribute
+{
+    public I10ApprovedVisualWriteFactAttribute()
+    {
+        if (Environment.GetEnvironmentVariable("CARNICERIAS_I10_WRITES_APPROVED") != "I10_APPROVED" ||
+            string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("CARNICERIAS_VISUAL_CONNECTION_STRING")))
+            Skip = "Requires isolated I10 writes in the single authorized visual database.";
     }
 }

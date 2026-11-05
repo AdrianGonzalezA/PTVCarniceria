@@ -56,7 +56,8 @@ public sealed class CatalogProduct
         string name,
         string unit,
         ProductSaleMode saleMode,
-        decimal? cost)
+        decimal? cost,
+        bool allowSaleWithoutStock = true)
     {
         if (companyId == Guid.Empty || categoryId == Guid.Empty)
             throw new ArgumentException("Company and category ids are required.");
@@ -69,6 +70,7 @@ public sealed class CatalogProduct
         NormalizedCode = Code.ToUpperInvariant();
         UpdateDetails(categoryId, name, unit, saleMode, cost);
         IsActive = true;
+        AllowSaleWithoutStock = allowSaleWithoutStock;
     }
 
     public Guid Id { get; private set; }
@@ -81,6 +83,9 @@ public sealed class CatalogProduct
     public ProductSaleMode SaleMode { get; private set; }
     public decimal? Cost { get; private set; }
     public bool IsActive { get; private set; }
+    public bool AllowSaleWithoutStock { get; private set; }
+
+    public void SetAllowSaleWithoutStock(bool allowed) => AllowSaleWithoutStock = allowed;
 
     public void UpdateDetails(Guid categoryId, string name, string unit, ProductSaleMode saleMode, decimal? cost)
     {

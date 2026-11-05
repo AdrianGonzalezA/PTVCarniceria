@@ -157,7 +157,7 @@ export class PosPage implements OnInit {
   protected readonly catalogNotice = signal<string | null>(null);
   protected readonly catalogCategories = signal<readonly CatalogCategory[]>([]);
   protected readonly realProducts = signal<readonly PosProduct[]>([]);
-  private readonly stockByProduct = signal<ReadonlyMap<string, number>>(new Map());
+  private readonly stockByProduct = signal<ReadonlyMap<string, InventoryStockItem>>(new Map());
   protected readonly stockLoadState = signal<'loading' | 'ready' | 'stale'>('loading');
   protected readonly priceListLoadState = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly catalogLoadState = signal<'idle' | 'loading' | 'ready' | 'error'>('idle');
@@ -224,8 +224,10 @@ export class PosPage implements OnInit {
       if (!Number.isInteger(pieces) || pieces < 1 || pieces > 10000)
         return 'Ingresá una cantidad de piezas entera entre 1 y 10000.';
     }
-    const available = this.availableStock(product);
-    if (!this.isDemoPriceList() && available !== undefined && quantity > available)
+    const piece = !!this.scannedPieceId();
+    const available = piece ? this.availablePieceStock(product) : this.availableStock(product);
+    if (!this.isDemoPriceList() && (piece || !this.canSellGenericWithoutStock(product)) &&
+        available !== undefined && quantity > available)
       return `Stock insuficiente. Disponible: ${available.toLocaleString('es-AR', { maximumFractionDigits: 3 })} ${this.unitLabel(product)}.`;
     return null;
   });
@@ -1044,7 +1046,9 @@ export class PosPage implements OnInit {
       this.errorMessage.set(this.liveDataProblem());
       return;
     }
-    if (!this.isDemoPriceList() && (this.availableStock(product) ?? 0) <= 0) {
+    const available = pieceId ? this.availablePieceStock(product) : this.availableStock(product);
+    if (!this.isDemoPriceList() && (pieceId || !this.canSellGenericWithoutStock(product)) &&
+        (available ?? 0) <= 0) {
       this.errorMessage.set('No hay stock disponible para este producto en la sucursal.');
       return;
     }
@@ -1116,12 +1120,15 @@ export class PosPage implements OnInit {
       this.errorMessage.set('Esta pieza ya está en el ticket.');
       return;
     }
-    const existingQuantity = this.lines().filter(line => line.product.id === product.id)
+    const existingQuantity = this.lines().filter(line => line.product.id === product.id &&
+      !!line.inventoryPieceId === !!pieceId)
       .reduce((sum, line) => sum + line.quantity, 0);
-    const reservedQuantity = this.persistedLines().filter(line => line.product.id === product.id)
+    const reservedQuantity = this.persistedLines().filter(line => line.product.id === product.id &&
+      !!line.inventoryPieceId === !!pieceId)
       .reduce((sum, line) => sum + line.quantity, 0);
-    const available = this.availableStock(product);
-    if (!this.isDemoPriceList() && available !== undefined &&
+    const available = pieceId ? this.availablePieceStock(product) : this.availableStock(product);
+    if (!this.isDemoPriceList() && (pieceId || !this.canSellGenericWithoutStock(product)) &&
+        available !== undefined &&
         existingQuantity + quantity > available + reservedQuantity) {
       this.errorMessage.set('Stock insuficiente para agregar esta pieza al ticket.');
       return;
@@ -1158,11 +1165,14 @@ export class PosPage implements OnInit {
       return;
     }
     const available = this.availableStock(line.product);
-    const reservedByThisTicket = this.persistedLines().filter(item => item.product.id === line.product.id)
+    const reservedByThisTicket = this.persistedLines().filter(item => item.product.id === line.product.id &&
+      !item.inventoryPieceId)
       .reduce((sum, item) => sum + item.quantity, 0);
-    const otherQuantity = this.lines().filter(item => item.product.id === line.product.id && item.id !== lineId)
+    const otherQuantity = this.lines().filter(item => item.product.id === line.product.id &&
+      item.id !== lineId && !item.inventoryPieceId)
       .reduce((sum, item) => sum + item.quantity, 0);
-    if (!this.isDemoPriceList() && available !== undefined && quantity + otherQuantity > available + reservedByThisTicket) {
+    if (!this.isDemoPriceList() && !this.canSellGenericWithoutStock(line.product) &&
+        available !== undefined && quantity + otherQuantity > available + reservedByThisTicket) {
       this.errorMessage.set(`Stock insuficiente. Disponible para agregar: ${available.toLocaleString('es-AR', { maximumFractionDigits: 3 })} ${this.unitLabel(line.product)}.`);
       input.value = String(line.quantity);
       return;
@@ -2447,8 +2457,22 @@ export class PosPage implements OnInit {
 
   protected availableStock(product: PosProduct): number | undefined {
     return this.stockLoadState() === 'ready'
-      ? this.stockByProduct().get(product.id) ?? 0
+      ? this.stockByProduct().get(product.id)?.genericAvailable ??
+        this.stockByProduct().get(product.id)?.available ?? 0
       : undefined;
+  }
+
+  private availablePieceStock(product: PosProduct): number | undefined {
+    return this.stockLoadState() === 'ready'
+      ? this.stockByProduct().get(product.id)?.protectedAvailable ??
+        this.stockByProduct().get(product.id)?.available ?? 0
+      : undefined;
+  }
+
+  private canSellGenericWithoutStock(product: PosProduct): boolean {
+    const stock = this.stockByProduct().get(product.id);
+    return this.stockLoadState() === 'ready' && stock?.allowSaleWithoutStock === true &&
+      stock.hasProtectedPieces !== true;
   }
 
   private refreshStock(): void {
@@ -2461,7 +2485,7 @@ export class PosPage implements OnInit {
     ).subscribe({
       next: (items) => {
         if (revision === this.stockRequestRevision) {
-          this.stockByProduct.set(new Map(items.map((item) => [item.productId, item.available])));
+          this.stockByProduct.set(new Map(items.map((item) => [item.productId, item])));
           this.stockLoadState.set('ready');
         }
       },

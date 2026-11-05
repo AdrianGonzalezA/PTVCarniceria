@@ -14,6 +14,7 @@ export interface AdminProduct {
   readonly cost: number | null;
   readonly isActive: boolean;
   readonly alternateCodeCount: number;
+  readonly allowSaleWithoutStock: boolean;
 }
 
 export interface AdminProductPage {
@@ -39,6 +40,7 @@ export interface AdminProductCreate {
   readonly unit: string;
   readonly saleMode: SaleMode;
   readonly cost: number | null;
+  readonly allowSaleWithoutStock?: boolean;
 }
 
 export interface AdminProductUpdate {
@@ -48,6 +50,7 @@ export interface AdminProductUpdate {
   readonly saleMode?: SaleMode;
   readonly cost?: number;
   readonly isActive?: boolean;
+  readonly allowSaleWithoutStock?: boolean;
 }
 
 @Injectable({ providedIn: 'root' })

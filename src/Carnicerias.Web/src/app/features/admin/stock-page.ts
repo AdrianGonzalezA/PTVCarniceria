@@ -119,7 +119,7 @@ export class StockPage implements OnInit {
       this.actionError.set('El artículo está bloqueado durante un conteo físico. Actualizá el stock al finalizar.');
       return;
     }
-    if (quantityDelta < 0 && item.onHand + quantityDelta < item.reserved + (item.quarantined ?? 0)) {
+    if (quantityDelta < 0 && (item.genericAvailable ?? item.available) + quantityDelta < 0) {
       this.actionError.set('El ajuste dejaría menos existencia que la reservada o inmovilizada.');
       return;
     }
@@ -133,7 +133,10 @@ export class StockPage implements OnInit {
     this.inventory.adjust(item.productId, this.pendingOperation.id, quantityDelta, reason).subscribe({
       next: (result) => {
         this.items.set(this.items().map((existing) => existing.productId === item.productId
-          ? { ...existing, onHand: result.onHand, reserved: result.reserved, available: result.available }
+          ? { ...existing, onHand: result.onHand, reserved: result.reserved,
+              available: result.available,
+              genericAvailable: result.genericAvailable ?? result.available,
+              protectedAvailable: result.protectedAvailable ?? existing.protectedAvailable }
           : existing));
         this.saving.set(false);
         this.selected.set(null);

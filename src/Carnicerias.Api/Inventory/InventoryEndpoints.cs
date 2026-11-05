@@ -48,7 +48,14 @@ public static class InventoryEndpoints
                         stock == null || stock.ReconciliationLockExpiresAtUtc > now ? 0 :
                             stock.OnHand - stock.Reserved - stock.Quarantined,
                         stock == null ? 0 : stock.Quarantined,
-                        stock != null && stock.ReconciliationLockExpiresAtUtc > now);
+                        stock != null && stock.ReconciliationLockExpiresAtUtc > now,
+                        stock == null || stock.ReconciliationLockExpiresAtUtc > now ? 0 :
+                            stock.OnHand - stock.ProtectedOnHand - stock.Reserved +
+                                stock.ProtectedReserved,
+                        stock == null || stock.ReconciliationLockExpiresAtUtc > now ? 0 :
+                            stock.ProtectedOnHand - stock.ProtectedReserved - stock.Quarantined,
+                        product.AllowSaleWithoutStock,
+                        stock != null && stock.ProtectedOnHand > 0);
         return Results.Ok(await query.ToArrayAsync(cancellationToken));
     }
 
@@ -88,7 +95,8 @@ public static class InventoryEndpoints
                 request.ProductId, cancellationToken);
             return Results.Ok(new StockAdjustmentResponse(
                 existingOperation.OperationId, existingBalance.OnHand, existingBalance.Reserved,
-                existingBalance.Available));
+                existingBalance.Available, existingBalance.GenericAvailable,
+                existingBalance.ProtectedAvailable));
         }
 
         var now = timeProvider.GetUtcNow();
@@ -100,11 +108,16 @@ public static class InventoryEndpoints
         command.Transaction = transaction.GetDbTransaction();
         command.CommandText = """
             INSERT INTO inventory.branch_inventory ("CompanyId", "BranchId", "ProductId", "OnHand", "Reserved")
-            VALUES (@companyId, @branchId, @productId, @delta, 0)
+            SELECT @companyId, @branchId, @productId, @delta, 0
+            WHERE @delta > 0 OR EXISTS (
+                SELECT 1 FROM inventory.branch_inventory
+                WHERE "CompanyId" = @companyId AND "BranchId" = @branchId
+                  AND "ProductId" = @productId)
             ON CONFLICT ("CompanyId", "BranchId", "ProductId") DO UPDATE
                 SET "OnHand" = inventory.branch_inventory."OnHand" + EXCLUDED."OnHand"
-                WHERE inventory.branch_inventory."OnHand" + EXCLUDED."OnHand" >=
-                      inventory.branch_inventory."Reserved" + inventory.branch_inventory."Quarantined"
+                WHERE (@delta > 0 OR
+                       inventory.branch_inventory."OnHand" - inventory.branch_inventory."ProtectedOnHand" + @delta >=
+                       inventory.branch_inventory."Reserved" - inventory.branch_inventory."ProtectedReserved")
                   AND (inventory.branch_inventory."ReconciliationLockExpiresAtUtc" IS NULL OR
                        inventory.branch_inventory."ReconciliationLockExpiresAtUtc" <= @now)
             RETURNING 1;
@@ -127,7 +140,8 @@ public static class InventoryEndpoints
             request.ProductId, cancellationToken);
         return Results.Ok(new StockAdjustmentResponse(
             request.OperationId, balanceAfter.OnHand, balanceAfter.Reserved,
-            balanceAfter.Available));
+            balanceAfter.Available, balanceAfter.GenericAvailable,
+            balanceAfter.ProtectedAvailable));
     }
 
     private static Task<BranchInventoryBalance> GetBalanceAsync(
@@ -152,6 +166,8 @@ public static class InventoryEndpoints
     private sealed record AdjustStockRequest(Guid ProductId, Guid OperationId, decimal QuantityDelta, string? Reason);
     private sealed record StockItem(Guid ProductId, string Code, string[] AlternateCodes, string Name, string Unit,
         string SaleMode, decimal OnHand, decimal Reserved, decimal Available,
-        decimal Quarantined, bool ReconciliationLocked);
-    private sealed record StockAdjustmentResponse(Guid OperationId, decimal OnHand, decimal Reserved, decimal Available);
+        decimal Quarantined, bool ReconciliationLocked, decimal GenericAvailable,
+        decimal ProtectedAvailable, bool AllowSaleWithoutStock, bool HasProtectedPieces);
+    private sealed record StockAdjustmentResponse(Guid OperationId, decimal OnHand, decimal Reserved,
+        decimal Available, decimal GenericAvailable, decimal ProtectedAvailable);
 }

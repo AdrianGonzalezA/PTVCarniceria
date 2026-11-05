@@ -81,10 +81,11 @@ public static class AdminExcelImportProcessor
             if (change.Balance is null)
             {
                 var balance = new BranchInventoryBalance(companyId, branchId, change.Product.Id);
-                balance.SetQuantities(change.OnHandAfter, 0);
+                balance.SetQuantities(change.OnHandAfter, 0, allowGenericDeficit: true);
                 db.BranchInventoryBalances.Add(balance);
             }
-            else change.Balance.SetQuantities(change.OnHandAfter, change.Balance.Reserved);
+            else change.Balance.SetQuantities(change.OnHandAfter, change.Balance.Reserved,
+                allowGenericDeficit: true);
 
             db.InventoryMovements.Add(new InventoryMovement(companyId, branchId, change.Product.Id,
                 userId, Guid.NewGuid(), InventoryMovementKind.Adjustment, change.QuantityDelta,

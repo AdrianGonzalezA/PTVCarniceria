@@ -34,6 +34,7 @@ export class ProductsPage implements OnInit {
     unit: ['', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(24)]],
     saleMode: ['weight' as SaleMode, Validators.required],
     cost: ['', Validators.pattern(/^\d{1,10}(?:[,.]\d{1,2})?$/)],
+    allowSaleWithoutStock: [true],
   });
   protected readonly session = signal<CurrentSession | null>(null);
   protected readonly categories = signal<readonly AdminCategoryOption[]>([]);
@@ -126,7 +127,7 @@ export class ProductsPage implements OnInit {
     this.editingProduct.set(null);
     this.alternateCodes.set([]);
     this.editorForm.reset({ categoryId: this.categories()[0].id, code: '', name: '',
-      unit: 'kg', saleMode: 'weight', cost: '' });
+      unit: 'kg', saleMode: 'weight', cost: '', allowSaleWithoutStock: true });
     this.actionError.set(null);
     this.actionMessage.set(null);
     this.editorOpen.set(true);
@@ -135,7 +136,8 @@ export class ProductsPage implements OnInit {
   protected startEdit(product: AdminProduct): void {
     this.editingProduct.set(product);
     this.editorForm.reset({ categoryId: product.categoryId, code: product.code, name: product.name,
-      unit: product.unit, saleMode: product.saleMode, cost: product.cost?.toFixed(2) ?? '' });
+      unit: product.unit, saleMode: product.saleMode, cost: product.cost?.toFixed(2) ?? '',
+      allowSaleWithoutStock: product.allowSaleWithoutStock });
     this.actionError.set(null);
     this.actionMessage.set(null);
     this.editorOpen.set(true);
@@ -190,6 +192,7 @@ export class ProductsPage implements OnInit {
     this.actionMessage.set(null);
     const details = { categoryId: values.categoryId, name: values.name.trim(),
       unit: values.unit.trim(), saleMode: values.saleMode,
+      allowSaleWithoutStock: values.allowSaleWithoutStock,
       ...(cost === null ? {} : { cost }) };
     const operation = editing
       ? this.productsClient.update(editing.id, details)

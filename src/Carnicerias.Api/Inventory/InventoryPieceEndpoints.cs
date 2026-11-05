@@ -208,9 +208,13 @@ public static class InventoryPieceEndpoints
                 return Error(StatusCodes.Status409Conflict, "PIECE_RESERVATION_MISSING");
             var changed = await StockReconciliationLease.Unlocked(db.BranchInventoryBalances.Where(balance =>
                     balance.CompanyId == context.CompanyId && balance.BranchId == context.BranchId &&
-                    balance.ProductId == piece.ProductId && balance.Reserved >= line.Quantity), now)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(balance => balance.Reserved,
-                    balance => balance.Reserved - line.Quantity), cancellationToken);
+                    balance.ProductId == piece.ProductId && balance.Reserved >= line.Quantity &&
+                    balance.ProtectedReserved >= line.Quantity), now)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(balance => balance.Reserved,
+                        balance => balance.Reserved - line.Quantity)
+                    .SetProperty(balance => balance.ProtectedReserved,
+                        balance => balance.ProtectedReserved - line.Quantity), cancellationToken);
             if (changed != 1) return Error(StatusCodes.Status409Conflict, "STOCK_RESERVATION_MISSING");
 
             draft.ReplaceLines(draft.Lines.Where(item => item.Id != line.Id).ToArray(), now);
@@ -315,10 +319,14 @@ public static class InventoryPieceEndpoints
         try
         {
             var changed = await db.Database.ExecuteSqlInterpolatedAsync($"""
-                INSERT INTO inventory.branch_inventory ("CompanyId", "BranchId", "ProductId", "OnHand", "Reserved")
-                VALUES ({context.CompanyId}, {context.BranchId}, {product.Id}, {read.WeightKg}, 0)
+                INSERT INTO inventory.branch_inventory ("CompanyId", "BranchId", "ProductId",
+                    "OnHand", "Reserved", "ProtectedOnHand", "ProtectedReserved")
+                VALUES ({context.CompanyId}, {context.BranchId}, {product.Id},
+                    {read.WeightKg}, 0, {read.WeightKg}, 0)
                 ON CONFLICT ("CompanyId", "BranchId", "ProductId") DO UPDATE
-                    SET "OnHand" = inventory.branch_inventory."OnHand" + EXCLUDED."OnHand"
+                    SET "OnHand" = inventory.branch_inventory."OnHand" + EXCLUDED."OnHand",
+                        "ProtectedOnHand" = inventory.branch_inventory."ProtectedOnHand" +
+                            EXCLUDED."ProtectedOnHand"
                 WHERE inventory.branch_inventory."ReconciliationLockExpiresAtUtc" IS NULL OR
                     inventory.branch_inventory."ReconciliationLockExpiresAtUtc" <= {now}
                 """, cancellationToken);

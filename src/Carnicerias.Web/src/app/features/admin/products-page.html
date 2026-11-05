@@ -68,6 +68,8 @@
             <label>Costo (ARS)
               <input id="product-cost" formControlName="cost" inputmode="decimal" placeholder="Opcional" [appLocalizedDecimal]="editorForm.controls.cost.value" />
             </label>
+            <label class="product-stock-rule"><input id="product-allow-without-stock" type="checkbox"
+              formControlName="allowSaleWithoutStock" /> Permitir venta común sin stock</label>
           </div>
           @if (editorForm.touched && editorForm.invalid) {
             <p class="field-error" role="alert">Completá los campos obligatorios. Si informás un costo, debe ser positivo y tener hasta dos decimales.</p>

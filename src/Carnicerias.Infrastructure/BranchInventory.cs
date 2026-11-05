@@ -28,7 +28,14 @@ public sealed class BranchInventoryBalance
     public decimal OnHand { get; private set; }
     public decimal Reserved { get; private set; }
     public decimal Quarantined { get; private set; }
+    public decimal ProtectedOnHand { get; private set; }
+    public decimal ProtectedReserved { get; private set; }
     [NotMapped] public decimal Available => OnHand - Reserved - Quarantined;
+    [NotMapped] public decimal GenericOnHand => OnHand - ProtectedOnHand;
+    [NotMapped] public decimal GenericReserved => Reserved - ProtectedReserved;
+    [NotMapped] public decimal GenericAvailable => GenericOnHand - GenericReserved;
+    [NotMapped] public decimal ProtectedAvailable =>
+        ProtectedOnHand - ProtectedReserved - Quarantined;
 
     public Guid? ReconciliationLockId { get; private set; }
     public Guid? ReconciliationLockPieceId { get; private set; }
@@ -38,14 +45,22 @@ public sealed class BranchInventoryBalance
     public bool IsReconciliationLocked(DateTimeOffset now) =>
         ReconciliationLockId is not null && ReconciliationLockExpiresAtUtc > now;
 
-    public void SetQuantities(decimal onHand, decimal reserved, decimal? quarantined = null)
+    public void SetQuantities(decimal onHand, decimal reserved, decimal? quarantined = null,
+        decimal? protectedOnHand = null, decimal? protectedReserved = null,
+        bool allowGenericDeficit = false)
     {
         var held = quarantined ?? Quarantined;
-        if (onHand < 0 || reserved < 0 || held < 0 || reserved + held > onHand)
+        var protectedTotal = protectedOnHand ?? Math.Max(ProtectedOnHand, held);
+        var protectedHeld = protectedReserved ?? ProtectedReserved;
+        if (reserved < 0 || held < 0 || protectedTotal < 0 || protectedHeld < 0 ||
+            reserved < protectedHeld || protectedTotal < protectedHeld + held ||
+            !allowGenericDeficit && (onHand < 0 || reserved + held > onHand))
             throw new ArgumentOutOfRangeException(nameof(onHand));
         OnHand = onHand;
         Reserved = reserved;
         Quarantined = held;
+        ProtectedOnHand = protectedTotal;
+        ProtectedReserved = protectedHeld;
     }
 }
 

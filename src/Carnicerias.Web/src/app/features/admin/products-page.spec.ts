@@ -18,7 +18,7 @@ describe('ProductsPage', () => {
   };
   const product = { id: 'product-1', categoryId: 'cat-1', categoryName: 'Vacuno',
     code: 'VAC-001', name: 'Asado', unit: 'kg', saleMode: 'weight', cost: 100,
-    isActive: true, alternateCodeCount: 0 };
+    isActive: true, allowSaleWithoutStock: true, alternateCodeCount: 0 };
 
   beforeEach(() => TestBed.configureTestingModule({
     imports: [ProductsPage],
@@ -93,7 +93,8 @@ describe('ProductsPage', () => {
     const request = http.expectOne('/api/admin/products');
     expect(request.request.method).toBe('POST');
     expect(request.request.body).toEqual({ categoryId: 'cat-1', code: 'CER-001',
-      name: 'Bondiola', unit: 'kg', saleMode: 'weight', cost: 400.5 });
+      name: 'Bondiola', unit: 'kg', saleMode: 'weight', cost: 400.5,
+      allowSaleWithoutStock: true });
     request.flush({ ...product, id: 'product-2', code: 'CER-001', name: 'Bondiola' });
     http.expectOne((candidate) => candidate.url === '/api/admin/products').flush({
       items: [{ ...product, id: 'product-2', code: 'CER-001', name: 'Bondiola' }],
@@ -126,6 +127,22 @@ describe('ProductsPage', () => {
     fixture.detectChanges();
     expect(page.querySelector('tbody')?.textContent).toContain('Sin costo');
     expect(page.querySelector('tbody')?.textContent).not.toContain('ARS 0,00');
+  });
+
+  it('lets an administrator disable sale without stock for an existing article', () => {
+    const { fixture, http, page } = load();
+    page.querySelector<HTMLButtonElement>('tbody .edit-button')!.click();
+    http.expectOne('/api/admin/products/product-1/codes').flush([]);
+    fixture.detectChanges();
+    const allowed = page.querySelector<HTMLInputElement>('input[formControlName="allowSaleWithoutStock"]')!;
+    expect(allowed.checked).toBe(true);
+    allowed.click();
+    fixture.detectChanges();
+    page.querySelector<HTMLFormElement>('.editor-form')!.dispatchEvent(new Event('submit'));
+    const request = http.expectOne('/api/admin/products/product-1');
+    expect(request.request.body.allowSaleWithoutStock).toBe(false);
+    request.flush({ ...product, allowSaleWithoutStock: false });
+    fixture.detectChanges();
   });
 
   it('keeps the principal code read-only while editing', () => {

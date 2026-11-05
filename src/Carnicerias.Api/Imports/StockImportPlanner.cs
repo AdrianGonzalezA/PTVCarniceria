@@ -78,16 +78,15 @@ public static class StockImportPlanner
                 continue;
             }
             var onHand = balance?.OnHand ?? 0m;
-            var reserved = balance?.Reserved ?? 0m;
-            var quarantined = balance?.Quarantined ?? 0m;
             var after = onHand + quantity.Value;
-            if (after < reserved + quarantined)
+            if (quantity.Value < 0 && (balance is null ||
+                balance.GenericOnHand + quantity.Value < balance.GenericReserved))
             {
                 AddIssue(row, "Variacion", "STOCK_BELOW_RESERVED",
-                    "La salida dejaría menos existencia que la reservada o inmovilizada.");
+                    "La salida consumiría existencia reservada o protegida de piezas.");
                 continue;
             }
-            if (after > 999_999_999.999m)
+            if (after is > 999_999_999.999m or < -999_999_999.999m)
             {
                 AddIssue(row, "Variacion", "STOCK_QUANTITY_OVERFLOW", "La existencia resultante supera el máximo admitido.");
                 continue;

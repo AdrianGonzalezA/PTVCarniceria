@@ -26,7 +26,7 @@
       <header class="panel-heading">
         <div>
           <h2 id="stock-title">Stock de esta sucursal</h2>
-          <p>Disponible = existencia − reservado en tickets abiertos − inmovilizado por trazabilidad histórica. Cada ajuste deja un movimiento.</p>
+          <p>El saldo contable incluye stock genérico y piezas trazables. Sus disponibilidades se muestran por separado. Cada ajuste deja un movimiento.</p>
         </div>
         <div class="admin-import-heading-actions">
           <app-admin-excel-import-actions kind="stock" [disabled]="loading() || saving()" (completed)="load()" />
@@ -49,7 +49,7 @@
       } @else {
         <div class="table-wrap">
           <table>
-            <thead><tr><th scope="col">Artículo</th><th scope="col" class="numeric-value">Existencia</th><th scope="col" class="numeric-value">Reservado</th><th scope="col" class="numeric-value">Inmovilizado</th><th scope="col" class="numeric-value">Disponible</th><th scope="col">Acción</th></tr></thead>
+            <thead><tr><th scope="col">Artículo</th><th scope="col" class="numeric-value">Saldo contable</th><th scope="col" class="numeric-value">Reservado</th><th scope="col" class="numeric-value">Inmovilizado</th><th scope="col" class="numeric-value">Genérico disponible</th><th scope="col" class="numeric-value">Piezas disponibles</th><th scope="col">Acción</th></tr></thead>
             <tbody>
               @for (item of visibleItems(); track item.productId) {
                 <tr class="stock-row">
@@ -57,7 +57,8 @@
                   <td class="numeric-value">{{ formatQuantity(item.onHand, item) }} {{ item.unit ?? 'u.' }}</td>
                   <td class="numeric-value">{{ formatQuantity(item.reserved, item) }} {{ item.unit ?? 'u.' }}</td>
                   <td class="numeric-value">{{ formatQuantity(item.quarantined ?? 0, item) }} {{ item.unit ?? 'u.' }}</td>
-                  <td class="numeric-value">{{ item.reconciliationLocked ? 'En conteo' : formatQuantity(item.available, item) }} {{ item.reconciliationLocked ? '' : item.unit ?? 'u.' }}</td>
+                  <td class="numeric-value">{{ item.reconciliationLocked ? 'En conteo' : formatQuantity(item.genericAvailable ?? item.available, item) }} {{ item.reconciliationLocked ? '' : item.unit ?? 'u.' }}</td>
+                  <td class="numeric-value">{{ item.reconciliationLocked ? 'En conteo' : formatQuantity(item.protectedAvailable ?? 0, item) }} {{ item.reconciliationLocked ? '' : item.unit ?? 'u.' }}</td>
                   <td><button type="button" class="secondary-button" [disabled]="saving() || item.reconciliationLocked" (click)="startAdjustment(item)">Ajustar</button></td>
                 </tr>
               }
@@ -71,7 +72,7 @@
         [canClose]="!saving()" (closed)="cancelAdjustment()">
         <form class="editor-form stock-form" [formGroup]="adjustmentForm" (ngSubmit)="saveAdjustment()">
           <h2 id="stock-adjustment-title">Ajustar {{ item.name }}</h2>
-          <p>Actual: {{ formatQuantity(item.onHand, item) }} {{ item.unit ?? 'u.' }} · Reservado: {{ formatQuantity(item.reserved, item) }} · Inmovilizado: {{ formatQuantity(item.quarantined ?? 0, item) }} · Disponible: {{ formatQuantity(item.available, item) }}</p>
+          <p>Saldo contable: {{ formatQuantity(item.onHand, item) }} {{ item.unit ?? 'u.' }} · Reservado: {{ formatQuantity(item.reserved, item) }} · Inmovilizado: {{ formatQuantity(item.quarantined ?? 0, item) }} · Genérico disponible: {{ formatQuantity(item.genericAvailable ?? item.available, item) }} · Piezas disponibles: {{ formatQuantity(item.protectedAvailable ?? 0, item) }}</p>
           <label for="stock-delta">Variación de cantidad (positiva para entrada, negativa para salida)</label>
           <input id="stock-delta" type="text" [attr.inputmode]="item.saleMode === 'unit' ? 'numeric' : 'decimal'" formControlName="quantityDelta" [appLocalizedDecimal]="adjustmentForm.controls.quantityDelta.value" [decimalPlaces]="item.saleMode === 'unit' ? 0 : 3" aria-describedby="stock-delta-help" required />
           <p id="stock-delta-help" class="field-hint">{{ item.saleMode === 'unit' ? 'Sólo unidades enteras.' : 'Hasta tres decimales.' }}</p>

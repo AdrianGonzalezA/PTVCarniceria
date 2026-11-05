@@ -137,6 +137,44 @@ public sealed class StockImportPlannerTests
         Assert.Equal(61.250m, balance.Available);
     }
 
+    [Fact]
+    public void GenericDebtCannotBeDeepenedWhenAProtectedPieceExists()
+    {
+        var companyId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var product = Product(companyId, "2546", ProductSaleMode.Weight);
+        var balance = new BranchInventoryBalance(companyId, branchId, product.Id);
+        balance.SetQuantities(-3m, 0m, protectedOnHand: 2m, allowGenericDeficit: true);
+
+        var plan = StockImportPlanner.Plan(companyId, branchId,
+            [Row(2, "2546", -1m)], [product], [balance]);
+
+        Assert.Empty(plan.Changes);
+        Assert.Contains(plan.Issues, issue => issue.Code == "STOCK_BELOW_RESERVED");
+        Assert.Equal(2m, balance.ProtectedAvailable);
+    }
+
+    [Fact]
+    public void GenericReceiptRegularizesDebtWithoutTouchingAProtectedPiece()
+    {
+        var companyId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var product = Product(companyId, "2546", ProductSaleMode.Weight);
+        var balance = new BranchInventoryBalance(companyId, branchId, product.Id);
+        balance.SetQuantities(-3m, 0m, protectedOnHand: 2m, allowGenericDeficit: true);
+
+        var plan = StockImportPlanner.Plan(companyId, branchId,
+            [Row(2, "2546", 6m)], [product], [balance]);
+
+        Assert.Empty(plan.Issues);
+        Assert.Single(plan.Changes);
+        Assert.Equal(3m, plan.Changes[0].OnHandAfter);
+        balance.SetQuantities(plan.Changes[0].OnHandAfter, balance.Reserved,
+            allowGenericDeficit: true);
+        Assert.Equal(1m, balance.GenericAvailable);
+        Assert.Equal(2m, balance.ProtectedAvailable);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(100001)]

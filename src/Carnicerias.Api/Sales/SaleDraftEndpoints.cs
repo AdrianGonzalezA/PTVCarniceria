@@ -247,22 +247,49 @@ public static class SaleDraftEndpoints
                 var previousQuantity = draft.Lines.Where(line => line.ProductId == productId).Sum(line => line.Quantity);
                 var newQuantity = lines.Where(line => line.ProductId == productId).Sum(line => line.Quantity);
                 var quantityDelta = newQuantity - previousQuantity;
-                if (quantityDelta == 0) continue;
+                var previousPieceQuantity = draft.Lines.Where(line => line.ProductId == productId &&
+                    line.InventoryPieceId is not null).Sum(line => line.Quantity);
+                var newPieceQuantity = lines.Where(line => line.ProductId == productId &&
+                    line.InventoryPieceId is not null).Sum(line => line.Quantity);
+                var pieceDelta = newPieceQuantity - previousPieceQuantity;
+                if (quantityDelta == 0 && pieceDelta == 0) continue;
+                var genericIncrease = quantityDelta - pieceDelta;
+                var allowWithoutStock = await db.CatalogProducts.AsNoTracking()
+                    .Where(product => product.CompanyId == context.CompanyId &&
+                        product.Id == productId)
+                    .Select(product => product.AllowSaleWithoutStock)
+                    .SingleAsync(cancellationToken);
 
                 var stock = db.BranchInventoryBalances.Where(balance => balance.CompanyId == context.CompanyId &&
                     balance.BranchId == context.BranchId && balance.ProductId == productId);
                 var unlockedStock = StockReconciliationLease.Unlocked(stock, now);
-                var updated = quantityDelta > 0
-                    ? await unlockedStock.Where(balance => balance.OnHand - balance.Reserved -
-                            balance.Quarantined >= quantityDelta)
-                        .ExecuteUpdateAsync(setters => setters.SetProperty(
-                            balance => balance.Reserved, balance => balance.Reserved + quantityDelta), cancellationToken)
-                    : await unlockedStock.Where(balance => balance.Reserved >= -quantityDelta)
-                        .ExecuteUpdateAsync(setters => setters.SetProperty(
-                            balance => balance.Reserved, balance => balance.Reserved + quantityDelta), cancellationToken);
+                var updated = await unlockedStock.Where(balance =>
+                        balance.Reserved + quantityDelta >= 0 &&
+                        balance.ProtectedReserved + pieceDelta >= 0 &&
+                        balance.Reserved + quantityDelta >= balance.ProtectedReserved + pieceDelta &&
+                        balance.ProtectedOnHand >= balance.ProtectedReserved + pieceDelta +
+                            balance.Quarantined &&
+                        (genericIncrease <= 0 ||
+                         allowWithoutStock && balance.ProtectedOnHand == 0 ||
+                         balance.OnHand - balance.ProtectedOnHand - balance.Reserved +
+                             balance.ProtectedReserved >= genericIncrease))
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(balance => balance.Reserved,
+                            balance => balance.Reserved + quantityDelta)
+                        .SetProperty(balance => balance.ProtectedReserved,
+                            balance => balance.ProtectedReserved + pieceDelta), cancellationToken);
+                if (updated == 0 && quantityDelta > 0 && pieceDelta == 0 && allowWithoutStock)
+                    updated = await db.Database.ExecuteSqlInterpolatedAsync($"""
+                        INSERT INTO inventory.branch_inventory
+                            ("CompanyId", "BranchId", "ProductId", "OnHand", "Reserved")
+                        VALUES ({context.CompanyId}, {context.BranchId}, {productId}, 0,
+                            {quantityDelta})
+                        ON CONFLICT ("CompanyId", "BranchId", "ProductId") DO NOTHING
+                        """, cancellationToken);
                 if (updated == 0)
                     return Error(StatusCodes.Status409Conflict,
-                        quantityDelta > 0 ? "INSUFFICIENT_STOCK" : "STOCK_RESERVATION_MISSING");
+                        quantityDelta > 0 || genericIncrease > 0
+                            ? "INSUFFICIENT_STOCK" : "STOCK_RESERVATION_MISSING");
             }
 
             draft.ReplaceLines(lines, now);
@@ -328,11 +355,17 @@ public static class SaleDraftEndpoints
             foreach (var group in draft.Lines.GroupBy(line => line.ProductId).OrderBy(group => group.Key))
             {
                 var quantity = group.Sum(line => line.Quantity);
+                var pieceQuantity = group.Where(line => line.InventoryPieceId is not null)
+                    .Sum(line => line.Quantity);
                 var updated = await StockReconciliationLease.Unlocked(db.BranchInventoryBalances.Where(balance =>
                         balance.CompanyId == context.CompanyId && balance.BranchId == context.BranchId &&
-                        balance.ProductId == group.Key && balance.Reserved >= quantity), now)
-                    .ExecuteUpdateAsync(setters => setters.SetProperty(
-                        balance => balance.Reserved, balance => balance.Reserved - quantity), cancellationToken);
+                        balance.ProductId == group.Key && balance.Reserved >= quantity &&
+                        balance.ProtectedReserved >= pieceQuantity), now)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(balance => balance.Reserved,
+                            balance => balance.Reserved - quantity)
+                        .SetProperty(balance => balance.ProtectedReserved,
+                            balance => balance.ProtectedReserved - pieceQuantity), cancellationToken);
                 if (updated == 0)
                     return Error(StatusCodes.Status409Conflict, "STOCK_RESERVATION_MISSING");
             }

@@ -756,6 +756,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(product => product.Name).HasMaxLength(200).IsRequired();
             entity.Property(product => product.Unit).HasMaxLength(24).IsRequired();
             entity.Property(product => product.Cost).HasPrecision(12, 2);
+            entity.Property(product => product.AllowSaleWithoutStock).HasDefaultValue(true);
             entity.HasOne<Company>().WithMany().HasForeignKey(product => product.CompanyId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<ProductCategory>().WithMany()
@@ -1403,14 +1404,15 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
         {
             entity.ToTable("branch_inventory", "inventory", table =>
             {
-                table.HasCheckConstraint("CK_branch_inventory_on_hand_nonnegative", "\"OnHand\" >= 0");
-                table.HasCheckConstraint("CK_branch_inventory_reserved_range", "\"Reserved\" >= 0 AND \"Quarantined\" >= 0 AND \"Reserved\" + \"Quarantined\" <= \"OnHand\"");
+                table.HasCheckConstraint("CK_branch_inventory_reserved_range", "\"Reserved\" >= 0 AND \"Quarantined\" >= 0 AND \"ProtectedOnHand\" >= 0 AND \"ProtectedReserved\" >= 0 AND \"Reserved\" >= \"ProtectedReserved\" AND \"ProtectedOnHand\" >= \"ProtectedReserved\" + \"Quarantined\"");
                 table.HasCheckConstraint("CK_branch_inventory_reconciliation_lock", "(\"ReconciliationLockId\" IS NULL AND \"ReconciliationLockPieceId\" IS NULL AND \"ReconciliationLockOwnerUserId\" IS NULL AND \"ReconciliationLockStartedAtUtc\" IS NULL AND \"ReconciliationLockExpiresAtUtc\" IS NULL) OR (\"ReconciliationLockId\" IS NOT NULL AND \"ReconciliationLockPieceId\" IS NOT NULL AND \"ReconciliationLockOwnerUserId\" IS NOT NULL AND \"ReconciliationLockStartedAtUtc\" IS NOT NULL AND \"ReconciliationLockExpiresAtUtc\" IS NOT NULL AND \"ReconciliationLockExpiresAtUtc\" > \"ReconciliationLockStartedAtUtc\")");
             });
             entity.HasKey(balance => new { balance.CompanyId, balance.BranchId, balance.ProductId });
             entity.Property(balance => balance.OnHand).HasPrecision(12, 3);
             entity.Property(balance => balance.Reserved).HasPrecision(12, 3);
             entity.Property(balance => balance.Quarantined).HasPrecision(12, 3).HasDefaultValue(0m);
+            entity.Property(balance => balance.ProtectedOnHand).HasPrecision(12, 3).HasDefaultValue(0m);
+            entity.Property(balance => balance.ProtectedReserved).HasPrecision(12, 3).HasDefaultValue(0m);
             entity.HasOne<Branch>().WithMany()
                 .HasForeignKey(balance => new { balance.CompanyId, balance.BranchId })
                 .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })

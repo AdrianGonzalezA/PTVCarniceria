@@ -330,13 +330,21 @@ public static class SaleConfirmationEndpoints
             foreach (var group in draft.Lines.GroupBy(line => line.ProductId).OrderBy(group => group.Key))
             {
                 var quantity = group.Sum(line => line.Quantity);
+                var pieceQuantity = group.Where(line => line.InventoryPieceId is not null)
+                    .Sum(line => line.Quantity);
                 var changed = await StockReconciliationLease.Unlocked(db.BranchInventoryBalances.Where(balance =>
                         balance.CompanyId == context.CompanyId && balance.BranchId == context.BranchId &&
-                        balance.ProductId == group.Key && balance.OnHand >= quantity &&
-                        balance.Reserved >= quantity), now)
+                        balance.ProductId == group.Key && balance.Reserved >= quantity &&
+                        balance.ProtectedReserved >= pieceQuantity &&
+                        balance.Reserved - balance.ProtectedReserved >= quantity - pieceQuantity &&
+                        balance.ProtectedOnHand - pieceQuantity >= balance.Quarantined), now)
                     .ExecuteUpdateAsync(setters => setters
                         .SetProperty(balance => balance.OnHand, balance => balance.OnHand - quantity)
-                        .SetProperty(balance => balance.Reserved, balance => balance.Reserved - quantity),
+                        .SetProperty(balance => balance.Reserved, balance => balance.Reserved - quantity)
+                        .SetProperty(balance => balance.ProtectedOnHand,
+                            balance => balance.ProtectedOnHand - pieceQuantity)
+                        .SetProperty(balance => balance.ProtectedReserved,
+                            balance => balance.ProtectedReserved - pieceQuantity),
                         cancellationToken);
                 if (changed == 0)
                     return Error(StatusCodes.Status409Conflict, "STOCK_RESERVATION_MISSING");

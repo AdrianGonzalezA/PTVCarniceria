@@ -219,11 +219,16 @@ public static class PieceHistoricalReconciliationEndpoints
                     item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
                     item.ProductId == piece.ProductId && item.ReconciliationLockId == request.LockId &&
                     item.ReconciliationLockExpiresAtUtc > now &&
-                    item.Quarantined >= piece.ReceivedWeightKg)
+                    item.Quarantined >= piece.ReceivedWeightKg &&
+                    item.ProtectedOnHand >= piece.ReceivedWeightKg)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(item => item.OnHand, request.CountedOnHand)
                     .SetProperty(item => item.Quarantined,
                         item => item.Quarantined - piece.ReceivedWeightKg)
+                    .SetProperty(item => item.ProtectedOnHand,
+                        item => outcome == InventoryPieceStatus.ReconciledUnavailable
+                            ? item.ProtectedOnHand - piece.ReceivedWeightKg
+                            : item.ProtectedOnHand)
                     .SetProperty(item => item.ReconciliationLockId, (Guid?)null)
                     .SetProperty(item => item.ReconciliationLockPieceId, (Guid?)null)
                     .SetProperty(item => item.ReconciliationLockOwnerUserId, (Guid?)null)

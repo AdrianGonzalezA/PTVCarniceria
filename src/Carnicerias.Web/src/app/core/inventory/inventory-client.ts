@@ -12,6 +12,10 @@ export interface InventoryStockItem {
   readonly reserved: number;
   readonly quarantined?: number;
   readonly available: number;
+  readonly genericAvailable?: number;
+  readonly protectedAvailable?: number;
+  readonly allowSaleWithoutStock?: boolean;
+  readonly hasProtectedPieces?: boolean;
   readonly reconciliationLocked?: boolean;
 }
 
@@ -20,6 +24,8 @@ export interface StockAdjustmentResponse {
   readonly onHand: number;
   readonly reserved: number;
   readonly available: number;
+  readonly genericAvailable?: number;
+  readonly protectedAvailable?: number;
 }
 
 @Injectable({ providedIn: 'root' })

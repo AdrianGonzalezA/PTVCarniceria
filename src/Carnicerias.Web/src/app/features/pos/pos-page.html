@@ -147,14 +147,17 @@
             <div class="product-grid">
               @for (product of visibleProducts(); track product.id) {
                 <button class="product-card" type="button" [disabled]="!canSearchCatalog()"
-                  [class.unavailable]="!isDemoPriceList() && (availableStock(product) ?? 0) <= 0"
+                  [class.unavailable]="!isDemoPriceList() && (availableStock(product) ?? 0) <= 0 && !canSellGenericWithoutStock(product)"
                   (click)="openProduct(product)">
                   <span class="product-name">{{ product.name }}</span>
                   <span class="product-price">{{ formatMoney(product.price) }} <small>/ {{ unitLabel(product) }}</small></span>
                   @if (!isDemoPriceList() && (availableStock(product) ?? 0) > 0) {
                     <small class="product-stock">Disponible: {{ availableStock(product) ?? 0 }} {{ unitLabel(product) }}</small>
                   }
-                  @if (!isDemoPriceList() && (availableStock(product) ?? 0) <= 0) {
+                  @if (!isDemoPriceList() && (availableStock(product) ?? 0) <= 0 && canSellGenericWithoutStock(product)) {
+                    <small class="product-availability">Venta sin stock habilitada</small>
+                  }
+                  @if (!isDemoPriceList() && (availableStock(product) ?? 0) <= 0 && !canSellGenericWithoutStock(product)) {
                     <small class="product-availability">Sin stock</small>
                   }
                 </button>

@@ -71,7 +71,8 @@ public static class AdminProductEndpoints
                 product.Cost,
                 product.IsActive,
                 db.ProductCodes.Count(code => code.CompanyId == companyId &&
-                    code.ProductId == product.Id && code.IsActive)))
+                    code.ProductId == product.Id && code.IsActive),
+                product.AllowSaleWithoutStock))
             .ToArrayAsync(cancellationToken);
         return Results.Ok(new ProductPage(items, page, pageSize, totalItems,
             totalItems == 0 ? 0 : (totalItems - 1) / pageSize + 1));
@@ -104,7 +105,8 @@ public static class AdminProductEndpoints
             return Error(StatusCodes.Status409Conflict, "PRODUCT_CODE_ALREADY_EXISTS");
 
         var product = new CatalogProduct(companyId, category.Id, request.Code,
-            request.Name, request.Unit, saleMode, request.Cost);
+            request.Name, request.Unit, saleMode, request.Cost,
+            request.AllowSaleWithoutStock ?? true);
         db.CatalogProducts.Add(product);
         if (product.Cost is decimal initialCost)
             db.ProductCostVersions.Add(new ProductCostVersion(companyId, product.Id,
@@ -134,7 +136,8 @@ public static class AdminProductEndpoints
         if (!AllowedOrigin(httpContext)) return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
         if (productId == Guid.Empty || request is null || request.Code is not null ||
             (request.CategoryId is null && request.Name is null && request.Unit is null &&
-             request.SaleMode is null && request.Cost is null && request.IsActive is null) ||
+             request.SaleMode is null && request.Cost is null && request.IsActive is null &&
+             request.AllowSaleWithoutStock is null) ||
             (request.CategoryId.HasValue && request.CategoryId == Guid.Empty) ||
             (request.Name is not null && !ValidText(request.Name, 200)) ||
             (request.Unit is not null && !ValidText(request.Unit, 24)) ||
@@ -198,6 +201,8 @@ public static class AdminProductEndpoints
             if (isActive) product.Activate();
             else product.Deactivate();
         }
+        if (request.AllowSaleWithoutStock is bool allowSaleWithoutStock)
+            product.SetAllowSaleWithoutStock(allowSaleWithoutStock);
 
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -249,7 +254,7 @@ public static class AdminProductEndpoints
     private static ProductResponse ToResponse(CatalogProduct product, string categoryName, int alternateCodeCount) =>
         new(product.Id, product.CategoryId, categoryName, product.Code, product.Name, product.Unit,
             product.SaleMode == ProductSaleMode.Weight ? "weight" : "unit", product.Cost,
-            product.IsActive, alternateCodeCount);
+            product.IsActive, alternateCodeCount, product.AllowSaleWithoutStock);
 
     private static bool ValidText(string? value, int maxLength) =>
         !string.IsNullOrWhiteSpace(value) && value.Trim().Length <= maxLength;
@@ -293,13 +298,15 @@ public static class AdminProductEndpoints
         statusCode: statusCode);
 
     private sealed record ProductCreateRequest(
-        Guid CategoryId, string Code, string Name, string Unit, string SaleMode, decimal? Cost);
+        Guid CategoryId, string Code, string Name, string Unit, string SaleMode, decimal? Cost,
+        bool? AllowSaleWithoutStock);
     private sealed record ProductUpdateRequest(
         Guid? CategoryId, string? Name, string? Unit, string? SaleMode, decimal? Cost,
-        bool? IsActive, string? Code);
+        bool? IsActive, string? Code, bool? AllowSaleWithoutStock);
     private sealed record ProductResponse(
         Guid Id, Guid CategoryId, string CategoryName, string Code, string Name, string Unit,
-        string SaleMode, decimal? Cost, bool IsActive, int AlternateCodeCount);
+        string SaleMode, decimal? Cost, bool IsActive, int AlternateCodeCount,
+        bool AllowSaleWithoutStock);
     private sealed record ProductPage(
         IReadOnlyList<ProductResponse> Items, int Page, int PageSize, long TotalItems, long TotalPages);
     private sealed record CostHistoryRow(Guid Id, decimal Amount, DateTimeOffset EffectiveFromUtc,

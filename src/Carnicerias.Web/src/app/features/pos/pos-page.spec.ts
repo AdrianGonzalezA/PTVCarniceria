@@ -1927,6 +1927,8 @@ describe('PosPage', () => {
     };
     let lists = [{ id: 'list-id', name: 'Mostrador' }, { id: 'other-list', name: 'Mayorista' }];
     let available = 10;
+    let allowSaleWithoutStock = false;
+    let hasProtectedPieces = false;
     let stockMissing = false;
     let stockFails = false;
     let listsFail = false;
@@ -1949,7 +1951,9 @@ describe('PosPage', () => {
     });
     const stock = vi.fn(() => stockFails
       ? throwError(() => new HttpErrorResponse({ status: 503 }))
-      : of(stockMissing ? [] : [{ productId: 'asado', available }]));
+      : of(stockMissing ? [] : [{ productId: 'asado', available,
+        genericAvailable: available, protectedAvailable: hasProtectedPieces ? 2 : 0,
+        allowSaleWithoutStock, hasProtectedPieces }]));
     const current = vi.fn(() => of(null));
     const save = vi.fn(() => NEVER);
     TestBed.configureTestingModule({ providers: [
@@ -1971,6 +1975,9 @@ describe('PosPage', () => {
       setAsadoPrice: (value: number) => { asadoPrice = value; },
       failProducts: (value: boolean) => { productsFail = value; },
       setAvailable: (value: number) => { available = value; stockMissing = false; },
+      setStockPolicy: (allowed: boolean, protectedPieces = false) => {
+        allowSaleWithoutStock = allowed; hasProtectedPieces = protectedPieces;
+      },
       omitStock: () => { stockMissing = true; },
       failStock: () => { stockFails = true; },
       failLists: () => { listsFail = true; } };
@@ -2406,6 +2413,26 @@ describe('PosPage', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Stock desactualizado');
     expect(fixture.nativeElement.querySelector('.product-card')).toBeNull();
+  });
+
+  it('offers generic sale with zero stock only when enabled and no protected piece exists', async () => {
+    const { fixture, setAvailable, setStockPolicy, save } = await liveCatalogFixture();
+    setAvailable(-5);
+    setStockPolicy(true);
+    window.dispatchEvent(new Event('focus'));
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('.product-availability')?.textContent).toContain('Venta sin stock habilitada');
+    page.querySelector<HTMLButtonElement>('.product-card')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector('#product-dialog-title')?.textContent).toContain('Asado');
+    page.querySelector<HTMLButtonElement>('.pos-dialog .finish-button')!.click();
+    fixture.detectChanges();
+    expect(save).toHaveBeenCalledTimes(1);
+    setStockPolicy(true, true);
+    window.dispatchEvent(new Event('focus'));
+    fixture.detectChanges();
+    expect(page.querySelector('.product-availability')?.textContent).toContain('Sin stock');
   });
 
   it('switches away from a disabled list only when the current ticket is empty', async () => {

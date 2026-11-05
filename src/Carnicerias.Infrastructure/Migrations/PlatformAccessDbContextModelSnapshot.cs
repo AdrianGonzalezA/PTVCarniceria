@@ -236,6 +236,18 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasPrecision(12, 3)
                         .HasColumnType("numeric(12,3)");
 
+                    b.Property<decimal>("ProtectedOnHand")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<decimal>("ProtectedReserved")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasDefaultValue(0m);
+
                     b.Property<decimal>("Quarantined")
                         .ValueGeneratedOnAdd()
                         .HasPrecision(12, 3)
@@ -267,11 +279,9 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.ToTable("branch_inventory", "inventory", t =>
                         {
-                            t.HasCheckConstraint("CK_branch_inventory_on_hand_nonnegative", "\"OnHand\" >= 0");
-
                             t.HasCheckConstraint("CK_branch_inventory_reconciliation_lock", "(\"ReconciliationLockId\" IS NULL AND \"ReconciliationLockPieceId\" IS NULL AND \"ReconciliationLockOwnerUserId\" IS NULL AND \"ReconciliationLockStartedAtUtc\" IS NULL AND \"ReconciliationLockExpiresAtUtc\" IS NULL) OR (\"ReconciliationLockId\" IS NOT NULL AND \"ReconciliationLockPieceId\" IS NOT NULL AND \"ReconciliationLockOwnerUserId\" IS NOT NULL AND \"ReconciliationLockStartedAtUtc\" IS NOT NULL AND \"ReconciliationLockExpiresAtUtc\" IS NOT NULL AND \"ReconciliationLockExpiresAtUtc\" > \"ReconciliationLockStartedAtUtc\")");
 
-                            t.HasCheckConstraint("CK_branch_inventory_reserved_range", "\"Reserved\" >= 0 AND \"Quarantined\" >= 0 AND \"Reserved\" + \"Quarantined\" <= \"OnHand\"");
+                            t.HasCheckConstraint("CK_branch_inventory_reserved_range", "\"Reserved\" >= 0 AND \"Quarantined\" >= 0 AND \"ProtectedOnHand\" >= 0 AND \"ProtectedReserved\" >= 0 AND \"Reserved\" >= \"ProtectedReserved\" AND \"ProtectedOnHand\" >= \"ProtectedReserved\" + \"Quarantined\"");
                         });
                 });
 
@@ -507,6 +517,11 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("AllowSaleWithoutStock")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<Guid>("CategoryId")
                         .HasColumnType("uuid");

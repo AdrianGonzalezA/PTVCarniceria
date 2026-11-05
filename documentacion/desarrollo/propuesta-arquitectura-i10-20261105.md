@@ -1,6 +1,6 @@
 # I10 — propuesta de separación del saldo genérico y las piezas protegidas
 
-**Estado:** arquitectura aprobada por el PO el 05/11/2026: agregar `ProtectedOnHand` y `ProtectedReserved` para separar déficit genérico de piezas protegidas. El diseño todavía no está implementado ni migrado. Continúa la alternativa A ya elegida: un artículo/sucursal con piezas protegidas bloquea nuevas ventas genéricas sin saldo, mientras una pieza individual nunca admite saldo negativo. El PO permitió recibir la primera pieza aunque exista déficit genérico previo.
+**Estado:** arquitectura aprobada e implementada el 05/11/2026. La migración `20261105135907_AddProtectedStockI10` se aplicó exclusivamente a `carnicerias_test_visual` tras respaldo y prevuelo; ver [resultado](../despliegue/resultado-migracion-i10-20261105.md). Continúa la alternativa A: un artículo/sucursal con piezas protegidas bloquea nuevas ventas genéricas sin saldo, mientras una pieza individual nunca admite saldo negativo. El PO permitió recibir la primera pieza aunque exista déficit genérico previo.
 
 ## Problema comprobado en el código
 
@@ -39,6 +39,8 @@ Una reserva genérica creada **antes** de recibir la primera pieza se mantiene y
 4. Rollback operativo: desactivar nuevas ventas negativas y conservar saldos/documentos. Volver al CHECK anterior solo si todos los balances cumplen otra vez sus condiciones; no corregir negativos borrando movimientos. Si no, mantener esquema expandido y volver a un binario lector compatible.
 
 **Prevuelo de lectura 05/11/2026:** `tools/sql/20261105_i10_protected_balance_preflight_readonly.sql` se ejecutó en transacción `READ ONLY` contra `carnicerias_test_visual` del contenedor autorizado. Hay 49 balances y dos combinaciones con piezas vivas; `ProtectedOnHand` proyectado suma 103,952 kg, todo en `HistoricalUnverified`, y `ProtectedReserved` es cero. Las tres guardas propuestas dieron **cero conflictos**. No se alteraron registros ni esquema.
+
+**Ejecución 05/11/2026:** el mismo prevuelo se repitió con cero discrepancias de cuarentena y cero piezas vivas sin balance. La migración reconstruyó `ProtectedOnHand = 103,952 kg`, `ProtectedReserved = 0`, conservó 49 balances y 53 artículos, y activó `AllowSaleWithoutStock = true` por predeterminado. El postcheck verificó 64 migraciones y cero discrepancias entre piezas y saldos. La prueba HTTP aislada confirmó venta negativa idempotente, recepción posterior de una pieza, reserva/liberación exclusiva de la pieza, bloqueo de nueva venta genérica y regularización positiva sin consumir la pieza; el fixture quedó limpio.
 
 ## Pruebas requeridas
 

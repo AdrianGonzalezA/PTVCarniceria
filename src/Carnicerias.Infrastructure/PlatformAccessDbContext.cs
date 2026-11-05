@@ -82,6 +82,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<InventoryReceipt> InventoryReceipts => Set<InventoryReceipt>();
     public DbSet<InventoryReceiptLine> InventoryReceiptLines => Set<InventoryReceiptLine>();
+    public DbSet<InventoryTransfer> InventoryTransfers => Set<InventoryTransfer>();
+    public DbSet<InventoryTransferLine> InventoryTransferLines => Set<InventoryTransferLine>();
 
     public DbSet<BarcodeProfile> BarcodeProfiles => Set<BarcodeProfile>();
 
@@ -1447,7 +1449,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.ToTable("inventory_movements", "inventory", table =>
             {
                 table.HasCheckConstraint("CK_inventory_movements_delta_nonzero", "\"QuantityDelta\" <> 0");
-                table.HasCheckConstraint("CK_inventory_movements_kind", "\"Kind\" IN (0, 1, 2, 3, 4)");
+                table.HasCheckConstraint("CK_inventory_movements_kind", "\"Kind\" IN (0, 1, 2, 3, 4, 5)");
             });
             entity.HasKey(movement => movement.Id);
             entity.Property(movement => movement.QuantityDelta).HasPrecision(12, 3);
@@ -1588,6 +1590,69 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(line => new { line.CompanyId, line.ReceiptId, line.ProductId });
             entity.HasIndex(line => line.InventoryMovementId).IsUnique()
+                .HasFilter("\"InventoryMovementId\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<InventoryTransfer>(entity =>
+        {
+            entity.ToTable("transfer_documents", "inventory", table =>
+            {
+                table.HasCheckConstraint("CK_transfer_documents_status", "\"Status\" IN (0, 1, 2)");
+                table.HasCheckConstraint("CK_transfer_documents_decision",
+                    "(\"Status\" = 0 AND \"DispatchedByUserId\" IS NULL AND \"DispatchedAtUtc\" IS NULL AND \"CanceledByUserId\" IS NULL AND \"CanceledAtUtc\" IS NULL) OR " +
+                    "(\"Status\" = 1 AND \"DispatchedByUserId\" IS NOT NULL AND \"DispatchedAtUtc\" IS NOT NULL AND \"CanceledByUserId\" IS NULL AND \"CanceledAtUtc\" IS NULL) OR " +
+                    "(\"Status\" = 2 AND \"DispatchedByUserId\" IS NULL AND \"DispatchedAtUtc\" IS NULL AND \"CanceledByUserId\" IS NOT NULL AND \"CanceledAtUtc\" IS NOT NULL)");
+            });
+            entity.HasKey(item => item.Id);
+            entity.HasAlternateKey(item => new { item.CompanyId, item.Id });
+            entity.Property(item => item.DestinationName).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.DocumentNumber).HasMaxLength(40).IsRequired();
+            entity.Property(item => item.Status).HasConversion<int>().IsRequired();
+            entity.Property(item => item.Version).IsConcurrencyToken();
+            entity.HasOne<Branch>().WithMany()
+                .HasForeignKey(item => new { item.CompanyId, item.BranchId })
+                .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Branch>().WithMany()
+                .HasForeignKey(item => new { item.CompanyId, item.DestinationBranchId })
+                .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(item => item.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(item => item.DispatchedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(item => item.CanceledByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(item => new { item.CompanyId, item.BranchId, item.OperationId }).IsUnique();
+            entity.HasIndex(item => new { item.CompanyId, item.BranchId, item.Status, item.CreatedAtUtc });
+            entity.HasMany(item => item.Lines).WithOne()
+                .HasForeignKey(line => new { line.CompanyId, line.TransferId })
+                .HasPrincipalKey(item => new { item.CompanyId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.Navigation(item => item.Lines).UsePropertyAccessMode(PropertyAccessMode.Field);
+        });
+
+        modelBuilder.Entity<InventoryTransferLine>(entity =>
+        {
+            entity.ToTable("transfer_lines", "inventory", table =>
+                table.HasCheckConstraint("CK_transfer_lines_quantity", "\"Quantity\" > 0"));
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.ProductCode).HasMaxLength(80).IsRequired();
+            entity.Property(item => item.ProductName).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.Unit).HasMaxLength(24).IsRequired();
+            entity.Property(item => item.SaleMode).HasConversion<int>().IsRequired();
+            entity.Property(item => item.Quantity).HasPrecision(12, 3);
+            entity.HasOne<CatalogProduct>().WithMany()
+                .HasForeignKey(item => new { item.CompanyId, item.ProductId })
+                .HasPrincipalKey(product => new { product.CompanyId, product.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<InventoryPiece>().WithMany()
+                .HasForeignKey(item => item.PieceId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<InventoryMovement>().WithMany()
+                .HasForeignKey(item => item.InventoryMovementId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(item => new { item.CompanyId, item.TransferId, item.ProductId });
+            entity.HasIndex(item => item.PieceId);
+            entity.HasIndex(item => item.InventoryMovementId).IsUnique()
                 .HasFilter("\"InventoryMovementId\" IS NOT NULL");
         });
 

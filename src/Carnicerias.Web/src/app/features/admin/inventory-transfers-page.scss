@@ -1,0 +1,12 @@
+.transfer-detail { min-width: min(76rem, 85vw); max-width: 85vw; padding: 1rem; }
+.transfer-detail-header { display: flex; justify-content: space-between; align-items: start; gap: 1rem; }
+.transfer-detail-header h2 { margin-top: 0; }
+.transfer-add-line { display: grid; grid-template-columns: minmax(14rem, 2fr) minmax(8rem, 1fr) auto; align-items: end; gap: .75rem; margin: 1rem 0; }
+.transfer-add-line > div { display: grid; gap: .35rem; }
+.transfer-piece-search { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; margin-bottom: 1rem; }
+.transfer-piece-search label { flex-basis: 100%; }
+.transfer-piece-search select { min-width: min(30rem, 100%); }
+.transfer-detail input, .transfer-detail select { box-sizing: border-box; min-height: 2.5rem; padding: .5rem .65rem; border: 1px solid var(--receipt-border); border-radius: .25rem; color: var(--receipt-ink); background: var(--receipt-control); font: inherit; }
+.transfer-detail input:focus-visible, .transfer-detail select:focus-visible { outline: 3px solid var(--receipt-focus); outline-offset: 2px; }
+.transfer-detail .numeric-value { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 48rem) { .transfer-detail { min-width: 0; max-width: 90vw; } .transfer-add-line { grid-template-columns: 1fr; } }

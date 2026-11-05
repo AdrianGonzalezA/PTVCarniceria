@@ -6,6 +6,7 @@ import { cashWithdrawalAdminGuard } from './core/admin/cash-withdrawal-admin.gua
 import { fiscalSalesBookGuard } from './core/admin/fiscal-sales-book.guard';
 import { inventoryAdminGuard } from './core/inventory/inventory-admin.guard';
 import { inventoryReceiptGuard } from './core/inventory/inventory-receipt.guard';
+import { inventoryTransferGuard } from './core/inventory/inventory-transfer.guard';
 import { catalogAdminGuard } from './core/admin/catalog-admin.guard';
 import { posCanDeactivateGuard, posGuard } from './core/pos/pos.guard';
 
@@ -29,6 +30,7 @@ export const routes: Routes = [
   { path: 'admin/barcode-layouts', loadComponent: () => import('./features/admin/barcode-layout-page').then((page) => page.BarcodeLayoutPage), canActivate: [inventoryAdminGuard] },
   { path: 'admin/pieces', loadComponent: () => import('./features/admin/piece-receipt-page').then((page) => page.PieceReceiptPage), canActivate: [inventoryAdminGuard] },
   { path: 'admin/receipts', loadComponent: () => import('./features/admin/inventory-receipts-page').then((page) => page.InventoryReceiptsPage), canActivate: [inventoryReceiptGuard] },
+  { path: 'admin/transfers', loadComponent: () => import('./features/admin/inventory-transfers-page').then((page) => page.InventoryTransfersPage), canActivate: [inventoryTransferGuard] },
   { path: 'admin/history', loadComponent: () => import('./features/admin/history-page').then((page) => page.HistoryPage), canActivate: [organizationAdminGuard] },
   { path: 'admin/fiscal-sales-book', loadComponent: () => import('./features/admin/fiscal-sales-book-page').then((page) => page.FiscalSalesBookPage), canActivate: [fiscalSalesBookGuard] },
   { path: 'admin/cash-withdrawals', loadComponent: () => import('./features/admin/cash-withdrawals-page').then((page) => page.CashWithdrawalsPage), canActivate: [cashWithdrawalAdminGuard] },

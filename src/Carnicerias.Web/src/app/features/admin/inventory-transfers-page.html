@@ -1,0 +1,147 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" [routerLink]="home()" aria-label="Volver al inicio">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Transferencias</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+
+  <div class="workspace receipt-workspace">
+    <a class="back-link" [routerLink]="home()">← Volver</a>
+    <p class="eyebrow">Negocio · Inventario</p>
+    <h1>Transferencias por remito</h1>
+    <p class="intro">Prepará el remito y confirmá la salida de mercadería. El despacho queda completo aunque el destino no use este sistema.</p>
+    @if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Contexto de trabajo">
+        <div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Sucursal de origen</span><strong>{{ context.branchName }}</strong></div>
+      </section>
+    }
+    @if (error(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
+    @if (notice(); as message) { <p class="success-message" role="status">{{ message }}</p> }
+
+    <section class="category-panel receipt-panel" aria-labelledby="new-transfer-title">
+      <header class="panel-heading"><div>
+        <h2 id="new-transfer-title">Nuevo remito</h2>
+        <p>Podés elegir una sucursal del sistema o escribir un destino externo.</p>
+      </div></header>
+      <form class="receipt-form" (submit)="$event.preventDefault(); create()">
+        <div class="receipt-fields">
+          <div><label for="transfer-branch">Sucursal del sistema (opcional)</label>
+            <select id="transfer-branch" [value]="destinationBranchId()" (change)="setDestinationBranch($any($event.target).value)">
+              <option value="">Destino externo o sin sistema</option>
+              @for (branch of branches(); track branch.id) { <option [value]="branch.id">{{ branch.name }}</option> }
+            </select>
+          </div>
+          <div><label for="transfer-destination">Destino del remito</label>
+            <input id="transfer-destination" maxlength="200" required [value]="destinationName()"
+              [readOnly]="!!destinationBranchId()" (input)="destinationName.set($any($event.target).value)" />
+          </div>
+          <div><label for="transfer-date">Fecha del remito</label>
+            <input id="transfer-date" type="date" required [value]="documentDate()"
+              (change)="documentDate.set($any($event.target).value)" />
+          </div>
+        </div>
+        <button type="submit" [disabled]="saving()">{{ saving() ? 'Guardando…' : 'Crear borrador' }}</button>
+      </form>
+    </section>
+
+    <section class="category-panel receipt-panel" aria-labelledby="transfer-list-title">
+      <header class="panel-heading"><div>
+        <h2 id="transfer-list-title">Remitos de esta sucursal</h2>
+        <p>Los despachados ya descontaron el stock del origen.</p>
+      </div></header>
+      @if (loading()) { <p role="status">Cargando remitos…</p> }
+      @else if (page(); as result) {
+        <div class="table-scroll"><table>
+          <thead><tr><th>Remito</th><th>Fecha</th><th>Destino</th><th>Estado</th><th>Acción</th></tr></thead>
+          <tbody>
+            @for (item of result.items; track item.id) {
+              <tr><td>{{ item.documentNumber }}</td><td>{{ item.documentDate }}</td>
+                <td>{{ item.destinationName }}</td>
+                <td>{{ item.status === 'Draft' ? 'Borrador' : item.status === 'Dispatched' ? 'Despachado' : 'Cancelado' }}</td>
+                <td><button type="button" class="secondary-button" (click)="open(item.id)">Ver detalle</button></td>
+              </tr>
+            } @empty { <tr><td colspan="5">Todavía no hay remitos.</td></tr> }
+          </tbody>
+        </table></div>
+        <div class="receipt-pagination">
+          <button type="button" class="secondary-button" [disabled]="result.page <= 1" (click)="loadPage(result.page - 1)">Anterior</button>
+          <span>Página {{ result.page }} de {{ result.totalPages || 1 }}</span>
+          <button type="button" class="secondary-button" [disabled]="result.page >= result.totalPages" (click)="loadPage(result.page + 1)">Siguiente</button>
+        </div>
+      }
+    </section>
+
+    @if (selected(); as transfer) {
+      <app-admin-detail-dialog labelledBy="transfer-detail-title" [canClose]="!saving()" (closed)="close()">
+        <section class="transfer-detail" aria-labelledby="transfer-detail-title">
+          <header class="transfer-detail-header">
+            <div><h2 id="transfer-detail-title">{{ transfer.documentNumber }}</h2>
+              <p>{{ transfer.documentDate }} · {{ transfer.destinationName }} · {{ transfer.status === 'Draft' ? 'Borrador' : transfer.status === 'Dispatched' ? 'Despachado' : 'Cancelado' }}</p></div>
+            <button type="button" class="secondary-button" [disabled]="saving()" (click)="close()">Cerrar</button>
+          </header>
+          @if (transfer.status === 'Draft') {
+            <p>El stock del origen cambia al confirmar el despacho. Podés agregar artículos genéricos o piezas trazables completas.</p>
+            <div class="transfer-add-line">
+              <div><label for="transfer-product">Artículo</label>
+                <select id="transfer-product" [value]="newProductId()" (change)="setProduct($any($event.target).value)">
+                  <option value="">Elegí un artículo</option>
+                  @for (product of products(); track product.productId) {
+                    <option [value]="product.productId">{{ product.code }} · {{ product.name }} ({{ product.unit }})</option>
+                  }
+                </select>
+              </div>
+              <div><label for="transfer-quantity">Cantidad</label>
+                <input id="transfer-quantity" type="text" inputmode="decimal" class="numeric-value"
+                  [readOnly]="!!newPieceId()" [value]="newQuantity()"
+                  (input)="newQuantity.set($any($event.target).value)" />
+              </div>
+              <button type="button" class="secondary-button" (click)="addLine()">Agregar renglón</button>
+            </div>
+            @if (newProductId() && products().length) {
+              <div class="transfer-piece-search">
+                <label for="transfer-piece-query">Pieza trazable (opcional)</label>
+                <input id="transfer-piece-query" type="search" placeholder="Código o identificador"
+                  [value]="pieceQuery()" (input)="pieceQuery.set($any($event.target).value)" />
+                <button type="button" class="secondary-button" (click)="searchPieces()">Buscar piezas</button>
+                @if (pieces().length) {
+                  <select aria-label="Pieza disponible" [value]="newPieceId()" (change)="setPiece($any($event.target).value)">
+                    <option value="">Sin pieza: cantidad genérica</option>
+                    @for (piece of pieces(); track piece.id) {
+                      <option [value]="piece.id">{{ piece.externalIdentifier }} · {{ piece.rawBarcode }} · {{ piece.weightKg }} kg</option>
+                    }
+                  </select>
+                }
+              </div>
+            }
+          }
+          <div class="table-scroll"><table>
+            <thead><tr><th>Artículo</th><th>Pieza</th><th class="numeric-value">Cantidad</th>
+              @if (transfer.status === 'Draft') { <th>Acción</th> }
+            </tr></thead>
+            <tbody>
+              @for (line of editingLines(); track $index; let index = $index) {
+                <tr><td>{{ productName(line.productId) }}</td><td>{{ line.pieceLabel || 'Genérico' }}</td>
+                  <td class="numeric-value">{{ quantity(line) }}</td>
+                  @if (transfer.status === 'Draft') {
+                    <td><button type="button" class="secondary-button" (click)="removeLine(index)">Quitar</button></td>
+                  }
+                </tr>
+              } @empty { <tr><td [attr.colspan]="transfer.status === 'Draft' ? 4 : 3">Sin renglones.</td></tr> }
+            </tbody>
+          </table></div>
+          @if (transfer.status === 'Draft') {
+            <div class="receipt-actions">
+              <button type="button" [disabled]="saving() || !lineDirty()" (click)="saveLines()">Guardar renglones</button>
+              <button type="button" [disabled]="saving() || lineDirty() || !transfer.lines.length" (click)="dispatch()">Confirmar despacho</button>
+              <button type="button" class="secondary-button" [disabled]="saving()" (click)="cancel()">Cancelar borrador</button>
+            </div>
+          }
+          @if (error(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
+        </section>
+      </app-admin-detail-dialog>
+    }
+  </div>
+</main>

@@ -7,6 +7,7 @@ public static class PlatformPermissionCatalog
     public const string AssignmentsManage = "platform.assignments.manage";
     public const string InventoryStockManage = "inventory.stock.manage";
     public const string InventoryReceiptsManage = "inventory.receipts.manage";
+    public const string InventoryTransfersManage = "inventory.transfers.manage";
     public const string CatalogManage = "catalog.manage";
     public const string OrganizationManage = "organization.manage";
     public const string PosAccountCharge = "pos.account.charge";
@@ -21,6 +22,7 @@ public static class PlatformPermissionCatalog
         new PermissionDefinition(AssignmentsManage, "Administrar asignaciones de usuarios"),
         new PermissionDefinition(InventoryStockManage, "Administrar existencias de sucursal"),
         new PermissionDefinition(InventoryReceiptsManage, "Registrar y confirmar recepciones de mercadería"),
+        new PermissionDefinition(InventoryTransfersManage, "Preparar y despachar transferencias por remito"),
         new PermissionDefinition(CatalogManage, "Administrar el catálogo de productos y precios"),
         new PermissionDefinition(OrganizationManage, "Administrar empresas, sucursales y terminales"),
         new PermissionDefinition(PosAccountCharge, "Cargar el saldo de una venta a la cuenta corriente de un cliente"),

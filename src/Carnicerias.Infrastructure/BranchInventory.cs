@@ -8,7 +8,8 @@ public enum InventoryMovementKind
     Adjustment,
     Sale,
     PieceReceipt,
-    Receipt
+    Receipt,
+    TransferOut
 }
 
 public sealed class BranchInventoryBalance

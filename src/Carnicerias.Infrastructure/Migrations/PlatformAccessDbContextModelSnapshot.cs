@@ -3147,6 +3147,39 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.ToTable("companies", "platform_access");
                 });
 
+            modelBuilder.Entity("Carnicerias.PlatformAccess.CompanyRolePermissionOverride", b =>
+                {
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PermissionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsGranted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("CompanyId", "RoleId", "PermissionId");
+
+                    b.HasIndex("PermissionId");
+
+                    b.HasIndex("RoleId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("CompanyId", "PermissionId");
+
+                    b.ToTable("company_role_permission_overrides", "platform_access");
+                });
+
             modelBuilder.Entity("Carnicerias.PlatformAccess.PermissionDefinition", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4482,6 +4515,33 @@ namespace Carnicerias.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("CompanyId", "BranchId")
                         .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Carnicerias.PlatformAccess.CompanyRolePermissionOverride", b =>
+                {
+                    b.HasOne("Carnicerias.PlatformAccess.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.PlatformAccess.PermissionDefinition", null)
+                        .WithMany()
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.PlatformAccess.Role", null)
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

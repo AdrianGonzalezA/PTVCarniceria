@@ -4,7 +4,7 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { AdminAreaTabs } from '../admin/admin-area-tabs';
 import { AdminDetailDialog } from '../admin/admin-detail-dialog';
-import { UserAssignments, UserDirectoryClient, UserListPage } from '../../core/users/user-directory-client';
+import { CompanyRolePermission, UserAssignments, UserDirectoryClient, UserListPage } from '../../core/users/user-directory-client';
 import { OperationalBranchOption, SessionClient } from '../../core/session/session-client';
 
 @Component({
@@ -23,6 +23,11 @@ export class UsersPage implements OnInit {
   protected readonly currentCompanyName = signal('');
   protected readonly minimumPasswordLength = signal(12);
   protected readonly branches = signal<readonly OperationalBranchOption[]>([]);
+  protected readonly canManageRoles = signal(false);
+  protected readonly rolePermissions = signal<readonly CompanyRolePermission[]>([]);
+  protected readonly rolePermissionSaving = signal<string | null>(null);
+  protected readonly rolePermissionMessage = signal<string | null>(null);
+  protected readonly rolePermissionError = signal<string | null>(null);
   protected readonly createOpen = signal(false);
   protected readonly createUsername = signal('');
   protected readonly createEmail = signal('');
@@ -77,6 +82,9 @@ export class UsersPage implements OnInit {
         this.currentUsername.set(session.username);
         this.currentUserId.set(session.userId);
         this.currentCompanyName.set(session.context.companyName);
+        const canManageRoles = session.context.permissions.includes('platform.roles.manage');
+        this.canManageRoles.set(canManageRoles);
+        if (canManageRoles) this.loadRolePermissions();
         this.loadUsers(1);
         this.usersClient.passwordPolicy().subscribe({
           next: (policy) => this.minimumPasswordLength.set(policy.minimumLength),
@@ -89,6 +97,40 @@ export class UsersPage implements OnInit {
         });
       },
       error: () => void this.router.navigateByUrl('/'),
+    });
+  }
+
+  private loadRolePermissions(): void {
+    this.usersClient.rolePermissions().subscribe({
+      next: items => this.rolePermissions.set(items),
+      error: () => this.rolePermissionError.set('No se pudieron cargar las funciones de los roles.'),
+    });
+  }
+
+  protected setRolePermission(item: CompanyRolePermission, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const isGranted = input.checked;
+    if (this.rolePermissionSaving()) {
+      input.checked = item.isGranted;
+      return;
+    }
+    const key = `${item.roleCode}:${item.permissionCode}`;
+    this.rolePermissionSaving.set(key);
+    this.rolePermissionError.set(null);
+    this.rolePermissionMessage.set(null);
+    this.usersClient.setRolePermission(item.roleCode, item.permissionCode, isGranted).subscribe({
+      next: updated => {
+        this.rolePermissions.update(items => items.map(current =>
+          current.roleCode === updated.roleCode && current.permissionCode === updated.permissionCode
+            ? updated : current));
+        this.rolePermissionSaving.set(null);
+        this.rolePermissionMessage.set('Funciones del rol actualizadas para esta empresa.');
+      },
+      error: () => {
+        input.checked = item.isGranted;
+        this.rolePermissionSaving.set(null);
+        this.rolePermissionError.set('No se pudo cambiar la función. Volvé a intentar.');
+      },
     });
   }
 

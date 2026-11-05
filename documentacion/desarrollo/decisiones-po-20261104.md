@@ -19,3 +19,9 @@
 ## Arquitectura pendiente de I10
 
 Las cuatro consultas del 04/11 están respondidas. En I10, la respuesta «No por el momento» descarta condicionar la recepción de la primera pieza a regularizar el déficit genérico previo. La alternativa A sigue rigiendo para ventas posteriores con piezas protegidas, pero requiere un mecanismo de transición que conserve separadas las obligaciones genéricas anteriores. No se puede quitar el CHECK de saldo ni compensar automáticamente el déficit con kilos de la nueva pieza. El diseño de columnas, movimiento e invariantes se revisará con el PO antes de crear la migración I10.
+
+## Aclaraciones PO del 05/11 para I18a e I18b
+
+1. **Piezas transferidas:** la pieza queda terminal en origen. Si el destino informatizado registra la recepción, se crea una nueva tenencia del mismo código vinculada al remito y a la pieza de origen. Un destino no informatizado no genera una tenencia digital; el despacho sigue siendo válido.
+2. **Remito offline:** el origen puede exportar los datos para importación y validación en un destino informatizado. Ni la exportación ni la importación son obligatorias para completar el despacho. La carga manual sigue disponible.
+3. **Permisos por empresa:** cada empresa configura los permisos de sus roles sin afectar a otra empresa que use el mismo rol. En I18a se habilita `inventory.receipts.manage` para administrador o cajero mediante una configuración específica de empresa, dejando los permisos globales existentes como valores iniciales.

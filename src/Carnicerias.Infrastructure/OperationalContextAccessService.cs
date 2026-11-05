@@ -110,19 +110,34 @@ public sealed class OperationalContextAccessService(PlatformAccessDbContext db)
             .Select(assignment => assignment.RoleId)
             .Distinct()
             .ToArrayAsync(cancellationToken);
-        var permissions = await (
-                from rolePermission in db.RolePermissions
-                join permission in db.Permissions on rolePermission.PermissionId equals permission.Id
+        var defaults = await (
+                from rolePermission in db.RolePermissions.AsNoTracking()
+                join permission in db.Permissions.AsNoTracking()
+                    on rolePermission.PermissionId equals permission.Id
                 where roleIds.Contains(rolePermission.RoleId)
-                select permission.Code)
-            .Distinct()
-            .ToListAsync(cancellationToken);
+                select new { rolePermission.RoleId, rolePermission.PermissionId, permission.Code })
+            .ToArrayAsync(cancellationToken);
+        var overrides = await (
+                from entry in db.CompanyRolePermissionOverrides.AsNoTracking()
+                join permission in db.Permissions.AsNoTracking()
+                    on entry.PermissionId equals permission.Id
+                where entry.CompanyId == companyId && roleIds.Contains(entry.RoleId)
+                select new { entry.RoleId, entry.PermissionId, entry.IsGranted, permission.Code })
+            .ToArrayAsync(cancellationToken);
+        var effective = defaults.ToDictionary(item => (item.RoleId, item.PermissionId),
+            item => item.Code);
+        foreach (var entry in overrides)
+        {
+            var key = (entry.RoleId, entry.PermissionId);
+            if (entry.IsGranted) effective[key] = entry.Code;
+            else effective.Remove(key);
+        }
 
         var context = new OperationalContext(
             userId,
             companyId,
             branchId,
-            permissions.ToHashSet(StringComparer.Ordinal),
+            effective.Values.ToHashSet(StringComparer.Ordinal),
             sessionId);
         return new AuthorizedOperationalContext(context, company, branch);
     }

@@ -143,6 +143,7 @@ if (!app.Configuration.GetValue<bool>("Clover:TunnelOnly"))
 app.MapSessionEndpoints();
 app.MapManufacturerEndpoints();
 app.MapUserEndpoints();
+app.MapCompanyRolePermissionEndpoints();
 app.MapCatalogEndpoints();
 app.MapAdminCategoryEndpoints();
 app.MapAdminProductEndpoints();

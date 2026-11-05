@@ -16,7 +16,7 @@ describe('UsersPage', () => {
   }));
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
-  function load() {
+  function load(withRolePermissions = false) {
     const fixture = TestBed.createComponent(UsersPage);
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
@@ -24,18 +24,46 @@ describe('UsersPage', () => {
       userId: admin.userId, username: admin.username, expiresAtUtc: '2026-10-09T00:00:00Z',
       context: { userId: admin.userId, companyId: 'company-1', companyName: 'Empresa Visual',
         branchId: 'branch-1', branchName: 'Centro', sessionId: 'session-id',
-        permissions: ['platform.users.manage'] },
+        permissions: withRolePermissions
+          ? ['platform.users.manage', 'platform.roles.manage'] : ['platform.users.manage'] },
     });
     http.expectOne('/api/operational-contexts').flush([{ companyId: 'company-1',
       companyName: 'Empresa Visual', branches: [{ branchId: 'branch-1', branchName: 'Centro' },
         { branchId: 'branch-2', branchName: 'Norte' }] }]);
     http.expectOne('/api/users/password-policy').flush({ minimumLength: 6 });
+    if (withRolePermissions) http.expectOne('/api/users/role-permissions').flush([
+      { roleCode: 'administrator', roleName: 'Administrador',
+        permissionCode: 'inventory.receipts.manage',
+        permissionDescription: 'Registrar y confirmar recepciones de mercadería', isGranted: false },
+      { roleCode: 'cashier', roleName: 'Cajero',
+        permissionCode: 'inventory.receipts.manage',
+        permissionDescription: 'Registrar y confirmar recepciones de mercadería', isGranted: false },
+    ]);
     http.expectOne((request) => request.url === '/api/users').flush({
       items: [admin, cashier], page: 1, pageSize: 20, totalItems: 2, totalPages: 1,
     });
     fixture.detectChanges();
     return { fixture, http, page: fixture.nativeElement as HTMLElement };
   }
+
+  it('assigns receipt permission to the cashier role only for the current company', () => {
+    const { fixture, http, page } = load(true);
+    const panel = page.querySelector<HTMLElement>(
+      'section[aria-labelledby="company-role-permissions-title"]')!;
+    expect(panel.textContent).toContain('solo a Empresa Visual');
+    const cashierPermission = panel.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')[1];
+    cashierPermission.checked = true;
+    cashierPermission.dispatchEvent(new Event('change'));
+    const request = http.expectOne('/api/users/role-permissions/cashier/inventory.receipts.manage');
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toEqual({ isGranted: true });
+    request.flush({ roleCode: 'cashier', roleName: 'Cajero',
+      permissionCode: 'inventory.receipts.manage',
+      permissionDescription: 'Registrar y confirmar recepciones de mercadería', isGranted: true });
+    fixture.detectChanges();
+    expect(cashierPermission.checked).toBe(true);
+    expect(panel.textContent).toContain('actualizadas para esta empresa');
+  });
 
   it('themes users, statuses and the access editor without changing a user', () => {
     const root = document.documentElement;

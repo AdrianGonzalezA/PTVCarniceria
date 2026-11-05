@@ -26,6 +26,14 @@ export interface UserPasswordPolicy {
   readonly minimumLength: number;
 }
 
+export interface CompanyRolePermission {
+  readonly roleCode: 'administrator' | 'cashier';
+  readonly roleName: string;
+  readonly permissionCode: string;
+  readonly permissionDescription: string;
+  readonly isGranted: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class UserDirectoryClient {
   private readonly http = inject(HttpClient);
@@ -39,6 +47,18 @@ export class UserDirectoryClient {
 
   passwordPolicy() {
     return this.http.get<UserPasswordPolicy>('/api/users/password-policy', { withCredentials: true });
+  }
+
+  rolePermissions() {
+    return this.http.get<readonly CompanyRolePermission[]>('/api/users/role-permissions',
+      { withCredentials: true });
+  }
+
+  setRolePermission(roleCode: CompanyRolePermission['roleCode'], permissionCode: string,
+    isGranted: boolean) {
+    return this.http.put<CompanyRolePermission>(
+      `/api/users/role-permissions/${encodeURIComponent(roleCode)}/${encodeURIComponent(permissionCode)}`,
+      { isGranted }, { withCredentials: true });
   }
 
   createUser(username: string, email: string, password: string,

@@ -13,6 +13,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
     public DbSet<PermissionDefinition> Permissions => Set<PermissionDefinition>();
 
     public DbSet<RoleCapability> RolePermissions => Set<RoleCapability>();
+    public DbSet<CompanyRolePermissionOverride> CompanyRolePermissionOverrides =>
+        Set<CompanyRolePermissionOverride>();
 
     public DbSet<UserAssignment> UserAssignments => Set<UserAssignment>();
 
@@ -162,6 +164,21 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasKey(link => new { link.RoleId, link.PermissionId });
             entity.HasOne<Role>().WithMany().HasForeignKey(link => link.RoleId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<PermissionDefinition>().WithMany().HasForeignKey(link => link.PermissionId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CompanyRolePermissionOverride>(entity =>
+        {
+            entity.ToTable("company_role_permission_overrides");
+            entity.HasKey(item => new { item.CompanyId, item.RoleId, item.PermissionId });
+            entity.HasOne<Company>().WithMany().HasForeignKey(item => item.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Role>().WithMany().HasForeignKey(item => item.RoleId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<PermissionDefinition>().WithMany().HasForeignKey(item => item.PermissionId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany().HasForeignKey(item => item.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(item => new { item.CompanyId, item.PermissionId });
         });
 
         modelBuilder.Entity<Company>(entity =>

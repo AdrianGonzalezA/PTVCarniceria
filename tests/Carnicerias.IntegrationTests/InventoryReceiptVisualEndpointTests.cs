@@ -242,6 +242,119 @@ public sealed class InventoryReceiptVisualEndpointTests
                 Assert.Equal(1, await db.InventoryPieces.CountAsync(item =>
                     item.CompanyId == company.Id));
             }
+
+            var pieceDraft = await OkAsync(await client.PostAsJsonAsync(
+                "/api/inventory/receipts", new { operationId = Guid.NewGuid(),
+                    supplierId = supplier.Id, documentType = "remito",
+                    documentNumber = "R-piezas", documentDate }), HttpStatusCode.Created);
+            var pieceDraftId = pieceDraft.GetProperty("id").GetGuid();
+            var profileOptions = await OkAsync(await client.GetAsync(
+                "/api/inventory/receipts/barcode-profiles"));
+            Assert.Contains(profileOptions.EnumerateArray(), item =>
+                item.GetProperty("id").GetGuid() == profile.Id);
+            var firstReadOperation = Guid.NewGuid();
+            var firstRead = await OkAsync(await client.PostAsJsonAsync(
+                $"/api/inventory/receipts/{pieceDraftId}/pieces",
+                new { version = 1, operationId = firstReadOperation,
+                    productId = weightProduct.Id, barcodeProfileId = profile.Id,
+                    sourceSystem = "I18a HTTP fixture", identifierField = "pro_identif",
+                    code = "25066201600" }));
+            Assert.Equal(2, firstRead.GetProperty("version").GetInt32());
+            var repeatedRead = await OkAsync(await client.PostAsJsonAsync(
+                $"/api/inventory/receipts/{pieceDraftId}/pieces",
+                new { version = 1, operationId = firstReadOperation,
+                    productId = weightProduct.Id, barcodeProfileId = profile.Id,
+                    sourceSystem = "I18a HTTP fixture", identifierField = "pro_identif",
+                    code = "25066201600" }));
+            Assert.Single(repeatedRead.GetProperty("pieceReads").EnumerateArray());
+            var secondRead = await OkAsync(await client.PostAsJsonAsync(
+                $"/api/inventory/receipts/{pieceDraftId}/pieces",
+                new { version = 2, operationId = Guid.NewGuid(),
+                    productId = weightProduct.Id, barcodeProfileId = profile.Id,
+                    sourceSystem = "I18a HTTP fixture", identifierField = "pro_identif",
+                    code = "25066302400" }));
+            Assert.Equal(3, secondRead.GetProperty("version").GetInt32());
+            Assert.Equal(2, secondRead.GetProperty("pieceReads").GetArrayLength());
+            using (var duplicateRead = await client.PostAsJsonAsync(
+                $"/api/inventory/receipts/{pieceDraftId}/pieces",
+                new { version = 3, operationId = Guid.NewGuid(),
+                    productId = weightProduct.Id, barcodeProfileId = profile.Id,
+                    sourceSystem = "I18a HTTP fixture", identifierField = "pro_identif",
+                    code = "25066201600" }))
+                Assert.Equal(HttpStatusCode.Conflict, duplicateRead.StatusCode);
+            await using (var db = new PlatformAccessDbContext(options))
+            {
+                var balance = await db.BranchInventoryBalances.SingleAsync(item =>
+                    item.CompanyId == company.Id && item.ProductId == weightProduct.Id);
+                Assert.Equal(1.600m, balance.OnHand);
+                Assert.Equal(1.600m, balance.ProtectedOnHand);
+                Assert.Equal(1, await db.InventoryPieces.CountAsync(item =>
+                    item.CompanyId == company.Id));
+            }
+            var mixedDraft = await OkAsync(await client.PutAsJsonAsync(
+                $"/api/inventory/receipts/{pieceDraftId}/lines",
+                new { version = 3, lines = new[] {
+                    new { productId = weightProduct.Id, expectedQuantity = (decimal?)null,
+                        receivedQuantity = 0.500m }
+                } }));
+            Assert.Equal(4, mixedDraft.GetProperty("version").GetInt32());
+            Assert.Equal(3, mixedDraft.GetProperty("lines").GetArrayLength());
+            Assert.Equal(2, mixedDraft.GetProperty("pieceReads").GetArrayLength());
+            byte[] pieceSpreadsheet;
+            using (var workbook = new XLWorkbook(new MemoryStream(template)))
+            {
+                var sheet = workbook.Worksheet("Recepciones");
+                sheet.Cell(2, 1).Value = weightProduct.Code;
+                sheet.Cell(2, 3).Value = 0.500;
+                using var stream = new MemoryStream();
+                workbook.SaveAs(stream);
+                pieceSpreadsheet = stream.ToArray();
+            }
+            var importedWithPieces = await OkAsync(await client.PostAsync(
+                $"/api/inventory/receipts/{pieceDraftId}/import/apply?version=4",
+                SpreadsheetContent(pieceSpreadsheet)));
+            Assert.Equal(5, importedWithPieces.GetProperty("version").GetInt32());
+            Assert.Equal(3, importedWithPieces.GetProperty("lines").GetArrayLength());
+            Assert.Equal(2, importedWithPieces.GetProperty("pieceReads").GetArrayLength());
+            var competingDraft = await OkAsync(await client.PostAsJsonAsync(
+                "/api/inventory/receipts", new { operationId = Guid.NewGuid(),
+                    supplierId = supplier.Id, documentType = "remito",
+                    documentNumber = "R-pieza-duplicada", documentDate }), HttpStatusCode.Created);
+            var competingId = competingDraft.GetProperty("id").GetGuid();
+            var competingScan = await OkAsync(await client.PostAsJsonAsync(
+                $"/api/inventory/receipts/{competingId}/pieces",
+                new { version = 1, operationId = Guid.NewGuid(),
+                    productId = weightProduct.Id, barcodeProfileId = profile.Id,
+                    sourceSystem = "I18a HTTP fixture", identifierField = "pro_identif",
+                    code = "25066201600" }));
+            Assert.Equal(2, competingScan.GetProperty("version").GetInt32());
+            var pieceApproved = await OkAsync(await client.PostAsJsonAsync(
+                $"/api/inventory/receipts/{pieceDraftId}/approve", new { version = 5 }));
+            Assert.Equal("Approved", pieceApproved.GetProperty("status").GetString());
+            var approvedAgain = await OkAsync(await client.PostAsJsonAsync(
+                $"/api/inventory/receipts/{pieceDraftId}/approve", new { version = 5 }));
+            Assert.Equal(pieceApproved.GetProperty("id").GetGuid(),
+                approvedAgain.GetProperty("id").GetGuid());
+            using (var duplicateApproval = await client.PostAsJsonAsync(
+                $"/api/inventory/receipts/{competingId}/approve", new { version = 2 }))
+                Assert.Equal(HttpStatusCode.Conflict, duplicateApproval.StatusCode);
+            var canceledCompeting = await OkAsync(await client.PostAsJsonAsync(
+                $"/api/inventory/receipts/{competingId}/cancel", new { version = 2 }));
+            Assert.Equal("Canceled", canceledCompeting.GetProperty("status").GetString());
+            await using (var db = new PlatformAccessDbContext(options))
+            {
+                var balance = await db.BranchInventoryBalances.SingleAsync(item =>
+                    item.CompanyId == company.Id && item.ProductId == weightProduct.Id);
+                Assert.Equal(6.100m, balance.OnHand);
+                Assert.Equal(5.600m, balance.ProtectedOnHand);
+                Assert.Equal(0.500m, balance.GenericOnHand);
+                Assert.Equal(3, await db.InventoryPieces.CountAsync(item =>
+                    item.CompanyId == company.Id));
+                Assert.Equal(2, await db.InventoryReceiptPieceReads.CountAsync(item =>
+                    item.CompanyId == company.Id && item.InventoryPieceId != null));
+                Assert.Equal(3, await db.InventoryMovements.CountAsync(item =>
+                    item.CompanyId == company.Id && item.Kind == InventoryMovementKind.PieceReceipt));
+            }
         }
         finally
         {
@@ -250,6 +363,8 @@ public sealed class InventoryReceiptVisualEndpointTests
                 await using var db = new PlatformAccessDbContext(options);
                 await using var transaction = await db.Database.BeginTransactionAsync();
                 await db.Sessions.Where(item => item.CompanyId == company.Id).ExecuteDeleteAsync();
+                await db.InventoryReceiptPieceReads.Where(item => item.CompanyId == company.Id)
+                    .ExecuteDeleteAsync();
                 await db.InventoryReceiptLines.Where(item => item.CompanyId == company.Id)
                     .ExecuteDeleteAsync();
                 await db.InventoryReceipts.Where(item => item.CompanyId == company.Id)

@@ -27,6 +27,9 @@ describe('InventoryReceiptsPage', () => {
     http.expectOne('/api/inventory/receipts/product-options').flush([
       { productId: 'product', code: 'A1', name: 'Asado', unit: 'kg', saleMode: 'weight' },
     ]);
+    http.expectOne('/api/inventory/receipts/barcode-profiles').flush([
+      { id: 'profile', name: 'Ciclo 2' },
+    ]);
     http.expectOne((request) => request.url === '/api/inventory/receipts').flush({
       items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0,
     });
@@ -46,8 +49,49 @@ describe('InventoryReceiptsPage', () => {
     documentType: 'remito', documentNumber: 'R-1', documentDate: '2026-11-05',
     destination: null, externalReference: null, status: 'Draft', version: 1,
     createdAtUtc: '2026-11-05T12:00:00Z', approvedAtUtc: null, canceledAtUtc: null,
-    lines: [],
+    lines: [], pieceReads: [],
   };
+
+  it('scans a traceable piece into a draft without changing stock', () => {
+    const { fixture, http, host } = load();
+    const supplier = host.querySelector<HTMLSelectElement>('#receipt-supplier')!;
+    supplier.value = 'supplier';
+    supplier.dispatchEvent(new Event('change'));
+    input(host, '#receipt-number', 'R-1');
+    host.querySelector<HTMLFormElement>('.receipt-form')!.dispatchEvent(new Event('submit'));
+    http.expectOne('/api/inventory/receipts').flush(draft);
+    http.expectOne((request) => request.url === '/api/inventory/receipts').flush({
+      items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0,
+    });
+    fixture.detectChanges();
+    const product = host.querySelector<HTMLSelectElement>('#receipt-scan-product')!;
+    product.value = 'product';
+    product.dispatchEvent(new Event('change'));
+    const profile = host.querySelector<HTMLSelectElement>('#receipt-scan-profile')!;
+    profile.value = 'profile';
+    profile.dispatchEvent(new Event('change'));
+    input(host, '#receipt-scan-code', '25066151600');
+    host.querySelector<HTMLFormElement>('.receipt-scan form')!.dispatchEvent(new Event('submit'));
+    const scan = http.expectOne('/api/inventory/receipts/receipt/pieces');
+    expect(scan.request.body).toMatchObject({ version: 1, productId: 'product',
+      barcodeProfileId: 'profile', sourceSystem: 'Frigorífico ciclo 2',
+      identifierField: 'pro_identif', code: '25066151600' });
+    expect(scan.request.body.operationId).toBeTruthy();
+    scan.flush({ ...draft, version: 2, lines: [{ id: 'piece-line', productId: 'product',
+      productCode: 'A1', productName: 'Asado', unit: 'kg', saleMode: 'weight',
+      expectedQuantity: null, receivedQuantity: 51.6, differenceStatus: 'None',
+      differenceReason: null, inventoryMovementId: null }],
+    pieceReads: [{ id: 'read-1', lineId: 'piece-line', operationId: scan.request.body.operationId,
+      barcodeProfileId: 'profile', sourceSystem: 'Frigorífico ciclo 2',
+      identifierField: 'pro_identif', externalIdentifier: '250661',
+      rawBarcode: '25066151600', weightKg: 51.6, inventoryPieceId: null }] });
+    fixture.detectChanges();
+    expect(host.textContent).toContain('250661');
+    expect(host.textContent).toContain('51,600');
+    expect(host.textContent).toContain('En borrador');
+    expect(host.querySelector<HTMLInputElement>('#receipt-scan-code')?.value).toBe('');
+    http.expectNone((request) => request.url === '/api/inventory/adjustments');
+  });
 
   it('lets a receiver without stock-admin permission save quantities before one approval', () => {
     const { fixture, http, host } = load();

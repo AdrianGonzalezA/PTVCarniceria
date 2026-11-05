@@ -88,6 +88,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<CashierShift> CashierShifts => Set<CashierShift>();
     public DbSet<ShiftClosingReport> ShiftClosingReports => Set<ShiftClosingReport>();
+    public DbSet<InventoryReceiptPieceRead> InventoryReceiptPieceReads => Set<InventoryReceiptPieceRead>();
 
     public DbSet<ConfirmedSale> ConfirmedSales => Set<ConfirmedSale>();
 
@@ -1502,6 +1503,41 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .OnDelete(DeleteBehavior.Restrict);
             entity.Navigation(receipt => receipt.Lines)
                 .UsePropertyAccessMode(PropertyAccessMode.Field);
+            entity.HasMany(receipt => receipt.PieceReads).WithOne()
+                .HasForeignKey(read => new { read.CompanyId, read.ReceiptId })
+                .HasPrincipalKey(receipt => new { receipt.CompanyId, receipt.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.Navigation(receipt => receipt.PieceReads)
+                .UsePropertyAccessMode(PropertyAccessMode.Field);
+        });
+
+        modelBuilder.Entity<InventoryReceiptPieceRead>(entity =>
+        {
+            entity.ToTable("receipt_piece_reads", "inventory", table =>
+                table.HasCheckConstraint("CK_receipt_piece_reads_weight_positive", "\"WeightKg\" > 0"));
+            entity.HasKey(read => read.Id);
+            entity.Property(read => read.SourceSystem).HasMaxLength(120).IsRequired();
+            entity.Property(read => read.NormalizedSourceSystem).HasMaxLength(120).IsRequired();
+            entity.Property(read => read.IdentifierField).HasMaxLength(80).IsRequired();
+            entity.Property(read => read.ExternalIdentifier).HasMaxLength(80).IsRequired();
+            entity.Property(read => read.RawBarcode).HasMaxLength(80).IsRequired();
+            entity.Property(read => read.WeightKg).HasPrecision(12, 3);
+            entity.HasOne<InventoryReceiptLine>().WithOne()
+                .HasForeignKey<InventoryReceiptPieceRead>(read => new { read.CompanyId, read.LineId })
+                .HasPrincipalKey<InventoryReceiptLine>(line => new { line.CompanyId, line.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<BarcodeProfile>().WithMany()
+                .HasForeignKey(read => new { read.CompanyId, read.BarcodeProfileId })
+                .HasPrincipalKey(profile => new { profile.CompanyId, profile.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<InventoryPiece>().WithMany()
+                .HasForeignKey(read => read.InventoryPieceId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(read => new { read.ReceiptId, read.NormalizedSourceSystem,
+                read.ExternalIdentifier }).IsUnique();
+            entity.HasIndex(read => new { read.ReceiptId, read.OperationId }).IsUnique();
+            entity.HasIndex(read => read.InventoryPieceId).IsUnique()
+                .HasFilter("\"InventoryPieceId\" IS NOT NULL");
         });
 
         modelBuilder.Entity<InventoryReceiptLine>(entity =>

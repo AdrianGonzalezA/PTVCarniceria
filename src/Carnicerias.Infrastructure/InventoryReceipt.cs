@@ -7,6 +7,7 @@ public enum InventoryReceiptDifferenceStatus { None, PendingReview, Resolved }
 public sealed class InventoryReceipt
 {
     private readonly List<InventoryReceiptLine> _lines = [];
+    private readonly List<InventoryReceiptPieceRead> _pieceReads = [];
 
     private InventoryReceipt()
     {
@@ -68,6 +69,7 @@ public sealed class InventoryReceipt
     public InventoryReceiptStatus Status { get; private set; }
     public int Version { get; private set; }
     public IReadOnlyList<InventoryReceiptLine> Lines => _lines.AsReadOnly();
+    public IReadOnlyList<InventoryReceiptPieceRead> PieceReads => _pieceReads.AsReadOnly();
 
     public static InventoryReceipt LegacyPiece(Guid companyId, Guid branchId, Guid operationId,
         string sourceSystem, CatalogProduct product, decimal weightKg, Guid actorUserId,
@@ -109,6 +111,20 @@ public sealed class InventoryReceipt
         Version++;
     }
 
+    public void AddPieceRead(InventoryReceiptLine line, InventoryReceiptPieceRead read)
+    {
+        ArgumentNullException.ThrowIfNull(read);
+        if (Status != InventoryReceiptStatus.Draft || read.CompanyId != CompanyId ||
+            read.ReceiptId != Id || read.LineId != line.Id ||
+            line.ReceivedQuantity != read.WeightKg ||
+            _pieceReads.Any(existing => existing.LineId == line.Id ||
+                existing.NormalizedSourceSystem == read.NormalizedSourceSystem &&
+                existing.ExternalIdentifier == read.ExternalIdentifier))
+            throw new InvalidOperationException("The piece read is duplicated or does not match its line.");
+        AddLine(line);
+        _pieceReads.Add(read);
+    }
+
     public void ReplaceLines(IEnumerable<InventoryReceiptLine> lines)
     {
         ArgumentNullException.ThrowIfNull(lines);
@@ -119,6 +135,8 @@ public sealed class InventoryReceipt
                 line.DifferenceStatus != InventoryReceiptDifferenceStatus.None) ||
             proposed.Select(line => line.Id).Distinct().Count() != proposed.Length)
             throw new InvalidOperationException("Only new lines of this draft can be saved.");
+        if (_pieceReads.Any(read => proposed.All(line => line.Id != read.LineId)))
+            throw new InvalidOperationException("A scanned piece cannot be removed by replacing generic lines.");
         _lines.Clear();
         _lines.AddRange(proposed);
         Version++;

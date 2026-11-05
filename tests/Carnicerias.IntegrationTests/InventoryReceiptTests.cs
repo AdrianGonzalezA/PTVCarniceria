@@ -6,6 +6,42 @@ namespace Carnicerias.IntegrationTests;
 public sealed class InventoryReceiptTests
 {
     [Fact]
+    public void TraceableReadsRemainIndividualAndCannotBeRemovedByGenericEdits()
+    {
+        var company = Guid.NewGuid();
+        var actor = Guid.NewGuid();
+        var product = Product(company, ProductSaleMode.Weight);
+        var receipt = new InventoryReceipt(company, Guid.NewGuid(), Guid.NewGuid(),
+            new Supplier(company, "F1", "Proveedor"), "remito", "R-piezas",
+            new DateOnly(2026, 11, 5), actor, DateTimeOffset.UtcNow);
+        var firstLine = new InventoryReceiptLine(receipt.Id, product, 51.600m);
+        var first = new InventoryReceiptPieceRead(company, receipt.Id, firstLine.Id,
+            Guid.NewGuid(), Guid.NewGuid(), "Ciclo 2", "pro_identif", "250661",
+            "25066151600", 51.600m);
+        receipt.AddPieceRead(firstLine, first);
+        var secondLine = new InventoryReceiptLine(receipt.Id, product, 50.400m);
+        var second = new InventoryReceiptPieceRead(company, receipt.Id, secondLine.Id,
+            Guid.NewGuid(), Guid.NewGuid(), "Ciclo 2", "pro_identif", "250656",
+            "25065650400", 50.400m);
+        receipt.AddPieceRead(secondLine, second);
+        Assert.Equal(102m, receipt.Lines.Sum(line => line.ReceivedQuantity));
+        Assert.Equal(2, receipt.PieceReads.Count);
+        Assert.Throws<InvalidOperationException>(() => receipt.ReplaceLines([firstLine]));
+        var duplicateLine = new InventoryReceiptLine(receipt.Id, product, 51.600m);
+        var duplicate = new InventoryReceiptPieceRead(company, receipt.Id, duplicateLine.Id,
+            Guid.NewGuid(), first.BarcodeProfileId, "CICLO 2", "pro_identif", "250661",
+            "25066151600", 51.600m);
+        Assert.Throws<InvalidOperationException>(() => receipt.AddPieceRead(duplicateLine, duplicate));
+        var genericLine = new InventoryReceiptLine(receipt.Id, product, 1.250m);
+        receipt.ReplaceLines([firstLine, secondLine, genericLine]);
+        Assert.Equal(3, receipt.Lines.Count);
+        Assert.Equal(2, receipt.PieceReads.Count);
+        receipt.Approve(actor, DateTimeOffset.UtcNow);
+        first.LinkPiece(Guid.NewGuid());
+        Assert.Throws<InvalidOperationException>(() => first.LinkPiece(Guid.NewGuid()));
+    }
+
+    [Fact]
     public void ApprovesOnlyObservedQuantityAndLeavesDifferenceForAuditedResolution()
     {
         var company = Guid.NewGuid();

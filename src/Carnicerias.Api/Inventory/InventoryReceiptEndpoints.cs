@@ -1,7 +1,9 @@
 using System.Data;
+using System.Text;
 using Carnicerias.Api.Contracts;
 using Carnicerias.Api.ExcelImport;
 using Carnicerias.Api.Security;
+using Carnicerias.Domain.Inventory;
 using Carnicerias.Infrastructure;
 using Carnicerias.PlatformAccess;
 using Microsoft.EntityFrameworkCore;
@@ -21,9 +23,11 @@ public static class InventoryReceiptEndpoints
         receipts.MapGet("", ListAsync);
         receipts.MapGet("/supplier-options", SupplierOptionsAsync);
         receipts.MapGet("/product-options", ProductOptionsAsync);
+        receipts.MapGet("/barcode-profiles", BarcodeProfilesAsync);
         receipts.MapGet("/{id:guid}", GetAsync);
         receipts.MapPost("", CreateAsync);
         receipts.MapPut("/{id:guid}/lines", ReplaceLinesAsync);
+        receipts.MapPost("/{id:guid}/pieces", ScanPieceAsync);
         receipts.MapPost("/{id:guid}/approve", ApproveAsync);
         receipts.MapPost("/{id:guid}/cancel", CancelAsync);
         receipts.MapGet("/{id:guid}/import/template", ImportTemplateAsync);
@@ -53,6 +57,17 @@ public static class InventoryReceiptEndpoints
             .OrderBy(item => item.Code).ThenBy(item => item.Id)
             .Select(item => new ReceiptProductOption(item.Id, item.Code, item.Name,
                 item.Unit, item.SaleMode == ProductSaleMode.Unit ? "unit" : "weight"))
+            .ToArrayAsync(cancellationToken);
+        return Results.Ok(items);
+    }
+
+    private static async Task<IResult> BarcodeProfilesAsync(PlatformAccessDbContext db,
+        OperationalContextAccessor accessor, CancellationToken cancellationToken)
+    {
+        var items = await db.BarcodeProfiles.AsNoTracking()
+            .Where(item => item.CompanyId == accessor.Context.CompanyId)
+            .OrderBy(item => item.Name).ThenBy(item => item.Id)
+            .Select(item => new ReceiptBarcodeProfileOption(item.Id, item.Name))
             .ToArrayAsync(cancellationToken);
         return Results.Ok(items);
     }
@@ -104,6 +119,7 @@ public static class InventoryReceiptEndpoints
             return Error(400, "VALIDATION_ERROR");
         var context = accessor.Context;
         var existing = await db.InventoryReceipts.Include(item => item.Lines)
+            .Include(item => item.PieceReads).AsSplitQuery()
             .SingleOrDefaultAsync(item => item.CompanyId == context.CompanyId &&
                 item.BranchId == context.BranchId && item.OperationId == request.OperationId,
                 cancellationToken);
@@ -168,8 +184,13 @@ public static class InventoryReceiptEndpoints
                 }
                 catch (ArgumentException) { return Error(400, "INVALID_PRODUCT_QUANTITY"); }
             }
-            db.InventoryReceiptLines.RemoveRange(receipt.Lines);
-            receipt.ReplaceLines(lines);
+            var pieceLineIds = receipt.PieceReads.Select(read => read.LineId).ToHashSet();
+            var pieceLines = receipt.Lines.Where(line => pieceLineIds.Contains(line.Id)).ToArray();
+            if (lines.Count + pieceLines.Length > 500)
+                return Error(400, "RECEIPT_LINE_LIMIT");
+            db.InventoryReceiptLines.RemoveRange(receipt.Lines.Where(line =>
+                !pieceLineIds.Contains(line.Id)));
+            receipt.ReplaceLines([..lines, ..pieceLines]);
             db.InventoryReceiptLines.AddRange(lines);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -178,6 +199,86 @@ public static class InventoryReceiptEndpoints
         catch (Exception exception) when (IsConcurrencyConflict(exception))
         {
             return Error(409, "RECEIPT_VERSION_CHANGED");
+        }
+    }
+
+    private static async Task<IResult> ScanPieceAsync(Guid id, ScanPieceRequest? request,
+        PlatformAccessDbContext db, OperationalContextAccessor accessor, HttpContext http,
+        CancellationToken cancellationToken)
+    {
+        if (!AllowedOrigin(http)) return Error(403, "CSRF_REJECTED");
+        if (request is null || request.Version < 1 || request.OperationId == Guid.Empty ||
+            request.ProductId == Guid.Empty || request.BarcodeProfileId == Guid.Empty ||
+            !Required(request.SourceSystem, 120) || !Required(request.IdentifierField, 80) ||
+            !Required(request.Code, 80))
+            return Error(400, "VALIDATION_ERROR");
+        var context = accessor.Context;
+        var source = request.SourceSystem.Trim().Normalize(NormalizationForm.FormKC);
+        if (source.Length > 120) return Error(400, "VALIDATION_ERROR");
+        var normalizedSource = source.ToUpperInvariant();
+        var identifierField = request.IdentifierField.Trim().ToLowerInvariant();
+        var code = request.Code.Trim();
+        var profile = await db.BarcodeProfiles.AsNoTracking().SingleOrDefaultAsync(item =>
+            item.CompanyId == context.CompanyId && item.Id == request.BarcodeProfileId,
+            cancellationToken);
+        if (profile is null) return Error(404, "BARCODE_PROFILE_NOT_AVAILABLE");
+        var product = await db.CatalogProducts.AsNoTracking().SingleOrDefaultAsync(item =>
+            item.CompanyId == context.CompanyId && item.Id == request.ProductId && item.IsActive &&
+            item.SaleMode == ProductSaleMode.Weight, cancellationToken);
+        if (product is null) return Error(404, "WEIGHT_PRODUCT_NOT_AVAILABLE");
+        PieceBarcodeRead parsed;
+        try
+        {
+            parsed = PieceBarcodeRead.Parse(profile.Formula, identifierField,
+                profile.WeightField, profile.WeightDecimals, code);
+        }
+        catch (KeyNotFoundException) { return Error(400, "IDENTIFIER_FIELD_NOT_IN_PROFILE"); }
+        catch (FormatException) { return Error(400, "INVALID_BARCODE"); }
+        catch (ArgumentOutOfRangeException) { return Error(400, "INVALID_PIECE_WEIGHT_OR_IDENTIFIER"); }
+        catch (ArgumentException) { return Error(400, "IDENTIFIER_FIELD_NOT_IN_PROFILE"); }
+        try
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable, cancellationToken);
+            var receipt = await FindAsync(db, accessor, id, true, cancellationToken);
+            if (receipt is null) return Error(404, "RECEIPT_NOT_FOUND");
+            var existingOperation = receipt.PieceReads.SingleOrDefault(read =>
+                read.OperationId == request.OperationId);
+            if (existingOperation is not null)
+                return existingOperation.BarcodeProfileId == profile.Id &&
+                       existingOperation.SourceSystem == source &&
+                       existingOperation.IdentifierField == identifierField &&
+                       existingOperation.RawBarcode == code &&
+                       receipt.Lines.Any(line => line.Id == existingOperation.LineId &&
+                           line.ProductId == product.Id)
+                    ? Results.Ok(ToResponse(receipt)) : Error(409, "OPERATION_ID_REUSED");
+            if (receipt.Status != InventoryReceiptStatus.Draft)
+                return Error(409, "RECEIPT_NOT_DRAFT");
+            if (receipt.Version != request.Version) return Error(409, "RECEIPT_VERSION_CHANGED");
+            if (receipt.Lines.Count >= 500) return Error(400, "RECEIPT_LINE_LIMIT");
+            if (receipt.PieceReads.Any(read =>
+                    read.NormalizedSourceSystem == normalizedSource &&
+                    read.ExternalIdentifier == parsed.ExternalIdentifier))
+                return Error(409, "PIECE_ALREADY_IN_RECEIPT");
+            if (await db.InventoryPieces.AsNoTracking().AnyAsync(piece =>
+                    piece.CompanyId == context.CompanyId &&
+                    piece.NormalizedSourceSystem == normalizedSource &&
+                    piece.ExternalIdentifier == parsed.ExternalIdentifier, cancellationToken))
+                return Error(409, "PIECE_ALREADY_RECEIVED");
+            var line = new InventoryReceiptLine(receipt.Id, product, parsed.WeightKg);
+            var read = new InventoryReceiptPieceRead(context.CompanyId, receipt.Id,
+                line.Id, request.OperationId, profile.Id, source, identifierField,
+                parsed.ExternalIdentifier, code, parsed.WeightKg);
+            receipt.AddPieceRead(line, read);
+            db.InventoryReceiptLines.Add(line);
+            db.InventoryReceiptPieceReads.Add(read);
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return Results.Ok(ToResponse(receipt));
+        }
+        catch (Exception exception) when (IsConcurrencyConflict(exception))
+        {
+            return Error(409, "PIECE_READ_CONFLICT");
         }
     }
 
@@ -229,8 +330,13 @@ public static class InventoryReceiptEndpoints
             var plan = await PlanImportAsync(db, receipt, upload.Bytes!, cancellationToken);
             if (!plan.Preview.CanApply)
                 return Results.Json(plan.Preview, statusCode: 400);
-            db.InventoryReceiptLines.RemoveRange(receipt.Lines);
-            receipt.ReplaceLines(plan.Lines);
+            var pieceLineIds = receipt.PieceReads.Select(read => read.LineId).ToHashSet();
+            var pieceLines = receipt.Lines.Where(line => pieceLineIds.Contains(line.Id)).ToArray();
+            if (plan.Lines.Count + pieceLines.Length > 500)
+                return Error(400, "RECEIPT_LINE_LIMIT");
+            db.InventoryReceiptLines.RemoveRange(receipt.Lines.Where(line =>
+                !pieceLineIds.Contains(line.Id)));
+            receipt.ReplaceLines([..plan.Lines, ..pieceLines]);
             db.InventoryReceiptLines.AddRange(plan.Lines);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -313,6 +419,24 @@ public static class InventoryReceiptEndpoints
                     activeProducts[line.ProductId].SaleMode != line.SaleMode ||
                     activeProducts[line.ProductId].Unit != line.Unit))
                 return Error(409, "PRODUCT_NOT_AVAILABLE");
+            var readsByLine = receipt.PieceReads.ToDictionary(read => read.LineId);
+            if (receipt.PieceReads.Any(read => receipt.Lines.All(line =>
+                    line.Id != read.LineId || line.ReceivedQuantity != read.WeightKg)))
+                return Error(409, "PIECE_READ_LINE_MISMATCH");
+            var sources = receipt.PieceReads.Select(read => read.NormalizedSourceSystem)
+                .Distinct().ToArray();
+            var identifiers = receipt.PieceReads.Select(read => read.ExternalIdentifier)
+                .Distinct().ToArray();
+            var alreadyReceived = await db.InventoryPieces.AsNoTracking().Where(piece =>
+                    piece.CompanyId == context.CompanyId &&
+                    sources.Contains(piece.NormalizedSourceSystem) &&
+                    identifiers.Contains(piece.ExternalIdentifier))
+                .Select(piece => new { piece.NormalizedSourceSystem, piece.ExternalIdentifier })
+                .ToArrayAsync(cancellationToken);
+            if (alreadyReceived.Any(piece => receipt.PieceReads.Any(read =>
+                    read.NormalizedSourceSystem == piece.NormalizedSourceSystem &&
+                    read.ExternalIdentifier == piece.ExternalIdentifier)))
+                return Error(409, "PIECE_ALREADY_RECEIVED");
             var now = clock.GetUtcNow();
             foreach (var group in positive.GroupBy(line => line.ProductId).OrderBy(group => group.Key))
             {
@@ -320,12 +444,15 @@ public static class InventoryReceiptEndpoints
                         context.BranchId, group.Key, now, cancellationToken))
                     return Error(409, "ARTICLE_RECONCILIATION_IN_PROGRESS");
                 var quantity = group.Sum(line => line.ReceivedQuantity);
+                var protectedQuantity = group.Where(line => readsByLine.ContainsKey(line.Id))
+                    .Sum(line => line.ReceivedQuantity);
                 var changed = await db.Database.ExecuteSqlInterpolatedAsync($"""
                     INSERT INTO inventory.branch_inventory
-                        ("CompanyId", "BranchId", "ProductId", "OnHand", "Reserved")
-                    VALUES ({context.CompanyId}, {context.BranchId}, {group.Key}, {quantity}, 0)
+                        ("CompanyId", "BranchId", "ProductId", "OnHand", "Reserved", "ProtectedOnHand", "ProtectedReserved")
+                    VALUES ({context.CompanyId}, {context.BranchId}, {group.Key}, {quantity}, 0, {protectedQuantity}, 0)
                     ON CONFLICT ("CompanyId", "BranchId", "ProductId") DO UPDATE
-                        SET "OnHand" = inventory.branch_inventory."OnHand" + EXCLUDED."OnHand"
+                        SET "OnHand" = inventory.branch_inventory."OnHand" + EXCLUDED."OnHand",
+                            "ProtectedOnHand" = inventory.branch_inventory."ProtectedOnHand" + EXCLUDED."ProtectedOnHand"
                     WHERE inventory.branch_inventory."ReconciliationLockExpiresAtUtc" IS NULL OR
                         inventory.branch_inventory."ReconciliationLockExpiresAtUtc" <= {now}
                     """, cancellationToken);
@@ -335,10 +462,26 @@ public static class InventoryReceiptEndpoints
             foreach (var line in positive)
             {
                 var movement = new InventoryMovement(context.CompanyId, context.BranchId,
-                    line.ProductId, context.UserId, line.Id, InventoryMovementKind.Receipt,
+                    line.ProductId, context.UserId, line.Id,
+                    readsByLine.ContainsKey(line.Id) ? InventoryMovementKind.PieceReceipt :
+                        InventoryMovementKind.Receipt,
                     line.ReceivedQuantity, $"Recepción {receipt.DocumentType} {receipt.DocumentNumber}", now);
                 db.InventoryMovements.Add(movement);
                 receipt.LinkMovement(line.Id, movement.Id);
+                if (readsByLine.TryGetValue(line.Id, out var read))
+                {
+                    var piece = new InventoryPiece(context.CompanyId, context.BranchId,
+                        line.ProductId, read.BarcodeProfileId, context.UserId,
+                        read.OperationId, movement.Id, read.SourceSystem,
+                        read.ExternalIdentifier, read.RawBarcode, read.WeightKg, now,
+                        read.IdentifierField);
+                    db.InventoryPieces.Add(piece);
+                    read.LinkPiece(piece.Id);
+                    db.InventoryPieceStateEvents.Add(new InventoryPieceStateEvent(context.CompanyId,
+                        context.BranchId, piece.Id, null, InventoryPieceStatus.Available,
+                        InventoryPieceEventKind.Receipt, null, context.UserId,
+                        "Recepción de pieza trazable", now));
+                }
             }
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -422,7 +565,8 @@ public static class InventoryReceiptEndpoints
         CancellationToken cancellationToken)
     {
         var context = accessor.Context;
-        var query = db.InventoryReceipts.Include(item => item.Lines).AsQueryable();
+        var query = db.InventoryReceipts.Include(item => item.Lines)
+            .Include(item => item.PieceReads).AsSplitQuery().AsQueryable();
         if (!tracked) query = query.AsNoTracking();
         return query.SingleOrDefaultAsync(item => item.Id == id &&
             item.CompanyId == context.CompanyId && item.BranchId == context.BranchId,
@@ -439,7 +583,11 @@ public static class InventoryReceiptEndpoints
             line.ProductCode, line.ProductName, line.Unit, line.SaleMode == ProductSaleMode.Unit
                 ? "unit" : "weight", line.ExpectedQuantity, line.ReceivedQuantity,
             line.DifferenceStatus.ToString(), line.DifferenceReason,
-            line.InventoryMovementId)).ToArray());
+            line.InventoryMovementId)).ToArray(),
+        receipt.PieceReads.Select(read => new ReceiptPieceReadResponse(read.Id, read.LineId,
+            read.OperationId, read.BarcodeProfileId, read.SourceSystem, read.IdentifierField,
+            read.ExternalIdentifier, read.RawBarcode, read.WeightKg,
+            read.InventoryPieceId)).ToArray());
 
     private static bool AllowedOrigin(HttpContext context)
     {
@@ -466,12 +614,15 @@ public static class InventoryReceiptEndpoints
     private sealed record SupplierOption(Guid Id, string Code, string Name);
     private sealed record ReceiptProductOption(Guid ProductId, string Code, string Name,
         string Unit, string SaleMode);
+    private sealed record ReceiptBarcodeProfileOption(Guid Id, string Name);
     private sealed record CreateReceiptRequest(Guid OperationId, Guid SupplierId,
         string DocumentType, string DocumentNumber, DateOnly DocumentDate,
         string? Destination, string? ExternalReference);
     private sealed record ReplaceLinesRequest(int Version, IReadOnlyList<ReceiptLineInput> Lines);
     private sealed record ReceiptLineInput(Guid ProductId, decimal ReceivedQuantity,
         decimal? ExpectedQuantity);
+    private sealed record ScanPieceRequest(int Version, Guid OperationId, Guid ProductId,
+        Guid BarcodeProfileId, string SourceSystem, string IdentifierField, string Code);
     private sealed record VersionRequest(int Version);
     private sealed record ResolveDifferenceRequest(int Version, string Reason);
     private sealed record ReceiptSummary(Guid Id, Guid OperationId, string SupplierName,
@@ -483,10 +634,14 @@ public static class InventoryReceiptEndpoints
         string ProductName, string Unit, string SaleMode, decimal? ExpectedQuantity,
         decimal ReceivedQuantity, string DifferenceStatus, string? DifferenceReason,
         Guid? InventoryMovementId);
+    private sealed record ReceiptPieceReadResponse(Guid Id, Guid LineId, Guid OperationId,
+        Guid BarcodeProfileId, string SourceSystem, string IdentifierField,
+        string ExternalIdentifier, string RawBarcode, decimal WeightKg, Guid? InventoryPieceId);
     private sealed record ReceiptResponse(Guid Id, Guid OperationId, Guid? SupplierId,
         string SupplierCode, string SupplierName, string? SupplierIdentification,
         string? SourceSystem, string DocumentType, string DocumentNumber, DateOnly DocumentDate,
         string? Destination, string? ExternalReference, string Status, int Version,
         DateTimeOffset CreatedAtUtc, DateTimeOffset? ApprovedAtUtc,
-        DateTimeOffset? CanceledAtUtc, IReadOnlyList<ReceiptLineResponse> Lines);
+        DateTimeOffset? CanceledAtUtc, IReadOnlyList<ReceiptLineResponse> Lines,
+        IReadOnlyList<ReceiptPieceReadResponse> PieceReads);
 }

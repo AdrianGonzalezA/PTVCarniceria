@@ -1871,8 +1871,6 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasAlternateKey("CompanyId", "Id");
-
                     b.HasIndex("DifferenceResolvedByUserId");
 
                     b.HasIndex("InventoryMovementId")
@@ -1888,6 +1886,84 @@ namespace Carnicerias.Infrastructure.Migrations
                             t.HasCheckConstraint("CK_receipt_lines_difference_status", "\"DifferenceStatus\" IN (0, 1, 2)");
 
                             t.HasCheckConstraint("CK_receipt_lines_quantity", "\"ReceivedQuantity\" >= 0 AND (\"ExpectedQuantity\" IS NULL OR \"ExpectedQuantity\" >= 0)");
+                        });
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.InventoryReceiptPieceRead", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BarcodeProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExternalIdentifier")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("IdentifierField")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid?>("InventoryPieceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("LineId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("NormalizedSourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RawBarcode")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid>("ReceiptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<decimal>("WeightKg")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InventoryPieceId")
+                        .IsUnique()
+                        .HasFilter("\"InventoryPieceId\" IS NOT NULL");
+
+                    b.HasIndex("CompanyId", "BarcodeProfileId");
+
+                    b.HasIndex("CompanyId", "LineId")
+                        .IsUnique();
+
+                    b.HasIndex("CompanyId", "ReceiptId");
+
+                    b.HasIndex("ReceiptId", "OperationId")
+                        .IsUnique();
+
+                    b.HasIndex("ReceiptId", "NormalizedSourceSystem", "ExternalIdentifier")
+                        .IsUnique();
+
+                    b.ToTable("receipt_piece_reads", "inventory", t =>
+                        {
+                            t.HasCheckConstraint("CK_receipt_piece_reads_weight_positive", "\"WeightKg\" > 0");
                         });
                 });
 
@@ -3950,6 +4026,35 @@ namespace Carnicerias.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Carnicerias.Infrastructure.InventoryReceiptPieceRead", b =>
+                {
+                    b.HasOne("Carnicerias.Infrastructure.InventoryPiece", null)
+                        .WithMany()
+                        .HasForeignKey("InventoryPieceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.Infrastructure.BarcodeProfile", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "BarcodeProfileId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.InventoryReceiptLine", null)
+                        .WithOne()
+                        .HasForeignKey("Carnicerias.Infrastructure.InventoryReceiptPieceRead", "CompanyId", "LineId")
+                        .HasPrincipalKey("Carnicerias.Infrastructure.InventoryReceiptLine", "CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.InventoryReceipt", null)
+                        .WithMany("PieceReads")
+                        .HasForeignKey("CompanyId", "ReceiptId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Carnicerias.Infrastructure.MercadoPagoGatewaySettings", b =>
                 {
                     b.HasOne("Carnicerias.PlatformAccess.Company", null)
@@ -4483,6 +4588,8 @@ namespace Carnicerias.Infrastructure.Migrations
             modelBuilder.Entity("Carnicerias.Infrastructure.InventoryReceipt", b =>
                 {
                     b.Navigation("Lines");
+
+                    b.Navigation("PieceReads");
                 });
 
             modelBuilder.Entity("Carnicerias.Infrastructure.SaleCheckout", b =>

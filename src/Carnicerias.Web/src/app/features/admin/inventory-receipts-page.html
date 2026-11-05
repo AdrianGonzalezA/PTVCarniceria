@@ -76,6 +76,28 @@
             <button type="button" class="secondary-button" (click)="addLine()">Agregar renglón</button>
           </div>
           <p class="field-hint">Punto o coma indican decimales. No uses separador de miles; las unidades deben ser enteras.</p>
+          <section class="receipt-scan" aria-labelledby="receipt-scan-title">
+            <h3 id="receipt-scan-title">Piezas trazables</h3>
+            <p class="field-hint">Cada lectura conserva su identificador y peso por separado. Se suma al stock solo al aprobar este documento.</p>
+            <form class="receipt-add-line" (submit)="$event.preventDefault(); scanPiece()">
+              <div><label for="receipt-scan-product">Artículo por peso</label>
+                <select id="receipt-scan-product" [value]="scanProductId()" (change)="scanProductId.set($any($event.target).value)">
+                  <option value="">Elegí un artículo</option>
+                  @for (product of products(); track product.productId) {
+                    @if (product.saleMode === 'weight') { <option [value]="product.productId">{{ product.code }} · {{ product.name }}</option> }
+                  }
+                </select></div>
+              <div><label for="receipt-scan-profile">Perfil de código</label>
+                <select id="receipt-scan-profile" [value]="scanBarcodeProfileId()" (change)="scanBarcodeProfileId.set($any($event.target).value)">
+                  <option value="">Elegí un perfil</option>
+                  @for (profile of barcodeProfiles(); track profile.id) { <option [value]="profile.id">{{ profile.name }}</option> }
+                </select></div>
+              <div><label for="receipt-scan-source">Origen</label><input id="receipt-scan-source" maxlength="120" [value]="scanSourceSystem()" (input)="scanSourceSystem.set($any($event.target).value)" /></div>
+              <div><label for="receipt-scan-field">Campo identificador</label><input id="receipt-scan-field" maxlength="80" [value]="scanIdentifierField()" (input)="scanIdentifierField.set($any($event.target).value)" /></div>
+              <div><label for="receipt-scan-code">Código de barras</label><input #receiptScanInput id="receipt-scan-code" maxlength="80" [value]="scanCode()" (input)="scanCode.set($any($event.target).value)" /></div>
+              <button type="submit" class="secondary-button" [disabled]="saving() || lineDirty()">Agregar pieza</button>
+            </form>
+          </section>
         }
         <div class="table-wrap">
           <table>
@@ -90,15 +112,28 @@
                     <td>Se calculará al aprobar</td>
                     <td><button type="button" class="secondary-button" (click)="removeLine(index)">Quitar</button></td>
                   } @else {
-                    <td class="numeric-value">{{ receipt.lines[index].expectedQuantity === null ? '—' : quantity(receipt.lines[index].expectedQuantity!, productMode(line.productId)) }}</td>
-                    <td class="numeric-value">{{ quantity(receipt.lines[index].receivedQuantity, productMode(line.productId)) }}</td>
-                    <td>{{ receipt.lines[index].differenceStatus === 'PendingReview' ? 'Pendiente de revisión' : receipt.lines[index].differenceStatus === 'Resolved' ? 'Resuelta' : 'Sin diferencia' }}</td>
+                    <td class="numeric-value">{{ line.expected === '' ? '—' : quantity(+line.expected, productMode(line.productId)) }}</td>
+                    <td class="numeric-value">{{ quantity(+line.received, productMode(line.productId)) }}</td>
+                    <td>{{ line.differenceStatus === 'PendingReview' ? 'Pendiente de revisión' : line.differenceStatus === 'Resolved' ? 'Resuelta' : 'Sin diferencia' }}</td>
                   }
                 </tr>
               } @empty { <tr><td colspan="5">Todavía no hay renglones.</td></tr> }
             </tbody>
           </table>
         </div>
+        @if ((receipt.pieceReads ?? []).length > 0) {
+          <h3>Piezas leídas · {{ (receipt.pieceReads ?? []).length }}</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th scope="col">Artículo</th><th scope="col">Identificador</th><th scope="col">Código</th><th scope="col" class="numeric-value">Peso kg</th><th scope="col">Estado</th></tr></thead>
+            <tbody>
+              @for (read of receipt.pieceReads ?? []; track read.id) {
+                <tr><td>{{ pieceProductName(read) }}</td><td>{{ read.externalIdentifier }}</td>
+                  <td>{{ read.rawBarcode }}</td><td class="numeric-value">{{ quantity(read.weightKg, 'weight') }}</td>
+                  <td>{{ read.inventoryPieceId ? 'Ingresada' : 'En borrador' }}</td></tr>
+              }
+            </tbody>
+          </table></div>
+        }
         @if (receipt.status === 'Draft') {
           <div class="receipt-actions">
             <button type="button" [disabled]="saving() || !lineDirty()" (click)="saveLines()">{{ saving() ? 'Guardando…' : 'Guardar cantidades' }}</button>

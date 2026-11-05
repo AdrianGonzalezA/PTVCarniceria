@@ -1,17 +1,19 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, ElementRef, inject, OnInit, signal, ViewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { CreateReceiptInput, InventoryReceipt, InventoryReceiptClient, ReceiptLineInput,
   ReceiptImportPreview, ReceiptPage, ReceiptProductOption,
-  ReceiptSupplierOption } from '../../core/inventory/inventory-receipt-client';
+  ReceiptSupplierOption, ReceiptBarcodeProfileOption, ReceiptPieceRead } from '../../core/inventory/inventory-receipt-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { formatLocalizedDecimal, parseLocalizedDecimal } from '../../shared/localized-decimal';
 import { AdminDetailDialog } from './admin-detail-dialog';
 
 interface EditableLine {
+  readonly id?: string;
   readonly productId: string;
   readonly expected: string;
   readonly received: string;
+  readonly differenceStatus?: 'None' | 'PendingReview' | 'Resolved';
 }
 
 @Component({
@@ -25,10 +27,12 @@ export class InventoryReceiptsPage implements OnInit {
   private readonly receiptsClient = inject(InventoryReceiptClient);
   private readonly sessions = inject(SessionClient);
   private readonly router = inject(Router);
+  @ViewChild('receiptScanInput') private receiptScanInput?: ElementRef<HTMLInputElement>;
 
   protected readonly session = signal<CurrentSession | null>(null);
   protected readonly suppliers = signal<readonly ReceiptSupplierOption[]>([]);
   protected readonly products = signal<readonly ReceiptProductOption[]>([]);
+  protected readonly barcodeProfiles = signal<readonly ReceiptBarcodeProfileOption[]>([]);
   protected readonly page = signal<ReceiptPage | null>(null);
   protected readonly selected = signal<InventoryReceipt | null>(null);
   protected readonly editingLines = signal<readonly EditableLine[]>([]);
@@ -46,6 +50,12 @@ export class InventoryReceiptsPage implements OnInit {
   protected readonly newProductId = signal('');
   protected readonly newExpected = signal('');
   protected readonly newReceived = signal('');
+  protected readonly scanProductId = signal('');
+  protected readonly scanBarcodeProfileId = signal('');
+  protected readonly scanSourceSystem = signal('Frigorífico ciclo 2');
+  protected readonly scanIdentifierField = signal('pro_identif');
+  protected readonly scanCode = signal('');
+  private pendingScan: { signature: string; operationId: string } | null = null;
   protected readonly importOpen = signal(false);
   protected readonly importFile = signal<File | null>(null);
   protected readonly importPreviewResult = signal<ReceiptImportPreview | null>(null);
@@ -79,6 +89,10 @@ export class InventoryReceiptsPage implements OnInit {
     this.receiptsClient.products().subscribe({
       next: (items) => this.products.set(items),
       error: () => this.error.set('No se pudieron cargar los artículos de la sucursal.'),
+    });
+    this.receiptsClient.barcodeProfiles().subscribe({
+      next: (items) => this.barcodeProfiles.set(items),
+      error: () => this.error.set('No se pudieron cargar los perfiles de códigos trazables.'),
     });
   }
 
@@ -151,9 +165,11 @@ export class InventoryReceiptsPage implements OnInit {
 
   private select(receipt: InventoryReceipt): void {
     this.selected.set(receipt);
-    this.editingLines.set(receipt.lines.map(line => ({ productId: line.productId,
+    const pieceLineIds = new Set((receipt.pieceReads ?? []).map(read => read.lineId));
+    this.editingLines.set(receipt.lines.filter(line => !pieceLineIds.has(line.id))
+      .map(line => ({ id: line.id, productId: line.productId,
       expected: line.expectedQuantity === null ? '' : String(line.expectedQuantity),
-      received: String(line.receivedQuantity) })));
+      received: String(line.receivedQuantity), differenceStatus: line.differenceStatus })));
     this.lineDirty.set(false);
     this.closeImport();
   }
@@ -252,6 +268,58 @@ export class InventoryReceiptsPage implements OnInit {
     this.newExpected.set('');
     this.newReceived.set('');
     this.error.set(null);
+  }
+
+  protected scanPiece(): void {
+    const receipt = this.selected();
+    const productId = this.scanProductId();
+    const barcodeProfileId = this.scanBarcodeProfileId();
+    const sourceSystem = this.scanSourceSystem().trim();
+    const identifierField = this.scanIdentifierField().trim();
+    const code = this.scanCode().trim();
+    if (!receipt || receipt.status !== 'Draft' || this.saving() || this.lineDirty() ||
+        !this.products().some(product => product.productId === productId &&
+          product.saleMode === 'weight') ||
+        !this.barcodeProfiles().some(profile => profile.id === barcodeProfileId) ||
+        !sourceSystem || sourceSystem.length > 120 || !identifierField ||
+        identifierField.length > 80 || !code || code.length > 80) {
+      this.error.set('Elegí artículo por peso y perfil, completá origen, identificador y código. Guardá antes las cantidades pendientes.');
+      return;
+    }
+    const signature = [receipt.id, productId, barcodeProfileId, sourceSystem,
+      identifierField, code].join('|');
+    if (this.pendingScan?.signature !== signature)
+      this.pendingScan = { signature, operationId: crypto.randomUUID() };
+    this.saving.set(true);
+    this.error.set(null);
+    this.receiptsClient.scanPiece(receipt.id, { version: receipt.version,
+      operationId: this.pendingScan.operationId, productId, barcodeProfileId,
+      sourceSystem, identifierField, code }).subscribe({
+      next: (updated) => {
+        this.saving.set(false);
+        this.pendingScan = null;
+        this.scanCode.set('');
+        if (this.receiptScanInput) this.receiptScanInput.nativeElement.value = '';
+        this.select(updated);
+        this.notice.set('Pieza agregada al borrador. El stock cambia al aprobar.');
+        queueMicrotask(() => this.receiptScanInput?.nativeElement.focus());
+      },
+      error: (error: HttpErrorResponse) => {
+        this.saving.set(false);
+        const code = error.error?.error?.code;
+        this.error.set(code === 'PIECE_ALREADY_RECEIVED' ? 'Esta pieza ya ingresó al stock.'
+          : code === 'PIECE_ALREADY_IN_RECEIPT' ? 'Esta pieza ya está en el borrador.'
+          : code === 'PIECE_READ_CONFLICT' ? 'La lectura entró en conflicto. Reabrí el borrador y verificá si quedó guardada.'
+          : code === 'RECEIPT_VERSION_CHANGED' ? 'El borrador cambió. Reabrilo y verificá las lecturas.'
+          : code === 'INVALID_BARCODE' ? 'El código no coincide con el perfil configurado.'
+          : 'No se pudo guardar la lectura. Reintentá con el mismo código.');
+      },
+    });
+  }
+
+  protected pieceProductName(read: ReceiptPieceRead): string {
+    const line = this.selected()?.lines.find(item => item.id === read.lineId);
+    return line?.productName ?? 'Artículo no disponible';
   }
 
   protected changeLine(index: number, field: 'expected' | 'received', value: string): void {

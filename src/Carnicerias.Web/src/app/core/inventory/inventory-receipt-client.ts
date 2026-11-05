@@ -15,6 +15,34 @@ export interface ReceiptProductOption {
   readonly saleMode: 'unit' | 'weight';
 }
 
+export interface ReceiptBarcodeProfileOption {
+  readonly id: string;
+  readonly name: string;
+}
+
+export interface ReceiptPieceRead {
+  readonly id: string;
+  readonly lineId: string;
+  readonly operationId: string;
+  readonly barcodeProfileId: string;
+  readonly sourceSystem: string;
+  readonly identifierField: string;
+  readonly externalIdentifier: string;
+  readonly rawBarcode: string;
+  readonly weightKg: number;
+  readonly inventoryPieceId: string | null;
+}
+
+export interface ReceiptPieceScanInput {
+  readonly version: number;
+  readonly operationId: string;
+  readonly productId: string;
+  readonly barcodeProfileId: string;
+  readonly sourceSystem: string;
+  readonly identifierField: string;
+  readonly code: string;
+}
+
 export interface ReceiptLine {
   readonly id: string;
   readonly productId: string;
@@ -48,6 +76,7 @@ export interface InventoryReceipt {
   readonly approvedAtUtc: string | null;
   readonly canceledAtUtc: string | null;
   readonly lines: readonly ReceiptLine[];
+  readonly pieceReads?: readonly ReceiptPieceRead[];
 }
 
 export interface ReceiptSummary {
@@ -110,6 +139,16 @@ export class InventoryReceiptClient {
 
   products() {
     return this.http.get<readonly ReceiptProductOption[]>(`${this.root}/product-options`,
+      { withCredentials: true });
+  }
+
+  barcodeProfiles() {
+    return this.http.get<readonly ReceiptBarcodeProfileOption[]>(`${this.root}/barcode-profiles`,
+      { withCredentials: true });
+  }
+
+  scanPiece(id: string, input: ReceiptPieceScanInput) {
+    return this.http.post<InventoryReceipt>(`${this.root}/${id}/pieces`, input,
       { withCredentials: true });
   }
 

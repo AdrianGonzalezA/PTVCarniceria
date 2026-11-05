@@ -174,6 +174,7 @@ app.MapIntegratedGatewayAvailabilityEndpoints();
 app.MapMercadoPagoWebhookEndpoints();
 app.MapFiscalDocumentEndpoints();
 app.MapInventoryEndpoints();
+app.MapInventoryReceiptEndpoints();
 app.MapAdminSupplierEndpoints();
 app.MapBarcodePreviewEndpoints();
 app.MapBarcodeProfileEndpoints();

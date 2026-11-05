@@ -11,6 +11,7 @@ public sealed class AdminExcelWorkbookTests
     [InlineData("price-lists", "Listas")]
     [InlineData("customers", "Clientes")]
     [InlineData("stock", "Existencias")]
+    [InlineData("receipts", "Recepciones")]
     public void TemplateKeepsExamplesOutsideLoadSheet(string kind, string loadSheet)
     {
         var bytes = AdminExcelWorkbook.CreateTemplate(kind);
@@ -127,5 +128,26 @@ public sealed class AdminExcelWorkbookTests
         Assert.Equal("002546", row.Text("CodigoArticulo"));
         Assert.Equal(5.125m, row.NumberValue("Variacion"));
         Assert.Null(row.Text("Descripcion"));
+    }
+
+    [Fact]
+    public void ReceiptTemplateKeepsArticleCodeAsTextAndQuantitiesAsNumbers()
+    {
+        var bytes = AdminExcelWorkbook.CreateTemplate("receipts");
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var sheet = workbook.Worksheet("Recepciones");
+        sheet.Cell(2, 1).Value = "002546";
+        sheet.Cell(2, 2).Value = 10.5;
+        sheet.Cell(2, 3).Value = 8.25;
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+
+        var parsed = AdminExcelWorkbook.Read("receipts", stream.ToArray());
+
+        Assert.Empty(parsed.Issues);
+        var row = Assert.Single(parsed.Rows);
+        Assert.Equal("002546", row.Text("CodigoArticulo"));
+        Assert.Equal(10.5m, row.NumberValue("CantidadEsperada"));
+        Assert.Equal(8.25m, row.NumberValue("CantidadRecibida"));
     }
 }

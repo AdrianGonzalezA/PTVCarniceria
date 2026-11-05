@@ -1,0 +1,179 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" [routerLink]="home()" aria-label="Volver al inicio">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Recepciones</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+
+  <div class="workspace receipt-workspace">
+    <a class="back-link" [routerLink]="home()">← Volver</a>
+    <p class="eyebrow">Negocio · Inventario</p>
+    <h1>Recepción de mercadería</h1>
+    <p class="intro">Registrá el comprobante, cargá lo recibido y aprobá una sola vez. El stock cambia únicamente al aprobar.</p>
+    @if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Contexto de trabajo">
+        <div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Sucursal</span><strong>{{ context.branchName }}</strong></div>
+      </section>
+    }
+    @if (error(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
+    @if (notice(); as message) { <p class="success-message" role="status">{{ message }}</p> }
+
+    <section class="category-panel receipt-panel" aria-labelledby="new-receipt-title">
+      <header class="panel-heading">
+        <div>
+          <h2 id="new-receipt-title">Nuevo comprobante</h2>
+          <p>El proveedor debe existir en el catálogo de la empresa. Su nombre queda copiado al documento.</p>
+        </div>
+      </header>
+      <form class="receipt-form" (submit)="$event.preventDefault(); create()">
+        <label for="receipt-supplier">Proveedor</label>
+        <select id="receipt-supplier" [value]="supplierId()" (change)="supplierId.set($any($event.target).value)" required>
+          <option value="">Elegí un proveedor</option>
+          @for (supplier of suppliers(); track supplier.id) {
+            <option [value]="supplier.id">{{ supplier.code }} · {{ supplier.name }}</option>
+          }
+        </select>
+        <div class="receipt-fields">
+          <div><label for="receipt-type">Tipo de comprobante</label><input id="receipt-type" maxlength="40" [value]="documentType()" (input)="documentType.set($any($event.target).value)" required /></div>
+          <div><label for="receipt-number">Número</label><input id="receipt-number" maxlength="80" [value]="documentNumber()" (input)="documentNumber.set($any($event.target).value)" required /></div>
+          <div><label for="receipt-date">Fecha del comprobante</label><input id="receipt-date" type="date" [value]="documentDate()" (change)="documentDate.set($any($event.target).value)" required /></div>
+          <div><label for="receipt-destination">Destino (opcional)</label><input id="receipt-destination" maxlength="120" [value]="destination()" (input)="destination.set($any($event.target).value)" /></div>
+          <div><label for="receipt-reference">Referencia externa (opcional)</label><input id="receipt-reference" maxlength="120" [value]="externalReference()" (input)="externalReference.set($any($event.target).value)" /></div>
+        </div>
+        <button type="submit" [disabled]="saving() || suppliers().length === 0">{{ saving() ? 'Guardando…' : 'Crear borrador' }}</button>
+      </form>
+    </section>
+
+    @if (selected(); as receipt) {
+      <section class="category-panel receipt-panel" aria-labelledby="receipt-detail-title">
+        <header class="panel-heading">
+          <div>
+            <h2 id="receipt-detail-title">{{ receipt.documentType }} {{ receipt.documentNumber }}</h2>
+            <p>{{ receipt.supplierName || receipt.sourceSystem }} · {{ receipt.documentDate }} · {{ receipt.status === 'Draft' ? 'Borrador' : receipt.status === 'Approved' ? 'Aprobada' : 'Cancelada' }}</p>
+          </div>
+          <button type="button" class="secondary-button" (click)="close()">Cerrar detalle</button>
+        </header>
+        @if (receipt.status === 'Draft') {
+          <p class="field-hint">Los valores nuevos no afectan existencias hasta que confirmes la recepción.</p>
+          <div class="receipt-import-actions">
+            <a class="secondary-button" [href]="importTemplateUrl(receipt.id)" download>Descargar plantilla Excel</a>
+            <button type="button" class="secondary-button receipt-import-open"
+              [disabled]="saving() || lineDirty()" (click)="startImport()">Importar Excel al borrador</button>
+            @if (lineDirty()) { <span class="field-hint">Guardá o descartá los cambios manuales antes de importar.</span> }
+          </div>
+          <div class="receipt-add-line">
+            <div><label for="line-product">Artículo</label><select id="line-product" [value]="newProductId()" (change)="newProductId.set($any($event.target).value)">
+              <option value="">Elegí un artículo</option>
+              @for (product of products(); track product.productId) {
+                <option [value]="product.productId">{{ product.code }} · {{ product.name }} ({{ product.unit }})</option>
+              }
+            </select></div>
+            <div><label for="line-expected">Esperado (opcional)</label><input id="line-expected" type="text" inputmode="decimal" class="numeric-value" [value]="newExpected()" (input)="newExpected.set($any($event.target).value)" /></div>
+            <div><label for="line-received">Recibido</label><input id="line-received" type="text" inputmode="decimal" class="numeric-value" [value]="newReceived()" (input)="newReceived.set($any($event.target).value)" /></div>
+            <button type="button" class="secondary-button" (click)="addLine()">Agregar renglón</button>
+          </div>
+          <p class="field-hint">Punto o coma indican decimales. No uses separador de miles; las unidades deben ser enteras.</p>
+        }
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th scope="col">Artículo</th><th scope="col" class="numeric-value">Esperado</th><th scope="col" class="numeric-value">Recibido</th><th scope="col">Diferencia</th>@if (receipt.status === 'Draft') { <th scope="col">Acción</th> }</tr></thead>
+            <tbody>
+              @for (line of editingLines(); track $index; let index = $index) {
+                <tr>
+                  <td>{{ productName(line.productId) }}</td>
+                  @if (receipt.status === 'Draft') {
+                    <td><input type="text" inputmode="decimal" class="numeric-value" [attr.aria-label]="'Cantidad esperada de ' + productName(line.productId)" [value]="line.expected" (input)="changeLine(index, 'expected', $any($event.target).value)" /></td>
+                    <td><input type="text" inputmode="decimal" class="numeric-value" [attr.aria-label]="'Cantidad recibida de ' + productName(line.productId)" [value]="line.received" (input)="changeLine(index, 'received', $any($event.target).value)" /></td>
+                    <td>Se calculará al aprobar</td>
+                    <td><button type="button" class="secondary-button" (click)="removeLine(index)">Quitar</button></td>
+                  } @else {
+                    <td class="numeric-value">{{ receipt.lines[index].expectedQuantity === null ? '—' : quantity(receipt.lines[index].expectedQuantity!, productMode(line.productId)) }}</td>
+                    <td class="numeric-value">{{ quantity(receipt.lines[index].receivedQuantity, productMode(line.productId)) }}</td>
+                    <td>{{ receipt.lines[index].differenceStatus === 'PendingReview' ? 'Pendiente de revisión' : receipt.lines[index].differenceStatus === 'Resolved' ? 'Resuelta' : 'Sin diferencia' }}</td>
+                  }
+                </tr>
+              } @empty { <tr><td colspan="5">Todavía no hay renglones.</td></tr> }
+            </tbody>
+          </table>
+        </div>
+        @if (receipt.status === 'Draft') {
+          <div class="receipt-actions">
+            <button type="button" [disabled]="saving() || !lineDirty()" (click)="saveLines()">{{ saving() ? 'Guardando…' : 'Guardar cantidades' }}</button>
+            <button type="button" [disabled]="saving() || lineDirty() || receipt.lines.length === 0" (click)="approve()">Aprobar y sumar stock</button>
+            <button type="button" class="secondary-button" [disabled]="saving()" (click)="cancel()">Cancelar borrador</button>
+          </div>
+        }
+      </section>
+    }
+
+    <section class="category-panel receipt-panel" aria-labelledby="receipt-history-title" [attr.aria-busy]="loading()">
+      <header class="panel-heading"><div><h2 id="receipt-history-title">Recepciones de la sucursal</h2><p>Los borradores se pueden recuperar y las recepciones aprobadas conservan cantidades y proveedor.</p></div><button type="button" class="secondary-button" (click)="loadPage(page()?.page ?? 1)">Actualizar</button></header>
+      @if (loading()) { <p class="state-message" role="status">Cargando recepciones…</p> }
+      @else if (page(); as result) {
+        <div class="table-wrap"><table>
+          <thead><tr><th scope="col">Comprobante</th><th scope="col">Proveedor / origen</th><th scope="col">Fecha</th><th scope="col">Estado</th><th scope="col">Acción</th></tr></thead>
+          <tbody>
+            @for (item of result.items; track item.id) {
+              <tr><td>{{ item.documentType }} {{ item.documentNumber }}</td><td>{{ item.supplierName || item.sourceSystem }}</td><td>{{ item.documentDate }}</td><td>{{ item.status === 'Draft' ? 'Borrador' : item.status === 'Approved' ? 'Aprobada' : 'Cancelada' }}</td><td><button type="button" class="secondary-button" (click)="open(item.id)">Ver detalle</button></td></tr>
+            } @empty { <tr><td colspan="5">No hay recepciones registradas.</td></tr> }
+          </tbody>
+        </table></div>
+        <nav class="receipt-pagination" aria-label="Páginas de recepciones">
+          <button type="button" class="secondary-button" [disabled]="result.page <= 1" (click)="loadPage(result.page - 1)">Anterior</button>
+          <span>{{ result.page }} / {{ result.totalPages || 1 }}</span>
+          <button type="button" class="secondary-button" [disabled]="result.page >= result.totalPages" (click)="loadPage(result.page + 1)">Siguiente</button>
+        </nav>
+      }
+    </section>
+  </div>
+</main>
+
+@if (importOpen()) {
+  <app-admin-detail-dialog labelledBy="receipt-import-title" [compact]="true"
+    [canClose]="importBusy() === null" (closed)="closeImport()">
+    <section class="import-dialog" aria-labelledby="receipt-import-title"
+      [attr.aria-busy]="importBusy() !== null">
+      <h2 id="receipt-import-title">Importar renglones al borrador</h2>
+      <p>La importación reemplaza los renglones actuales de este borrador. La hoja Ejemplos no se importa.
+        El stock cambia recién cuando aprobás la recepción.</p>
+      <label class="import-file receipt-import-file">Archivo .xlsx
+        <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          [disabled]="importBusy() !== null" (change)="chooseImportFile($event)" />
+      </label>
+      @if (importError(); as message) { <p class="import-error" role="alert">{{ message }}</p> }
+      @if (importBusy() === 'preview') { <p role="status">Analizando archivo…</p> }
+      @if (importPreviewResult(); as result) {
+        <p class="import-summary"><strong>{{ result.createCount }}</strong> renglones para cargar.</p>
+        @if (result.issues.length > 0) {
+          <h3>Errores que impiden guardar</h3>
+          <ul class="import-details import-issues">
+            @for (issue of result.issues; track $index) {
+              <li><strong>{{ issue.sheet || 'Archivo' }}@if (issue.row) { · fila {{ issue.row }}}@if (issue.column) { · {{ issue.column }}}</strong>: {{ issue.message }}</li>
+            }
+          </ul>
+        }
+        @if (result.rows.length > 0) {
+          <h3>Detalle por fila</h3>
+          <ul class="import-details">
+            @for (row of result.rows; track $index) {
+              <li><strong>{{ row.sheet }} · fila {{ row.row }}</strong>: {{ row.message }}</li>
+            }
+          </ul>
+        }
+      }
+      <div class="import-footer">
+        <button type="button" class="secondary-button" [disabled]="importBusy() !== null"
+          (click)="closeImport()">Cerrar</button>
+        <button type="button" class="secondary-button receipt-import-preview"
+          [disabled]="!importFile() || importBusy() !== null || !!importError()"
+          (click)="previewImport()">Previsualizar</button>
+        <button type="button" class="receipt-import-apply"
+          [disabled]="!importPreviewResult()?.canApply || importBusy() !== null || !!importError()"
+          (click)="applyImport()">Guardar en borrador</button>
+      </div>
+    </section>
+  </app-admin-detail-dialog>
+}

@@ -214,6 +214,14 @@ namespace Carnicerias.Infrastructure.Migrations
                 column: "InventoryMovementId",
                 unique: true,
                 filter: "\"InventoryMovementId\" IS NOT NULL");
+
+            migrationBuilder.Sql("""
+                INSERT INTO platform_access.permissions ("Id", "Code", "Description")
+                VALUES ('87f54e27-1f0d-47ca-bca5-ec0d4bb79eb8',
+                    'inventory.receipts.manage',
+                    'Registrar y confirmar recepciones de mercadería')
+                ON CONFLICT ("Code") DO NOTHING;
+                """);
         }
 
         /// <inheritdoc />

@@ -143,6 +143,9 @@
               <a class="module-link" routerLink="/admin/stock"><span><strong>Existencias</strong><small>Consultar stock y registrar entradas o salidas de la sucursal.</small></span><span aria-hidden="true">→</span></a>
               <a class="module-link" routerLink="/admin/pieces"><span><strong>Recepción de piezas</strong><small>Leer etiquetas y registrar piezas con stock en esta sucursal.</small></span><span aria-hidden="true">→</span></a>
             }
+            @if (context.permissions.includes('inventory.receipts.manage')) {
+              <a class="module-link" routerLink="/admin/receipts"><span><strong>Recepciones</strong><small>Registrar comprobantes y confirmar la mercadería efectivamente recibida.</small></span><span aria-hidden="true">→</span></a>
+            }
           }
           <a class="module-link" routerLink="/pos"><span><strong>Punto de venta</strong><small>Volver a la operación de la caja y los tickets.</small></span><span aria-hidden="true">→</span></a>
         </div>

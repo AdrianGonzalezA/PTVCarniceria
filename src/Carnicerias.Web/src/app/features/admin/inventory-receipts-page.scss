@@ -1,0 +1,53 @@
+:host {
+  --receipt-control: #fff;
+  --receipt-ink: #202322;
+  --receipt-border: #b2b2b2;
+  --receipt-focus: #71b8da;
+}
+
+:host-context(html[data-visual-theme='nocturno']) {
+  --receipt-control: #181b20;
+  --receipt-ink: #f3efe9;
+  --receipt-border: #414750;
+  --receipt-focus: #e5b27f;
+}
+
+.receipt-panel { max-width: 76rem; }
+.receipt-form, .receipt-add-line { display: grid; gap: .75rem; padding: 1rem; }
+.receipt-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
+.receipt-fields > div, .receipt-add-line > div { display: grid; gap: .35rem; }
+.receipt-form input, .receipt-form select, .receipt-add-line input, .receipt-add-line select,
+.receipt-panel td input {
+  box-sizing: border-box; width: 100%; min-height: 2.5rem; padding: .5rem .65rem;
+  border: 1px solid var(--receipt-border); border-radius: .25rem;
+  color: var(--receipt-ink); background: var(--receipt-control); font: inherit;
+}
+.receipt-form input:focus-visible, .receipt-form select:focus-visible,
+.receipt-add-line input:focus-visible, .receipt-add-line select:focus-visible,
+.receipt-panel td input:focus-visible { outline: 3px solid var(--receipt-focus); outline-offset: 2px; }
+.receipt-form > button { justify-self: start; }
+.receipt-add-line { grid-template-columns: minmax(12rem, 2fr) repeat(2, minmax(7rem, 1fr)) auto; align-items: end; }
+.receipt-panel td input { min-width: 6rem; }
+.receipt-actions, .receipt-pagination { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; padding: .75rem 1rem; }
+.receipt-pagination { justify-content: flex-end; }
+.numeric-value { text-align: right; font-variant-numeric: tabular-nums; }
+:host-context(html[data-visual-theme='nocturno']) input,
+:host-context(html[data-visual-theme='nocturno']) select { color-scheme: dark; }
+@media (max-width: 48rem) {
+  .receipt-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .receipt-add-line { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 32rem) {
+  .receipt-fields, .receipt-add-line { grid-template-columns: 1fr; }
+}
+.receipt-import-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.receipt-import-actions .field-hint {
+  margin: 0;
+}

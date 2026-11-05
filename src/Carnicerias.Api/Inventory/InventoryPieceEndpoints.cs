@@ -302,8 +302,12 @@ public static class InventoryPieceEndpoints
         var piece = new InventoryPiece(context.CompanyId, context.BranchId, product.Id,
             profile.Id, context.UserId, request.OperationId, movement.Id, source,
             read.ExternalIdentifier, code, read.WeightKg, now, identifierField);
+        var receipt = InventoryReceipt.LegacyPiece(context.CompanyId, context.BranchId,
+            request.OperationId, source, product, read.WeightKg, context.UserId, now);
+        receipt.LinkMovement(receipt.Lines[0].Id, movement.Id);
         db.InventoryMovements.Add(movement);
         db.InventoryPieces.Add(piece);
+        db.InventoryReceipts.Add(receipt);
         db.InventoryPieceStateEvents.Add(new InventoryPieceStateEvent(context.CompanyId,
             context.BranchId, piece.Id, null, InventoryPieceStatus.Available,
             InventoryPieceEventKind.Receipt, null, context.UserId,

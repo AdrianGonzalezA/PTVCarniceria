@@ -42,7 +42,10 @@ public static class AdminExcelWorkbook
             ["customers"] = [new("Clientes", ["Codigo", "Nombre", "CuentaCorriente"],
                 ["CLI-001", "Cliente de ejemplo", "NO"])],
             ["stock"] = [new("Existencias", ["CodigoArticulo", "Variacion", "Descripcion"],
-                ["2546", "5.500", "Reposición"])]
+                ["2546", "5.500", "Reposición"])],
+            ["receipts"] = [new("Recepciones",
+                ["CodigoArticulo", "CantidadEsperada", "CantidadRecibida"],
+                ["2546", "5.500", "5.250"])]
         };
 
     public static bool Supports(string kind) => Definitions.ContainsKey(kind);
@@ -62,17 +65,21 @@ public static class AdminExcelWorkbook
                 cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#27383D");
                 cell.Style.Font.FontColor = XLColor.White;
                 sheet.Column(column + 1).Width = Math.Max(18, definition.Columns[column].Length + 4);
-                if (definition.Columns[column] is "CostoARS" or "PrecioARS" or "Variacion")
+                if (IsNumericColumn(definition.Columns[column]))
                     sheet.Column(column + 1).Style.NumberFormat.Format =
-                        definition.Columns[column] == "Variacion" ? "0.000" : "0.00";
+                        definition.Columns[column] is "Variacion" or "CantidadEsperada" or
+                            "CantidadRecibida" ? "0.000" : "0.00";
             }
             sheet.SheetView.FreezeRows(1);
         }
 
         var examples = workbook.Worksheets.Add("Ejemplos");
-        examples.Cell(1, 1).Value = kind == "stock"
-            ? "Ejemplos: variación positiva suma y negativa resta al stock actual; copiá las filas a Existencias."
-            : "Ejemplos: copiá cada fila a su hoja de carga y reemplazá los valores.";
+        examples.Cell(1, 1).Value = kind switch
+        {
+            "stock" => "Ejemplos: variación positiva suma y negativa resta al stock actual; copiá las filas a Existencias.",
+            "receipts" => "Ejemplos: las cantidades ingresan al stock solo cuando se aprueba la recepción.",
+            _ => "Ejemplos: copiá cada fila a su hoja de carga y reemplazá los valores."
+        };
         examples.Cell(1, 1).Style.Font.Bold = true;
         examples.Column(1).Width = 26;
         var exampleRow = 3;
@@ -84,7 +91,7 @@ public static class AdminExcelWorkbook
             {
                 examples.Cell(exampleRow + 1, column + 1).Value = definition.Columns[column];
                 examples.Cell(exampleRow + 1, column + 1).Style.Font.Bold = true;
-                if (definition.Columns[column] is "CostoARS" or "PrecioARS" or "Variacion")
+                if (IsNumericColumn(definition.Columns[column]))
                     examples.Cell(exampleRow + 2, column + 1).Value =
                         decimal.Parse(definition.Example[column], CultureInfo.InvariantCulture);
                 else examples.Cell(exampleRow + 2, column + 1).Value = definition.Example[column];
@@ -195,7 +202,7 @@ public static class AdminExcelWorkbook
             foreach (var column in definition.Columns)
             {
                 var cell = sheet.Cell(rowNumber, columns[column]);
-                var numeric = column is "CostoARS" or "PrecioARS" or "Variacion";
+                var numeric = IsNumericColumn(column);
                 if (cell.IsEmpty())
                 {
                     cells[column] = new ImportCell(null, null);
@@ -221,6 +228,9 @@ public static class AdminExcelWorkbook
                 rows.Add(new ImportRow(sheet.Name, rowNumber, cells));
         }
     }
+
+    private static bool IsNumericColumn(string column) => column is
+        "CostoARS" or "PrecioARS" or "Variacion" or "CantidadEsperada" or "CantidadRecibida";
 
     private static bool SafeZip(byte[] bytes)
     {

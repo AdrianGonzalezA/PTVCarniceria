@@ -63,6 +63,30 @@ public sealed class InventoryReceiptTests
     }
 
     [Fact]
+    public void DraftLinesCanBeCorrectedBeforeApprovalButNotAfterward()
+    {
+        var company = Guid.NewGuid();
+        var actor = Guid.NewGuid();
+        var product = Product(company, ProductSaleMode.Unit);
+        var receipt = new InventoryReceipt(company, Guid.NewGuid(), Guid.NewGuid(),
+            new Supplier(company, "F1", "Proveedor"), "remito", "R-1",
+            new DateOnly(2026, 11, 5), actor, DateTimeOffset.UtcNow);
+        receipt.AddLine(new InventoryReceiptLine(receipt.Id, product, 3));
+        var version = receipt.Version;
+        var corrected = new InventoryReceiptLine(receipt.Id, product, 2, 3);
+
+        receipt.ReplaceLines([corrected]);
+
+        Assert.Single(receipt.Lines);
+        Assert.Same(corrected, receipt.Lines[0]);
+        Assert.Equal(version + 1, receipt.Version);
+        Assert.Throws<InvalidOperationException>(() => receipt.ReplaceLines([
+            new InventoryReceiptLine(Guid.NewGuid(), product, 1)]));
+        receipt.Approve(actor, DateTimeOffset.UtcNow);
+        Assert.Throws<InvalidOperationException>(() => receipt.ReplaceLines([]));
+    }
+
+    [Fact]
     public void LegacyPieceHasAuditedSourceButNoInventedSupplier()
     {
         var company = Guid.NewGuid();

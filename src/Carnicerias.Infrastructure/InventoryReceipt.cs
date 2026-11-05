@@ -109,6 +109,21 @@ public sealed class InventoryReceipt
         Version++;
     }
 
+    public void ReplaceLines(IEnumerable<InventoryReceiptLine> lines)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+        var proposed = lines.ToArray();
+        if (Status != InventoryReceiptStatus.Draft ||
+            proposed.Any(line => line is null || line.ReceiptId != Id ||
+                line.CompanyId != CompanyId || line.InventoryMovementId is not null ||
+                line.DifferenceStatus != InventoryReceiptDifferenceStatus.None) ||
+            proposed.Select(line => line.Id).Distinct().Count() != proposed.Length)
+            throw new InvalidOperationException("Only new lines of this draft can be saved.");
+        _lines.Clear();
+        _lines.AddRange(proposed);
+        Version++;
+    }
+
     public void Approve(Guid actorUserId, DateTimeOffset now)
     {
         if (Status != InventoryReceiptStatus.Draft || actorUserId == Guid.Empty ||

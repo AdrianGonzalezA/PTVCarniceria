@@ -4,6 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { HistoryPage } from './history-page';
 
 describe('HistoryPage', () => {
@@ -286,6 +287,35 @@ describe('HistoryPage', () => {
     secondPage.flush({ items: [], page: 2, pageSize: 30, totalItems: 31 });
     fixture.detectChanges();
     fixture.destroy();
+  });
+
+  it('opens an exact branch and article kardex from the stock link', async () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [provideRouter([{ path: 'admin/history', component: HistoryPage }]),
+        provideHttpClient(), provideHttpClientTesting()],
+    });
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(
+      '/admin/history?tab=stock&branchId=branch-1&productId=product-1&productCode=P1', HistoryPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/sessions/current').flush({
+      userId: 'admin-id', username: 'admin', expiresAtUtc: '2026-10-09T00:00:00Z',
+      context: { userId: 'admin-id', companyId: 'company-1', companyName: 'Empresa',
+        branchId: 'branch-1', branchName: 'Centro', sessionId: 'session-id',
+        permissions: ['organization.manage'] },
+    });
+    http.expectOne('/api/admin/companies/company-1/branches').flush([
+      { id: 'branch-1', name: 'Centro', isActive: true, activeTerminalCount: 1 },
+    ]);
+    const stock = http.expectOne((request) =>
+      request.url === '/api/admin/history/stock-movements');
+    expect(stock.request.params.get('branchId')).toBe('branch-1');
+    expect(stock.request.params.get('productId')).toBe('product-1');
+    expect(stock.request.params.get('productSearch')).toBe('P1');
+    stock.flush({ items: [], page: 1, pageSize: 30, totalItems: 0, summary: null });
+    harness.detectChanges();
+    expect(harness.routeNativeElement?.querySelector<HTMLInputElement>('#history-product')?.value).toBe('P1');
   });
 
   it('combines document type with branch, terminal, dates and pagination for sales', () => {

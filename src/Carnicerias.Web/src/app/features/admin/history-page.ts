@@ -1,6 +1,6 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AdminAreaTabs } from './admin-area-tabs';
 import { AdminBranch, AdminOrganizationClient } from '../../core/admin/admin-organization-client';
 import { AdminTerminal, AdminTerminalClient } from '../../core/admin/admin-terminal-client';
@@ -24,6 +24,7 @@ export class HistoryPage implements OnInit {
   private readonly terminalsClient = inject(AdminTerminalClient);
   private readonly sessions = inject(SessionClient);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private requestRevision = 0;
   private detailRevision = 0;
 
@@ -37,6 +38,7 @@ export class HistoryPage implements OnInit {
   protected readonly terminalId = signal('');
   protected readonly documentType = signal<HistorySaleDocumentType | ''>('');
   protected readonly productSearch = signal('');
+  protected readonly productId = signal('');
   protected readonly categorySearch = signal('');
   protected readonly stockKind = signal<StockHistoryItem['kind'] | ''>('');
   protected readonly fromDate = signal('');
@@ -76,6 +78,13 @@ export class HistoryPage implements OnInit {
           return;
         }
         this.session.set(session);
+        const query = this.route.snapshot.queryParamMap;
+        if (query.get('tab') === 'stock' && query.has('branchId') && query.has('productId')) {
+          this.tab.set('stock');
+          this.branchId.set(query.get('branchId')!);
+          this.productId.set(query.get('productId')!);
+          this.productSearch.set(query.get('productCode') ?? '');
+        }
         this.organization.branches(session.context.companyId).subscribe({
           next: (branches) => this.branches.set(branches),
           error: () => this.loadError.set('No se pudieron cargar las sucursales.'),
@@ -126,7 +135,10 @@ export class HistoryPage implements OnInit {
 
   protected updateStockFilter(field: 'product' | 'category' | 'kind', event: Event): void {
     const value = (event.target as HTMLInputElement | HTMLSelectElement).value;
-    if (field === 'product') this.productSearch.set(value);
+    if (field === 'product') {
+      this.productSearch.set(value);
+      this.productId.set('');
+    }
     else if (field === 'category') this.categorySearch.set(value);
     else this.stockKind.set(value as StockHistoryItem['kind'] | '');
   }
@@ -274,6 +286,7 @@ export class HistoryPage implements OnInit {
       fromUtc: from?.toISOString(), toUtc: to?.toISOString(),
       documentType: this.tab() === 'sales' ? this.documentType() || undefined : undefined,
       productSearch: this.tab() === 'stock' ? this.productSearch().trim() || undefined : undefined,
+      productId: this.tab() === 'stock' ? this.productId() || undefined : undefined,
       categorySearch: this.tab() === 'stock' ? this.categorySearch().trim() || undefined : undefined,
       kind: this.tab() === 'stock' ? this.stockKind() || undefined : undefined,
     };

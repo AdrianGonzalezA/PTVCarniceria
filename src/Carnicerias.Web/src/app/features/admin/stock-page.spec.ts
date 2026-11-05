@@ -67,6 +67,29 @@ describe('StockPage', () => {
     expect(page.querySelector('.stock-row')?.textContent).toContain('10,000 kg');
   });
 
+  it('links an administrator to the exact article and branch kardex', () => {
+    const fixture = TestBed.createComponent(StockPage);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/sessions/current').flush({
+      userId: 'admin-id', username: 'admin', expiresAtUtc: '2026-10-09T00:00:00Z',
+      context: { userId: 'admin-id', companyId: 'company-1', companyName: 'Carnicería',
+        branchId: 'branch-1', branchName: 'Centro', sessionId: 'session-id',
+        permissions: ['inventory.stock.manage', 'organization.manage'] },
+    });
+    http.expectOne('/api/inventory/stock').flush([{ productId: 'product-1', code: 'P1',
+      name: 'Asado', unit: 'kg', saleMode: 'weight', onHand: 10, reserved: 0,
+      available: 10 }]);
+    fixture.detectChanges();
+    const link = (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLAnchorElement>('.stock-row a');
+    expect(link?.getAttribute('href')).toContain('tab=stock');
+    expect(link?.getAttribute('href')).toContain('branchId=branch-1');
+    expect(link?.getAttribute('href')).toContain('productId=product-1');
+    expect(link?.getAttribute('href')).toContain('productCode=P1');
+    fixture.destroy();
+  });
+
   it('shows generic and traceable availability separately when generic stock is in debt', () => {
     const fixture = TestBed.createComponent(StockPage);
     fixture.detectChanges();

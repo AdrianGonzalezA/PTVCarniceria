@@ -59,7 +59,12 @@
                   <td class="numeric-value">{{ formatQuantity(item.quarantined ?? 0, item) }} {{ item.unit ?? 'u.' }}</td>
                   <td class="numeric-value">{{ item.reconciliationLocked ? 'En conteo' : formatQuantity(item.genericAvailable ?? item.available, item) }} {{ item.reconciliationLocked ? '' : item.unit ?? 'u.' }}</td>
                   <td class="numeric-value">{{ item.reconciliationLocked ? 'En conteo' : formatQuantity(item.protectedAvailable ?? 0, item) }} {{ item.reconciliationLocked ? '' : item.unit ?? 'u.' }}</td>
-                  <td><button type="button" class="secondary-button" [disabled]="saving() || item.reconciliationLocked" (click)="startAdjustment(item)">Ajustar</button></td>
+                  <td>
+                    <button type="button" class="secondary-button" [disabled]="saving() || item.reconciliationLocked" (click)="startAdjustment(item)">Ajustar</button>
+                    @if (session()?.context?.permissions?.includes('organization.manage')) {
+                      <a class="secondary-button" routerLink="/admin/history" [queryParams]="{ tab: 'stock', branchId: session()?.context?.branchId, productId: item.productId, productCode: item.code }">Ver kardex</a>
+                    }
+                  </td>
                 </tr>
               }
             </tbody>

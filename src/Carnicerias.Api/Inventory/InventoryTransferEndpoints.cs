@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text.Json;
 using Carnicerias.Api.Contracts;
 using Carnicerias.Api.Security;
 using Carnicerias.Infrastructure;
@@ -10,6 +11,9 @@ namespace Carnicerias.Api.Inventory;
 
 public static class InventoryTransferEndpoints
 {
+    private static readonly JsonSerializerOptions ExportJsonOptions =
+        new(JsonSerializerDefaults.Web);
+
     public static IEndpointRouteBuilder MapInventoryTransferEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var transfers = endpoints.MapGroup("/api/inventory/transfers")
@@ -19,6 +23,7 @@ public static class InventoryTransferEndpoints
         transfers.MapGet("/branch-options", BranchOptionsAsync);
         transfers.MapGet("/piece-options", PieceOptionsAsync);
         transfers.MapGet("/{id:guid}", GetAsync);
+        transfers.MapGet("/{id:guid}/export", ExportAsync);
         transfers.MapPost("", CreateAsync);
         transfers.MapPut("/{id:guid}/lines", ReplaceLinesAsync);
         transfers.MapPost("/{id:guid}/dispatch", DispatchAsync);
@@ -105,6 +110,42 @@ public static class InventoryTransferEndpoints
         var transfer = await FindAsync(db, accessor, id, false, cancellationToken);
         return transfer is null ? Error(404, "TRANSFER_NOT_FOUND") :
             Results.Ok(await ToResponseAsync(db, transfer, cancellationToken));
+    }
+
+    private static async Task<IResult> ExportAsync(Guid id, PlatformAccessDbContext db,
+        OperationalContextAccessor accessor, CancellationToken cancellationToken)
+    {
+        var transfer = await FindAsync(db, accessor, id, false, cancellationToken);
+        if (transfer is null) return Error(404, "TRANSFER_NOT_FOUND");
+        if (transfer.Status != InventoryTransferStatus.Dispatched)
+            return Error(409, "TRANSFER_NOT_DISPATCHED");
+        var company = await db.Companies.AsNoTracking().SingleAsync(item =>
+            item.Id == transfer.CompanyId, cancellationToken);
+        var branch = await db.Branches.AsNoTracking().SingleAsync(item =>
+            item.CompanyId == transfer.CompanyId && item.Id == transfer.BranchId,
+            cancellationToken);
+        var ids = transfer.Lines.Where(line => line.PieceId.HasValue)
+            .Select(line => line.PieceId!.Value).ToArray();
+        var pieces = await db.InventoryPieces.AsNoTracking().Where(piece =>
+                piece.CompanyId == transfer.CompanyId && ids.Contains(piece.Id))
+            .ToDictionaryAsync(piece => piece.Id, cancellationToken);
+        var document = new TransferExport(1, transfer.Id, transfer.OperationId,
+            transfer.DocumentNumber, transfer.DocumentDate, transfer.DispatchedAtUtc!.Value,
+            transfer.CompanyId, company.Code, company.Name, transfer.BranchId, branch.Name,
+            transfer.DestinationBranchId, transfer.DestinationName,
+            transfer.Lines.OrderBy(line => line.Id).Select(line =>
+            {
+                InventoryPiece? piece = line.PieceId.HasValue ? pieces[line.PieceId.Value] : null;
+                return new TransferExportLine(line.Id, line.ProductId,
+                    line.ProductCode, line.ProductName, line.Unit,
+                    line.SaleMode == ProductSaleMode.Unit ? "unit" : "weight",
+                    line.Quantity, piece?.Id, piece?.SourceSystem,
+                    piece?.IdentifierField, piece?.ExternalIdentifier,
+                    piece?.RawBarcode);
+            }).ToArray());
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(document, ExportJsonOptions);
+        return Results.File(bytes, "application/json",
+            $"remito-{transfer.DocumentNumber}.json");
     }
 
     private static async Task<IResult> CreateAsync(CreateTransferRequest? request,
@@ -418,4 +459,14 @@ public static class InventoryTransferEndpoints
         DateOnly DocumentDate, string Status, int Version, DateTimeOffset CreatedAtUtc,
         DateTimeOffset? DispatchedAtUtc, DateTimeOffset? CanceledAtUtc,
         IReadOnlyList<TransferLineResponse> Lines);
+    private sealed record TransferExport(int SchemaVersion, Guid TransferId,
+        Guid OperationId, string DocumentNumber, DateOnly DocumentDate,
+        DateTimeOffset DispatchedAtUtc, Guid CompanyId, string CompanyCode,
+        string CompanyName, Guid OriginBranchId, string OriginBranchName,
+        Guid? DestinationBranchId, string DestinationName,
+        IReadOnlyList<TransferExportLine> Lines);
+    private sealed record TransferExportLine(Guid LineId, Guid ProductId,
+        string ProductCode, string ProductName, string Unit, string SaleMode,
+        decimal Quantity, Guid? OriginPieceId, string? SourceSystem,
+        string? IdentifierField, string? ExternalIdentifier, string? RawBarcode);
 }

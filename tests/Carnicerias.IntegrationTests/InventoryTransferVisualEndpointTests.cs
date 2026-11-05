@@ -128,6 +128,9 @@ public sealed class InventoryTransferVisualEndpointTests
                 } }));
             Assert.Equal(3, genericCorrected.GetProperty("version").GetInt32());
             Assert.Single(genericCorrected.GetProperty("lines").EnumerateArray());
+            using (var prematureExport = await client.GetAsync(
+                $"/api/inventory/transfers/{genericId}/export"))
+                Assert.Equal(HttpStatusCode.Conflict, prematureExport.StatusCode);
             var genericDispatch = await OkAsync(await client.PostAsJsonAsync(
                 $"/api/inventory/transfers/{genericId}/dispatch", new { version = 3 }));
             Assert.Equal("Dispatched", genericDispatch.GetProperty("status").GetString());
@@ -136,6 +139,21 @@ public sealed class InventoryTransferVisualEndpointTests
                 $"/api/inventory/transfers/{genericId}/dispatch", new { version = 3 }));
             Assert.Equal(genericDispatch.GetProperty("version").GetInt32(),
                 retry.GetProperty("version").GetInt32());
+            using (var export = await client.GetAsync(
+                $"/api/inventory/transfers/{genericId}/export"))
+            {
+                Assert.Equal(HttpStatusCode.OK, export.StatusCode);
+                Assert.Equal("application/json", export.Content.Headers.ContentType?.MediaType);
+                Assert.Contains(genericDispatch.GetProperty("documentNumber").GetString()!,
+                    export.Content.Headers.ContentDisposition?.FileName ?? string.Empty);
+                using var exported = JsonDocument.Parse(await export.Content.ReadAsStringAsync());
+                Assert.Equal(1, exported.RootElement.GetProperty("schemaVersion").GetInt32());
+                Assert.Equal(genericId, exported.RootElement.GetProperty("transferId").GetGuid());
+                Assert.Equal("Destino sin sistema",
+                    exported.RootElement.GetProperty("destinationName").GetString());
+                Assert.Equal(2m, exported.RootElement.GetProperty("lines")[0]
+                    .GetProperty("quantity").GetDecimal());
+            }
 
             var insufficient = await CreateAsync(client, "Destino sin sistema", null, documentDate);
             var insufficientId = insufficient.GetProperty("id").GetGuid();

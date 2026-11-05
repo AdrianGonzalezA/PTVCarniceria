@@ -273,6 +273,10 @@ export class InventoryTransfersPage implements OnInit {
     return formatLocalizedDecimal(line.quantity, mode === 'unit' ? 0 : 3);
   }
 
+  protected exportUrl(id: string): string {
+    return `/api/inventory/transfers/${id}/export`;
+  }
+
   private localToday(): string {
     const today = new Date();
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;

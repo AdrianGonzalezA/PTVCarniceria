@@ -139,6 +139,11 @@
               <button type="button" class="secondary-button" [disabled]="saving()" (click)="cancel()">Cancelar borrador</button>
             </div>
           }
+          @if (transfer.status === 'Dispatched') {
+            <div class="receipt-actions">
+              <a class="secondary-button" [href]="exportUrl(transfer.id)">Descargar datos del remito</a>
+            </div>
+          }
           @if (error(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
         </section>
       </app-admin-detail-dialog>

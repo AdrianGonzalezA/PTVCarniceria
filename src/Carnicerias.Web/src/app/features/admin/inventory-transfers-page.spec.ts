@@ -91,6 +91,8 @@ describe('InventoryTransfersPage', () => {
     fixture.detectChanges();
     expect(host.textContent).toContain('Despacho confirmado');
     expect(host.textContent).toContain('2,500');
+    expect(host.querySelector<HTMLAnchorElement>('a[href="/api/inventory/transfers/transfer/export"]'))
+      .not.toBeNull();
     expect(confirm).toHaveBeenCalled();
     confirm.mockRestore();
     http.expectNone(request => request.url.startsWith('/api/inventory/receipts'));

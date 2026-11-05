@@ -1,0 +1,37 @@
+:host {
+  --book-control: #fff;
+  --book-ink: #202322;
+  --book-border: #a9b0ad;
+  --book-warning: #fff0c9;
+  --book-warning-ink: #543b00;
+}
+:host-context(html[data-visual-theme='nocturno']) {
+  --book-control: #181b20;
+  --book-ink: #f3efe9;
+  --book-border: #414750;
+  --book-warning: #48392b;
+  --book-warning-ink: #f3d4a8;
+}
+.book-filters { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem; padding: 1rem 1.25rem; }
+.book-filters label { font-weight: 700; }
+.book-filters input, .book-filters select { min-height: 2.75rem; padding: .5rem; color: var(--book-ink); background: var(--book-control); border: 1px solid var(--book-border); font: inherit; }
+.book-filters :is(input, select, button):focus-visible { outline: 3px solid var(--admin-abm-focus); outline-offset: 2px; }
+.book-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .75rem; padding: 1rem 1.25rem; border-top: 1px solid var(--book-border); }
+.book-summary div { display: grid; gap: .2rem; }
+.book-summary span { font-size: .85rem; }
+.book-summary strong { font-size: 1.1rem; text-align: right; font-variant-numeric: tabular-nums; }
+.book-rates { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; padding: .5rem 1.25rem; }
+.book-note { margin: .5rem 1.25rem 1rem; font-size: .9rem; }
+.book-warning { margin: 0; padding: 1rem 1.25rem; color: var(--book-warning-ink); background: var(--book-warning); }
+.book-pending-row { background: var(--book-warning); }
+.book-pending-row td { color: var(--book-warning-ink); }
+.fiscal-book-panel table { min-width: 65rem; }
+.fiscal-book-panel th, .fiscal-book-panel td { padding: .7rem; vertical-align: top; white-space: nowrap; }
+.fiscal-book-panel td small { display: block; text-align: right; }
+.numeric-value { text-align: right; font-variant-numeric: tabular-nums; }
+.book-pagination { display: flex; align-items: center; justify-content: flex-end; gap: .75rem; padding: 1rem 1.25rem; }
+:host-context(html[data-visual-theme='nocturno']) .book-filters { color-scheme: dark; }
+@media (max-width: 680px) {
+  .book-filters { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .book-filters input, .book-filters select { width: 100%; box-sizing: border-box; }
+}

@@ -159,6 +159,7 @@ app.MapAdminCloverOAuthEndpoints();
 app.MapAdminTerminalEndpoints();
 app.MapAdminBranchDeviceEndpoints();
 app.MapAdminHistoryEndpoints();
+app.MapFiscalSalesBookEndpoints();
 app.MapAdminCustomerEndpoints();
 app.MapAdminExcelImportEndpoints();
 app.MapPosCustomerEndpoints();

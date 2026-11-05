@@ -1,0 +1,120 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" routerLink="/admin" aria-label="Volver a administración">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Administración</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+
+  <div class="workspace">
+    <app-admin-area-tabs area="business" />
+    <a class="back-link" routerLink="/admin">← Volver a negocio</a>
+    <p class="eyebrow">Consulta fiscal</p>
+    <h1>Libro IVA Ventas</h1>
+    <p class="intro">Comprobantes autorizados con CAE. Los importes fiscales provienen del snapshot registrado al emitir.</p>
+
+    @if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Empresa consultada">
+        <div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Alcance</span><strong>Todas las sucursales o la seleccionada</strong></div>
+      </section>
+    }
+
+    <section class="category-panel fiscal-book-panel" aria-labelledby="book-title" [attr.aria-busy]="loading()">
+      <header class="panel-heading"><div>
+        <h2 id="book-title">Comprobantes del período</h2>
+        <p>Consulta operativa interna. Los comprobantes sin snapshot completo figuran pendientes de revisión.</p>
+      </div></header>
+
+      <div class="book-filters">
+        <label for="book-from">Desde</label>
+        <input id="book-from" type="date" [value]="from()" (change)="changeDate('from', $event)" />
+        <label for="book-to">Hasta</label>
+        <input id="book-to" type="date" [value]="to()" (change)="changeDate('to', $event)" />
+        <button type="button" (click)="applyPeriod()" [disabled]="loading()">Aplicar período</button>
+        <label for="book-branch">Sucursal</label>
+        <select id="book-branch" [value]="branchId()" (change)="changeBranch($event)">
+          <option value="">Todas</option>
+          @for (branch of branches(); track branch.id) {
+            <option [value]="branch.id">{{ branch.name }}{{ branch.isActive ? '' : ' (inactiva)' }}</option>
+          }
+        </select>
+        <button type="button" class="secondary-button" (click)="load()" [disabled]="loading()">Actualizar</button>
+        <button type="button" (click)="exportExcel()" [disabled]="!result() || loading() || exporting()">
+          {{ exporting() ? 'Preparando Excel…' : 'Descargar Excel' }}
+        </button>
+      </div>
+
+      @if (exportError(); as problem) { <p class="error-message" role="alert">{{ problem }}</p> }
+      @if (error(); as problem) { <p class="error-message" role="alert">{{ problem }}</p> }
+      @if (loading()) {
+        <p class="state-message" role="status">Consultando comprobantes…</p>
+      } @else if (result(); as book) {
+        <div class="book-summary" aria-label="Totales del período">
+          <div><span>Comprobantes completos</span><strong>{{ book.totals.completeCount }}</strong></div>
+          <div><span>Importe completo</span><strong>$ {{ money(book.totals.completeTotal) }}</strong></div>
+          <div><span>Neto gravado</span><strong>$ {{ money(book.totals.taxableBase) }}</strong></div>
+          <div><span>IVA</span><strong>$ {{ money(book.totals.vatAmount) }}</strong></div>
+          <div><span>Exento</span><strong>$ {{ money(book.totals.exemptAmount) }}</strong></div>
+          <div><span>No gravado</span><strong>$ {{ money(book.totals.notTaxedAmount) }}</strong></div>
+        </div>
+        @if (book.totals.vatBreakdown.length) {
+          <div class="book-rates" aria-label="IVA por alícuota">
+            @for (rate of book.totals.vatBreakdown; track rate.arcaRateCode) {
+              <span>{{ money(rate.ratePercent) }} %: neto $ {{ money(rate.taxableBase) }} · IVA $ {{ money(rate.taxAmount) }}</span>
+            }
+          </div>
+        }
+        <p class="book-note">Otros tributos: no modelados en este incremento; no se presume importe cero.</p>
+        @if (book.totals.incompleteCount) {
+          <p class="book-warning" role="status">{{ book.totals.incompleteCount }} comprobante(s) pendientes de revisión fiscal.
+            Total conocido por separado: $ {{ money(book.totals.incompleteKnownTotal) }}. No integra los totales completos.</p>
+        }
+        @if (book.totalItems === 0) {
+          <p class="state-message" role="status">No hay comprobantes autorizados con CAE para este período.</p>
+        } @else {
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th scope="col">Fecha</th><th scope="col">Sucursal</th><th scope="col">Comprobante</th>
+                <th scope="col" class="numeric-value">Punto de venta</th><th scope="col" class="numeric-value">Número</th>
+                <th scope="col">Receptor</th><th scope="col">Condición IVA</th><th scope="col">CAE</th>
+                @for (rate of book.totals.vatBreakdown; track rate.arcaRateCode) {
+                  <th scope="col" class="numeric-value">Neto {{ money(rate.ratePercent) }} %</th>
+                  <th scope="col" class="numeric-value">IVA {{ money(rate.ratePercent) }} %</th>
+                }
+                <th scope="col" class="numeric-value">Exento</th><th scope="col" class="numeric-value">No gravado</th>
+                <th scope="col" class="numeric-value">Total</th><th scope="col">Estado</th>
+              </tr></thead>
+              <tbody>
+                @for (item of book.items; track item.fiscalDocumentId) {
+                  <tr [class.book-pending-row]="item.snapshotStatus !== 'complete'">
+                    <td>{{ date(item.issueDate) }}</td><td>{{ item.branchName }}</td>
+                    <td>{{ voucher(item) }}</td><td class="numeric-value">{{ item.pointOfSale }}</td>
+                    <td class="numeric-value">{{ item.number }}</td>
+                    <td>{{ item.recipientName || 'Sin razón social' }}<small>{{ item.receiverDocument }}</small></td>
+                    <td>{{ vatCondition(item.receiverVatConditionCode) }}</td><td>{{ item.cae }}</td>
+                    @for (rate of book.totals.vatBreakdown; track rate.arcaRateCode) {
+                      <td class="numeric-value">{{ money(rateValue(item, rate, 'taxableBase')) }}</td>
+                      <td class="numeric-value">{{ money(rateValue(item, rate, 'taxAmount')) }}</td>
+                    }
+                    <td class="numeric-value">{{ money(item.exemptAmount) }}</td>
+                    <td class="numeric-value">{{ money(item.notTaxedAmount) }}</td>
+                    <td class="numeric-value">$ {{ money(item.total) }}</td>
+                    <td>{{ status(item) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <div class="book-pagination">
+            <span>{{ firstItem() }}–{{ lastItem() }} de {{ book.totalItems }}</span>
+            <button type="button" class="secondary-button" (click)="changePage(-1)" [disabled]="page() === 1 || loading()">Anterior</button>
+            <button type="button" class="secondary-button" (click)="changePage(1)" [disabled]="lastItem() >= book.totalItems || loading()">Siguiente</button>
+          </div>
+        }
+      }
+    </section>
+  </div>
+</main>

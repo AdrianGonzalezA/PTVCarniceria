@@ -54,6 +54,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
     public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
 
+    public DbSet<Supplier> Suppliers => Set<Supplier>();
+
     public DbSet<CatalogProduct> CatalogProducts => Set<CatalogProduct>();
 
     public DbSet<ProductCode> ProductCodes => Set<ProductCode>();
@@ -610,6 +612,21 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .HasPrincipalKey(list => new { list.CompanyId, list.Id })
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(link => new { link.CompanyId, link.BranchId, link.IsActive });
+        });
+
+        modelBuilder.Entity<Supplier>(entity =>
+        {
+            entity.ToTable("suppliers", "inventory");
+            entity.HasKey(supplier => supplier.Id);
+            entity.HasAlternateKey(supplier => new { supplier.CompanyId, supplier.Id });
+            entity.Property(supplier => supplier.Code).HasMaxLength(80).IsRequired();
+            entity.Property(supplier => supplier.NormalizedCode).HasMaxLength(80).IsRequired();
+            entity.Property(supplier => supplier.Name).HasMaxLength(200).IsRequired();
+            entity.Property(supplier => supplier.Identification).HasMaxLength(40);
+            entity.HasOne<Company>().WithMany().HasForeignKey(supplier => supplier.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(supplier => new { supplier.CompanyId, supplier.NormalizedCode })
+                .IsUnique();
         });
 
         modelBuilder.Entity<ProductCategory>(entity =>

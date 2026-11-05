@@ -2608,6 +2608,47 @@ namespace Carnicerias.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Carnicerias.Infrastructure.Supplier", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Identification")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("NormalizedCode")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("CompanyId", "Id");
+
+                    b.HasIndex("CompanyId", "NormalizedCode")
+                        .IsUnique();
+
+                    b.ToTable("suppliers", "inventory");
+                });
+
             modelBuilder.Entity("Carnicerias.Infrastructure.TaxCatalogEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3974,6 +4015,15 @@ namespace Carnicerias.Infrastructure.Migrations
                         .WithMany("Payments")
                         .HasForeignKey("SaleId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.Supplier", b =>
+                {
+                    b.HasOne("Carnicerias.PlatformAccess.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

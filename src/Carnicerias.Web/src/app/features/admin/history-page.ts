@@ -8,6 +8,7 @@ import { AdminHistoryClient, CashHistoryItem, FiscalDocumentDetail, HistoryFilte
   SaleHistoryItem, ShiftHistoryItem, StockHistoryItem, HistorySaleDocumentType } from '../../core/admin/admin-history-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { AdminDetailDialog } from './admin-detail-dialog';
+import { ShiftClosingReport } from '../../core/sales/cashier-shift-client';
 
 type HistoryTab = 'sales' | 'shifts' | 'cash' | 'stock';
 
@@ -46,6 +47,10 @@ export class HistoryPage implements OnInit {
   protected readonly detailSaleId = signal<string | null>(null);
   protected readonly detailLoading = signal(false);
   protected readonly detailError = signal<string | null>(null);
+  protected readonly shiftReportId = signal<string | null>(null);
+  protected readonly shiftReport = signal<ShiftClosingReport | null>(null);
+  protected readonly shiftReportLoading = signal(false);
+  protected readonly shiftReportError = signal<string | null>(null);
   protected readonly totalItems = computed(() => {
     switch (this.tab()) {
       case 'sales': return this.sales()?.totalItems ?? 0;
@@ -161,6 +166,45 @@ export class HistoryPage implements OnInit {
     this.detail.set(null);
     this.detailError.set(null);
     this.detailLoading.set(false);
+    this.shiftReportId.set(null);
+    this.shiftReport.set(null);
+    this.shiftReportLoading.set(false);
+    this.shiftReportError.set(null);
+  }
+
+  protected viewShiftReport(id: string): void {
+    const revision = ++this.detailRevision;
+    this.shiftReportId.set(id);
+    this.shiftReport.set(null);
+    this.shiftReportError.set(null);
+    this.shiftReportLoading.set(true);
+    this.client.shiftReport(id).subscribe({
+      next: (report) => {
+        if (revision !== this.detailRevision) return;
+        this.shiftReport.set(report);
+        this.shiftReportLoading.set(false);
+      },
+      error: () => {
+        if (revision !== this.detailRevision) return;
+        this.shiftReportError.set('No se pudo cargar la rendición.');
+        this.shiftReportLoading.set(false);
+      },
+    });
+  }
+
+  protected downloadShiftReport(id: string): void {
+    this.shiftReportError.set(null);
+    this.client.shiftReportPdf(id).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `rendicion-turno-${id}.pdf`;
+        anchor.click();
+        setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      },
+      error: () => this.shiftReportError.set('No se pudo descargar el PDF.'),
+    });
   }
 
   protected paymentLabel(method: string): string {

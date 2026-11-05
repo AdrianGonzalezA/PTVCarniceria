@@ -133,6 +133,7 @@ export interface ShiftHistoryItem {
   readonly terminalName: string | null;
   readonly cashierId: string;
   readonly cashierName: string;
+  readonly hasReport: boolean;
 }
 
 export interface CashHistoryItem {
@@ -196,6 +197,16 @@ export class AdminHistoryClient {
     return this.http.get<HistoryPage<ShiftHistoryItem>>('/api/admin/history/shifts', {
       params: this.params(filters), withCredentials: true,
     });
+  }
+
+  shiftReport(id: string) {
+    return this.http.get<import('../sales/cashier-shift-client').ShiftClosingReport>(
+      `/api/admin/history/shifts/${encodeURIComponent(id)}/report`, { withCredentials: true });
+  }
+
+  shiftReportPdf(id: string) {
+    return this.http.get(`/api/admin/history/shifts/${encodeURIComponent(id)}/report.pdf`,
+      { responseType: 'blob', withCredentials: true });
   }
 
   cashMovements(filters: HistoryFilters) {

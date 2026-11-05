@@ -1561,9 +1561,17 @@ describe('PosPage', () => {
       paymentBreakdown: [{ method: 'cash', amount: 1000 }, { method: 'debit', amount: 500 }],
       openedAtUtc: '2026-10-06T15:00:00Z', closedAtUtc: null };
     const closedShift = { ...openShift, cashierName: 'cajero-anterior',
-      closedAtUtc: '2026-10-06T17:00:00Z' };
+      closedAtUtc: '2026-10-06T17:00:00Z', report: {
+        shiftId: 'shift-id', companyName: 'Empresa', branchName: 'Sucursal', terminalName: 'Caja A',
+        cashierName: 'cajero-anterior', openedAtUtc: '2026-10-06T15:00:00Z',
+        closedAtUtc: '2026-10-06T17:00:00Z', openingCash: 100, salesTotal: 1500,
+        cashSales: 1000, nonCashSales: 500, cashCollections: 0, nonCashCollections: 0,
+        cashWithdrawals: 0, expectedCash: 1100, countedCash: 1090, handedCash: 1090,
+        cashDifference: -10,
+      } };
     let isOpen = true;
     let reopenedCash: number | null = null;
+    let closingAmounts: [number, number] | null = null;
     TestBed.configureTestingModule({ providers: [
       provideRouter([]),
       { provide: SessionClient, useValue: { current: () => of(session) } },
@@ -1572,7 +1580,10 @@ describe('PosPage', () => {
       { provide: CashierShiftClient, useValue: {
         current: () => of(isOpen ? openShift : null),
         lastClosed: () => of(isOpen ? null : closedShift),
-        close: () => { isOpen = false; return of(closedShift); },
+        close: (countedCash: number, handedCash: number) => {
+          closingAmounts = [countedCash, handedCash];
+          isOpen = false; return of(closedShift);
+        },
         open: (openingCash: number) => {
           reopenedCash = openingCash;
           isOpen = true;
@@ -1590,7 +1601,18 @@ describe('PosPage', () => {
     expect(fixture.nativeElement.querySelector('.shift-summary').textContent).toContain('1.100,00');
     expect(fixture.nativeElement.querySelector('.shift-summary').textContent).toContain('Débito');
     expect(fixture.nativeElement.querySelector('.shift-summary').textContent).toContain('500,00');
+    for (const [id, value] of [['shift-counted-cash', '1090'], ['shift-handed-cash', '1090']]) {
+      const input = fixture.nativeElement.querySelector(`#${id}`) as HTMLInputElement;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+    }
+    fixture.detectChanges();
     (fixture.nativeElement.querySelector('#close-shift-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(closingAmounts).toEqual([1090, 1090]);
+    expect(fixture.nativeElement.querySelector('.closed-shift-summary').textContent).toContain('Diferencia-$');
+    expect(navigate).not.toHaveBeenCalledWith('/');
+    (fixture.nativeElement.querySelector('.shift-dialog .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(navigate).toHaveBeenCalledWith('/');
     expect(fixture.nativeElement.querySelector('.shift-dialog')).toBeNull();

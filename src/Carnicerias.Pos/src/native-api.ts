@@ -2,6 +2,7 @@ import type { ReceiptRequest } from './receipt-pdf';
 import type { ScaleReading } from './serial-scale';
 import type { HasarSalePrintResult } from './hasar-sale-ledger';
 import type { AssignedDevices } from './terminal-devices';
+import type { ShiftClosingReport } from './shift-closing-report';
 
 export interface NativeDiagnostic {
   readonly electronVersion: string;
@@ -12,6 +13,8 @@ export interface NativeDiagnostic {
 export interface CarniceriasNativeApi {
   readonly getDiagnostic: () => Promise<NativeDiagnostic>;
   readonly saveReceiptPdf: (request: ReceiptRequest) => Promise<{ readonly path: string }>;
+  readonly saveShiftReportPdf: (report: ShiftClosingReport) => Promise<{ readonly path: string }>;
+  readonly printShiftReport: (report: ShiftClosingReport) => Promise<{ readonly port: string }>;
   readonly readSerialScale: () => Promise<ScaleReading>;
   readonly getDeviceAvailability: () => Promise<AssignedDevices>;
   readonly printSerialReceipt: (request: ReceiptRequest) => Promise<{
@@ -31,6 +34,8 @@ export interface CarniceriasNativeApi {
 export const enum NativeChannel {
   Diagnostic = 'carnicerias:diagnostic',
   SaveReceiptPdf = 'carnicerias:save-receipt-pdf',
+  SaveShiftReportPdf = 'carnicerias:save-shift-report-pdf',
+  PrintShiftReport = 'carnicerias:print-shift-report',
   ReadSerialScale = 'carnicerias:read-serial-scale',
   DeviceAvailability = 'carnicerias:device-availability',
   PrintSerialReceipt = 'carnicerias:print-serial-receipt',

@@ -2809,6 +2809,31 @@ namespace Carnicerias.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Carnicerias.Infrastructure.ShiftClosingReport", b =>
+                {
+                    b.Property<Guid>("CashierShiftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("CashierShiftId");
+
+                    b.HasIndex("CompanyId", "CashierShiftId")
+                        .IsUnique();
+
+                    b.HasIndex("CompanyId", "CreatedAtUtc");
+
+                    b.ToTable("shift_closing_reports", "payments_cash");
+                });
+
             modelBuilder.Entity("Carnicerias.Infrastructure.Supplier", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4273,6 +4298,16 @@ namespace Carnicerias.Infrastructure.Migrations
                         .WithMany("Payments")
                         .HasForeignKey("SaleId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.ShiftClosingReport", b =>
+                {
+                    b.HasOne("Carnicerias.Infrastructure.CashierShift", null)
+                        .WithOne()
+                        .HasForeignKey("Carnicerias.Infrastructure.ShiftClosingReport", "CompanyId", "CashierShiftId")
+                        .HasPrincipalKey("Carnicerias.Infrastructure.CashierShift", "CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

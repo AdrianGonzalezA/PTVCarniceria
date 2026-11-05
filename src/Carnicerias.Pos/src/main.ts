@@ -24,11 +24,12 @@ import { issueHasarFiscalTicket, issueHasarNonFiscalTicket } from './hasar-ticke
 import { NativeChannel } from './native-api';
 import { initialUrlForProfile, resolvePosProfile } from './pos-profile';
 import { createReceiptHtml, validateReceiptRequest } from './receipt-pdf';
-import { sendSerialReceipt } from './serial-printer';
+import { sendSerialBytes, sendSerialReceipt } from './serial-printer';
 import { sendEscPosReceipt } from './escpos-receipt';
 import { fetchAssignedDevices, noDevices, TerminalDevices, type AssignedDevices } from './terminal-devices';
 import { createSecureWebPreferences, isAllowedNavigation } from './security-policy';
 import { loadTerminalCredential } from './terminal-credential';
+import { shiftClosingHtml, shiftClosingLines, validateShiftClosingReport } from './shift-closing-report';
 
 function createContentSecurityPolicy(nonce?: string): string {
   const nonceSource = nonce ? ` 'nonce-${nonce}'` : '';
@@ -123,6 +124,50 @@ function registerNativeApi(devices: TerminalDevices,
     } finally {
       receiptWindow.destroy();
     }
+  });
+  ipcMain.handle(NativeChannel.SaveShiftReportPdf, async (event, payload: unknown) => {
+    validateIpcSender(event);
+    const report = validateShiftClosingReport(payload);
+    const reportWindow = new BrowserWindow({
+      show: false, skipTaskbar: true,
+      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true },
+    });
+    reportWindow.webContents.on('will-navigate', (navigationEvent) => navigationEvent.preventDefault());
+    reportWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    try {
+      await reportWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(shiftClosingHtml(report))}`);
+      const pdf = await reportWindow.webContents.printToPDF({
+        printBackground: true, pageSize: 'A4',
+      });
+      const directory = app.getPath('downloads');
+      await mkdir(directory, { recursive: true });
+      const filePath = path.join(directory, `rendicion-turno-${report.shiftId}-${randomUUID()}.pdf`);
+      await writeFile(filePath, pdf, { flag: 'wx' });
+      return { path: filePath };
+    } finally { reportWindow.destroy(); }
+  });
+  ipcMain.handle(NativeChannel.PrintShiftReport, async (event, payload: unknown) => {
+    validateIpcSender(event);
+    const report = validateShiftClosingReport(payload);
+    const assigned = await synchronizeDevices();
+    if (!assigned.printer) throw new Error('PRINTER_NOT_CONFIGURED');
+    const lines = shiftClosingLines(report);
+    if (assigned.printer.kind === 'hasar') {
+      return withHasar(async (session, port) => {
+        const wrapped = lines.flatMap((line) => line.match(/.{1,45}/g) ?? ['']);
+        await issueHasarNonFiscalTicket(session, wrapped);
+        return { port };
+      });
+    }
+    if (assigned.printer.kind === 'escpos') {
+      const ascii = lines.join('\n').normalize('NFD').replace(/\p{Mn}/gu, '')
+        .replace(/[^\x20-\x7e\n]/g, '?');
+      const bytes = Buffer.concat([Buffer.from([0x1b, 0x40]), Buffer.from(`${ascii}\n\n\n`, 'ascii'),
+        Buffer.from([0x1d, 0x56, 0x00])]);
+      return sendSerialBytes(bytes, undefined, devices.escPosPrinter());
+    }
+    return sendSerialBytes(Buffer.from(`${lines.join('\r\n')}\r\n\r\n`, 'utf8'),
+      undefined, devices.textPrinter());
   });
   ipcMain.handle(NativeChannel.DeviceAvailability, async (event) => {
     validateIpcSender(event);

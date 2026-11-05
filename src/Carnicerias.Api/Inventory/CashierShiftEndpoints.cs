@@ -4,6 +4,7 @@ using Carnicerias.Domain.Sales;
 using Carnicerias.Infrastructure;
 using Carnicerias.Api.Sessions;
 using System.Data;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -14,6 +15,7 @@ public static class CashierShiftEndpoints
     public static IEndpointRouteBuilder MapCashierShiftEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet("/api/cashier-shifts/current", GetCurrentAsync).RequireOperationalContext();
+        endpoints.MapGet("/api/cashier-shifts/current/close-preview", GetCurrentAsync).RequireOperationalContext();
         endpoints.MapGet("/api/cashier-shifts/last-closed", GetLastClosedAsync).RequireOperationalContext();
         endpoints.MapPost("/api/cashier-shifts", OpenAsync).RequireOperationalContext();
         endpoints.MapPost("/api/cashier-shifts/current/close", CloseAsync).RequireOperationalContext();
@@ -55,7 +57,12 @@ public static class CashierShiftEndpoints
             .Select(user => user.Username)
             .SingleOrDefaultAsync(cancellationToken);
         var response = await ToResponseAsync(db, shift, cancellationToken);
-        return Results.Ok(response with { CashierName = cashierName });
+        var savedReport = await db.ShiftClosingReports.AsNoTracking()
+            .Where(report => report.CompanyId == context.CompanyId && report.CashierShiftId == shift.Id)
+            .Select(report => report.SnapshotJson).SingleOrDefaultAsync(cancellationToken);
+        return Results.Ok(response with { CashierName = cashierName,
+            Report = savedReport is null ? null : JsonSerializer.Deserialize<ShiftClosingSnapshot>(
+                savedReport, ShiftClosingSnapshot.JsonOptions) });
     }
 
     private static async Task<IResult> OpenAsync(
@@ -98,6 +105,24 @@ public static class CashierShiftEndpoints
         CancellationToken cancellationToken)
     {
         var context = accessor.Context;
+        CloseShiftRequest? request = null;
+        if (httpContext.Request.HasJsonContentType())
+        {
+            try
+            {
+                request = await httpContext.Request.ReadFromJsonAsync<CloseShiftRequest>(cancellationToken);
+            }
+            catch (JsonException)
+            {
+                return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+            }
+        }
+        else if (httpContext.Request.ContentLength is > 0)
+            return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+        if (request is not null &&
+            (request.CountedCash.HasValue != request.HandedCash.HasValue ||
+             !IsValidAmount(request.CountedCash) || !IsValidAmount(request.HandedCash)))
+            return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
         try
         {
             await using var transaction = await db.Database.BeginTransactionAsync(
@@ -126,13 +151,35 @@ public static class CashierShiftEndpoints
 
             var now = timeProvider.GetUtcNow();
             shift.Close(context.UserId, now);
+            var response = await ToResponseAsync(db, shift, cancellationToken);
+            var companyName = await db.Companies.AsNoTracking()
+                .Where(item => item.Id == context.CompanyId).Select(item => item.Name)
+                .SingleAsync(cancellationToken);
+            var branchName = await db.Branches.AsNoTracking()
+                .Where(item => item.CompanyId == context.CompanyId && item.Id == context.BranchId)
+                .Select(item => item.Name).SingleAsync(cancellationToken);
+            var cashierName = await db.Users.AsNoTracking()
+                .Where(item => item.CompanyId == context.CompanyId && item.Id == context.UserId)
+                .Select(item => item.Username).SingleAsync(cancellationToken);
+            var terminalName = accessor.TerminalId is null ? null : await db.PosTerminals.AsNoTracking()
+                .Where(item => item.CompanyId == context.CompanyId && item.Id == accessor.TerminalId)
+                .Select(item => item.Name).SingleOrDefaultAsync(cancellationToken);
+            var report = new ShiftClosingSnapshot(1, shift.Id, context.CompanyId, context.BranchId,
+                accessor.TerminalId, context.UserId, companyName, branchName, terminalName,
+                cashierName, shift.OpenedAtUtc, now, shift.OpeningCash, response.CashSales,
+                response.NonCashSales, response.AccountSales, response.SalesTotal,
+                response.CashCollections, response.NonCashCollections, response.CreditApplied,
+                response.CashWithdrawals, response.CashBalance, request?.CountedCash,
+                request?.HandedCash, request?.CountedCash - response.CashBalance,
+                response.PaymentBreakdown.Select(item => new ShiftClosingPayment(item.Method, item.Amount)).ToArray());
+            db.ShiftClosingReports.Add(new ShiftClosingReport(context.CompanyId, shift.Id,
+                JsonSerializer.Serialize(report, ShiftClosingSnapshot.JsonOptions), now));
             if (accessor.TerminalId is not null)
             {
                 var session = await db.Sessions.SingleAsync(item => item.Id == context.SessionId, cancellationToken);
                 session.Revoke(now);
             }
             await db.SaveChangesAsync(cancellationToken);
-            var response = await ToResponseAsync(db, shift, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             if (accessor.TerminalId is not null)
                 httpContext.Response.Cookies.Delete(SessionEndpoints.CookieName, new CookieOptions
@@ -142,7 +189,7 @@ public static class CashierShiftEndpoints
                     SameSite = SameSiteMode.Strict,
                     Path = "/api"
                 });
-            return Results.Ok(response);
+            return Results.Ok(response with { CashierName = cashierName, Report = report });
         }
         catch (Exception exception) when (IsSerializationFailure(exception))
         {
@@ -160,6 +207,10 @@ public static class CashierShiftEndpoints
 
     private static bool IsUniqueViolation(DbUpdateException exception) =>
         exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
+
+    private static bool IsValidAmount(decimal? value) =>
+        value is null || (value >= 0 && value <= 9_999_999_999.99m &&
+                          decimal.Round(value.Value, 2) == value.Value);
 
     private static async Task<ShiftResponse> ToResponseAsync(
         PlatformAccessDbContext db, CashierShift shift, CancellationToken cancellationToken)
@@ -246,6 +297,7 @@ public static class CashierShiftEndpoints
         statusCode: statusCode);
 
     private sealed record OpenShiftRequest(decimal OpeningCash);
+    private sealed record CloseShiftRequest(decimal? CountedCash, decimal? HandedCash);
     private sealed record ShiftResponse(
         Guid Id, decimal OpeningCash, DateTimeOffset OpenedAtUtc, DateTimeOffset? ClosedAtUtc,
         decimal CashSales, decimal NonCashSales, decimal AccountSales, decimal SalesTotal, decimal CashBalance,
@@ -255,6 +307,7 @@ public static class CashierShiftEndpoints
         IReadOnlyList<PaymentBreakdownItem> PaymentBreakdown)
     {
         public string? CashierName { get; init; }
+        public ShiftClosingSnapshot? Report { get; init; }
     }
 
     private sealed record PaymentBreakdownItem(string Method, decimal Amount);

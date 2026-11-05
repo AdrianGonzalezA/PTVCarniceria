@@ -92,14 +92,16 @@
             }
             @case ('shifts') {
               <table>
-                <thead><tr><th scope="col">Apertura</th><th scope="col">Cierre</th><th scope="col">Sucursal / caja</th><th scope="col">Cajero</th><th scope="col" class="numeric-value">Inicial</th><th scope="col">Estado</th></tr></thead>
+                <thead><tr><th scope="col">Apertura</th><th scope="col">Cierre</th><th scope="col">Sucursal / caja</th><th scope="col">Cajero</th><th scope="col" class="numeric-value">Inicial</th><th scope="col">Estado</th><th scope="col">Rendición</th></tr></thead>
                 <tbody>
                   @for (shift of shifts()?.items ?? []; track shift.id) {
                     <tr><td>{{ shift.openedAtUtc | date:'dd/MM/yyyy HH:mm' }}</td>
                       <td>{{ shift.closedAtUtc ? (shift.closedAtUtc | date:'dd/MM/yyyy HH:mm') : '—' }}</td>
                       <td>{{ shift.branchName }} · {{ shift.terminalName ?? 'Caja histórica' }}</td>
                       <td>{{ shift.cashierName }}</td><td class="numeric-value">$ {{ shift.openingCash | number:'1.2-2' }}</td>
-                      <td>{{ shift.status === 'open' ? 'Abierto' : 'Cerrado' }}</td></tr>
+                      <td>{{ shift.status === 'open' ? 'Abierto' : 'Cerrado' }}</td>
+                      <td>@if (shift.hasReport) { <button type="button" class="secondary-button" (click)="viewShiftReport(shift.id)">Ver rendición</button> }
+                        @else if (shift.status === 'closed') { Sin snapshot histórico } @else { — }</td></tr>
                   }
                 </tbody>
               </table>
@@ -205,6 +207,40 @@
               @if (payment.tenderedAmount !== payment.appliedAmount) { (entregado $ {{ payment.tenderedAmount | number:'1.2-2' }}) }
             </li>
           }</ul>
+          }
+        </section>
+      </app-admin-detail-dialog>
+    }
+    @if (shiftReportId()) {
+      <app-admin-detail-dialog labelledBy="shift-report-title" (closed)="closeDetail()">
+        <section class="ticket-detail" aria-labelledby="shift-report-title">
+          <header><h2 id="shift-report-title">Rendición de turno</h2><button type="button" class="secondary-button" (click)="closeDetail()">Cerrar</button></header>
+          @if (shiftReportLoading()) { <p role="status">Cargando rendición…</p> }
+          @if (shiftReportError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+          @if (shiftReport(); as report) {
+            <p>{{ report.companyName }} · {{ report.branchName }} · {{ report.terminalName ?? 'Caja histórica' }} · {{ report.cashierName }}</p>
+            <p>Apertura {{ report.openedAtUtc | date:'dd/MM/yyyy HH:mm' }} · Cierre {{ report.closedAtUtc | date:'dd/MM/yyyy HH:mm' }}</p>
+            <table><tbody>
+              <tr><th>Fondo inicial</th><td class="numeric-value">$ {{ report.openingCash | number:'1.2-2':'es-AR' }}</td></tr>
+              <tr><th>Ventas del turno</th><td class="numeric-value">$ {{ report.salesTotal | number:'1.2-2':'es-AR' }}</td></tr>
+              <tr><th>Ventas en efectivo</th><td class="numeric-value">$ {{ report.cashSales | number:'1.2-2':'es-AR' }}</td></tr>
+              <tr><th>Ventas otros medios</th><td class="numeric-value">$ {{ report.nonCashSales | number:'1.2-2':'es-AR' }}</td></tr>
+              <tr><th>Ventas a cuenta corriente</th><td class="numeric-value">$ {{ report.accountSales | number:'1.2-2':'es-AR' }}</td></tr>
+              <tr><th>Saldo a favor aplicado</th><td class="numeric-value">$ {{ report.creditApplied | number:'1.2-2':'es-AR' }}</td></tr>
+              <tr><th>Cobranzas en efectivo</th><td class="numeric-value">$ {{ report.cashCollections | number:'1.2-2':'es-AR' }}</td></tr>
+              <tr><th>Cobranzas otros medios</th><td class="numeric-value">$ {{ report.nonCashCollections | number:'1.2-2':'es-AR' }}</td></tr>
+              @for (payment of report.paymentBreakdown; track payment.method) {
+                <tr><th>Cobros netos · {{ paymentLabel(payment.method) }}</th><td class="numeric-value">$ {{ payment.amount | number:'1.2-2':'es-AR' }}</td></tr>
+              }
+              <tr><th>Retiros</th><td class="numeric-value">$ {{ report.cashWithdrawals | number:'1.2-2':'es-AR' }}</td></tr>
+              <tr><th>Efectivo esperado</th><td class="numeric-value">$ {{ report.expectedCash | number:'1.2-2':'es-AR' }}</td></tr>
+              @if (report.isComplete) {
+                <tr><th>Efectivo contado</th><td class="numeric-value">$ {{ report.countedCash | number:'1.2-2':'es-AR' }}</td></tr>
+                <tr><th>Efectivo entregado</th><td class="numeric-value">$ {{ report.handedCash | number:'1.2-2':'es-AR' }}</td></tr>
+                <tr><th>Diferencia</th><td class="numeric-value">$ {{ report.cashDifference | number:'1.2-2':'es-AR' }}</td></tr>
+              } @else { <tr><td colspan="2">Cierre legado sin arqueo declarado.</td></tr> }
+            </tbody></table>
+            <button type="button" class="secondary-button" (click)="downloadShiftReport(report.shiftId)">Descargar PDF / reimprimir</button>
           }
         </section>
       </app-admin-detail-dialog>

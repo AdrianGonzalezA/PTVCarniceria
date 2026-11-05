@@ -1,10 +1,12 @@
 using Carnicerias.Api.Contracts;
 using Carnicerias.Api.Fiscal;
+using Carnicerias.Api.Inventory;
 using Carnicerias.Api.Security;
 using Carnicerias.Domain.Sales;
 using Carnicerias.Infrastructure;
 using Carnicerias.PlatformAccess;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace Carnicerias.Api.History;
 
@@ -18,6 +20,8 @@ public static class AdminHistoryEndpoints
         history.MapGet("/summary", GetSummaryAsync);
         history.MapGet("/sales/{saleId:guid}", GetSaleAsync);
         history.MapGet("/shifts", ListShiftsAsync);
+        history.MapGet("/shifts/{shiftId:guid}/report", GetShiftReportAsync);
+        history.MapGet("/shifts/{shiftId:guid}/report.pdf", GetShiftReportPdfAsync);
         history.MapGet("/cash-movements", ListCashMovementsAsync);
         history.MapGet("/stock-movements", ListStockMovementsAsync);
         return endpoints;
@@ -237,13 +241,43 @@ public static class AdminHistoryEndpoints
                 shift.PosTerminalId, db.PosTerminals.Where(terminal => terminal.Id == shift.PosTerminalId)
                     .Select(terminal => terminal.Name).FirstOrDefault(),
                 shift.CashierId, db.Users.Where(user => user.Id == shift.CashierId)
-                    .Select(user => user.Username).FirstOrDefault() ?? ""))
+                    .Select(user => user.Username).FirstOrDefault() ?? "",
+                db.ShiftClosingReports.Any(report => report.CompanyId == shift.CompanyId &&
+                    report.CashierShiftId == shift.Id)))
             .ToArrayAsync(cancellationToken);
         return Results.Ok(new HistoryPage<ShiftItem>(rows.Select(row => new ShiftItem(
             row.Id, row.OpenedAtUtc, row.ClosedAtUtc,
             row.Status == CashierShiftStatus.Open ? "open" : "closed", row.OpeningCash,
             row.BranchId, row.BranchName, row.TerminalId, row.TerminalName,
-            row.CashierId, row.CashierName)).ToArray(), page, pageSize, total));
+            row.CashierId, row.CashierName, row.HasReport)).ToArray(), page, pageSize, total));
+    }
+
+    private static async Task<IResult> GetShiftReportAsync(Guid shiftId,
+        PlatformAccessDbContext db, OperationalContextAccessor accessor,
+        CancellationToken cancellationToken)
+    {
+        var report = await LoadShiftReportAsync(shiftId, db, accessor.Context.CompanyId, cancellationToken);
+        return report is null ? Results.NotFound() : Results.Ok(report);
+    }
+
+    private static async Task<IResult> GetShiftReportPdfAsync(Guid shiftId,
+        PlatformAccessDbContext db, OperationalContextAccessor accessor,
+        CancellationToken cancellationToken)
+    {
+        var report = await LoadShiftReportAsync(shiftId, db, accessor.Context.CompanyId, cancellationToken);
+        if (report is null) return Results.NotFound();
+        return Results.File(await ShiftClosingPdf.RenderAsync(report), "application/pdf",
+            $"rendicion-turno-{shiftId:N}.pdf");
+    }
+
+    private static async Task<ShiftClosingSnapshot?> LoadShiftReportAsync(Guid shiftId,
+        PlatformAccessDbContext db, Guid companyId, CancellationToken cancellationToken)
+    {
+        var json = await db.ShiftClosingReports.AsNoTracking()
+            .Where(report => report.CompanyId == companyId && report.CashierShiftId == shiftId)
+            .Select(report => report.SnapshotJson).SingleOrDefaultAsync(cancellationToken);
+        return json is null ? null : JsonSerializer.Deserialize<ShiftClosingSnapshot>(
+            json, ShiftClosingSnapshot.JsonOptions);
     }
 
     private static async Task<IResult> ListCashMovementsAsync(
@@ -396,10 +430,10 @@ public static class AdminHistoryEndpoints
     private sealed record SalePaymentItem(string Method, decimal TenderedAmount, decimal AppliedAmount);
     private sealed record ShiftRow(Guid Id, DateTimeOffset OpenedAtUtc, DateTimeOffset? ClosedAtUtc,
         CashierShiftStatus Status, decimal OpeningCash, Guid BranchId, string BranchName,
-        Guid? TerminalId, string? TerminalName, Guid CashierId, string CashierName);
+        Guid? TerminalId, string? TerminalName, Guid CashierId, string CashierName, bool HasReport);
     private sealed record ShiftItem(Guid Id, DateTimeOffset OpenedAtUtc, DateTimeOffset? ClosedAtUtc,
         string Status, decimal OpeningCash, Guid BranchId, string BranchName,
-        Guid? TerminalId, string? TerminalName, Guid CashierId, string CashierName);
+        Guid? TerminalId, string? TerminalName, Guid CashierId, string CashierName, bool HasReport);
     private sealed record CashRow(Guid Id, DateTimeOffset CreatedAtUtc, Guid BranchId, string BranchName,
         Guid? TerminalId, string? TerminalName, Guid CashierId, string CashierName,
         Guid ShiftId, Guid? SaleId, CashLedgerMovementKind Kind, PaymentMethod Method, decimal AmountDelta);

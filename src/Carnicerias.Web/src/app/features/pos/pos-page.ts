@@ -17,7 +17,7 @@ import { HasarSalePrintResult, PosDeviceAvailability, PosDeviceClient, SerialPri
 import { ConfirmedSale, SaleDocumentType, SaleDraft, SaleDraftClient, SaleDraftLine, SalePaymentMethod, SaleRecipientTaxStatus, SaleTicketSlot } from '../../core/sales/sale-draft-client';
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { AuthorizedFiscalDocument, FiscalDocumentClient } from '../../core/sales/fiscal-document-client';
-import { CashierShift, CashierShiftClient } from '../../core/sales/cashier-shift-client';
+import { CashierShift, CashierShiftClient, ShiftClosingReport } from '../../core/sales/cashier-shift-client';
 import { CashWithdrawal, CashWithdrawalClient } from '../../core/sales/cash-withdrawal-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { CreditCustomerAccount, CreditCustomerClient, CreditCustomerOption, FiscalCustomerOption } from '../../core/customers/credit-customer-client';
@@ -239,6 +239,10 @@ export class PosPage implements OnInit {
   protected readonly lastClosedShift = signal<CashierShift | null>(null);
   protected readonly shiftDialog = signal(false);
   protected readonly shiftOpeningCash = signal('0');
+  protected readonly shiftCountedCash = signal('');
+  protected readonly shiftHandedCash = signal('');
+  protected readonly closedShiftReport = signal<ShiftClosingReport | null>(null);
+  protected readonly shiftReportNotice = signal<string | null>(null);
   protected readonly shiftBusy = signal(false);
   protected readonly shiftError = signal<string | null>(null);
   protected readonly withdrawalAmount = signal('');
@@ -1616,6 +1620,12 @@ export class PosPage implements OnInit {
     this.shiftOpeningCash.set((event.target as HTMLInputElement).value);
   }
 
+  protected updateClosingAmount(field: 'counted' | 'handed', event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    if (field === 'counted') this.shiftCountedCash.set(value);
+    else this.shiftHandedCash.set(value);
+  }
+
   protected openShiftDialog(): void {
     if (!this.terminal()) return;
     this.shiftDialog.set(true);
@@ -1711,15 +1721,28 @@ export class PosPage implements OnInit {
       this.shiftError.set('Finalizá o cancelá el ticket antes de cerrar el turno.');
       return;
     }
+    const countedCash = parseLocalizedDecimal(this.shiftCountedCash(), 2);
+    const handedCash = parseLocalizedDecimal(this.shiftHandedCash(), 2);
+    if (countedCash === null || handedCash === null || countedCash < 0 || handedCash < 0 ||
+        countedCash > 9_999_999_999.99 || handedCash > 9_999_999_999.99) {
+      this.shiftError.set('Ingresá el efectivo contado y entregado con hasta dos decimales.');
+      return;
+    }
     this.shiftBusy.set(true);
     this.shiftError.set(null);
-    this.cashierShiftClient.close().subscribe({
+    this.cashierShiftClient.close(countedCash, handedCash).subscribe({
       next: (closedShift) => {
         this.cashierShift.set(null);
         this.lastClosedShift.set(closedShift);
         this.shiftBusy.set(false);
-        this.shiftDialog.set(false);
-        void this.router.navigateByUrl('/');
+        this.closedShiftReport.set(closedShift.report ?? null);
+        this.shiftReportNotice.set(null);
+        if (closedShift.report) {
+          void this.posDeviceClient.printShiftReport(closedShift.report)
+            .then((printed) => this.shiftReportNotice.set(printed
+              ? `Rendición enviada a ${printed.port}.` : 'No hay impresora asignada a esta caja.'))
+            .catch(() => this.shiftReportNotice.set('El turno cerró, pero falló la impresión. Podés reintentar.'));
+        } else this.shiftReportNotice.set('El turno cerró sin informe disponible.');
       },
       error: (error: HttpErrorResponse) => {
         this.shiftBusy.set(false);
@@ -1731,6 +1754,29 @@ export class PosPage implements OnInit {
             : 'No se pudo cerrar el turno. Intentá de nuevo.');
       },
     });
+  }
+
+  protected reprintShiftReport(): void {
+    const report = this.closedShiftReport();
+    if (!report) return;
+    this.shiftReportNotice.set('Enviando rendición a la impresora…');
+    void this.posDeviceClient.printShiftReport(report)
+      .then((printed) => this.shiftReportNotice.set(printed
+        ? `Rendición enviada a ${printed.port}.` : 'No hay impresora asignada a esta caja.'))
+      .catch(() => this.shiftReportNotice.set('No se pudo imprimir la rendición. Reintentá.'));
+  }
+
+  protected downloadShiftReport(): void {
+    const report = this.closedShiftReport();
+    if (!report) return;
+    void this.posDeviceClient.saveShiftReportPdf(report)
+      .then(() => this.shiftReportNotice.set('PDF guardado en Descargas.'))
+      .catch(() => this.shiftReportNotice.set('No se pudo guardar el PDF. Reintentá.'));
+  }
+
+  protected leaveClosedShift(): void {
+    this.shiftDialog.set(false);
+    void this.router.navigateByUrl('/');
   }
 
   protected togglePayment(method: SalePaymentMethod, event: Event): void {

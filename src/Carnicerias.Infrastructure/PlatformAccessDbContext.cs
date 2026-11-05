@@ -87,6 +87,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
     public DbSet<InventoryPieceStateEvent> InventoryPieceStateEvents => Set<InventoryPieceStateEvent>();
 
     public DbSet<CashierShift> CashierShifts => Set<CashierShift>();
+    public DbSet<ShiftClosingReport> ShiftClosingReports => Set<ShiftClosingReport>();
 
     public DbSet<ConfirmedSale> ConfirmedSales => Set<ConfirmedSale>();
 
@@ -1564,6 +1565,18 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .IsUnique().HasFilter("\"Status\" = 0 AND \"PosTerminalId\" IS NOT NULL");
             entity.HasIndex(shift => new { shift.CompanyId, shift.OpenedAtUtc });
             entity.HasIndex(shift => new { shift.CompanyId, shift.BranchId, shift.PosTerminalId, shift.OpenedAtUtc });
+        });
+
+        modelBuilder.Entity<ShiftClosingReport>(entity =>
+        {
+            entity.ToTable("shift_closing_reports", "payments_cash");
+            entity.HasKey(report => report.CashierShiftId);
+            entity.Property(report => report.SnapshotJson).HasColumnType("jsonb").IsRequired();
+            entity.HasOne<CashierShift>().WithOne()
+                .HasForeignKey<ShiftClosingReport>(report => new { report.CompanyId, report.CashierShiftId })
+                .HasPrincipalKey<CashierShift>(shift => new { shift.CompanyId, shift.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(report => new { report.CompanyId, report.CreatedAtUtc });
         });
     }
 }

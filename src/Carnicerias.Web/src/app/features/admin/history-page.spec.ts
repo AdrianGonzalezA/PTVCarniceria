@@ -86,6 +86,40 @@ describe('HistoryPage', () => {
     expect(page.querySelector('tbody button')).toBe(trigger);
   });
 
+  it('opens a stored shift closing report and labels older shifts without one', () => {
+    const { fixture, http, page } = load();
+    const shiftsTab = Array.from(page.querySelectorAll<HTMLButtonElement>('.history-tabs button'))
+      .find((button) => button.textContent?.includes('Turnos'))!;
+    shiftsTab.click();
+    http.expectOne((request) => request.url === '/api/admin/history/shifts').flush({
+      items: [
+        { id: 'shift-new', openedAtUtc: '2026-11-05T10:00:00Z',
+          closedAtUtc: '2026-11-05T18:00:00Z', status: 'closed', openingCash: 100,
+          branchName: 'Centro', terminalName: 'Caja 1', cashierName: 'cajero1', hasReport: true },
+        { id: 'shift-old', openedAtUtc: '2026-10-05T10:00:00Z',
+          closedAtUtc: '2026-10-05T18:00:00Z', status: 'closed', openingCash: 50,
+          branchName: 'Centro', terminalName: 'Caja 1', cashierName: 'cajero2', hasReport: false },
+      ], page: 1, pageSize: 30, totalItems: 2,
+    });
+    fixture.detectChanges();
+    expect(page.textContent).toContain('Sin snapshot histórico');
+    expect(page.querySelectorAll('tbody button')).toHaveLength(1);
+    page.querySelector<HTMLButtonElement>('tbody button')!.click();
+    http.expectOne('/api/admin/history/shifts/shift-new/report').flush({
+      shiftId: 'shift-new', companyName: 'Empresa', branchName: 'Centro', terminalName: 'Caja 1',
+      cashierName: 'cajero1', openedAtUtc: '2026-11-05T10:00:00Z',
+      closedAtUtc: '2026-11-05T18:00:00Z', openingCash: 100, salesTotal: 400,
+      cashSales: 300, nonCashSales: 100, accountSales: 0, creditApplied: 0,
+      cashCollections: 20, nonCashCollections: 0, paymentBreakdown: [],
+      cashWithdrawals: 10, expectedCash: 410, countedCash: 405,
+      handedCash: 400, cashDifference: -5, isComplete: true,
+    });
+    fixture.detectChanges();
+    expect(page.querySelector('dialog[open]')?.textContent).toContain('Efectivo contado');
+    expect(page.querySelector('dialog[open]')?.textContent).toContain('405,00');
+    expect(page.querySelector('dialog[open]')?.textContent).toContain('Descargar PDF');
+  });
+
   it('distinguishes an issued fiscal snapshot from an older incomplete attempt', () => {
     const { fixture, http, page } = load();
     page.querySelector<HTMLButtonElement>('tbody button')!.click();

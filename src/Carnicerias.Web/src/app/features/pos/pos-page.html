@@ -739,10 +739,32 @@
   @if (shiftDialog()) {
     <div class="dialog-backdrop">
       <section class="pos-dialog shift-dialog" role="dialog" aria-modal="true" aria-labelledby="shift-title">
-        <button class="dialog-close" type="button" aria-label="Cerrar turno" (click)="shiftDialog.set(false)">×</button>
+        <button class="dialog-close" type="button" aria-label="Cerrar turno" (click)="closedShiftReport() ? leaveClosedShift() : shiftDialog.set(false)">×</button>
         <p class="eyebrow">{{ session()?.context?.branchName }} · {{ session()?.username }}</p>
-        <h2 id="shift-title">{{ cashierShift() ? 'Turno de caja activo' : 'Abrir turno de caja' }}</h2>
-        @if (cashierShift(); as shift) {
+        <h2 id="shift-title">{{ closedShiftReport() ? 'Rendición de turno' : cashierShift() ? 'Turno de caja activo' : 'Abrir turno de caja' }}</h2>
+        @if (closedShiftReport(); as report) {
+          <div class="shift-summary closed-shift-summary" role="status">
+            <span>Caja</span><strong>{{ report.branchName }} · {{ report.terminalName ?? 'Caja histórica' }}</strong>
+            <span>Cajero</span><strong>{{ report.cashierName }}</strong>
+            <span>Apertura</span><strong>{{ report.openedAtUtc | date:'dd/MM/yyyy HH:mm' }}</strong>
+            <span>Cierre</span><strong>{{ report.closedAtUtc | date:'dd/MM/yyyy HH:mm' }}</strong>
+            <span>Fondo inicial</span><strong>{{ formatMoney(report.openingCash) }}</strong>
+            <span>Ventas del turno</span><strong>{{ formatMoney(report.salesTotal) }}</strong>
+            <span>Cobros en efectivo</span><strong>{{ formatMoney(report.cashSales + report.cashCollections) }}</strong>
+            <span>Cobros por otros medios</span><strong>{{ formatMoney(report.nonCashSales + report.nonCashCollections) }}</strong>
+            <span>Retiros</span><strong>{{ formatMoney(report.cashWithdrawals) }}</strong>
+            <span>Efectivo esperado</span><strong>{{ formatMoney(report.expectedCash) }}</strong>
+            <span>Efectivo contado</span><strong>{{ formatMoney(report.countedCash ?? 0) }}</strong>
+            <span>Efectivo entregado</span><strong>{{ formatMoney(report.handedCash ?? 0) }}</strong>
+            <span>Diferencia</span><strong>{{ formatMoney(report.cashDifference ?? 0) }}</strong>
+          </div>
+          @if (shiftReportNotice(); as notice) { <p role="status">{{ notice }}</p> }
+          <div class="dialog-actions">
+            <button type="button" class="secondary-button" (click)="reprintShiftReport()">Reimprimir</button>
+            <button type="button" class="secondary-button" (click)="downloadShiftReport()">Descargar PDF</button>
+            <button type="button" class="finish-button" (click)="leaveClosedShift()">Salir del turno</button>
+          </div>
+        } @else if (cashierShift(); as shift) {
           <div class="shift-summary">
             <span>Fondo inicial</span><strong>{{ formatMoney(shift.openingCash) }}</strong>
             <span>Ventas del turno</span><strong>{{ formatMoney(shift.salesTotal) }}</strong>
@@ -788,6 +810,12 @@
           </section>
           @if (lines().length > 0) { <p class="price-list-lock">Hay un ticket abierto. Cerralo o cancelalo antes de cerrar el turno.</p> }
           @if (hasPendingWithdrawal()) { <p class="price-list-lock">Hay un retiro pendiente de aprobación. El turno permanecerá abierto.</p> }
+          <label class="quantity-field" for="shift-counted-cash">Efectivo contado al cierre
+            <input id="shift-counted-cash" type="text" inputmode="decimal" [appLocalizedDecimal]="shiftCountedCash()" (input)="updateClosingAmount('counted', $event)" />
+          </label>
+          <label class="quantity-field" for="shift-handed-cash">Efectivo entregado
+            <input id="shift-handed-cash" type="text" inputmode="decimal" [appLocalizedDecimal]="shiftHandedCash()" (input)="updateClosingAmount('handed', $event)" />
+          </label>
           @if (shiftError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
           <div class="dialog-actions">
             <button class="dialog-cancel" type="button" (click)="shiftDialog.set(false)">Volver al POS</button>

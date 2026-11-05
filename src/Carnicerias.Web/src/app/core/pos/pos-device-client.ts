@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { ConfirmedSale } from '../sales/sale-draft-client';
 import { receiptPayload, ReceiptPayload } from '../sales/receipt-pdf-client';
 import { AuthorizedFiscalDocument } from '../sales/fiscal-document-client';
+import { ShiftClosingReport } from '../sales/cashier-shift-client';
 
 interface DeviceBridge {
   readSerialScale(): Promise<{ readonly weightKg: number; readonly stable: boolean; readonly observedAtUtc: string }>;
@@ -10,6 +11,8 @@ interface DeviceBridge {
   getDeviceAvailability?(): Promise<PosDeviceAvailability>;
   getHasarSaleAvailability?(): Promise<{ readonly port: string | null }>;
   printHasarSaleReceipt?(request: ReceiptPayload): Promise<HasarSalePrintResult>;
+  printShiftReport?(report: ShiftClosingReport): Promise<{ readonly port: string }>;
+  saveShiftReportPdf?(report: ShiftClosingReport): Promise<{ readonly path: string }>;
 }
 
 export interface PosDeviceAvailability {
@@ -36,6 +39,20 @@ export interface SerialPrintResult {
 
 @Injectable({ providedIn: 'root' })
 export class PosDeviceClient {
+  async printShiftReport(report: ShiftClosingReport): Promise<{ readonly port: string } | null> {
+    const bridge = (window as Window & { carnicerias?: DeviceBridge }).carnicerias;
+    const devices = await this.deviceAvailability();
+    if (!devices.printer) return null;
+    if (!bridge?.printShiftReport) throw new Error('DEVICE_UNAVAILABLE');
+    return bridge.printShiftReport(report);
+  }
+
+  async saveShiftReportPdf(report: ShiftClosingReport): Promise<string> {
+    const bridge = (window as Window & { carnicerias?: DeviceBridge }).carnicerias;
+    if (!bridge?.saveShiftReportPdf) throw new Error('DEVICE_UNAVAILABLE');
+    return (await bridge.saveShiftReportPdf(report)).path;
+  }
+
   async deviceAvailability(): Promise<PosDeviceAvailability> {
     const bridge = (window as Window & { carnicerias?: DeviceBridge }).carnicerias;
     return bridge?.getDeviceAvailability ? bridge.getDeviceAvailability() : noDevices;

@@ -1,4 +1,5 @@
 using Carnicerias.Infrastructure;
+using Microsoft.EntityFrameworkCore;
 
 namespace Carnicerias.IntegrationTests;
 
@@ -86,6 +87,29 @@ public sealed class InventoryReceiptTests
             Guid.NewGuid(), DateTimeOffset.UtcNow));
         Assert.Throws<ArgumentException>(() => new InventoryReceiptLine(Guid.NewGuid(),
             Product(company, ProductSaleMode.Unit), 1.5m));
+    }
+
+    [Fact]
+    public void ModelKeepsReceiptAndMovementIdentityUniquePerCompanyAndBranch()
+    {
+        var options = new DbContextOptionsBuilder<PlatformAccessDbContext>()
+            .UseNpgsql("Host=localhost;Database=model_only;Username=design_only").Options;
+        using var db = new PlatformAccessDbContext(options);
+        var receipt = db.Model.FindEntityType(typeof(InventoryReceipt));
+        var line = db.Model.FindEntityType(typeof(InventoryReceiptLine));
+
+        Assert.NotNull(receipt);
+        Assert.NotNull(line);
+        Assert.Equal("receipt_documents", receipt.GetTableName());
+        Assert.Equal("inventory", receipt.GetSchema());
+        Assert.Equal("receipt_lines", line.GetTableName());
+        Assert.Contains(receipt.GetIndexes(), index => index.IsUnique &&
+            index.Properties.Select(property => property.Name).SequenceEqual(
+                [nameof(InventoryReceipt.CompanyId), nameof(InventoryReceipt.BranchId),
+                    nameof(InventoryReceipt.OperationId)]));
+        Assert.Contains(line.GetIndexes(), index => index.IsUnique &&
+            index.Properties.Select(property => property.Name).SequenceEqual(
+                [nameof(InventoryReceiptLine.InventoryMovementId)]));
     }
 
     private static CatalogProduct Product(Guid companyId, ProductSaleMode mode) =>

@@ -1494,7 +1494,7 @@ namespace Carnicerias.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_inventory_movements_delta_nonzero", "\"QuantityDelta\" <> 0");
 
-                            t.HasCheckConstraint("CK_inventory_movements_kind", "\"Kind\" IN (0, 1, 2, 3)");
+                            t.HasCheckConstraint("CK_inventory_movements_kind", "\"Kind\" IN (0, 1, 2, 3, 4)");
                         });
                 });
 
@@ -1687,6 +1687,192 @@ namespace Carnicerias.Infrastructure.Migrations
                             t.HasCheckConstraint("CK_piece_state_events_reconciliation_evidence", "(\"Kind\" = 8 AND \"PreviousStatus\" IS NOT NULL AND \"PreviousStatus\" = 5 AND \"Status\" IN (0, 6) AND \"ActorUserId\" IS NOT NULL AND \"ReconciliationOperationId\" IS NOT NULL AND \"EvidenceReference\" IS NOT NULL AND \"ObservedWeightKg\" IS NOT NULL AND \"CountedOnHand\" IS NOT NULL AND \"CountedAtUtc\" IS NOT NULL) OR (\"Kind\" <> 8 AND \"ReconciliationOperationId\" IS NULL AND \"EvidenceReference\" IS NULL AND \"EvidenceSha256\" IS NULL AND \"ObservedWeightKg\" IS NULL AND \"CountedOnHand\" IS NULL AND \"CountedAtUtc\" IS NULL AND \"InventoryMovementId\" IS NULL)");
 
                             t.HasCheckConstraint("CK_piece_state_events_status", "\"Status\" BETWEEN 0 AND 6 AND (\"PreviousStatus\" IS NULL OR \"PreviousStatus\" BETWEEN 0 AND 6)");
+                        });
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.InventoryReceipt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ApprovedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CanceledAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CanceledByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Destination")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateOnly>("DocumentDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("DocumentNumber")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("DocumentType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("ExternalReference")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceSystem")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SupplierCode")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid?>("SupplierId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SupplierIdentification")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("SupplierName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApprovedByUserId");
+
+                    b.HasIndex("CanceledByUserId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("CompanyId", "SupplierId");
+
+                    b.HasIndex("CompanyId", "BranchId", "OperationId")
+                        .IsUnique();
+
+                    b.HasIndex("CompanyId", "BranchId", "Status", "CreatedAtUtc");
+
+                    b.ToTable("receipt_documents", "inventory", t =>
+                        {
+                            t.HasCheckConstraint("CK_receipt_documents_decision", "(\"Status\" = 0 AND \"ApprovedByUserId\" IS NULL AND \"ApprovedAtUtc\" IS NULL AND \"CanceledByUserId\" IS NULL AND \"CanceledAtUtc\" IS NULL) OR (\"Status\" = 1 AND \"ApprovedByUserId\" IS NOT NULL AND \"ApprovedAtUtc\" IS NOT NULL AND \"CanceledByUserId\" IS NULL AND \"CanceledAtUtc\" IS NULL) OR (\"Status\" = 2 AND \"ApprovedByUserId\" IS NULL AND \"ApprovedAtUtc\" IS NULL AND \"CanceledByUserId\" IS NOT NULL AND \"CanceledAtUtc\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_receipt_documents_origin", "(\"SupplierId\" IS NOT NULL AND \"SourceSystem\" IS NULL AND \"SupplierCode\" <> '' AND \"SupplierName\" <> '') OR (\"SupplierId\" IS NULL AND \"SourceSystem\" IS NOT NULL AND \"SupplierCode\" = '' AND \"SupplierName\" = '')");
+
+                            t.HasCheckConstraint("CK_receipt_documents_status", "\"Status\" IN (0, 1, 2)");
+                        });
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.InventoryReceiptLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DifferenceReason")
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)");
+
+                    b.Property<DateTimeOffset?>("DifferenceResolvedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DifferenceResolvedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DifferenceStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("ExpectedQuantity")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)");
+
+                    b.Property<Guid?>("InventoryMovementId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProductCode")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("ReceiptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("ReceivedQuantity")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)");
+
+                    b.Property<int>("SaleMode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("CompanyId", "Id");
+
+                    b.HasIndex("DifferenceResolvedByUserId");
+
+                    b.HasIndex("InventoryMovementId")
+                        .IsUnique()
+                        .HasFilter("\"InventoryMovementId\" IS NOT NULL");
+
+                    b.HasIndex("CompanyId", "ProductId");
+
+                    b.HasIndex("CompanyId", "ReceiptId", "ProductId");
+
+                    b.ToTable("receipt_lines", "inventory", t =>
+                        {
+                            t.HasCheckConstraint("CK_receipt_lines_difference_status", "\"DifferenceStatus\" IN (0, 1, 2)");
+
+                            t.HasCheckConstraint("CK_receipt_lines_quantity", "\"ReceivedQuantity\" >= 0 AND (\"ExpectedQuantity\" IS NULL OR \"ExpectedQuantity\" >= 0)");
                         });
                 });
 
@@ -2640,8 +2826,6 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasColumnType("character varying(80)");
 
                     b.HasKey("Id");
-
-                    b.HasAlternateKey("CompanyId", "Id");
 
                     b.HasIndex("CompanyId", "NormalizedCode")
                         .IsUnique();
@@ -3667,6 +3851,65 @@ namespace Carnicerias.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("Carnicerias.Infrastructure.InventoryReceipt", b =>
+                {
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("ApprovedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("CanceledByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.PlatformAccess.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "BranchId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.Supplier", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "SupplierId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.InventoryReceiptLine", b =>
+                {
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("DifferenceResolvedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.Infrastructure.InventoryMovement", null)
+                        .WithMany()
+                        .HasForeignKey("InventoryMovementId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.Infrastructure.CatalogProduct", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "ProductId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.InventoryReceipt", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("CompanyId", "ReceiptId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Carnicerias.Infrastructure.MercadoPagoGatewaySettings", b =>
                 {
                     b.HasOne("Carnicerias.PlatformAccess.Company", null)
@@ -4185,6 +4428,11 @@ namespace Carnicerias.Infrastructure.Migrations
             modelBuilder.Entity("Carnicerias.Infrastructure.FiscalDocumentSnapshot", b =>
                 {
                     b.Navigation("VatLines");
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.InventoryReceipt", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("Carnicerias.Infrastructure.SaleCheckout", b =>

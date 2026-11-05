@@ -220,6 +220,74 @@ describe('HistoryPage', () => {
     expect(page.querySelector('tbody')?.textContent).not.toContain('2,000');
   });
 
+  it('combines stock filters with paging and shows the source document and running balance', () => {
+    const { fixture, http, page } = load();
+    const branch = page.querySelector<HTMLSelectElement>('#history-branch')!;
+    branch.value = 'branch-1';
+    branch.dispatchEvent(new Event('change'));
+    http.expectOne('/api/admin/companies/company-1/branches/branch-1/terminals').flush([]);
+    http.expectOne((request) => request.url === '/api/admin/history/sales').flush({
+      items: [], page: 1, pageSize: 30, totalItems: 0,
+    });
+    fixture.detectChanges();
+    const stockTab = Array.from(page.querySelectorAll<HTMLButtonElement>('.history-tabs button'))
+      .find((button) => button.textContent?.includes('stock'))!;
+    stockTab.click();
+    http.expectOne((request) => request.url === '/api/admin/history/stock-movements').flush({
+      items: [], page: 1, pageSize: 30, totalItems: 0,
+    });
+    fixture.detectChanges();
+
+    const product = page.querySelector<HTMLInputElement>('#history-product')!;
+    product.value = 'Asado';
+    product.dispatchEvent(new Event('input'));
+    const category = page.querySelector<HTMLInputElement>('#history-category')!;
+    category.value = 'Carnes';
+    category.dispatchEvent(new Event('input'));
+    const kind = page.querySelector<HTMLSelectElement>('#history-stock-kind')!;
+    kind.value = 'transferOut';
+    kind.dispatchEvent(new Event('change'));
+    page.querySelector<HTMLButtonElement>('.history-filters button')!.click();
+    const filtered = http.expectOne((request) => request.url === '/api/admin/history/stock-movements');
+    expect(filtered.request.params.get('branchId')).toBe('branch-1');
+    expect(filtered.request.params.get('productSearch')).toBe('Asado');
+    expect(filtered.request.params.get('categorySearch')).toBe('Carnes');
+    expect(filtered.request.params.get('kind')).toBe('transferOut');
+    expect(filtered.request.params.get('page')).toBe('1');
+    filtered.flush({ items: [{ id: 'move-1', createdAtUtc: '2026-11-05T15:00:00Z',
+      branchId: 'branch-1', branchName: 'Centro', productId: 'p-1', productName: 'Asado',
+      saleMode: 'weight', unit: 'kg', userId: 'admin-id', username: 'admin',
+      kind: 'transferOut', quantityDelta: -2.5, runningBalance: 7.5,
+      reason: 'Despacho', operationId: 'line-1', documentKind: 'transfer',
+      documentId: 'transfer-1', documentNumber: 'TR-1' }],
+      page: 1, pageSize: 30, totalItems: 31,
+      summary: { productId: 'p-1', productCode: 'A1', productName: 'Asado',
+        unit: 'kg', saleMode: 'weight', openingBalance: 10,
+        openingMovements: 0, receipts: 0, pieceReceipts: 0, sales: 0,
+        transfersOut: -2.5, adjustments: 0, closingBalance: 7.5 } });
+    fixture.detectChanges();
+    expect(page.querySelector('.history-panel > .table-wrap tbody')?.textContent).toContain('Transferencia enviada');
+    expect(page.querySelector('.history-panel > .table-wrap tbody')?.textContent).toContain('7,500 kg');
+    expect(page.querySelector('.stock-summary')?.textContent).toContain('7,500 kg');
+    page.querySelector<HTMLButtonElement>('tbody button')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector('dialog[open]')?.textContent).toContain('TR-1');
+    page.querySelector<HTMLButtonElement>('dialog button')!.click();
+    fixture.detectChanges();
+
+    const next = Array.from(page.querySelectorAll<HTMLButtonElement>('.list-footer button'))
+      .find((button) => button.textContent?.includes('Siguiente'))!;
+    next.click();
+    const secondPage = http.expectOne((request) => request.url === '/api/admin/history/stock-movements');
+    expect(secondPage.request.params.get('page')).toBe('2');
+    expect(secondPage.request.params.get('productSearch')).toBe('Asado');
+    expect(secondPage.request.params.get('categorySearch')).toBe('Carnes');
+    expect(secondPage.request.params.get('kind')).toBe('transferOut');
+    secondPage.flush({ items: [], page: 2, pageSize: 30, totalItems: 31 });
+    fixture.detectChanges();
+    fixture.destroy();
+  });
+
   it('combines document type with branch, terminal, dates and pagination for sales', () => {
     const { fixture, http, page } = load();
     const branch = page.querySelector<HTMLSelectElement>('#history-branch')!;

@@ -6,6 +6,8 @@ using Carnicerias.Domain.Sales;
 using Carnicerias.Infrastructure;
 using Carnicerias.PlatformAccess;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using System.Data;
 using System.Text.Json;
 
 namespace Carnicerias.Api.History;
@@ -322,20 +324,100 @@ public static class AdminHistoryEndpoints
             }, PaymentMethodName(row.Method), row.AmountDelta)).ToArray(), page, pageSize, total));
     }
 
-    private static async Task<IResult> ListStockMovementsAsync(
+    internal static async Task<IResult> ListStockMovementsAsync(
         PlatformAccessDbContext db, OperationalContextAccessor accessor, CancellationToken cancellationToken,
         int page = 1, int pageSize = 30, Guid? branchId = null,
-        DateTimeOffset? fromUtc = null, DateTimeOffset? toUtc = null)
+        DateTimeOffset? fromUtc = null, DateTimeOffset? toUtc = null,
+        Guid? productId = null, Guid? categoryId = null, string? productSearch = null,
+        string? categorySearch = null, string? kind = null)
     {
         var check = await ValidateAsync(db, accessor.Context.CompanyId, page, pageSize,
             branchId, null, fromUtc, toUtc, cancellationToken);
         if (check is not null) return check;
         var companyId = accessor.Context.CompanyId;
+        var search = productSearch?.Trim();
+        var categoryTerm = categorySearch?.Trim();
+        if (productId == Guid.Empty || categoryId == Guid.Empty || search?.Length > 80 ||
+            categoryTerm?.Length > 80 ||
+            !StockMovementKindCode.TryParse(kind, out var selectedKind))
+            return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+        await using var snapshot = await db.Database.BeginTransactionAsync(
+            IsolationLevel.RepeatableRead, cancellationToken);
+        await db.Database.ExecuteSqlRawAsync("SET TRANSACTION READ ONLY", cancellationToken);
+        if (productId.HasValue && !await db.CatalogProducts.AsNoTracking().AnyAsync(product =>
+                product.CompanyId == companyId && product.Id == productId, cancellationToken))
+            return Error(StatusCodes.Status404NotFound, "PRODUCT_NOT_FOUND");
+        if (categoryId.HasValue && !await db.ProductCategories.AsNoTracking().AnyAsync(category =>
+                category.CompanyId == companyId && category.Id == categoryId, cancellationToken))
+            return Error(StatusCodes.Status404NotFound, "CATEGORY_NOT_FOUND");
         var query = db.InventoryMovements.AsNoTracking().Where(item => item.CompanyId == companyId &&
             (!branchId.HasValue || item.BranchId == branchId.Value) &&
             (!fromUtc.HasValue || item.CreatedAtUtc >= fromUtc.Value) &&
             (!toUtc.HasValue || item.CreatedAtUtc < toUtc.Value));
+        if (productId.HasValue) query = query.Where(item => item.ProductId == productId.Value);
+        if (categoryId.HasValue) query = query.Where(item => db.CatalogProducts.Any(product =>
+            product.CompanyId == companyId && product.Id == item.ProductId &&
+            product.CategoryId == categoryId.Value));
+        if (!string.IsNullOrEmpty(search))
+        {
+            var pattern = StockMovementKindCode.SearchPattern(search);
+            query = query.Where(item => db.CatalogProducts.Any(product =>
+                product.CompanyId == companyId && product.Id == item.ProductId &&
+                (EF.Functions.ILike(product.Name, pattern, "\\") ||
+                 EF.Functions.ILike(product.Code, pattern, "\\"))));
+        }
+        if (!string.IsNullOrEmpty(categoryTerm))
+        {
+            var pattern = StockMovementKindCode.SearchPattern(categoryTerm);
+            query = query.Where(item => db.CatalogProducts.Any(product =>
+                product.CompanyId == companyId && product.Id == item.ProductId &&
+                db.ProductCategories.Any(category => category.CompanyId == companyId &&
+                    category.Id == product.CategoryId &&
+                    EF.Functions.ILike(category.Name, pattern, "\\"))));
+        }
+        if (selectedKind.HasValue) query = query.Where(item => item.Kind == selectedKind.Value);
         var total = await query.LongCountAsync(cancellationToken);
+        Guid? summaryProductId = productId;
+        if (branchId.HasValue && !summaryProductId.HasValue && !string.IsNullOrEmpty(search))
+        {
+            var matches = await query.Select(item => item.ProductId).Distinct().Take(2)
+                .ToArrayAsync(cancellationToken);
+            if (matches.Length == 1) summaryProductId = matches[0];
+        }
+        StockSummary? summary = null;
+        if (branchId.HasValue && summaryProductId.HasValue)
+        {
+            var summaryProduct = await db.CatalogProducts.AsNoTracking()
+                .Where(product => product.CompanyId == companyId &&
+                    product.Id == summaryProductId.Value)
+                .Select(product => new { product.Id, product.Code, product.Name,
+                    product.Unit, product.SaleMode }).SingleAsync(cancellationToken);
+            var ledger = db.InventoryMovements.AsNoTracking().Where(item =>
+                item.CompanyId == companyId && item.BranchId == branchId.Value &&
+                item.ProductId == summaryProductId.Value);
+            var opening = fromUtc.HasValue
+                ? await ledger.Where(item => item.CreatedAtUtc < fromUtc.Value)
+                    .SumAsync(item => (decimal?)item.QuantityDelta, cancellationToken) ?? 0
+                : 0;
+            var totals = await ledger.Where(item =>
+                    (!fromUtc.HasValue || item.CreatedAtUtc >= fromUtc.Value) &&
+                    (!toUtc.HasValue || item.CreatedAtUtc < toUtc.Value))
+                .GroupBy(item => item.Kind)
+                .Select(group => new { Kind = group.Key,
+                    Quantity = group.Sum(item => item.QuantityDelta) })
+                .ToDictionaryAsync(item => item.Kind, item => item.Quantity, cancellationToken);
+            decimal Quantity(InventoryMovementKind movementKind) =>
+                totals.GetValueOrDefault(movementKind);
+            summary = new StockSummary(summaryProduct.Id, summaryProduct.Code,
+                summaryProduct.Name, summaryProduct.Unit,
+                summaryProduct.SaleMode == ProductSaleMode.Unit ? "unit" : "weight",
+                opening, Quantity(InventoryMovementKind.OpeningBalance),
+                Quantity(InventoryMovementKind.Receipt),
+                Quantity(InventoryMovementKind.PieceReceipt),
+                Quantity(InventoryMovementKind.Sale),
+                Quantity(InventoryMovementKind.TransferOut),
+                Quantity(InventoryMovementKind.Adjustment), opening + totals.Values.Sum());
+        }
         var rows = await query.OrderByDescending(item => item.CreatedAtUtc).ThenByDescending(item => item.Id)
             .Skip((page - 1) * pageSize).Take(pageSize)
             .Select(item => new StockRow(item.Id, item.CreatedAtUtc, item.BranchId,
@@ -345,19 +427,59 @@ public static class AdminHistoryEndpoints
                     .Select(product => product.Name).FirstOrDefault() ?? "",
                 db.CatalogProducts.Where(product => product.Id == item.ProductId)
                     .Select(product => product.SaleMode).First(),
+                db.CatalogProducts.Where(product => product.Id == item.ProductId)
+                    .Select(product => product.Unit).First(),
                 item.UserId, db.Users.Where(user => user.Id == item.UserId)
                     .Select(user => user.Username).FirstOrDefault() ?? "",
-                item.Kind, item.QuantityDelta, item.Reason))
+                item.Kind, item.QuantityDelta, item.Reason, item.OperationId))
             .ToArrayAsync(cancellationToken);
-        return Results.Ok(new HistoryPage<StockItem>(rows.Select(row => new StockItem(
+        var ids = rows.Select(row => row.Id).ToArray();
+        var balances = ids.Length == 0 ? new Dictionary<Guid, decimal>() :
+            (await db.Database.SqlQueryRaw<StockBalanceRow>("""
+                SELECT current."Id" AS "Id",
+                    COALESCE((SELECT SUM(prior."QuantityDelta")
+                        FROM inventory.inventory_movements AS prior
+                        WHERE prior."CompanyId" = current."CompanyId"
+                            AND prior."BranchId" = current."BranchId"
+                            AND prior."ProductId" = current."ProductId"
+                            AND (prior."CreatedAtUtc", prior."Id") <=
+                                (current."CreatedAtUtc", current."Id")), 0) AS "RunningBalance"
+                FROM inventory.inventory_movements AS current
+                WHERE current."CompanyId" = @companyId AND current."Id" = ANY(@movementIds)
+                """, new NpgsqlParameter("companyId", companyId),
+                new NpgsqlParameter("movementIds", ids)).ToArrayAsync(cancellationToken))
+            .ToDictionary(row => row.Id, row => row.RunningBalance);
+        var receipts = await db.InventoryReceiptLines.AsNoTracking()
+            .Where(line => line.CompanyId == companyId && line.InventoryMovementId.HasValue &&
+                ids.Contains(line.InventoryMovementId.Value))
+            .Select(line => new StockDocumentRow(line.InventoryMovementId!.Value, "receipt",
+                line.ReceiptId, db.InventoryReceipts.Where(document =>
+                    document.CompanyId == companyId && document.Id == line.ReceiptId)
+                    .Select(document => document.DocumentType + " " + document.DocumentNumber)
+                    .FirstOrDefault() ?? ""))
+            .ToArrayAsync(cancellationToken);
+        var transfers = await db.InventoryTransferLines.AsNoTracking()
+            .Where(line => line.CompanyId == companyId && line.InventoryMovementId.HasValue &&
+                ids.Contains(line.InventoryMovementId.Value))
+            .Select(line => new StockDocumentRow(line.InventoryMovementId!.Value, "transfer",
+                line.TransferId, db.InventoryTransfers.Where(document =>
+                    document.CompanyId == companyId && document.Id == line.TransferId)
+                    .Select(document => document.DocumentNumber).FirstOrDefault() ?? ""))
+            .ToArrayAsync(cancellationToken);
+        var documents = receipts.Concat(transfers).ToDictionary(row => row.MovementId);
+        var result = new StockHistoryPage(rows.Select(row => new StockItem(
             row.Id, row.CreatedAtUtc, row.BranchId, row.BranchName, row.ProductId,
             row.ProductName, row.SaleMode == ProductSaleMode.Unit ? "unit" : "weight",
-            row.UserId, row.Username, row.Kind switch
-            {
-                InventoryMovementKind.OpeningBalance => "openingBalance",
-                InventoryMovementKind.Adjustment => "adjustment",
-                _ => "sale"
-            }, row.QuantityDelta, row.Reason)).ToArray(), page, pageSize, total));
+            row.Unit,
+            row.UserId, row.Username, StockMovementKindCode.Format(row.Kind),
+            row.QuantityDelta, row.Reason, row.OperationId,
+            balances[row.Id], documents.TryGetValue(row.Id, out var document)
+                ? document.Kind : row.Kind == InventoryMovementKind.Sale ? "sale" : null,
+            document?.DocumentId ?? StockMovementKindCode.SaleId(row.Kind, row.Reason),
+            document?.DocumentNumber ?? StockMovementKindCode.SaleNumber(row.Kind, row.Reason)))
+            .ToArray(), page, pageSize, total, summary);
+        await snapshot.CommitAsync(cancellationToken);
+        return Results.Ok(result);
     }
 
     private static async Task<IResult?> ValidateAsync(
@@ -441,9 +563,27 @@ public static class AdminHistoryEndpoints
         Guid? TerminalId, string? TerminalName, Guid CashierId, string CashierName,
         Guid ShiftId, Guid? SaleId, string Kind, string Method, decimal AmountDelta);
     private sealed record StockRow(Guid Id, DateTimeOffset CreatedAtUtc, Guid BranchId, string BranchName,
-        Guid ProductId, string ProductName, ProductSaleMode SaleMode, Guid UserId, string Username,
-        InventoryMovementKind Kind, decimal QuantityDelta, string Reason);
+        Guid ProductId, string ProductName, ProductSaleMode SaleMode, string Unit,
+        Guid UserId, string Username,
+        InventoryMovementKind Kind, decimal QuantityDelta, string Reason, Guid OperationId);
     private sealed record StockItem(Guid Id, DateTimeOffset CreatedAtUtc, Guid BranchId, string BranchName,
-        Guid ProductId, string ProductName, string SaleMode, Guid UserId, string Username,
-        string Kind, decimal QuantityDelta, string Reason);
+        Guid ProductId, string ProductName, string SaleMode, string Unit,
+        Guid UserId, string Username,
+        string Kind, decimal QuantityDelta, string Reason, Guid OperationId,
+        decimal RunningBalance, string? DocumentKind, Guid? DocumentId,
+        string? DocumentNumber);
+    private sealed record StockHistoryPage(StockItem[] Items, int Page, int PageSize,
+        long TotalItems, StockSummary? Summary);
+    private sealed record StockSummary(Guid ProductId, string ProductCode,
+        string ProductName, string Unit, string SaleMode, decimal OpeningBalance,
+        decimal OpeningMovements, decimal Receipts, decimal PieceReceipts,
+        decimal Sales, decimal TransfersOut, decimal Adjustments,
+        decimal ClosingBalance);
+    private sealed class StockBalanceRow
+    {
+        public Guid Id { get; set; }
+        public decimal RunningBalance { get; set; }
+    }
+    private sealed record StockDocumentRow(Guid MovementId, string Kind,
+        Guid DocumentId, string DocumentNumber);
 }

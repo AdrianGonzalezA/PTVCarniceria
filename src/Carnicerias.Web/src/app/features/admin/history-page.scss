@@ -31,6 +31,9 @@
 .ticket-detail header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .ticket-detail h2 { margin: 0; color: var(--admin-history-heading); overflow-wrap: anywhere; }
 .ticket-detail ul { line-height: 1.6; }
+.stock-summary { margin: 1rem; padding: 1rem; border: 1px solid var(--admin-history-border); background: var(--admin-history-detail); color: var(--admin-history-ink); }
+.stock-summary h3 { margin-top: 0; color: var(--admin-history-heading); }
+.stock-summary table { width: 100%; }
 :host-context(html[data-visual-theme='nocturno']) .history-filters { color-scheme: dark; }
 @media (max-width: 600px) {
   .history-filters { display: grid; grid-template-columns: minmax(0, 1fr); }

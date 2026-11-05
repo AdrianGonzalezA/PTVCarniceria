@@ -2,8 +2,12 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Carnicerias.Infrastructure;
+using Carnicerias.Api.History;
+using Carnicerias.Api.Security;
+using Carnicerias.Domain.PlatformAccess;
 using Carnicerias.PlatformAccess;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +22,8 @@ namespace Carnicerias.IntegrationTests;
 [Collection("DatabaseIntegration")]
 public sealed class InventoryTransferVisualEndpointTests
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     [I18BTransferApprovedVisualWriteFact]
     [Trait("Category", "I18BApprovedDatabaseWrite")]
     public async Task DispatchIsIndependentOfDestinationAndConcurrentPieceDispatchCannotDuplicateStock()
@@ -57,6 +63,12 @@ public sealed class InventoryTransferVisualEndpointTests
         var initialMovement = new InventoryMovement(company.Id, origin.Id, weight.Id,
             user.Id, Guid.NewGuid(), InventoryMovementKind.PieceReceipt, 2.500m,
             "Pieza aislada I18b", now);
+        var unitOpening = new InventoryMovement(company.Id, origin.Id, unit.Id,
+            user.Id, Guid.NewGuid(), InventoryMovementKind.OpeningBalance, 5m,
+            "Saldo inicial I18b", now);
+        var genericDeficit = new InventoryMovement(company.Id, origin.Id, weight.Id,
+            user.Id, Guid.NewGuid(), InventoryMovementKind.Adjustment, -1m,
+            "Déficit genérico previo I18b", now.AddTicks(1));
         var piece = new InventoryPiece(company.Id, origin.Id, weight.Id, profile.Id,
             user.Id, Guid.NewGuid(), initialMovement.Id, "I18b fixture",
             $"T{suffix}", $"T{suffix}02500", 2.500m, now);
@@ -73,7 +85,7 @@ public sealed class InventoryTransferVisualEndpointTests
                     new UserAssignment(user.Id, role.Id, company.Id, origin.Id),
                     new RoleCapability(role.Id, permissionId), terminal, category,
                     unit, weight, profile, unitBalance, weightBalance,
-                    initialMovement, piece);
+                    initialMovement, unitOpening, genericDeficit, piece);
                 await db.SaveChangesAsync();
                 seeded = true;
             }
@@ -216,6 +228,21 @@ public sealed class InventoryTransferVisualEndpointTests
                     item.CompanyId == company.Id && item.BranchId == destination.Id));
                 Assert.Equal(1, await db.InventoryPieceStateEvents.CountAsync(item =>
                     item.CompanyId == company.Id && item.Kind == InventoryPieceEventKind.Transferred));
+                var accessor = new OperationalContextAccessor();
+                accessor.Set(new OperationalContext(user.Id, company.Id, origin.Id,
+                    new HashSet<string> { PlatformPermissionCatalog.OrganizationManage },
+                    Guid.NewGuid()), null);
+                var kardex = await AdminHistoryEndpoints.ListStockMovementsAsync(db, accessor,
+                    CancellationToken.None, branchId: origin.Id, kind: "transferOut");
+                var body = JsonSerializer.SerializeToElement(
+                    Assert.IsAssignableFrom<IValueHttpResult>(kardex).Value, JsonOptions);
+                Assert.Equal(2, body.GetProperty("totalItems").GetInt32());
+                Assert.Contains(body.GetProperty("items").EnumerateArray(), item =>
+                    item.GetProperty("documentId").GetGuid() == genericId &&
+                    item.GetProperty("documentKind").GetString() == "transfer" &&
+                    item.GetProperty("documentNumber").GetString() ==
+                        genericDispatch.GetProperty("documentNumber").GetString() &&
+                    item.GetProperty("runningBalance").GetDecimal() == 3m);
             }
         }
         finally

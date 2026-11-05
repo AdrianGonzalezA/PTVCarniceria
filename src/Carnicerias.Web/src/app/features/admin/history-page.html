@@ -60,6 +60,23 @@
             <option value="electronicInvoice">Factura electrónica</option>
           </select>
         }
+        @if (tab() === 'stock') {
+          <label for="history-product">Artículo</label>
+          <input id="history-product" type="search" [value]="productSearch()" (input)="updateStockFilter('product', $event)" placeholder="Código o nombre" />
+          <label for="history-category">Categoría</label>
+          <input id="history-category" type="search" [value]="categorySearch()" (input)="updateStockFilter('category', $event)" placeholder="Nombre de categoría" />
+          <label for="history-stock-kind">Movimiento</label>
+          <select id="history-stock-kind" [value]="stockKind()" (change)="updateStockFilter('kind', $event)">
+            <option value="">Todos</option>
+            <option value="openingBalance">Saldo inicial</option>
+            <option value="adjustment">Ajuste</option>
+            <option value="sale">Venta</option>
+            <option value="pieceReceipt">Recepción de pieza</option>
+            <option value="receipt">Recepción</option>
+            <option value="transferOut">Transferencia enviada</option>
+          </select>
+          <button type="button" (click)="applyStockFilters()">Aplicar stock</button>
+        }
         <label for="history-from">Desde</label>
         <input id="history-from" type="date" [value]="fromDate()" (change)="updateDate('from', $event)" />
         <label for="history-to">Hasta</label>
@@ -67,6 +84,27 @@
         <button type="button" (click)="applyDates()">Aplicar fechas</button>
         <button type="button" class="secondary-button" [disabled]="loading()" (click)="load()">Actualizar</button>
       </div>
+
+      @if (tab() === 'stock' && !loading() && !loadError()) {
+        @if (stock()?.summary; as summary) {
+          <section class="stock-summary" aria-label="Conciliación de stock">
+            <h3>{{ summary.productCode }} · {{ summary.productName }} · {{ selectedBranchName() }}</h3>
+            <p>El saldo incorpora todos los tipos de movimiento del período, aunque la tabla esté filtrada por tipo.</p>
+            <div class="table-wrap"><table>
+              <tbody>
+                <tr><th scope="row">Saldo anterior al período</th><td class="numeric-value">{{ summary.openingBalance | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
+                <tr><th scope="row">Saldos iniciales registrados</th><td class="numeric-value">{{ summary.openingMovements | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
+                <tr><th scope="row">Recepciones</th><td class="numeric-value">{{ summary.receipts | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
+                <tr><th scope="row">Recepciones de piezas</th><td class="numeric-value">{{ summary.pieceReceipts | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
+                <tr><th scope="row">Ventas</th><td class="numeric-value">{{ summary.sales | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
+                <tr><th scope="row">Transferencias salientes</th><td class="numeric-value">{{ summary.transfersOut | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
+                <tr><th scope="row">Ajustes netos</th><td class="numeric-value">{{ summary.adjustments | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
+                <tr><th scope="row">Saldo final del período</th><td class="numeric-value"><strong>{{ summary.closingBalance | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</strong></td></tr>
+              </tbody>
+            </table></div>
+          </section>
+        }
+      }
 
       @if (loading()) {
         <p class="state-message" role="status">Cargando historial…</p>
@@ -122,13 +160,16 @@
             }
             @case ('stock') {
               <table>
-                <thead><tr><th scope="col">Fecha</th><th scope="col">Sucursal</th><th scope="col">Artículo</th><th scope="col">Usuario</th><th scope="col">Tipo</th><th scope="col" class="numeric-value">Variación</th><th scope="col">Motivo</th></tr></thead>
+                <thead><tr><th scope="col">Fecha</th><th scope="col">Sucursal</th><th scope="col">Artículo</th><th scope="col">Usuario</th><th scope="col">Tipo</th><th scope="col" class="numeric-value">Variación</th><th scope="col" class="numeric-value">Saldo</th><th scope="col">Documento</th><th scope="col">Detalle</th></tr></thead>
                 <tbody>
                   @for (movement of stock()?.items ?? []; track movement.id) {
                     <tr><td>{{ movement.createdAtUtc | date:'dd/MM/yyyy HH:mm' }}</td>
                       <td>{{ movement.branchName }}</td><td>{{ movement.productName }}</td>
                       <td>{{ movement.username }}</td><td>{{ stockKindLabel(movement.kind) }}</td>
-                      <td class="numeric-value">{{ movement.quantityDelta | number:(movement.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }}</td><td>{{ movement.reason }}</td></tr>
+                      <td class="numeric-value">{{ movement.quantityDelta | number:(movement.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ movement.unit }}</td>
+                      <td class="numeric-value">{{ movement.runningBalance | number:(movement.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ movement.unit }}</td>
+                      <td>{{ movement.documentNumber ?? '—' }}</td>
+                      <td><button type="button" class="secondary-button" (click)="viewStockMovement(movement)">Ver movimiento</button></td></tr>
                   }
                 </tbody>
               </table>
@@ -146,6 +187,23 @@
       }
 
     </section>
+    @if (selectedStockMovement(); as movement) {
+      <app-admin-detail-dialog labelledBy="stock-movement-title" (closed)="closeDetail()">
+        <section class="ticket-detail" aria-labelledby="stock-movement-title">
+          <header><h2 id="stock-movement-title">Movimiento de stock</h2><button type="button" class="secondary-button" (click)="closeDetail()">Cerrar</button></header>
+          <p>{{ movement.createdAtUtc | date:'dd/MM/yyyy HH:mm' }} · {{ movement.branchName }} · {{ movement.productName }} · {{ movement.username }}</p>
+          <p>Tipo: {{ stockKindLabel(movement.kind) }}. Motivo: {{ movement.reason }}</p>
+          <p>Variación: {{ movement.quantityDelta | number:(movement.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ movement.unit }} · Saldo posterior: {{ movement.runningBalance | number:(movement.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ movement.unit }}</p>
+          <p>Operación: {{ movement.operationId }}</p>
+          @if (movement.documentId) {
+            <p>Documento origen: {{ movement.documentNumber }} · {{ movement.documentId }}</p>
+            @if (movement.documentKind === 'sale') {
+              <button type="button" class="secondary-button" (click)="viewSale(movement.documentId)">Ver venta</button>
+            }
+          }
+        </section>
+      </app-admin-detail-dialog>
+    }
     @if (detailSaleId()) {
       <app-admin-detail-dialog labelledBy="ticket-title" (closed)="closeDetail()">
         <section class="ticket-detail" aria-labelledby="ticket-title">

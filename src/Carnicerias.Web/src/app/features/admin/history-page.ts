@@ -5,7 +5,7 @@ import { AdminAreaTabs } from './admin-area-tabs';
 import { AdminBranch, AdminOrganizationClient } from '../../core/admin/admin-organization-client';
 import { AdminTerminal, AdminTerminalClient } from '../../core/admin/admin-terminal-client';
 import { AdminHistoryClient, CashHistoryItem, FiscalDocumentDetail, HistoryFilters, HistoryPage as HistoryPageData, SaleDetail,
-  SaleHistoryItem, ShiftHistoryItem, StockHistoryItem, HistorySaleDocumentType } from '../../core/admin/admin-history-client';
+  SaleHistoryItem, ShiftHistoryItem, StockHistoryItem, StockHistoryPage, HistorySaleDocumentType } from '../../core/admin/admin-history-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { AdminDetailDialog } from './admin-detail-dialog';
 import { ShiftClosingReport } from '../../core/sales/cashier-shift-client';
@@ -32,8 +32,13 @@ export class HistoryPage implements OnInit {
   protected readonly terminals = signal<readonly AdminTerminal[]>([]);
   protected readonly tab = signal<HistoryTab>('sales');
   protected readonly branchId = signal('');
+  protected readonly selectedBranchName = computed(() => this.branches()
+    .find((branch) => branch.id === this.branchId())?.name ?? 'Sucursal');
   protected readonly terminalId = signal('');
   protected readonly documentType = signal<HistorySaleDocumentType | ''>('');
+  protected readonly productSearch = signal('');
+  protected readonly categorySearch = signal('');
+  protected readonly stockKind = signal<StockHistoryItem['kind'] | ''>('');
   protected readonly fromDate = signal('');
   protected readonly toDate = signal('');
   protected readonly page = signal(1);
@@ -42,7 +47,8 @@ export class HistoryPage implements OnInit {
   protected readonly sales = signal<HistoryPageData<SaleHistoryItem> | null>(null);
   protected readonly shifts = signal<HistoryPageData<ShiftHistoryItem> | null>(null);
   protected readonly cash = signal<HistoryPageData<CashHistoryItem> | null>(null);
-  protected readonly stock = signal<HistoryPageData<StockHistoryItem> | null>(null);
+  protected readonly stock = signal<StockHistoryPage | null>(null);
+  protected readonly selectedStockMovement = signal<StockHistoryItem | null>(null);
   protected readonly detail = signal<SaleDetail | null>(null);
   protected readonly detailSaleId = signal<string | null>(null);
   protected readonly detailLoading = signal(false);
@@ -118,6 +124,18 @@ export class HistoryPage implements OnInit {
     this.load();
   }
 
+  protected updateStockFilter(field: 'product' | 'category' | 'kind', event: Event): void {
+    const value = (event.target as HTMLInputElement | HTMLSelectElement).value;
+    if (field === 'product') this.productSearch.set(value);
+    else if (field === 'category') this.categorySearch.set(value);
+    else this.stockKind.set(value as StockHistoryItem['kind'] | '');
+  }
+
+  protected applyStockFilters(): void {
+    this.page.set(1);
+    this.load();
+  }
+
   protected updateDate(field: 'from' | 'to', event: Event): void {
     const value = (event.target as HTMLInputElement).value;
     if (field === 'from') this.fromDate.set(value);
@@ -141,6 +159,7 @@ export class HistoryPage implements OnInit {
   }
 
   protected viewSale(id: string): void {
+    this.closeDetail();
     const revision = ++this.detailRevision;
     this.detailSaleId.set(id);
     this.detail.set(null);
@@ -162,6 +181,7 @@ export class HistoryPage implements OnInit {
 
   protected closeDetail(): void {
     this.detailRevision++;
+    this.selectedStockMovement.set(null);
     this.detailSaleId.set(null);
     this.detail.set(null);
     this.detailError.set(null);
@@ -232,7 +252,14 @@ export class HistoryPage implements OnInit {
   }
 
   protected stockKindLabel(kind: StockHistoryItem['kind']): string {
-    return { openingBalance: 'Saldo inicial', adjustment: 'Ajuste', sale: 'Venta' }[kind];
+    return { openingBalance: 'Saldo inicial', adjustment: 'Ajuste', sale: 'Venta',
+      pieceReceipt: 'Recepción de pieza', receipt: 'Recepción',
+      transferOut: 'Transferencia enviada' }[kind];
+  }
+
+  protected viewStockMovement(movement: StockHistoryItem): void {
+    this.closeDetail();
+    this.selectedStockMovement.set(movement);
   }
 
   protected load(): void {
@@ -246,6 +273,9 @@ export class HistoryPage implements OnInit {
       terminalId: this.tab() === 'stock' ? undefined : this.terminalId() || undefined,
       fromUtc: from?.toISOString(), toUtc: to?.toISOString(),
       documentType: this.tab() === 'sales' ? this.documentType() || undefined : undefined,
+      productSearch: this.tab() === 'stock' ? this.productSearch().trim() || undefined : undefined,
+      categorySearch: this.tab() === 'stock' ? this.categorySearch().trim() || undefined : undefined,
+      kind: this.tab() === 'stock' ? this.stockKind() || undefined : undefined,
     };
     this.loading.set(true);
     this.loadError.set(null);

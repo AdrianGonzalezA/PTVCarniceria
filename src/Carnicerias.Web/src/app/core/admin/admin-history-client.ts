@@ -11,6 +11,10 @@ export interface HistoryFilters {
   readonly fromUtc?: string;
   readonly toUtc?: string;
   readonly documentType?: HistorySaleDocumentType;
+  readonly productId?: string;
+  readonly productSearch?: string;
+  readonly categorySearch?: string;
+  readonly kind?: StockHistoryItem['kind'];
 }
 
 export interface HistoryPage<T> {
@@ -161,11 +165,37 @@ export interface StockHistoryItem {
   readonly productId: string;
   readonly productName: string;
   readonly saleMode: 'weight' | 'unit';
+  readonly unit: string;
   readonly userId: string;
   readonly username: string;
-  readonly kind: 'openingBalance' | 'adjustment' | 'sale';
+  readonly kind: 'openingBalance' | 'adjustment' | 'sale' | 'pieceReceipt' | 'receipt' | 'transferOut';
   readonly quantityDelta: number;
   readonly reason: string;
+  readonly operationId: string;
+  readonly runningBalance: number;
+  readonly documentKind: 'sale' | 'receipt' | 'transfer' | null;
+  readonly documentId: string | null;
+  readonly documentNumber: string | null;
+}
+
+export interface StockHistorySummary {
+  readonly productId: string;
+  readonly productCode: string;
+  readonly productName: string;
+  readonly unit: string;
+  readonly saleMode: 'weight' | 'unit';
+  readonly openingBalance: number;
+  readonly openingMovements: number;
+  readonly receipts: number;
+  readonly pieceReceipts: number;
+  readonly sales: number;
+  readonly transfersOut: number;
+  readonly adjustments: number;
+  readonly closingBalance: number;
+}
+
+export interface StockHistoryPage extends HistoryPage<StockHistoryItem> {
+  readonly summary: StockHistorySummary | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -216,8 +246,13 @@ export class AdminHistoryClient {
   }
 
   stockMovements(filters: HistoryFilters) {
-    return this.http.get<HistoryPage<StockHistoryItem>>('/api/admin/history/stock-movements', {
-      params: this.params(filters), withCredentials: true,
+    let params = this.params(filters);
+    if (filters.productId) params = params.set('productId', filters.productId);
+    if (filters.productSearch) params = params.set('productSearch', filters.productSearch);
+    if (filters.categorySearch) params = params.set('categorySearch', filters.categorySearch);
+    if (filters.kind) params = params.set('kind', filters.kind);
+    return this.http.get<StockHistoryPage>('/api/admin/history/stock-movements', {
+      params, withCredentials: true,
     });
   }
 

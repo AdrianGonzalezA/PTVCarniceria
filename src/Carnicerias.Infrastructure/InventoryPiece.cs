@@ -27,11 +27,12 @@ public sealed class InventoryPiece
     public InventoryPiece(Guid companyId, Guid branchId, Guid productId, Guid barcodeProfileId,
         Guid receivedByUserId, Guid operationId, Guid inventoryMovementId, string sourceSystem,
         string externalIdentifier, string rawBarcode, decimal receivedWeightKg,
-        DateTimeOffset receivedAtUtc, string identifierField = "pro_identif")
+        DateTimeOffset receivedAtUtc, string identifierField = "pro_identif",
+        Guid? originPieceId = null)
     {
         if (companyId == Guid.Empty || branchId == Guid.Empty || productId == Guid.Empty ||
             barcodeProfileId == Guid.Empty || receivedByUserId == Guid.Empty || operationId == Guid.Empty ||
-            inventoryMovementId == Guid.Empty)
+            inventoryMovementId == Guid.Empty || originPieceId == Guid.Empty)
             throw new ArgumentException("Piece receipt identifiers are required.");
         if (string.IsNullOrWhiteSpace(sourceSystem) || sourceSystem.Trim().Length > 120 ||
             string.IsNullOrWhiteSpace(externalIdentifier) || externalIdentifier.Length > 80 ||
@@ -58,6 +59,7 @@ public sealed class InventoryPiece
         ExternalIdentifier = externalIdentifier.Trim();
         RawBarcode = rawBarcode.Trim();
         IdentifierField = identifierField.Trim().ToLowerInvariant();
+        OriginPieceId = originPieceId;
         ReceivedWeightKg = receivedWeightKg;
         ReceivedAtUtc = receivedAtUtc.ToUniversalTime();
         Status = InventoryPieceStatus.Available;
@@ -77,6 +79,7 @@ public sealed class InventoryPiece
     public string ExternalIdentifier { get; private set; }
     public string RawBarcode { get; private set; }
     public string IdentifierField { get; private set; }
+    public Guid? OriginPieceId { get; private set; }
     public decimal ReceivedWeightKg { get; private set; }
     public DateTimeOffset ReceivedAtUtc { get; private set; }
     public InventoryPieceStatus Status { get; private set; }

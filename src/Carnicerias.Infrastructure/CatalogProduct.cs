@@ -12,6 +12,8 @@ public enum ProductCodeKind
     PurchasePackage
 }
 
+public enum StockCountPolicy { TheoreticalStock, MassObservation }
+
 public sealed class ProductCategory
 {
     private ProductCategory() => Name = string.Empty;
@@ -29,6 +31,13 @@ public sealed class ProductCategory
     public Guid CompanyId { get; private set; }
     public string Name { get; private set; }
     public bool IsActive { get; private set; }
+    public StockCountPolicy CountPolicy { get; private set; } = StockCountPolicy.TheoreticalStock;
+
+    public void SetCountPolicy(StockCountPolicy policy)
+    {
+        if (!Enum.IsDefined(policy)) throw new ArgumentOutOfRangeException(nameof(policy));
+        CountPolicy = policy;
+    }
 
     public void Rename(string name) => Name = NormalizeName(name);
 
@@ -90,6 +99,14 @@ public sealed class CatalogProduct
     public decimal? Cost { get; private set; }
     public bool IsActive { get; private set; }
     public bool AllowSaleWithoutStock { get; private set; }
+    public StockCountPolicy? CountPolicyOverride { get; private set; }
+
+    public void SetCountPolicyOverride(StockCountPolicy? policy)
+    {
+        if (policy.HasValue && !Enum.IsDefined(policy.Value))
+            throw new ArgumentOutOfRangeException(nameof(policy));
+        CountPolicyOverride = policy;
+    }
 
     public void SetAllowSaleWithoutStock(bool allowed) => AllowSaleWithoutStock = allowed;
 

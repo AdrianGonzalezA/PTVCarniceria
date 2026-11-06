@@ -74,6 +74,8 @@
             <option value="pieceReceipt">Recepción de pieza</option>
             <option value="receipt">Recepción</option>
             <option value="transferOut">Transferencia enviada</option>
+            <option value="transferIn">Transferencia recibida</option>
+            <option value="physicalCountAdjustment">Ajuste por conteo físico</option>
           </select>
           <button type="button" (click)="applyStockFilters()">Aplicar stock</button>
         }
@@ -98,6 +100,8 @@
                 <tr><th scope="row">Recepciones de piezas</th><td class="numeric-value">{{ summary.pieceReceipts | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
                 <tr><th scope="row">Ventas</th><td class="numeric-value">{{ summary.sales | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
                 <tr><th scope="row">Transferencias salientes</th><td class="numeric-value">{{ summary.transfersOut | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
+                <tr><th scope="row">Transferencias recibidas</th><td class="numeric-value">{{ summary.transfersIn | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
+                <tr><th scope="row">Ajustes por conteo</th><td class="numeric-value">{{ summary.physicalCountAdjustments | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
                 <tr><th scope="row">Ajustes netos</th><td class="numeric-value">{{ summary.adjustments | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
                 <tr><th scope="row">Saldo final del período</th><td class="numeric-value"><strong>{{ summary.closingBalance | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</strong></td></tr>
               </tbody>

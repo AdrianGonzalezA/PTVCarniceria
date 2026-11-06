@@ -266,7 +266,8 @@ export class HistoryPage implements OnInit {
   protected stockKindLabel(kind: StockHistoryItem['kind']): string {
     return { openingBalance: 'Saldo inicial', adjustment: 'Ajuste', sale: 'Venta',
       pieceReceipt: 'Recepción de pieza', receipt: 'Recepción',
-      transferOut: 'Transferencia enviada' }[kind];
+      transferOut: 'Transferencia enviada', transferIn: 'Transferencia recibida',
+      physicalCountAdjustment: 'Ajuste por conteo físico' }[kind];
   }
 
   protected viewStockMovement(movement: StockHistoryItem): void {

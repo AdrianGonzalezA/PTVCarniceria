@@ -416,7 +416,10 @@ public static class AdminHistoryEndpoints
                 Quantity(InventoryMovementKind.PieceReceipt),
                 Quantity(InventoryMovementKind.Sale),
                 Quantity(InventoryMovementKind.TransferOut),
-                Quantity(InventoryMovementKind.Adjustment), opening + totals.Values.Sum());
+                Quantity(InventoryMovementKind.TransferIn),
+                Quantity(InventoryMovementKind.Adjustment),
+                Quantity(InventoryMovementKind.PhysicalCountAdjustment),
+                opening + totals.Values.Sum());
         }
         var rows = await query.OrderByDescending(item => item.CreatedAtUtc).ThenByDescending(item => item.Id)
             .Skip((page - 1) * pageSize).Take(pageSize)
@@ -466,7 +469,24 @@ public static class AdminHistoryEndpoints
                     document.CompanyId == companyId && document.Id == line.TransferId)
                     .Select(document => document.DocumentNumber).FirstOrDefault() ?? ""))
             .ToArrayAsync(cancellationToken);
-        var documents = receipts.Concat(transfers).ToDictionary(row => row.MovementId);
+        var transferReceipts = await db.InventoryTransferReceiptLines.AsNoTracking()
+            .Where(line => line.CompanyId == companyId && line.InventoryMovementId.HasValue &&
+                ids.Contains(line.InventoryMovementId.Value))
+            .Select(line => new StockDocumentRow(line.InventoryMovementId!.Value,
+                "transferReceipt", line.ReceiptId,
+                db.InventoryTransferReceipts.Where(document =>
+                    document.CompanyId == companyId && document.Id == line.ReceiptId)
+                    .Select(document => document.DocumentNumber).FirstOrDefault() ?? ""))
+            .ToArrayAsync(cancellationToken);
+        var counts = await db.PhysicalStockCountLines.AsNoTracking()
+            .Where(line => line.CompanyId == companyId && line.InventoryMovementId.HasValue &&
+                ids.Contains(line.InventoryMovementId.Value))
+            .Select(line => new StockDocumentRow(line.InventoryMovementId!.Value,
+                "physicalCount", line.CountId, line.CountId.ToString()))
+            .ToArrayAsync(cancellationToken);
+        var documents = receipts.Concat(transfers).Concat(transferReceipts)
+            .Concat(counts)
+            .ToDictionary(row => row.MovementId);
         var result = new StockHistoryPage(rows.Select(row => new StockItem(
             row.Id, row.CreatedAtUtc, row.BranchId, row.BranchName, row.ProductId,
             row.ProductName, row.SaleMode == ProductSaleMode.Unit ? "unit" : "weight",
@@ -577,7 +597,8 @@ public static class AdminHistoryEndpoints
     private sealed record StockSummary(Guid ProductId, string ProductCode,
         string ProductName, string Unit, string SaleMode, decimal OpeningBalance,
         decimal OpeningMovements, decimal Receipts, decimal PieceReceipts,
-        decimal Sales, decimal TransfersOut, decimal Adjustments,
+        decimal Sales, decimal TransfersOut, decimal TransfersIn, decimal Adjustments,
+        decimal PhysicalCountAdjustments,
         decimal ClosingBalance);
     private sealed class StockBalanceRow
     {

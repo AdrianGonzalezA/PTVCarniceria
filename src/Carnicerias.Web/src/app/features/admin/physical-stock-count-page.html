@@ -1,0 +1,121 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" [routerLink]="home()" aria-label="Volver al inicio">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Conteo físico</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+  <div class="workspace receipt-workspace">
+    <a class="back-link" [routerLink]="home()">← Volver</a>
+    <p class="eyebrow">Negocio · Inventario</p>
+    <h1>Conteo físico</h1>
+    <p class="intro">Las cajas siguen operando durante el conteo. Si el saldo cambia antes de aprobar, se exige un recuento. Un borrador no modifica existencias.</p>
+    @if (session()?.context; as context) {
+      <section class="context-bar"><div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Sucursal</span><strong>{{ context.branchName }}</strong></div></section>
+    }
+    @if (error(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
+    @if (notice(); as message) { <p class="success-message" role="status">{{ message }}</p> }
+
+    <section class="category-panel receipt-panel" aria-labelledby="count-create-title">
+      <header class="panel-heading"><div><h2 id="count-create-title">Nuevo conteo</h2>
+        <p>Registrá las cantidades observadas y enviá el documento al administrador.</p></div></header>
+      <button type="button" [disabled]="saving()" (click)="create()">Crear borrador</button>
+    </section>
+
+    <section class="category-panel receipt-panel" aria-labelledby="count-list-title">
+      <header class="panel-heading"><div><h2 id="count-list-title">Conteos de esta sucursal</h2></div></header>
+      @if (loading()) { <p role="status">Cargando conteos…</p> }
+      @else if (page(); as result) {
+        <div class="table-scroll"><table>
+          <thead><tr><th>Fecha</th><th>ID</th><th>Estado</th><th>Acción</th></tr></thead>
+          <tbody>
+            @for (item of result.items; track item.id) {
+              <tr><td>{{ item.createdAtUtc }}</td><td>{{ item.id }}</td>
+                <td>{{ item.status === 'Draft' ? 'Borrador' : item.status === 'Submitted' ? 'En revisión' : item.status === 'Approved' ? 'Aprobado' : item.status === 'Rejected' ? 'Rechazado' : 'Cancelado' }}</td>
+                <td><button type="button" class="secondary-button" (click)="open(item.id)">Ver detalle</button></td></tr>
+            } @empty { <tr><td colspan="4">Todavía no hay conteos.</td></tr> }
+          </tbody>
+        </table></div>
+        <div class="receipt-pagination"><button type="button" class="secondary-button" [disabled]="result.page <= 1" (click)="loadPage(result.page - 1)">Anterior</button>
+          <span>Página {{ result.page }} de {{ result.totalPages || 1 }}</span>
+          <button type="button" class="secondary-button" [disabled]="result.page >= result.totalPages" (click)="loadPage(result.page + 1)">Siguiente</button></div>
+      }
+    </section>
+
+    @if (administrator()) {
+      @if (policyOptions(); as options) {
+      <section class="category-panel receipt-panel" aria-labelledby="count-policy-title">
+        <header class="panel-heading"><div><h2 id="count-policy-title">Política de conteo</h2>
+          <p>La categoría define el valor inicial. Cada artículo por peso puede tener una excepción. «Solo medición de masa» registra la observación física sin crear stock teórico anatómico. Los artículos por unidad conservan saldo por artículo.</p></div></header>
+        <h3>Categorías</h3>
+        <div class="table-scroll"><table><thead><tr><th>Categoría</th><th>Tratamiento</th></tr></thead><tbody>
+          @for (category of options.categories; track category.id) {
+            <tr><td>{{ category.name }}</td><td><select [attr.aria-label]="'Política de ' + category.name" [value]="category.policy" [disabled]="saving()" (change)="setCategoryPolicy(category.id, $any($event.target).value)">
+              <option value="TheoreticalStock">Saldo por artículo</option><option value="MassObservation">Solo medición de masa</option>
+            </select></td></tr>
+          }
+        </tbody></table></div>
+        <h3>Excepciones por artículo</h3>
+        <div class="table-scroll"><table><thead><tr><th>Artículo</th><th>Categoría</th><th>Tratamiento</th></tr></thead><tbody>
+          @for (product of options.products; track product.id) {
+            <tr><td>{{ product.code }} · {{ product.name }}</td><td>{{ categoryName(product.categoryId) }}</td>
+              <td><select [attr.aria-label]="'Política de ' + product.name" [value]="product.policyOverride || ''" [disabled]="saving()" (change)="setProductPolicy(product.id, $any($event.target).value)">
+                <option value="">Heredar categoría</option><option value="TheoreticalStock">Saldo por artículo</option>@if (product.saleMode === 'weight') { <option value="MassObservation">Solo medición de masa</option> }
+              </select></td></tr>
+          }
+        </tbody></table></div>
+      </section>
+      }
+    }
+
+    @if (selected(); as count) {
+      <app-admin-detail-dialog labelledBy="count-detail-title" [canClose]="!saving()" (closed)="close()">
+        <section class="transfer-detail" aria-labelledby="count-detail-title">
+          <header class="transfer-detail-header"><div><h2 id="count-detail-title">Conteo {{ count.id }}</h2>
+            <p>{{ count.createdAtUtc }} · {{ count.status }}</p></div>
+            <button type="button" class="secondary-button" (click)="close()">Cerrar</button></header>
+          <div class="table-scroll"><table>
+            <thead><tr><th>Artículo</th><th>Tratamiento</th><th>Saldo al contar</th><th>Físico</th><th>Desvío</th></tr></thead>
+            <tbody>
+              @for (line of count.lines; track line.id) {
+                <tr><td>{{ line.productCode }} · {{ line.productName }}</td>
+                  <td>{{ policyLabel(line.policy) }}</td>
+                  <td class="numeric-value">{{ format(line.systemOnHand, line.saleMode) }} {{ line.unit }}</td>
+                  <td class="numeric-value">{{ format(line.countedQuantity, line.saleMode) }} {{ line.unit }}</td>
+                  <td class="numeric-value">{{ format(line.delta, line.saleMode) }} {{ line.unit }}
+                    @if (line.policy === 'MassObservation') { <small> · medición, sin ajuste</small> }
+                  </td></tr>
+              } @empty { <tr><td colspan="5">Aún no se registraron artículos.</td></tr> }
+            </tbody>
+          </table></div>
+          @if (count.lines.length) {
+            <p><strong>Masa física observada:</strong> {{ format(count.massObservedKg, 'weight') }} kg ·
+              <strong>Referencia contable:</strong> {{ format(count.massLedgerReferenceKg, 'weight') }} kg.
+              Las mediciones de masa no generan stock teórico por corte ni un ajuste automático.</p>
+          }
+          @if (count.status === 'Draft') {
+            <div class="receipt-fields"><div><label for="count-product">Artículo</label><select id="count-product" [value]="selectedProductId()" (change)="selectedProductId.set($any($event.target).value)">
+              <option value="">Elegir artículo</option>
+              @for (product of policyOptions()?.products || []; track product.id) {
+                <option [value]="product.id">{{ product.code }} · {{ product.name }}</option>
+              }
+            </select></div>
+              <div><label for="count-quantity">Cantidad física</label><input id="count-quantity" inputmode="decimal" [value]="countedQuantity()" (input)="countedQuantity.set($any($event.target).value)" /></div>
+              <button type="button" [disabled]="saving()" (click)="addLine()">Registrar medición</button>
+            </div>
+            <div class="receipt-actions"><button type="button" [disabled]="saving() || !count.lines.length" (click)="submit()">Enviar a revisión</button>
+              <button type="button" class="secondary-button" [disabled]="saving()" (click)="cancel()">Cancelar borrador</button></div>
+          }
+          @if (count.status === 'Submitted' && administrator()) {
+            <label for="count-reason">Motivo de decisión</label><input id="count-reason" maxlength="240" [value]="decisionReason()" (input)="decisionReason.set($any($event.target).value)" />
+            <div class="receipt-actions"><button type="button" [disabled]="saving()" (click)="approve()">Aprobar diferencias</button>
+              <button type="button" class="secondary-button" [disabled]="saving()" (click)="reject()">Rechazar</button></div>
+          }
+          @if (count.decisionReason) { <p><strong>Motivo:</strong> {{ count.decisionReason }}</p> }
+        </section>
+      </app-admin-detail-dialog>
+    }
+  </div>
+</main>

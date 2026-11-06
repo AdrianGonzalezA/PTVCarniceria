@@ -141,10 +141,14 @@
             }
             @if (context.permissions.includes('inventory.stock.manage')) {
               <a class="module-link" routerLink="/admin/stock"><span><strong>Existencias</strong><small>Consultar stock y registrar entradas o salidas de la sucursal.</small></span><span aria-hidden="true">→</span></a>
+              <a class="module-link" routerLink="/admin/physical-counts"><span><strong>Conteo físico</strong><small>Medir existencias y enviar diferencias para aprobación administrativa.</small></span><span aria-hidden="true">→</span></a>
               <a class="module-link" routerLink="/admin/pieces"><span><strong>Recepción de piezas</strong><small>Leer etiquetas y registrar piezas con stock en esta sucursal.</small></span><span aria-hidden="true">→</span></a>
             }
             @if (context.permissions.includes('inventory.receipts.manage')) {
               <a class="module-link" routerLink="/admin/receipts"><span><strong>Recepciones</strong><small>Registrar comprobantes y confirmar la mercadería efectivamente recibida.</small></span><span aria-hidden="true">→</span></a>
+            }
+            @if (context.permissions.includes('inventory.receipts.manage')) {
+              <a class="module-link" routerLink="/admin/transfer-receipts"><span><strong>Recepción entre sucursales</strong><small>Importar remitos y acreditar solo lo recibido físicamente.</small></span><span aria-hidden="true">→</span></a>
             }
             @if (context.permissions.includes('inventory.transfers.manage')) {
               <a class="module-link" routerLink="/admin/transfers"><span><strong>Transferencias</strong><small>Preparar remitos y descontar el stock al confirmar el despacho.</small></span><span aria-hidden="true">→</span></a>

@@ -17,6 +17,8 @@ internal static class StockMovementKindCode
             "pieceReceipt" => InventoryMovementKind.PieceReceipt,
             "receipt" => InventoryMovementKind.Receipt,
             "transferOut" => InventoryMovementKind.TransferOut,
+            "transferIn" => InventoryMovementKind.TransferIn,
+            "physicalCountAdjustment" => InventoryMovementKind.PhysicalCountAdjustment,
             _ => null
         };
         return string.IsNullOrEmpty(code) || kind.HasValue;
@@ -30,6 +32,8 @@ internal static class StockMovementKindCode
         InventoryMovementKind.PieceReceipt => "pieceReceipt",
         InventoryMovementKind.Receipt => "receipt",
         InventoryMovementKind.TransferOut => "transferOut",
+        InventoryMovementKind.TransferIn => "transferIn",
+        InventoryMovementKind.PhysicalCountAdjustment => "physicalCountAdjustment",
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 

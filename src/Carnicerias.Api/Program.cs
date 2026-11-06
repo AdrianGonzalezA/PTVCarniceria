@@ -177,6 +177,8 @@ app.MapFiscalDocumentEndpoints();
 app.MapInventoryEndpoints();
 app.MapInventoryReceiptEndpoints();
 app.MapInventoryTransferEndpoints();
+app.MapInventoryTransferReceiptEndpoints();
+app.MapPhysicalStockCountEndpoints();
 app.MapAdminSupplierEndpoints();
 app.MapBarcodePreviewEndpoints();
 app.MapBarcodeProfileEndpoints();

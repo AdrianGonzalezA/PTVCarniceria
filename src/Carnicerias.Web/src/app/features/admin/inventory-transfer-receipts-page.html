@@ -1,0 +1,131 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" [routerLink]="home()" aria-label="Volver al inicio">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Recepción entre sucursales</small></span>
+    </a>
+    @if (session(); as current) { <div class="account-bar"><span>{{ current.username }}</span></div> }
+  </header>
+  <div class="workspace receipt-workspace">
+    <a class="back-link" [routerLink]="home()">← Volver</a>
+    <p class="eyebrow">Negocio · Inventario</p>
+    <h1>Recepción de transferencias</h1>
+    <p class="intro">Importá un remito de origen o cargalo manualmente. El stock de esta sucursal aumenta cuando aprobás la cantidad física recibida.</p>
+    @if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Contexto de trabajo">
+        <div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Sucursal de destino</span><strong>{{ context.branchName }}</strong></div>
+      </section>
+    }
+    @if (error(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
+    @if (notice(); as message) { <p class="success-message" role="status">{{ message }}</p> }
+
+    <section class="category-panel receipt-panel" aria-labelledby="import-title">
+      <header class="panel-heading"><div><h2 id="import-title">Importar remito</h2>
+        <p>Archivo JSON exportado desde la sucursal de origen. La importación es una declaración: comprobá la mercadería antes de aprobar.</p></div></header>
+      <label for="transfer-remito-file">Archivo de remito</label>
+      <input id="transfer-remito-file" type="file" accept=".json,application/json" [disabled]="saving()" (change)="importFile($event)" />
+    </section>
+
+    <section class="category-panel receipt-panel" aria-labelledby="manual-title">
+      <header class="panel-heading"><div><h2 id="manual-title">Carga manual</h2>
+        <p>El origen puede no usar este POS. El ID interno de su sucursal no es obligatorio.</p></div></header>
+      <form class="receipt-form" (submit)="$event.preventDefault(); create()">
+        <div class="receipt-fields">
+          <div><label for="source-name">Sucursal de origen</label><input id="source-name" required maxlength="200" [value]="sourceBranchName()" (input)="sourceBranchName.set($any($event.target).value)" /></div>
+          <div><label for="remito-number">Número de remito</label><input id="remito-number" required maxlength="80" [value]="documentNumber()" (input)="documentNumber.set($any($event.target).value)" /></div>
+          <div><label for="remito-date">Fecha</label><input id="remito-date" type="date" required [value]="documentDate()" (change)="documentDate.set($any($event.target).value)" /></div>
+        </div>
+        <button type="submit" [disabled]="saving()">Crear borrador</button>
+      </form>
+    </section>
+
+    <section class="category-panel receipt-panel" aria-labelledby="received-list-title">
+      <header class="panel-heading"><div><h2 id="received-list-title">Remitos de destino</h2></div></header>
+      @if (loading()) { <p role="status">Cargando remitos…</p> }
+      @else if (page(); as result) {
+        <div class="table-scroll"><table>
+          <thead><tr><th>Remito</th><th>Fecha</th><th>Origen</th><th>Estado</th><th>Acción</th></tr></thead>
+          <tbody>
+            @for (item of result.items; track item.id) {
+              <tr><td>{{ item.documentNumber }}</td><td>{{ item.documentDate }}</td>
+                <td>{{ item.sourceBranchName }}</td>
+                <td>{{ item.status === 'Draft' ? 'Borrador' : item.status === 'Approved' ? 'Aprobado' : 'Cancelado' }}</td>
+                <td><button type="button" class="secondary-button" (click)="open(item.id)">Ver detalle</button></td></tr>
+            } @empty { <tr><td colspan="5">Todavía no hay remitos recibidos.</td></tr> }
+          </tbody>
+        </table></div>
+        <div class="receipt-pagination">
+          <button type="button" class="secondary-button" [disabled]="result.page <= 1" (click)="loadPage(result.page - 1)">Anterior</button>
+          <span>Página {{ result.page }} de {{ result.totalPages || 1 }}</span>
+          <button type="button" class="secondary-button" [disabled]="result.page >= result.totalPages" (click)="loadPage(result.page + 1)">Siguiente</button>
+        </div>
+      }
+    </section>
+
+    @if (selected(); as receipt) {
+      <app-admin-detail-dialog labelledBy="transfer-receipt-detail-title" [canClose]="!saving()" (closed)="close()">
+        <section class="transfer-detail" aria-labelledby="transfer-receipt-detail-title">
+          <header class="transfer-detail-header"><div>
+            <h2 id="transfer-receipt-detail-title">Remito {{ receipt.documentNumber }}</h2>
+            <p>{{ receipt.sourceBranchName }} · {{ receipt.documentDate }} · {{ receipt.status === 'Draft' ? 'Borrador' : receipt.status === 'Approved' ? 'Aprobado' : 'Cancelado' }}</p>
+          </div><button type="button" class="secondary-button" (click)="close()">Cerrar</button></header>
+          <div class="table-scroll"><table>
+            <thead><tr><th>Artículo / pieza</th><th>Enviado</th><th>Recibido</th><th>Diferencia</th><th>Acción</th></tr></thead>
+            <tbody>
+              @for (line of receipt.lines; track line.id) {
+                <tr><td>{{ line.productCode }} · {{ line.productName }}
+                  @if (line.isPiece) { <small> · {{ line.externalIdentifier || line.sourceExternalIdentifier || 'Pieza sin leer' }}</small> }</td>
+                  <td class="numeric-value">{{ format(line.sentQuantity, line.saleMode) }}</td>
+                  <td class="numeric-value">
+                    @if (receipt.status === 'Draft' && !line.isPiece) {
+                      <input [attr.aria-label]="'Recibido ' + line.productName" [value]="line.receivedQuantity.toString().replace('.', ',')" (change)="setReceived(line.id, $any($event.target).value)" />
+                    } @else { {{ format(line.receivedQuantity, line.saleMode) }} }
+                  </td>
+                  <td>{{ line.differenceStatus === 'PendingReview' ? 'Pendiente' : line.differenceStatus === 'Resolved' ? 'Resuelta' : '—' }}</td>
+                  <td>
+                    @if (receipt.status === 'Draft' && !line.isPiece) { <span>Editar recibido</span> }
+                    @if (receipt.status === 'Draft' && line.isPiece && !line.externalIdentifier) {
+                      <button type="button" class="secondary-button" [disabled]="saving()" (click)="scan(line.id)">Leer pieza</button>
+                    }
+                    @if (receipt.status === 'Approved' && line.differenceStatus === 'PendingReview') {
+                      <button type="button" class="secondary-button" [disabled]="saving()" (click)="resolve(line.id)">Resolver</button>
+                    }
+                  </td></tr>
+              } @empty { <tr><td colspan="5">Agregá un artículo para continuar.</td></tr> }
+            </tbody>
+          </table></div>
+          @if (receipt.status === 'Draft') {
+            <div class="receipt-fields">
+              <div><label for="line-product">Artículo</label><select id="line-product" [value]="newProductId()" (change)="newProductId.set($any($event.target).value)">
+                <option value="">Elegir artículo</option>
+                @for (product of products(); track product.productId) { <option [value]="product.productId">{{ product.code }} · {{ product.name }}</option> }
+              </select></div>
+              <div><label for="line-sent">Cantidad enviada</label><input id="line-sent" inputmode="decimal" [value]="sentQuantity()" (input)="sentQuantity.set($any($event.target).value)" /></div>
+              <div><label for="line-received">Cantidad recibida</label><input id="line-received" inputmode="decimal" [disabled]="newIsPiece()" [value]="receivedQuantity()" (input)="receivedQuantity.set($any($event.target).value)" /></div>
+              <label><input type="checkbox" [checked]="newIsPiece()" (change)="newIsPiece.set($any($event.target).checked)" /> Pieza trazable</label>
+              <button type="button" [disabled]="saving()" (click)="addLine()">Agregar renglón</button>
+            </div>
+            <div class="receipt-fields">
+              <div><label for="read-profile">Fórmula de código</label><select id="read-profile" [value]="profileId()" (change)="profileId.set($any($event.target).value)">
+                <option value="">Elegir fórmula</option>
+                @for (profile of profiles(); track profile.id) { <option [value]="profile.id">{{ profile.name }}</option> }
+              </select></div>
+              <div><label for="read-source">Origen del código</label><input id="read-source" [value]="sourceSystem()" (input)="sourceSystem.set($any($event.target).value)" /></div>
+              <div><label for="read-field">Campo identificador</label><input id="read-field" [value]="identifierField()" (input)="identifierField.set($any($event.target).value)" /></div>
+              <div><label for="read-code">Código de pieza</label><input id="read-code" [value]="barcode()" (input)="barcode.set($any($event.target).value)" /></div>
+            </div>
+            <p>Para un faltante, dejá la pieza sin lectura: quedará como diferencia pendiente.</p>
+            <div class="receipt-actions"><button type="button" [disabled]="saving() || !receipt.lines.length" (click)="approve()">Aprobar recepción</button>
+              <button type="button" class="secondary-button" [disabled]="saving()" (click)="cancel()">Cancelar borrador</button></div>
+          }
+          @if (receipt.status === 'Approved') {
+            <label for="difference-reason">Motivo de resolución de diferencia</label>
+            <input id="difference-reason" maxlength="240" [value]="differenceReason()" (input)="differenceReason.set($any($event.target).value)" />
+            <p>Solo un administrador puede resolver diferencias pendientes; el stock acreditado no cambia.</p>
+          }
+        </section>
+      </app-admin-detail-dialog>
+    }
+  </div>
+</main>

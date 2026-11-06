@@ -9,7 +9,9 @@ public enum InventoryMovementKind
     Sale,
     PieceReceipt,
     Receipt,
-    TransferOut
+    TransferOut,
+    TransferIn,
+    PhysicalCountAdjustment
 }
 
 public sealed class BranchInventoryBalance

@@ -228,4 +228,6 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 
 | 06/11/2026 | 14:11:31 | 14:27:29 | 15 min 58 s medidos | Avanzar la aceptación técnica y operativa de I24 | Se verificó el plan y se documentó la matriz por caso. Pasaron 100 pruebas Electron, 103 .NET focalizadas (3 omitidas), las pruebas HTTP controladas de pago parcial e idempotencia Mercado Pago simulada, build de Electron/Web y modelo EF sin cambios. Postcheck de solo lectura: 75 migraciones, 4 piezas, 172 movimientos y saldos agregados estables; sin residuos de pruebas. Se levantaron temporalmente API, Angular y dos Electron de La Rústica; la captura y el control visual fallaron en dos herramientas de automatización de Windows, por lo que no se declaró aceptación operativa. Se detuvieron las cajas y los servicios. Resultado y pendientes en `estado-i24-20261106.md`, commits `f36fa1c` y `1d96dde` publicados; sin pausas conocidas. |
 
-**Total activo registrado desde el 16/10/2026:** 1816 min 22 s medidos, más diez tramos menores a 1 min y tramos no cuantificables.
+| 06/11/2026 | 14:30:52 | 14:31:03 | 11 s medidos | Explicar el alcance de I24 | Se leyó el renglón I24 del plan y la matriz `06_QA_Y_ACEPTACION.md` para distinguir piloto de aceptación, pruebas obligatorias y pendientes operativos. Sin cambios de código ni datos; sin pausas conocidas. |
+
+**Total activo registrado desde el 16/10/2026:** 1816 min 33 s medidos, más diez tramos menores a 1 min y tramos no cuantificables.

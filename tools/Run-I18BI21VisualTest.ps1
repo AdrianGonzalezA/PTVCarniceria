@@ -22,7 +22,7 @@ if ($instance.Id -ne $expectedId -or -not $instance.State.Running -or
 $sql = 'SELECT current_database(), count(*), max("MigrationId") FROM "__EFMigrationsHistory";'
 $history = @($sql | docker exec -i $container psql -U postgres -d $database -v ON_ERROR_STOP=1 -At)
 if ($LASTEXITCODE -ne 0 -or $history.Count -ne 1 -or
-    $history[0] -ne 'carnicerias_test_visual|72|20261106125046_AddPhysicalCountI21') {
+    $history[0] -ne 'carnicerias_test_visual|75|20261106165321_AddAnatomicalGroupCountSnapshotI22') {
     throw "Historial inesperado: $($history -join ', ')"
 }
 $passwords = @($instance.Config.Env | Where-Object { $_ -like 'POSTGRES_PASSWORD=*' })

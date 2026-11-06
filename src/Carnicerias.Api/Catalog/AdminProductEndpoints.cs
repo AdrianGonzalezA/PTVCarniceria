@@ -15,6 +15,7 @@ public static class AdminProductEndpoints
         var products = endpoints.MapGroup("/api/admin/products")
             .RequireOperationalPermission(PlatformPermissionCatalog.CatalogManage);
         products.MapGet("", ListAsync);
+        products.MapGet("/anatomical-groups", ListAnatomicalGroupsAsync);
         products.MapPost("", CreateAsync);
         products.MapPatch("/{productId:guid}", UpdateAsync);
         products.MapGet("/{productId:guid}/cost-history", CostHistoryAsync);
@@ -29,9 +30,11 @@ public static class AdminProductEndpoints
         int pageSize = 20,
         string? search = null,
         Guid? categoryId = null,
-        bool? isActive = null)
+        bool? isActive = null,
+        string? anatomicalGroup = null)
     {
         if (page < 1 || pageSize is < 1 or > 100 || (search?.Length ?? 0) > 100 ||
+            anatomicalGroup?.Trim().Length > 120 ||
             ((long)page - 1) * pageSize > int.MaxValue)
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
@@ -40,6 +43,13 @@ public static class AdminProductEndpoints
             .Where(product => product.CompanyId == companyId &&
                 (!categoryId.HasValue || product.CategoryId == categoryId.Value) &&
                 (!isActive.HasValue || product.IsActive == isActive.Value));
+        if (!string.IsNullOrWhiteSpace(anatomicalGroup))
+        {
+            var normalizedGroup = anatomicalGroup.Trim()
+                .Normalize(NormalizationForm.FormKC).ToUpperInvariant();
+            products = products.Where(product =>
+                product.AnatomicalGroupNormalized == normalizedGroup);
+        }
         var normalizedSearch = search?.Trim().Normalize(NormalizationForm.FormKC);
         if (!string.IsNullOrEmpty(normalizedSearch))
         {
@@ -73,10 +83,29 @@ public static class AdminProductEndpoints
                 db.ProductCodes.Count(code => code.CompanyId == companyId &&
                     code.ProductId == product.Id && code.IsActive &&
                     code.Kind == ProductCodeKind.SaleAlternative),
-                product.AllowSaleWithoutStock))
+                product.AllowSaleWithoutStock,
+                product.AnatomicalGroup))
             .ToArrayAsync(cancellationToken);
         return Results.Ok(new ProductPage(items, page, pageSize, totalItems,
             totalItems == 0 ? 0 : (totalItems - 1) / pageSize + 1));
+    }
+
+    private static async Task<IResult> ListAnatomicalGroupsAsync(
+        PlatformAccessDbContext db, OperationalContextAccessor contextAccessor,
+        CancellationToken cancellationToken)
+    {
+        var companyId = contextAccessor.Context.CompanyId;
+        var rows = await db.CatalogProducts.AsNoTracking()
+            .Where(product => product.CompanyId == companyId &&
+                product.AnatomicalGroupNormalized != null)
+            .Select(product => new { product.AnatomicalGroup,
+                product.AnatomicalGroupNormalized })
+            .ToArrayAsync(cancellationToken);
+        return Results.Ok(rows.GroupBy(item => item.AnatomicalGroupNormalized,
+                StringComparer.Ordinal)
+            .Select(group => group.OrderBy(item => item.AnatomicalGroup,
+                StringComparer.Ordinal).First().AnatomicalGroup!)
+            .Order(StringComparer.OrdinalIgnoreCase).ToArray());
     }
 
     private static async Task<IResult> CreateAsync(
@@ -91,7 +120,8 @@ public static class AdminProductEndpoints
         if (request is null || request.CategoryId == Guid.Empty ||
             !ValidText(request.Code, 80) || !ValidText(request.Name, 200) ||
             !ValidText(request.Unit, 24) || !TryParseSaleMode(request.SaleMode, out var saleMode) ||
-            (request.Cost.HasValue && !ValidCost(request.Cost.Value)))
+            (request.Cost.HasValue && !ValidCost(request.Cost.Value)) ||
+            request.AnatomicalGroup?.Trim().Length > 120)
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var companyId = contextAccessor.Context.CompanyId;
@@ -108,6 +138,7 @@ public static class AdminProductEndpoints
         var product = new CatalogProduct(companyId, category.Id, request.Code,
             request.Name, request.Unit, saleMode, request.Cost,
             request.AllowSaleWithoutStock ?? true);
+        product.SetAnatomicalGroup(request.AnatomicalGroup);
         db.CatalogProducts.Add(product);
         if (product.Cost is decimal initialCost)
             db.ProductCostVersions.Add(new ProductCostVersion(companyId, product.Id,
@@ -138,12 +169,13 @@ public static class AdminProductEndpoints
         if (productId == Guid.Empty || request is null || request.Code is not null ||
             (request.CategoryId is null && request.Name is null && request.Unit is null &&
              request.SaleMode is null && request.Cost is null && request.IsActive is null &&
-             request.AllowSaleWithoutStock is null) ||
+             request.AllowSaleWithoutStock is null && request.AnatomicalGroup is null) ||
             (request.CategoryId.HasValue && request.CategoryId == Guid.Empty) ||
             (request.Name is not null && !ValidText(request.Name, 200)) ||
             (request.Unit is not null && !ValidText(request.Unit, 24)) ||
             (request.Cost.HasValue && !ValidCost(request.Cost.Value)) ||
-            (request.SaleMode is not null && !TryParseSaleMode(request.SaleMode, out _)))
+            (request.SaleMode is not null && !TryParseSaleMode(request.SaleMode, out _)) ||
+            request.AnatomicalGroup?.Trim().Length > 120)
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var companyId = contextAccessor.Context.CompanyId;
@@ -204,6 +236,8 @@ public static class AdminProductEndpoints
         }
         if (request.AllowSaleWithoutStock is bool allowSaleWithoutStock)
             product.SetAllowSaleWithoutStock(allowSaleWithoutStock);
+        if (request.AnatomicalGroup is not null)
+            product.SetAnatomicalGroup(request.AnatomicalGroup);
 
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -256,7 +290,8 @@ public static class AdminProductEndpoints
     private static ProductResponse ToResponse(CatalogProduct product, string categoryName, int alternateCodeCount) =>
         new(product.Id, product.CategoryId, categoryName, product.Code, product.Name, product.Unit,
             product.SaleMode == ProductSaleMode.Weight ? "weight" : "unit", product.Cost,
-            product.IsActive, alternateCodeCount, product.AllowSaleWithoutStock);
+            product.IsActive, alternateCodeCount, product.AllowSaleWithoutStock,
+            product.AnatomicalGroup);
 
     private static bool ValidText(string? value, int maxLength) =>
         !string.IsNullOrWhiteSpace(value) && value.Trim().Length <= maxLength;
@@ -301,14 +336,15 @@ public static class AdminProductEndpoints
 
     private sealed record ProductCreateRequest(
         Guid CategoryId, string Code, string Name, string Unit, string SaleMode, decimal? Cost,
-        bool? AllowSaleWithoutStock);
+        bool? AllowSaleWithoutStock, string? AnatomicalGroup);
     private sealed record ProductUpdateRequest(
         Guid? CategoryId, string? Name, string? Unit, string? SaleMode, decimal? Cost,
-        bool? IsActive, string? Code, bool? AllowSaleWithoutStock);
+        bool? IsActive, string? Code, bool? AllowSaleWithoutStock,
+        string? AnatomicalGroup);
     private sealed record ProductResponse(
         Guid Id, Guid CategoryId, string CategoryName, string Code, string Name, string Unit,
         string SaleMode, decimal? Cost, bool IsActive, int AlternateCodeCount,
-        bool AllowSaleWithoutStock);
+        bool AllowSaleWithoutStock, string? AnatomicalGroup);
     private sealed record ProductPage(
         IReadOnlyList<ProductResponse> Items, int Page, int PageSize, long TotalItems, long TotalPages);
     private sealed record CostHistoryRow(Guid Id, decimal Amount, DateTimeOffset EffectiveFromUtc,

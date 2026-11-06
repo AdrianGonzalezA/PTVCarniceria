@@ -115,6 +115,7 @@
               <a class="module-link" routerLink="/admin/products"><span><strong>Artículos</strong><small>Definir productos, unidad de venta, modalidad y costo.</small></span><span aria-hidden="true">→</span></a>
               <a class="module-link" routerLink="/admin/taxes"><span><strong>Impuestos por artículo</strong><small>Clasificar gravado, exento o no alcanzado, con alícuota e historial.</small></span><span aria-hidden="true">→</span></a>
               <a class="module-link" routerLink="/admin/price-lists"><span><strong>Listas de precios</strong><small>Habilitarlas por sucursal y mantener precios con historial.</small></span><span aria-hidden="true">→</span></a>
+              <a class="module-link" routerLink="/admin/production-classifiers"><span><strong>Tipos de producción</strong><small>Definir clasificaciones para las órdenes de producción.</small></span><span aria-hidden="true">→</span></a>
             }
             @if (context.permissions.includes('organization.manage')) {
               <a class="module-link" routerLink="/admin/suppliers"><span><strong>Proveedores</strong><small>Identificar proveedores para las recepciones de mercadería.</small></span><span aria-hidden="true">→</span></a>
@@ -129,6 +130,9 @@
             }
             <a class="module-link" routerLink="/users"><span><strong>Usuarios</strong><small>Consultar cuentas, modificar datos y controlar el acceso.</small></span><span aria-hidden="true">→</span></a>
           } @else {
+            @if (context.permissions.includes('production.operate')) {
+              <a class="module-link" routerLink="/production"><span><strong>Producción</strong><small>Registrar insumos, salidas, piezas y balance de masa por orden.</small></span><span aria-hidden="true">→</span></a>
+            }
             @if (context.permissions.includes('cash.withdrawal.approve')) {
               <a class="module-link" routerLink="/admin/cash-withdrawals"><span><strong>Retiros de efectivo</strong><small>Aprobar o rechazar solicitudes pendientes de las cajas.</small></span><span aria-hidden="true">→</span></a>
             }

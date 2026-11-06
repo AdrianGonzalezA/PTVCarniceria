@@ -28,11 +28,12 @@ public sealed class InventoryPiece
         Guid receivedByUserId, Guid operationId, Guid inventoryMovementId, string sourceSystem,
         string externalIdentifier, string rawBarcode, decimal receivedWeightKg,
         DateTimeOffset receivedAtUtc, string identifierField = "pro_identif",
-        Guid? originPieceId = null)
+        Guid? originPieceId = null, Guid? productionOrderId = null)
     {
         if (companyId == Guid.Empty || branchId == Guid.Empty || productId == Guid.Empty ||
             barcodeProfileId == Guid.Empty || receivedByUserId == Guid.Empty || operationId == Guid.Empty ||
-            inventoryMovementId == Guid.Empty || originPieceId == Guid.Empty)
+            inventoryMovementId == Guid.Empty || originPieceId == Guid.Empty ||
+            productionOrderId == Guid.Empty || originPieceId.HasValue && productionOrderId.HasValue)
             throw new ArgumentException("Piece receipt identifiers are required.");
         if (string.IsNullOrWhiteSpace(sourceSystem) || sourceSystem.Trim().Length > 120 ||
             string.IsNullOrWhiteSpace(externalIdentifier) || externalIdentifier.Length > 80 ||
@@ -60,6 +61,7 @@ public sealed class InventoryPiece
         RawBarcode = rawBarcode.Trim();
         IdentifierField = identifierField.Trim().ToLowerInvariant();
         OriginPieceId = originPieceId;
+        ProductionOrderId = productionOrderId;
         ReceivedWeightKg = receivedWeightKg;
         ReceivedAtUtc = receivedAtUtc.ToUniversalTime();
         Status = InventoryPieceStatus.Available;
@@ -80,10 +82,12 @@ public sealed class InventoryPiece
     public string RawBarcode { get; private set; }
     public string IdentifierField { get; private set; }
     public Guid? OriginPieceId { get; private set; }
+    public Guid? ProductionOrderId { get; private set; }
     public decimal ReceivedWeightKg { get; private set; }
     public DateTimeOffset ReceivedAtUtc { get; private set; }
     public InventoryPieceStatus Status { get; private set; }
     public Guid? ReservedBySaleDraftId { get; private set; }
+    public Guid? ReservedByProductionOrderId { get; private set; }
     public DateTimeOffset? ReservedAtUtc { get; private set; }
     public DateTimeOffset StateChangedAtUtc { get; private set; }
 
@@ -117,6 +121,40 @@ public sealed class InventoryPiece
             throw new InvalidOperationException("The draft does not own this piece.");
         Status = InventoryPieceStatus.Sold;
         ReservedBySaleDraftId = null;
+        ReservedAtUtc = null;
+        StateChangedAtUtc = now.ToUniversalTime();
+    }
+
+    public void ReserveForProduction(Guid orderId, DateTimeOffset now)
+    {
+        if (orderId == Guid.Empty) throw new ArgumentException("An order is required.", nameof(orderId));
+        if (Status == InventoryPieceStatus.Reserved && ReservedByProductionOrderId == orderId) return;
+        if (Status != InventoryPieceStatus.Available)
+            throw new InvalidOperationException("The piece is not available for production.");
+        Status = InventoryPieceStatus.Reserved;
+        ReservedByProductionOrderId = orderId;
+        ReservedAtUtc = now.ToUniversalTime();
+        StateChangedAtUtc = ReservedAtUtc.Value;
+    }
+
+    public void ReleaseProductionReservation(Guid orderId, DateTimeOffset now)
+    {
+        if (orderId == Guid.Empty || Status != InventoryPieceStatus.Reserved ||
+            ReservedByProductionOrderId != orderId)
+            throw new InvalidOperationException("The order does not own this piece.");
+        Status = InventoryPieceStatus.Available;
+        ReservedByProductionOrderId = null;
+        ReservedAtUtc = null;
+        StateChangedAtUtc = now.ToUniversalTime();
+    }
+
+    public void MarkConsumedByProduction(Guid orderId, DateTimeOffset now)
+    {
+        if (orderId == Guid.Empty || Status != InventoryPieceStatus.Reserved ||
+            ReservedByProductionOrderId != orderId)
+            throw new InvalidOperationException("The order does not own this piece.");
+        Status = InventoryPieceStatus.Consumed;
+        ReservedByProductionOrderId = null;
         ReservedAtUtc = null;
         StateChangedAtUtc = now.ToUniversalTime();
     }

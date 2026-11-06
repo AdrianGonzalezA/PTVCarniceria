@@ -37,6 +37,10 @@ public sealed class TransferReceiptCountVisualEndpointTests
         var category = new ProductCategory(company.Id, "Artículos de prueba");
         var product = new CatalogProduct(company.Id, category.Id, $"U{suffix}",
             "Artículo unitario de prueba", "un", ProductSaleMode.Unit, null);
+        var weightProduct = new CatalogProduct(company.Id, category.Id,
+            $"K{suffix}", "Corte por peso de prueba", "kg", ProductSaleMode.Weight,
+            null);
+        weightProduct.SetAnatomicalGroup("Cuarto trasero");
         var password = $"I21-{Guid.NewGuid():N}!";
         var user = UserIdentity.CreateForCompany(company.Id, $"i21-{suffix}",
             $"i21-{suffix}@example.test", new Argon2idPasswordHasher().Hash(password));
@@ -52,7 +56,7 @@ public sealed class TransferReceiptCountVisualEndpointTests
                 var receiptPermissionId = await db.Permissions.Where(item =>
                         item.Code == PlatformPermissionCatalog.InventoryReceiptsManage)
                     .Select(item => item.Id).SingleAsync();
-                db.AddRange(company, branch, category, product, user,
+                db.AddRange(company, branch, category, product, weightProduct, user,
                     new UserAssignment(user.Id, roleId, company.Id),
                     new CompanyRolePermissionOverride(company.Id, roleId,
                         receiptPermissionId, true, user.Id, DateTimeOffset.UtcNow));
@@ -111,9 +115,20 @@ public sealed class TransferReceiptCountVisualEndpointTests
                 .GetProperty("systemOnHand").GetDecimal());
             Assert.Equal("TheoreticalStock", counted.GetProperty("lines")[0]
                 .GetProperty("policy").GetString());
+            var weighed = await OkAsync(await client.PostAsJsonAsync(
+                $"/api/inventory/counts/{countId}/lines", new {
+                    version = counted.GetProperty("version").GetInt32(),
+                    productId = weightProduct.Id, countedQuantity = 12.5m }));
+            Assert.Equal("MassObservation", weighed.GetProperty("lines")[1]
+                .GetProperty("policy").GetString());
+            Assert.Equal("Cuarto trasero", weighed.GetProperty("lines")[1]
+                .GetProperty("anatomicalGroup").GetString());
+            var mass = Assert.Single(weighed.GetProperty("anatomicalMasses").EnumerateArray());
+            Assert.Equal("Cuarto trasero", mass.GetProperty("group").GetString());
+            Assert.Equal(12.5m, mass.GetProperty("observedKg").GetDecimal());
             var submitted = await OkAsync(await client.PostAsJsonAsync(
                 $"/api/inventory/counts/{countId}/submit", new {
-                    version = counted.GetProperty("version").GetInt32() }));
+                    version = weighed.GetProperty("version").GetInt32() }));
             var approvedCount = await OkAsync(await client.PostAsJsonAsync(
                 $"/api/inventory/counts/{countId}/approve", new {
                     version = submitted.GetProperty("version").GetInt32(),

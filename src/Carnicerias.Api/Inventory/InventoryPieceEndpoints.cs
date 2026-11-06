@@ -116,13 +116,17 @@ public static class InventoryPieceEndpoints
                                ProductName = product.Name,
                                piece.SourceSystem, piece.ExternalIdentifier, piece.ReceivedWeightKg,
                                piece.RawBarcode, piece.ReceivedAtUtc, piece.Status,
-                               piece.ReservedBySaleDraftId, piece.ReservedAtUtc })
+                               piece.ReservedBySaleDraftId, piece.ReservedAtUtc,
+                               piece.OriginPieceId, piece.ProductionOrderId,
+                               piece.ReservedByProductionOrderId })
             .Skip((currentPage - 1) * currentPageSize).Take(currentPageSize)
             .ToArrayAsync(cancellationToken);
         var items = pageItems.Select(piece => new PieceListItem(piece.Id, piece.ProductId,
             piece.ProductCode, piece.ProductName, piece.SourceSystem, piece.ExternalIdentifier,
             piece.ReceivedWeightKg, piece.RawBarcode, piece.ReceivedAtUtc,
-            piece.Status.ToString(), piece.ReservedBySaleDraftId, piece.ReservedAtUtc)).ToArray();
+            piece.Status.ToString(), piece.ReservedBySaleDraftId, piece.ReservedAtUtc,
+            piece.OriginPieceId, piece.ProductionOrderId,
+            piece.ReservedByProductionOrderId)).ToArray();
         return Results.Ok(new PieceListResponse(items, currentPage, currentPageSize, total));
     }
 
@@ -142,7 +146,8 @@ public static class InventoryPieceEndpoints
             item.PreviousStatus?.ToString(), item.Status.ToString(), item.Kind.ToString(),
             item.SaleDraftId, item.ActorUserId, item.Reason, item.CreatedAtUtc,
             item.EvidenceReference, item.EvidenceSha256, item.ObservedWeightKg,
-            item.CountedOnHand, item.CountedAtUtc, item.InventoryMovementId)).ToArray();
+            item.CountedOnHand, item.CountedAtUtc, item.InventoryMovementId,
+            item.ProductionOrderId)).ToArray();
         return Results.Ok(items);
     }
 
@@ -348,7 +353,9 @@ public static class InventoryPieceEndpoints
 
     private static PieceResponse ToResponse(InventoryPiece piece) => new(piece.Id, piece.OperationId,
         piece.ProductId, piece.BarcodeProfileId, piece.SourceSystem, piece.ExternalIdentifier,
-        piece.ReceivedWeightKg, piece.RawBarcode, piece.ReceivedAtUtc, piece.Status.ToString());
+        piece.ReceivedWeightKg, piece.RawBarcode, piece.ReceivedAtUtc,
+        piece.Status.ToString(), piece.OriginPieceId, piece.ProductionOrderId,
+        piece.ReservedByProductionOrderId);
 
     private static IResult Error(int statusCode, string code) => Results.Json(
         new ErrorResponse(new ApiError(code, "No se pudo procesar la pieza", [])), statusCode: statusCode);
@@ -357,16 +364,19 @@ public static class InventoryPieceEndpoints
         string SourceSystem, string IdentifierField, string Code);
     private sealed record PieceResponse(Guid Id, Guid OperationId, Guid ProductId, Guid BarcodeProfileId,
         string SourceSystem, string ExternalIdentifier, decimal ReceivedWeightKg, string RawBarcode,
-        DateTimeOffset ReceivedAtUtc, string Status);
+        DateTimeOffset ReceivedAtUtc, string Status, Guid? OriginPieceId,
+        Guid? ProductionOrderId, Guid? ReservedByProductionOrderId);
     private sealed record PieceListItem(Guid Id, Guid ProductId, string ProductCode, string ProductName,
         string SourceSystem, string ExternalIdentifier, decimal ReceivedWeightKg, string RawBarcode,
         DateTimeOffset ReceivedAtUtc, string Status, Guid? ReservedBySaleDraftId,
-        DateTimeOffset? ReservedAtUtc);
+        DateTimeOffset? ReservedAtUtc, Guid? OriginPieceId,
+        Guid? ProductionOrderId, Guid? ReservedByProductionOrderId);
     private sealed record PieceListResponse(IReadOnlyList<PieceListItem> Items, int Page, int PageSize, int Total);
     private sealed record PieceEventResponse(Guid Id, string? PreviousStatus, string Status,
         string Kind, Guid? SaleDraftId, Guid? ActorUserId, string Reason, DateTimeOffset CreatedAtUtc,
         string? EvidenceReference, string? EvidenceSha256, decimal? ObservedWeightKg,
-        decimal? CountedOnHand, DateTimeOffset? CountedAtUtc, Guid? InventoryMovementId);
+        decimal? CountedOnHand, DateTimeOffset? CountedAtUtc, Guid? InventoryMovementId,
+        Guid? ProductionOrderId);
     private sealed record ReleasePieceRequest(string? Reason);
     private sealed record PosPieceLookupResponse(Guid Id, Guid ProductId, string ProductCode,
         string ExternalIdentifier, decimal ReceivedWeightKg, string RawBarcode);

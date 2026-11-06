@@ -5,4 +5,5 @@ public sealed record OperationalContext(
     Guid CompanyId,
     Guid BranchId,
     IReadOnlySet<string> Permissions,
-    Guid SessionId);
+    Guid SessionId,
+    IReadOnlySet<string>? Roles = null);

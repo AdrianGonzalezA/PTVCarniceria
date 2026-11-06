@@ -11,7 +11,9 @@ public enum InventoryMovementKind
     Receipt,
     TransferOut,
     TransferIn,
-    PhysicalCountAdjustment
+    PhysicalCountAdjustment,
+    ProductionInput,
+    ProductionOutput
 }
 
 public sealed class BranchInventoryBalance

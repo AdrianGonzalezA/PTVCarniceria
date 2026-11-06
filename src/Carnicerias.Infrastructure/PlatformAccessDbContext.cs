@@ -89,6 +89,9 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
     public DbSet<InventoryTransferReceiptLine> InventoryTransferReceiptLines => Set<InventoryTransferReceiptLine>();
     public DbSet<PhysicalStockCount> PhysicalStockCounts => Set<PhysicalStockCount>();
     public DbSet<PhysicalStockCountLine> PhysicalStockCountLines => Set<PhysicalStockCountLine>();
+    public DbSet<ProductionClassifier> ProductionClassifiers => Set<ProductionClassifier>();
+    public DbSet<ProductionOrder> ProductionOrders => Set<ProductionOrder>();
+    public DbSet<ProductionMaterialLine> ProductionMaterialLines => Set<ProductionMaterialLine>();
 
     public DbSet<BarcodeProfile> BarcodeProfiles => Set<BarcodeProfile>();
 
@@ -692,7 +695,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             {
                 table.HasCheckConstraint("CK_pieces_received_weight_positive", "\"ReceivedWeightKg\" > 0");
                 table.HasCheckConstraint("CK_pieces_status", "\"Status\" BETWEEN 0 AND 6");
-                table.HasCheckConstraint("CK_pieces_reservation_owner", "(\"Status\" = 1 AND \"ReservedBySaleDraftId\" IS NOT NULL AND \"ReservedAtUtc\" IS NOT NULL) OR (\"Status\" <> 1 AND \"ReservedBySaleDraftId\" IS NULL AND \"ReservedAtUtc\" IS NULL)");
+                table.HasCheckConstraint("CK_pieces_reservation_owner", "(\"Status\" = 1 AND (\"ReservedBySaleDraftId\" IS NOT NULL) <> (\"ReservedByProductionOrderId\" IS NOT NULL) AND \"ReservedAtUtc\" IS NOT NULL) OR (\"Status\" <> 1 AND \"ReservedBySaleDraftId\" IS NULL AND \"ReservedByProductionOrderId\" IS NULL AND \"ReservedAtUtc\" IS NULL)");
             });
             entity.HasKey(piece => piece.Id);
             entity.Property(piece => piece.SourceSystem).HasMaxLength(120).IsRequired();
@@ -706,6 +709,14 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasOne<SaleDraft>().WithMany()
                 .HasForeignKey(piece => new { piece.CompanyId, piece.ReservedBySaleDraftId })
                 .HasPrincipalKey(draft => new { draft.CompanyId, draft.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ProductionOrder>().WithMany()
+                .HasForeignKey(piece => new { piece.CompanyId, piece.ReservedByProductionOrderId })
+                .HasPrincipalKey(order => new { order.CompanyId, order.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ProductionOrder>().WithMany()
+                .HasForeignKey(piece => new { piece.CompanyId, piece.ProductionOrderId })
+                .HasPrincipalKey(order => new { order.CompanyId, order.Id })
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<Branch>().WithMany()
                 .HasForeignKey(piece => new { piece.CompanyId, piece.BranchId })
@@ -732,6 +743,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .HasFilter("\"OriginPieceId\" IS NOT NULL");
             entity.HasIndex(piece => new { piece.CompanyId, piece.BranchId, piece.Status });
             entity.HasIndex(piece => new { piece.CompanyId, piece.ReservedBySaleDraftId });
+            entity.HasIndex(piece => new { piece.CompanyId, piece.ReservedByProductionOrderId });
+            entity.HasIndex(piece => new { piece.CompanyId, piece.ProductionOrderId });
             entity.HasIndex(piece => new
             {
                 piece.CompanyId,
@@ -746,7 +759,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.ToTable("piece_state_events", "inventory", table =>
             {
                 table.HasCheckConstraint("CK_piece_state_events_status", "\"Status\" BETWEEN 0 AND 6 AND (\"PreviousStatus\" IS NULL OR \"PreviousStatus\" BETWEEN 0 AND 6)");
-                table.HasCheckConstraint("CK_piece_state_events_kind", "\"Kind\" BETWEEN 0 AND 8");
+                table.HasCheckConstraint("CK_piece_state_events_kind", "\"Kind\" BETWEEN 0 AND 12");
                 table.HasCheckConstraint("CK_piece_state_events_reconciliation_evidence", "(\"Kind\" = 8 AND \"PreviousStatus\" IS NOT NULL AND \"PreviousStatus\" = 5 AND \"Status\" IN (0, 6) AND \"ActorUserId\" IS NOT NULL AND \"ReconciliationOperationId\" IS NOT NULL AND \"EvidenceReference\" IS NOT NULL AND \"ObservedWeightKg\" IS NOT NULL AND \"CountedOnHand\" IS NOT NULL AND \"CountedAtUtc\" IS NOT NULL) OR (\"Kind\" <> 8 AND \"ReconciliationOperationId\" IS NULL AND \"EvidenceReference\" IS NULL AND \"EvidenceSha256\" IS NULL AND \"ObservedWeightKg\" IS NULL AND \"CountedOnHand\" IS NULL AND \"CountedAtUtc\" IS NULL AND \"InventoryMovementId\" IS NULL)");
             });
             entity.HasKey(item => item.Id);
@@ -766,6 +779,10 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .HasForeignKey(item => new { item.CompanyId, item.SaleDraftId })
                 .HasPrincipalKey(draft => new { draft.CompanyId, draft.Id })
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ProductionOrder>().WithMany()
+                .HasForeignKey(item => new { item.CompanyId, item.ProductionOrderId })
+                .HasPrincipalKey(order => new { order.CompanyId, order.Id })
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<UserIdentity>().WithMany()
                 .HasForeignKey(item => item.ActorUserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<InventoryMovement>().WithMany()
@@ -781,6 +798,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 table.HasCheckConstraint("CK_products_sale_mode", "\"SaleMode\" IN (0, 1)");
                 table.HasCheckConstraint("CK_products_count_policy_override",
                     "\"CountPolicyOverride\" IS NULL OR \"CountPolicyOverride\" IN (0, 1)");
+                table.HasCheckConstraint("CK_products_anatomical_group",
+                    "(\"AnatomicalGroup\" IS NULL) = (\"AnatomicalGroupNormalized\" IS NULL)");
             });
             entity.HasKey(product => product.Id);
             entity.HasAlternateKey(product => new { product.CompanyId, product.Id });
@@ -791,6 +810,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(product => product.Cost).HasPrecision(12, 2);
             entity.Property(product => product.AllowSaleWithoutStock).HasDefaultValue(true);
             entity.Property(product => product.CountPolicyOverride).HasConversion<int?>();
+            entity.Property(product => product.AnatomicalGroup).HasMaxLength(120);
+            entity.Property(product => product.AnatomicalGroupNormalized).HasMaxLength(120);
             entity.HasOne<Company>().WithMany().HasForeignKey(product => product.CompanyId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<ProductCategory>().WithMany()
@@ -799,6 +820,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(product => new { product.CompanyId, product.NormalizedCode }).IsUnique();
             entity.HasIndex(product => new { product.CompanyId, product.CategoryId, product.IsActive });
+            entity.HasIndex(product => new { product.CompanyId, product.AnatomicalGroupNormalized });
         });
 
         modelBuilder.Entity<TaxCatalogEntry>(entity =>
@@ -1467,7 +1489,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.ToTable("inventory_movements", "inventory", table =>
             {
                 table.HasCheckConstraint("CK_inventory_movements_delta_nonzero", "\"QuantityDelta\" <> 0");
-                table.HasCheckConstraint("CK_inventory_movements_kind", "\"Kind\" IN (0, 1, 2, 3, 4, 5, 6, 7)");
+                table.HasCheckConstraint("CK_inventory_movements_kind", "\"Kind\" IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)");
             });
             entity.HasKey(movement => movement.Id);
             entity.Property(movement => movement.QuantityDelta).HasPrecision(12, 3);
@@ -1856,6 +1878,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.HasKey(item => item.Id);
             entity.Property(item => item.ProductCode).HasMaxLength(80).IsRequired();
             entity.Property(item => item.ProductName).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.AnatomicalGroup).HasMaxLength(120);
             entity.Property(item => item.Unit).HasMaxLength(24).IsRequired();
             entity.Property(item => item.SaleMode).HasConversion<int>().IsRequired();
             entity.Property(item => item.Policy).HasConversion<int>().IsRequired();
@@ -1878,6 +1901,128 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .IsUnique();
             entity.HasIndex(item => item.InventoryMovementId).IsUnique()
                 .HasFilter("\"InventoryMovementId\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<ProductionClassifier>(entity =>
+        {
+            entity.ToTable("production_classifiers", "inventory");
+            entity.HasKey(item => item.Id);
+            entity.HasAlternateKey(item => new { item.CompanyId, item.Id });
+            entity.Property(item => item.Name).HasMaxLength(120).IsRequired();
+            entity.Property(item => item.NormalizedName).HasMaxLength(120).IsRequired();
+            entity.HasOne<Company>().WithMany().HasForeignKey(item => item.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(item => new { item.CompanyId, item.NormalizedName }).IsUnique();
+        });
+
+        modelBuilder.Entity<ProductionOrder>(entity =>
+        {
+            entity.ToTable("production_orders", "inventory", table =>
+            {
+                table.HasCheckConstraint("CK_production_orders_kind", "\"Kind\" IN (0, 1)");
+                table.HasCheckConstraint("CK_production_orders_status", "\"Status\" IN (0, 1, 2)");
+                table.HasCheckConstraint("CK_production_orders_type",
+                    "(\"Kind\" = 0 AND \"ClassifierId\" IS NOT NULL AND \"CorrectsOrderId\" IS NULL) OR " +
+                    "(\"Kind\" = 1 AND \"ClassifierId\" IS NULL AND \"CorrectsOrderId\" IS NOT NULL)");
+                table.HasCheckConstraint("CK_production_orders_decision",
+                    "(\"Status\" = 0 AND \"ClosedByUserId\" IS NULL AND \"ClosedAtUtc\" IS NULL AND \"CanceledByUserId\" IS NULL AND \"CanceledAtUtc\" IS NULL) OR " +
+                    "(\"Status\" = 1 AND \"ClosedByUserId\" IS NOT NULL AND \"ClosedAtUtc\" IS NOT NULL AND \"CanceledByUserId\" IS NULL AND \"CanceledAtUtc\" IS NULL) OR " +
+                    "(\"Status\" = 2 AND \"ClosedByUserId\" IS NULL AND \"ClosedAtUtc\" IS NULL AND \"CanceledByUserId\" IS NOT NULL AND \"CanceledAtUtc\" IS NOT NULL)");
+                table.HasCheckConstraint("CK_production_orders_waste",
+                    "\"ReportedWasteKg\" BETWEEN 0 AND 100000");
+            });
+            entity.HasKey(item => item.Id);
+            entity.HasAlternateKey(item => new { item.CompanyId, item.Id });
+            entity.Property(item => item.Kind).HasConversion<int>().IsRequired();
+            entity.Property(item => item.Status).HasConversion<int>().IsRequired();
+            entity.Property(item => item.Version).IsConcurrencyToken();
+            entity.Property(item => item.ReportedWasteKg).HasPrecision(12, 3);
+            entity.Property(item => item.WasteReason).HasMaxLength(240).IsRequired();
+            entity.Ignore(item => item.InputMassKg);
+            entity.Ignore(item => item.OutputMassKg);
+            entity.Ignore(item => item.MassDifferenceKg);
+            entity.HasOne<Branch>().WithMany()
+                .HasForeignKey(item => new { item.CompanyId, item.BranchId })
+                .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ProductionClassifier>().WithMany()
+                .HasForeignKey(item => new { item.CompanyId, item.ClassifierId })
+                .HasPrincipalKey(item => new { item.CompanyId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ProductionOrder>().WithMany()
+                .HasForeignKey(item => new { item.CompanyId, item.CorrectsOrderId })
+                .HasPrincipalKey(item => new { item.CompanyId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany().HasForeignKey(item => item.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany().HasForeignKey(item => item.ClosedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany().HasForeignKey(item => item.CanceledByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(item => new { item.CompanyId, item.BranchId, item.OperationId })
+                .IsUnique();
+            entity.HasIndex(item => new { item.CompanyId, item.BranchId,
+                item.Status, item.CreatedAtUtc });
+            entity.HasMany(item => item.Lines).WithOne()
+                .HasForeignKey(line => new { line.CompanyId, line.OrderId })
+                .HasPrincipalKey(item => new { item.CompanyId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.Navigation(item => item.Lines)
+                .UsePropertyAccessMode(PropertyAccessMode.Field);
+        });
+
+        modelBuilder.Entity<ProductionMaterialLine>(entity =>
+        {
+            entity.ToTable("production_lines", "inventory", table =>
+            {
+                table.HasCheckConstraint("CK_production_lines_direction", "\"Direction\" IN (0, 1)");
+                table.HasCheckConstraint("CK_production_lines_quantity",
+                    "\"Quantity\" > 0 AND \"MassKg\" > 0 AND " +
+                    "(\"SaleMode\" <> 1 OR \"Quantity\" = trunc(\"Quantity\")) AND " +
+                    "(\"SaleMode\" <> 0 OR \"Quantity\" = \"MassKg\")");
+                table.HasCheckConstraint("CK_production_lines_piece",
+                    "(\"InputPieceId\" IS NULL OR \"Direction\" = 0) AND " +
+                    "((\"OutputBarcodeProfileId\" IS NULL AND " +
+                    "\"OutputSourceSystem\" IS NULL AND \"OutputExternalIdentifier\" IS NULL AND " +
+                    "\"OutputRawBarcode\" IS NULL AND \"OutputIdentifierField\" IS NULL) OR " +
+                    "(\"OutputBarcodeProfileId\" IS NOT NULL AND \"Direction\" = 1 AND " +
+                    "\"OutputSourceSystem\" IS NOT NULL AND \"OutputExternalIdentifier\" IS NOT NULL AND " +
+                    "\"OutputRawBarcode\" IS NOT NULL AND \"OutputIdentifierField\" IS NOT NULL))");
+            });
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.ProductCode).HasMaxLength(80).IsRequired();
+            entity.Property(item => item.ProductName).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.Unit).HasMaxLength(24).IsRequired();
+            entity.Property(item => item.SaleMode).HasConversion<int>().IsRequired();
+            entity.Property(item => item.Direction).HasConversion<int>().IsRequired();
+            entity.Property(item => item.Quantity).HasPrecision(12, 3);
+            entity.Property(item => item.MassKg).HasPrecision(12, 3);
+            entity.Property(item => item.OutputSourceSystem).HasMaxLength(120);
+            entity.Property(item => item.OutputExternalIdentifier).HasMaxLength(80);
+            entity.Property(item => item.OutputRawBarcode).HasMaxLength(80);
+            entity.Property(item => item.OutputIdentifierField).HasMaxLength(80);
+            entity.HasOne<CatalogProduct>().WithMany()
+                .HasForeignKey(item => new { item.CompanyId, item.ProductId })
+                .HasPrincipalKey(product => new { product.CompanyId, product.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<InventoryPiece>().WithMany().HasForeignKey(item => item.InputPieceId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<InventoryPiece>().WithMany().HasForeignKey(item => item.OutputPieceId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<BarcodeProfile>().WithMany()
+                .HasForeignKey(item => item.OutputBarcodeProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<InventoryMovement>().WithMany()
+                .HasForeignKey(item => item.InventoryMovementId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(item => new { item.CompanyId, item.OrderId, item.InputPieceId })
+                .IsUnique().HasFilter("\"InputPieceId\" IS NOT NULL");
+            entity.HasIndex(item => new { item.CompanyId, item.OutputSourceSystem,
+                item.OutputExternalIdentifier });
+            entity.HasIndex(item => item.InventoryMovementId).IsUnique()
+                .HasFilter("\"InventoryMovementId\" IS NOT NULL");
+            entity.HasIndex(item => item.OutputPieceId).IsUnique()
+                .HasFilter("\"OutputPieceId\" IS NOT NULL");
         });
 
         modelBuilder.Entity<CashierShift>(entity =>

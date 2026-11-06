@@ -15,6 +15,7 @@ export interface AdminProduct {
   readonly isActive: boolean;
   readonly alternateCodeCount: number;
   readonly allowSaleWithoutStock: boolean;
+  readonly anatomicalGroup: string | null;
 }
 
 export interface AdminProductPage {
@@ -41,6 +42,7 @@ export interface AdminProductCreate {
   readonly saleMode: SaleMode;
   readonly cost: number | null;
   readonly allowSaleWithoutStock?: boolean;
+  readonly anatomicalGroup?: string | null;
 }
 
 export interface AdminProductUpdate {
@@ -51,6 +53,7 @@ export interface AdminProductUpdate {
   readonly cost?: number;
   readonly isActive?: boolean;
   readonly allowSaleWithoutStock?: boolean;
+  readonly anatomicalGroup?: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -58,12 +61,18 @@ export class AdminProductClient {
   private readonly http = inject(HttpClient);
   private readonly endpoint = '/api/admin/products';
 
-  list(page = 1, search = '', categoryId = '', status = '') {
+  list(page = 1, search = '', categoryId = '', status = '', anatomicalGroup = '') {
     let params = new HttpParams().set('page', page).set('pageSize', 20);
     if (search) params = params.set('search', search);
     if (categoryId) params = params.set('categoryId', categoryId);
     if (status) params = params.set('isActive', status === 'active');
+    if (anatomicalGroup) params = params.set('anatomicalGroup', anatomicalGroup);
     return this.http.get<AdminProductPage>(this.endpoint, { params, withCredentials: true });
+  }
+
+  anatomicalGroups() {
+    return this.http.get<readonly string[]>(`${this.endpoint}/anatomical-groups`,
+      { withCredentials: true });
   }
 
   create(product: AdminProductCreate) {

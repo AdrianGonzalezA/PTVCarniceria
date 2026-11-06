@@ -9,6 +9,7 @@ import { inventoryReceiptGuard } from './core/inventory/inventory-receipt.guard'
 import { inventoryTransferGuard } from './core/inventory/inventory-transfer.guard';
 import { catalogAdminGuard } from './core/admin/catalog-admin.guard';
 import { posCanDeactivateGuard, posGuard } from './core/pos/pos.guard';
+import { productionGuard } from './core/production/production.guard';
 
 export const routes: Routes = [
   { path: '', component: WelcomePage },
@@ -37,6 +38,8 @@ export const routes: Routes = [
   { path: 'admin/fiscal-sales-book', loadComponent: () => import('./features/admin/fiscal-sales-book-page').then((page) => page.FiscalSalesBookPage), canActivate: [fiscalSalesBookGuard] },
   { path: 'admin/cash-withdrawals', loadComponent: () => import('./features/admin/cash-withdrawals-page').then((page) => page.CashWithdrawalsPage), canActivate: [cashWithdrawalAdminGuard] },
   { path: 'admin/accounts', loadComponent: () => import('./features/admin/accounts-page').then((page) => page.AccountsPage), canActivate: [organizationAdminGuard] },
+  { path: 'admin/production-classifiers', loadComponent: () => import('./features/admin/production-classifiers-page').then((page) => page.ProductionClassifiersPage), canActivate: [catalogAdminGuard] },
+  { path: 'production', loadComponent: () => import('./features/production/production-page').then((page) => page.ProductionPage), canActivate: [productionGuard] },
   { path: 'pos', loadComponent: () => import('./features/pos/pos-page').then((page) => page.PosPage), canActivate: [posGuard], canDeactivate: [posCanDeactivateGuard] },
   { path: '**', redirectTo: '' },
 ];

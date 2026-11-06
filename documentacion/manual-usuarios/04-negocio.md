@@ -31,4 +31,16 @@ Para cargar varios artículos, usá **Descargar plantilla** e **Importar Excel**
 
 **Recepción de piezas** registra una pieza por vez a partir de un perfil de lectura guardado, artículo vendido por peso, origen y código de barras. La recepción suma kilos al stock de la sucursal y conserva el identificador de la pieza; la lista muestra las últimas recibidas. Para probar o crear un formato de etiqueta se usa **Configuración → Lectura de etiquetas**. La importación masiva desde frigorífico/abastecedor todavía no está disponible.
 
+## Conteo y agrupador anatómico
+
+En **Conteo físico** creá un borrador, registrá cada artículo observado y envialo a revisión. Un administrador aprueba o rechaza el documento con motivo. Si el saldo cambia mientras se cuenta, se exige un conteo nuevo. Los artículos configurados para **Solo medición de masa** informan kilos observados sin crear un saldo teórico por corte. El detalle muestra los kilos por agrupador anatómico cuando el artículo lo tenía definido al momento de registrar la línea. Cambiar después el agrupador del artículo no reescribe ese conteo.
+
+El agrupador es opcional en **Configuración → Artículos** y en su plantilla Excel (`AgrupadorAnatomico`). Sirve para consulta y agrupación de masa; no reemplaza el artículo, la pieza ni su identificador individual.
+
+## Producción
+
+En **Negocio → Producción**, un usuario con permiso de producción abre una orden eligiendo un tipo configurado en **Configuración → Tipos de producción**. Puede agregar varios insumos y varios productos obtenidos, por peso o unidad. Un insumo trazable se elige por su identificador y queda reservado para esa orden mientras esté abierta; otra orden no puede usarlo. Al cancelar la orden o quitar la línea se libera.
+
+Para una salida trazable, registrar cada pieza por separado con su código, identificador y kilos reales, y preparar su etiqueta antes del cierre. El detalle informa ingreso, salida, merma y diferencia de masa. Al cerrar, se registran juntos el consumo, las salidas y los movimientos de stock. La orden cerrada no se edita; **Crear corrección** abre otra orden vinculada. El balance por tipo reúne las órdenes cerradas de la sucursal. La impresión de etiquetas desde el navegador debe verificarse con la impresora real del puesto.
+
 Base técnica: [reportes](../../SPEC-reporting.md), [cuentas](../../SPEC-customers-credit.md) y [piezas](../../SPEC-inventory-traceability.md).

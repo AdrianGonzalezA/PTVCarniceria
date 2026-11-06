@@ -100,6 +100,17 @@ public sealed class CatalogProduct
     public bool IsActive { get; private set; }
     public bool AllowSaleWithoutStock { get; private set; }
     public StockCountPolicy? CountPolicyOverride { get; private set; }
+    public string? AnatomicalGroup { get; private set; }
+    public string? AnatomicalGroupNormalized { get; private set; }
+
+    public void SetAnatomicalGroup(string? group)
+    {
+        var value = group?.Trim().Normalize(System.Text.NormalizationForm.FormKC);
+        if (value?.Length > 120)
+            throw new ArgumentOutOfRangeException(nameof(group));
+        AnatomicalGroup = string.IsNullOrWhiteSpace(value) ? null : value;
+        AnatomicalGroupNormalized = AnatomicalGroup?.ToUpperInvariant();
+    }
 
     public void SetCountPolicyOverride(StockCountPolicy? policy)
     {

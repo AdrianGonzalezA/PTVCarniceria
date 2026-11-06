@@ -445,12 +445,18 @@ public static class PhysicalStockCountEndpoints
             line.SaleMode == ProductSaleMode.Weight)
             .Sum(line => line.SystemOnHand),
         count.Lines.Select(line => new CountLineResponse(line.Id, line.ProductId,
-            line.ProductCode, line.ProductName, line.Unit,
+            line.ProductCode, line.ProductName, line.AnatomicalGroup, line.Unit,
             line.SaleMode == ProductSaleMode.Unit ? "unit" : "weight",
             line.Policy.ToString(), line.SystemOnHand, line.SystemReserved,
             line.SystemProtectedOnHand, line.SystemQuarantined,
             line.CountedQuantity, line.Delta, line.CountedByUserId,
-            line.CountedAtUtc, line.InventoryMovementId)).ToArray());
+            line.CountedAtUtc, line.InventoryMovementId)).ToArray(),
+        count.Lines.Where(line => line.Policy == StockCountPolicy.MassObservation &&
+                line.SaleMode == ProductSaleMode.Weight)
+            .GroupBy(line => line.AnatomicalGroup, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new AnatomicalMassResponse(group.Key, group.Count(),
+                group.Sum(line => line.CountedQuantity)))
+            .OrderBy(group => group.Group, StringComparer.OrdinalIgnoreCase).ToArray());
 
     private static Task<bool> IsAdministratorAsync(PlatformAccessDbContext db,
         Guid companyId, Guid userId, CancellationToken cancellationToken) =>
@@ -507,7 +513,8 @@ public static class PhysicalStockCountEndpoints
     private sealed record CountPage(IReadOnlyList<CountSummary> Items, int Page,
         int PageSize, long TotalItems, long TotalPages);
     private sealed record CountLineResponse(Guid Id, Guid ProductId,
-        string ProductCode, string ProductName, string Unit, string SaleMode,
+        string ProductCode, string ProductName, string? AnatomicalGroup,
+        string Unit, string SaleMode,
         string Policy, decimal SystemOnHand, decimal SystemReserved,
         decimal SystemProtectedOnHand, decimal SystemQuarantined,
         decimal CountedQuantity, decimal Delta, Guid CountedByUserId,
@@ -518,5 +525,8 @@ public static class PhysicalStockCountEndpoints
         DateTimeOffset? SubmittedAtUtc, Guid? DecidedByUserId,
         DateTimeOffset? DecidedAtUtc, string? DecisionReason,
         decimal MassObservedKg, decimal MassLedgerReferenceKg,
-        IReadOnlyList<CountLineResponse> Lines);
+        IReadOnlyList<CountLineResponse> Lines,
+        IReadOnlyList<AnatomicalMassResponse> AnatomicalMasses);
+    private sealed record AnatomicalMassResponse(string? Group, int ArticleCount,
+        decimal ObservedKg);
 }

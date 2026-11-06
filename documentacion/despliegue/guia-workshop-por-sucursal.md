@@ -82,8 +82,10 @@ Después del alta inicial de empresa y sucursal, fijar en la configuración prot
    La interfaz aún permite crear otras sucursales en la misma base; en este workshop **no hacerlo**. El vínculo de API restringe las sesiones a la sucursal configurada, pero todavía no impide almacenar otra sucursal.
 3. En **Usuarios**, crear cajeros para las sucursales o administradores adicionales de esa empresa. Cada persona usa su propio usuario y abre/cierra su turno; no compartir una sesión entre responsables.
 4. Cargar categorías, artículos (con unidad de venta, impuestos y códigos), listas de precios habilitadas en la sucursal y clientes. Las plantillas Excel de la administración sirven para esos maestros. Revisar precios e IVA antes de vender.
+   El agrupador anatómico de un artículo es opcional y puede cargarse en el ABM o en la plantilla Excel compatible. No asignarlo por inferencia a artículos históricos.
 5. Contar e ingresar stock inicial mediante las operaciones disponibles. Para piezas ciclo 2, configurar el perfil de lectura y registrar piezas; no asumir que ya existe importación masiva del frigorífico. Una venta sin stock no debe completarse.
 6. Crear en **Organización → Cajas → Catálogo de dispositivos** las balanzas e impresoras de la sucursal con controlador, COM, velocidad y, para ESC/POS, ancho de papel de 58 u 80 mm. Después, en **Dispositivos** de cada caja, asignar los equipos o dejar explícitamente «Sin balanza» y «Sin impresora». Usar COM distintos por caja cuando varias ventanas corren en la misma PC. Configurar ARCA/pasarelas solo si el laboratorio las incluye. Las credenciales actuales son de homologación/sandbox. Clover no está habilitado aún para cobros POS sin dispositivo/protocolo verificados.
+7. Si se usa Producción, crear sus clasificadores en Configuración, asignar el permiso `production.operate` por usuario/rol y comprobar que cada operador trabaja en la sucursal correcta. Probar la etiqueta Code128 en el navegador y la impresora real del sector antes de cerrar una orden con piezas nuevas. Ver [actualización I22/I23](produccion-i22-i23.md).
 
 ## 7. Preparar cada PC de caja
 

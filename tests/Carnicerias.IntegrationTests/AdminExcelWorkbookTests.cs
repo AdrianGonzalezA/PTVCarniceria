@@ -67,6 +67,33 @@ public sealed class AdminExcelWorkbookTests
     }
 
     [Fact]
+    public void ProductWorkbookAcceptsOptionalAnatomicalGroupAndOlderHeaders()
+    {
+        var bytes = AdminExcelWorkbook.CreateTemplate("products");
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var sheet = workbook.Worksheet("Articulos");
+        sheet.Cell(2, 1).Value = "LOMO-1";
+        sheet.Cell(2, 2).Value = "Lomo limpio";
+        sheet.Cell(2, 3).Value = "Carnes";
+        sheet.Cell(2, 4).Value = "weight";
+        sheet.Cell(2, 5).Value = "kg";
+        sheet.Cell(2, 7).Value = "Lomo";
+        using var updated = new MemoryStream();
+        workbook.SaveAs(updated);
+        var parsed = AdminExcelWorkbook.Read("products", updated.ToArray());
+        Assert.Empty(parsed.Issues);
+        Assert.Equal("Lomo", Assert.Single(parsed.Rows).Text("AgrupadorAnatomico"));
+
+        sheet.Cell(2, 7).Clear();
+        sheet.Cell(1, 7).Clear();
+        using var oldTemplate = new MemoryStream();
+        workbook.SaveAs(oldTemplate);
+        var oldParsed = AdminExcelWorkbook.Read("products", oldTemplate.ToArray());
+        Assert.Empty(oldParsed.Issues);
+        Assert.Null(Assert.Single(oldParsed.Rows).Text("AgrupadorAnatomico"));
+    }
+
+    [Fact]
     public void FormulaIsRejectedWithoutEvaluation()
     {
         var bytes = AdminExcelWorkbook.CreateTemplate("categories");

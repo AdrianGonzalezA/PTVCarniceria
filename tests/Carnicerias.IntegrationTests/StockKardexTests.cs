@@ -21,6 +21,8 @@ public sealed class StockMovementKindCodeTests
     [InlineData("transferOut", InventoryMovementKind.TransferOut)]
     [InlineData("transferIn", InventoryMovementKind.TransferIn)]
     [InlineData("physicalCountAdjustment", InventoryMovementKind.PhysicalCountAdjustment)]
+    [InlineData("productionInput", InventoryMovementKind.ProductionInput)]
+    [InlineData("productionOutput", InventoryMovementKind.ProductionOutput)]
     public void EveryMovementKindHasItsOwnFilterAndLabel(string code, InventoryMovementKind kind)
     {
         Assert.True(StockMovementKindCode.TryParse(code, out var parsed));

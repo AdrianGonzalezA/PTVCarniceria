@@ -76,6 +76,8 @@
             <option value="transferOut">Transferencia enviada</option>
             <option value="transferIn">Transferencia recibida</option>
             <option value="physicalCountAdjustment">Ajuste por conteo físico</option>
+            <option value="productionInput">Consumo de producción</option>
+            <option value="productionOutput">Producto de producción</option>
           </select>
           <button type="button" (click)="applyStockFilters()">Aplicar stock</button>
         }
@@ -102,6 +104,8 @@
                 <tr><th scope="row">Transferencias salientes</th><td class="numeric-value">{{ summary.transfersOut | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
                 <tr><th scope="row">Transferencias recibidas</th><td class="numeric-value">{{ summary.transfersIn | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
                 <tr><th scope="row">Ajustes por conteo</th><td class="numeric-value">{{ summary.physicalCountAdjustments | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
+                <tr><th scope="row">Consumo de producción</th><td class="numeric-value">{{ summary.productionInputs | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
+                <tr><th scope="row">Productos de producción</th><td class="numeric-value">{{ summary.productionOutputs | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
                 <tr><th scope="row">Ajustes netos</th><td class="numeric-value">{{ summary.adjustments | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</td></tr>
                 <tr><th scope="row">Saldo final del período</th><td class="numeric-value"><strong>{{ summary.closingBalance | number:(summary.saleMode === 'weight' ? '1.3-3' : '1.0-0'):'es-AR' }} {{ summary.unit }}</strong></td></tr>
               </tbody>

@@ -146,6 +146,36 @@ describe('UsersPage', () => {
     });
   });
 
+  it('creates a production operator scoped to selected branches', () => {
+    const { fixture, http, page } = load();
+    page.querySelector<HTMLButtonElement>('.create-user-button')!.click();
+    fixture.detectChanges();
+    for (const [id, value] of Object.entries({
+      'create-username': 'produccion-uno', 'create-email': 'produccion@example.test',
+      'create-password': 'segura-de-prueba-2026',
+    })) {
+      const input = page.querySelector<HTMLInputElement>(`#${id}`)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+    }
+    const role = page.querySelector<HTMLSelectElement>('#create-role')!;
+    role.value = 'production';
+    role.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    const checkbox = page.querySelector<HTMLInputElement>('.user-editor input[type="checkbox"]')!;
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    page.querySelector<HTMLFormElement>('.user-editor')!.dispatchEvent(new Event('submit'));
+    const request = http.expectOne('/api/users');
+    expect(request.request.body).toEqual({ username: 'produccion-uno', email: 'produccion@example.test',
+      password: 'segura-de-prueba-2026', role: 'production', branchIds: ['branch-1'] });
+    request.flush({ ...cashier, userId: 'production-id', username: 'produccion-uno' });
+    http.expectOne((candidate) => candidate.url === '/api/users').flush({
+      items: [admin, cashier], page: 1, pageSize: 20, totalItems: 2, totalPages: 1,
+    });
+  });
+
   it('loads and updates cashier branch assignments', () => {
     const { fixture, http, page } = load();
     const button = Array.from(page.querySelectorAll<HTMLButtonElement>('.row-actions button'))

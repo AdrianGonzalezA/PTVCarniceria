@@ -107,7 +107,7 @@ El navegador del administrador local y Electron consumen la misma API de sucursa
 | `customers_credit` | Clientes y ficha fiscal opcional, cuenta corriente, cargos, recibos, aplicaciones y correcciones. |
 | `pos_sales` | Borradores A/B/C/D, renglones, ventas confirmadas y comprobantes fiscales. |
 | `payments_cash` | Turnos, medios e intenciones de pago, movimientos de caja y configuración de pasarelas. |
-| `inventory` | Existencias agregadas y movimientos por artículo/sucursal, perfiles de código y piezas trazables recibidas. |
+| `inventory` | Existencias y movimientos por artículo/sucursal, perfiles de código, piezas trazables, recepciones, transferencias, conteos y órdenes de producción. |
 | `central_access` | Empresas/administradores/sesiones de central, instalaciones, conexiones, credenciales cifradas y auditoría central. |
 
 `central_access` tiene contexto EF e historial de migraciones propios. Que hoy cohabite en PostgreSQL del laboratorio **no concede** a la API central propiedad ni acceso SQL a ventas o clientes. La empresa central y la empresa POS remota tienen IDs independientes; se relacionan mediante una conexión verificada, nunca por igualdad supuesta de UUID. En instalación vinculada, la API POS fija por configuración protegida empresa y sucursal; no deja que una petición de caja o navegador seleccione otro ámbito. El servidor compartido de desarrollo puede conservar selección para ensayos, y no representa la UX objetivo de sucursal.
@@ -126,11 +126,15 @@ Implementación aprovisiona empresa/sucursal, caja y su credencial. Cada perfil 
 4. Reintentar la misma confirmación con la misma solicitud es idempotente; una repetición incongruente se rechaza. Una falla de persistencia conserva el detalle para reintentar y no debe presentarse como venta terminada.
 5. Tras el commit, se tramita por separado la emisión ARCA elegida y/o la impresión/descarga del comprobante. Una falla externa se diagnostica y reintenta sin duplicar la venta. El cierre de turno concilia importes por cajero/caja/turno.
 
-La trazabilidad por código de pieza del abastecedor admite perfil de lectura parametrizable y carga manual; **no** implica todavía reserva/consumo físico individual completo ni recepción masiva desde el ERP. El stock operativo se agrega por artículo/sucursal y la identidad de piezas se conserva para los casos ya implementados.
+La trazabilidad por código de pieza del abastecedor admite perfil de lectura parametrizable y carga manual. La reserva exclusiva y el consumo individual de piezas ya funcionan para venta y producción; la recepción masiva directa desde el ERP sigue pendiente. El stock operativo se agrega por artículo/sucursal y la identidad individual se conserva con estado, origen, eventos y documento asociado. Los agrupadores anatómicos del artículo sirven para clasificación y medición de masa, sin crear stock teórico por corte.
 
 ### 7.3 Conexión sucursal–central y consulta
 
 En modo administrado, la API de sucursal está fijada a empresa/sucursal. Un administrador local autorizado configura su URL pública/privada válida y genera una sola vez un paquete con etiqueta, URL, `installationId`, `remoteCompanyId`, `remoteBranchId` y token de servicio. La sucursal conserva el verificador del token, no el token en claro. El administrador **central de esa empresa** importa el paquete; la API central verifica destino allowlisted e identidad remota, y almacena su copia del token cifrada. Se puede desactivar o rotar la conexión sin detener el POS. La API central consulta identidad y resumen mediante contratos versionados de solo lectura; si una sucursal está caída, la vista central informa incompletitud. No hay sincronización ni réplica comercial entre sucursales.
+
+### 7.4 Producción y balance físico
+
+El módulo `/production` usa la misma API y base de la sucursal, sin servicio ni instalador propio. `ProductionClassifier` define tipos configurables; `ProductionOrder` conserva cabecera y n líneas de entrada/salida. El permiso `production.operate` se evalúa con empresa y sucursal. Una línea de entrada con pieza reserva su ID de forma exclusiva; editarla o cancelar la orden libera la reserva. El cierre en transacción serializable consume insumos, crea salidas y piezas trazables, registra movimientos y eventos y deja la orden inmutable. Una corrección es una orden nueva vinculada. La suma de masa de entrada, salida y merma se conserva en el documento y se agrupa por tipo para consulta. El conteo físico puede guardar el agrupador anatómico del artículo como snapshot de la masa observada, sin modificar el saldo teórico por corte. Ver [resultado I22/I23](../desarrollo/resultado-i22-i23-20261106.md).
 
 ## 8. Integraciones y periféricos: qué está disponible
 
@@ -142,7 +146,7 @@ En modo administrado, la API de sucursal está fijada a empresa/sucursal. Un adm
 | ARCA | Emisión electrónica en homologación, CAE y PDF/QR del comprobante aplicable; venta y emisión son estados distintos. | Facturación productiva o aval legal de ticket fiscal de laboratorio. |
 | Mercado Pago | Sandbox con QR dinámico/fijo y Point según caja/configuración; consulta de estado del pago. | Conciliación robusta ante cierre de pantalla, caída de Internet o webhook público aún no desplegado. |
 | Clover | OAuth sandbox, tokens/consulta de comercio y configuración inicial. | Cobros en terminal, devoluciones o asociación física de dispositivo probados. |
-| Frigorífico/ERP | Recepción manual de piezas y perfil de códigos parametrizable. | API de importación masiva/directa operativa o trazabilidad completa del ciclo físico por pieza. |
+| Frigorífico/ERP | Recepción manual de piezas y perfil de códigos parametrizable; estados y movimientos individuales de venta/producción. | API de importación masiva/directa operativa o identificación retrospectiva de piezas ambiguas. |
 | Central | Identidad independiente, alta/validación de conexiones y resumen vivo de solo lectura. | Administración remota de sucursales, duplicación de datos comerciales o sincronización offline. |
 
 ## 9. Despliegue, operación y fallas a representar

@@ -19,6 +19,8 @@ internal static class StockMovementKindCode
             "transferOut" => InventoryMovementKind.TransferOut,
             "transferIn" => InventoryMovementKind.TransferIn,
             "physicalCountAdjustment" => InventoryMovementKind.PhysicalCountAdjustment,
+            "productionInput" => InventoryMovementKind.ProductionInput,
+            "productionOutput" => InventoryMovementKind.ProductionOutput,
             _ => null
         };
         return string.IsNullOrEmpty(code) || kind.HasValue;
@@ -34,6 +36,8 @@ internal static class StockMovementKindCode
         InventoryMovementKind.TransferOut => "transferOut",
         InventoryMovementKind.TransferIn => "transferIn",
         InventoryMovementKind.PhysicalCountAdjustment => "physicalCountAdjustment",
+        InventoryMovementKind.ProductionInput => "productionInput",
+        InventoryMovementKind.ProductionOutput => "productionOutput",
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 

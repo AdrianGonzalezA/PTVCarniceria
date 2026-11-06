@@ -63,6 +63,8 @@ En el laboratorio actual, `127.0.0.1:55433` identifica PostgreSQL Docker y `loca
 
 El administrador local usa los mismos endpoints de negocio según sus permisos, pero sin la capacidad nativa del proceso Electron. La central usa endpoints y sesión propios; **ningún cliente debe escribir SQL directamente**. Los contratos detallados de ventas y checkout están en las especificaciones enlazadas al final.
 
+El módulo de producción reside en el Angular administrativo (`/production`) y usa `/api/production/classifiers` y `/api/production/orders`. El permiso `production.operate` permite crear y operar órdenes dentro del contexto de empresa/sucursal; el rol Producción no recibe permisos de caja ni de configuración general. La API reserva piezas de entrada con actualización condicional, conserva la reserva mientras la orden está abierta y ejecuta el cierre en una transacción serializable. Una salida trazable tiene identificador, peso real, perfil de código y evento de origen; la etiqueta Code128 se genera en el navegador. Los movimientos de entrada y salida alimentan el mismo kardex de inventario. Los artículos tienen agrupador anatómico opcional; las nuevas líneas de conteo guardan una copia de ese dato para que una reclasificación posterior no reescriba la medición histórica.
+
 ### 3.3 Recorrido de una consulta central
 
 1. La sucursal está fijada mediante configuración `Federation` a empresa/sucursal; el administrador local genera un paquete de conexión en modo administrado. El paquete muestra una sola vez URL, tres identificadores y token. La sucursal almacena el verificador del token, no su valor recuperable.

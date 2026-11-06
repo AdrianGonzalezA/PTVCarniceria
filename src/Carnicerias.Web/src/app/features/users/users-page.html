@@ -44,8 +44,9 @@
           <select id="create-role" name="role" [value]="createRole()" (change)="updateCreateRole($event)">
             <option value="cashier">Cajero</option>
             <option value="administrator">Administrador de esta empresa</option>
+            <option value="production">Producción</option>
           </select>
-          @if (createRole() === 'cashier') {
+          @if (createRole() !== 'administrator') {
             <fieldset>
               <legend>Sucursales habilitadas</legend>
               @for (branch of branches(); track branch.branchId) {
@@ -76,9 +77,10 @@
             <select id="assignment-role" [value]="assignmentRole()" [disabled]="userId === currentUserId()" (change)="updateAssignmentRole($event)">
               <option value="cashier">Cajero</option>
               <option value="administrator">Administrador de esta empresa</option>
+              <option value="production">Producción</option>
             </select>
-            @if (assignmentRole() === 'cashier') {
-              <p>Seleccioná las sucursales del cajero. Los cambios cerrarán sus sesiones anteriores.</p>
+            @if (assignmentRole() !== 'administrator') {
+              <p>Seleccioná las sucursales del usuario. Los cambios cerrarán sus sesiones anteriores.</p>
               <fieldset>
                 <legend>Sucursales habilitadas</legend>
                 @for (branch of branches(); track branch.branchId) {

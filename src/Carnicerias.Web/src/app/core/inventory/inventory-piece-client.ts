@@ -12,6 +12,9 @@ export interface InventoryPieceReceipt {
   readonly rawBarcode: string;
   readonly receivedAtUtc: string;
   readonly status: string;
+  readonly originPieceId?: string | null;
+  readonly productionOrderId?: string | null;
+  readonly reservedByProductionOrderId?: string | null;
 }
 
 export interface InventoryPieceListItem {
@@ -27,6 +30,9 @@ export interface InventoryPieceListItem {
   readonly status: string;
   readonly reservedBySaleDraftId: string | null;
   readonly reservedAtUtc: string | null;
+  readonly originPieceId?: string | null;
+  readonly productionOrderId?: string | null;
+  readonly reservedByProductionOrderId?: string | null;
 }
 
 export interface InventoryPieceEvent {
@@ -44,6 +50,7 @@ export interface InventoryPieceEvent {
   readonly countedOnHand: number | null;
   readonly countedAtUtc: string | null;
   readonly inventoryMovementId: string | null;
+  readonly productionOrderId?: string | null;
 }
 
 export interface InventoryPieceReconciliationLease {

@@ -8,7 +8,10 @@ export const posGuard: CanActivateFn = () => {
   const router = inject(Router);
 
   return sessions.current().pipe(
-    map((session) => session.context ? true : router.createUrlTree(['/'])),
+    map((session) => session.context &&
+      (!session.context.permissions.includes('production.operate') ||
+        session.context.permissions.includes('platform.users.manage'))
+      ? true : router.createUrlTree(['/'])),
     catchError(() => of(router.createUrlTree(['/']))),
   );
 };

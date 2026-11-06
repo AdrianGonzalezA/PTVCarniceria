@@ -107,13 +107,13 @@ public static class UserEndpoints
         var branchIds = request?.BranchIds ?? [];
         if (request is null || !ValidUsername(request.Username) || !IsValidEmail(request.Email) ||
             !VisualDevelopmentPasswordPolicy.IsValid(request.Password, db.Database.GetConnectionString()) ||
-            roleCode is not ("cashier" or "administrator") ||
-            (roleCode == "cashier" && !ValidBranchIds(branchIds)) ||
+            roleCode is not ("cashier" or "administrator" or "production") ||
+            (roleCode != "administrator" && !ValidBranchIds(branchIds)) ||
             (roleCode == "administrator" && branchIds.Length != 0))
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var companyId = operationalContext.Context.CompanyId;
-        if (roleCode == "cashier" && !await AllBranchesActiveAsync(db, companyId, branchIds, cancellationToken))
+        if (roleCode != "administrator" && !await AllBranchesActiveAsync(db, companyId, branchIds, cancellationToken))
             return Error(StatusCodes.Status400BadRequest, "BRANCH_NOT_AVAILABLE");
         var roleId = await db.Roles.AsNoTracking().Where(role => role.Code == roleCode)
             .Select(role => (Guid?)role.Id).SingleOrDefaultAsync(cancellationToken);
@@ -152,8 +152,9 @@ public static class UserEndpoints
                 (assignment, role) => new { assignment.BranchId, role.Code })
             .ToArrayAsync(cancellationToken);
         return Results.Ok(new UserAssignmentsResponse(
-            assignments.Any(assignment => assignment.Code == "administrator") ? "administrator" : "cashier",
-            assignments.Where(assignment => assignment.Code == "cashier" && assignment.BranchId.HasValue)
+            assignments.Any(assignment => assignment.Code == "administrator") ? "administrator" :
+                assignments.Any(assignment => assignment.Code == "production") ? "production" : "cashier",
+            assignments.Where(assignment => assignment.Code != "administrator" && assignment.BranchId.HasValue)
                 .Select(assignment => assignment.BranchId!.Value).Order().ToArray()));
     }
 
@@ -169,8 +170,8 @@ public static class UserEndpoints
         if (!AllowedOrigin(httpContext)) return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
         var roleCode = request?.Role ?? "cashier";
         var branchIds = request?.BranchIds ?? [];
-        if (userId == Guid.Empty || request is null || roleCode is not ("cashier" or "administrator") ||
-            (roleCode == "cashier" && !ValidBranchIds(branchIds)) ||
+        if (userId == Guid.Empty || request is null || roleCode is not ("cashier" or "administrator" or "production") ||
+            (roleCode != "administrator" && !ValidBranchIds(branchIds)) ||
             (roleCode == "administrator" && branchIds.Length != 0))
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
         if (userId == operationalContext.Context.UserId)
@@ -179,7 +180,7 @@ public static class UserEndpoints
         var companyId = operationalContext.Context.CompanyId;
         if (!await IsAssignedToCompanyAsync(db, userId, companyId, cancellationToken))
             return Error(StatusCodes.Status404NotFound, "USER_NOT_FOUND");
-        if (roleCode == "cashier" && !await AllBranchesActiveAsync(db, companyId, branchIds, cancellationToken))
+        if (roleCode != "administrator" && !await AllBranchesActiveAsync(db, companyId, branchIds, cancellationToken))
             return Error(StatusCodes.Status400BadRequest, "BRANCH_NOT_AVAILABLE");
 
         var role = await db.Roles.AsNoTracking().SingleOrDefaultAsync(item => item.Code == roleCode,
@@ -207,7 +208,7 @@ public static class UserEndpoints
         {
             foreach (var assignment in assignments)
                 if (assignment.BranchId is Guid existingBranchId &&
-                    (roleCode != "cashier" || !requested.Contains(existingBranchId)) &&
+                    (assignments.Any(item => item.RoleId != role.Id) || !requested.Contains(existingBranchId)) &&
                     await HasOpenOperationsAsync(db, userId, companyId, existingBranchId, cancellationToken))
                     return Error(StatusCodes.Status409Conflict, "USER_HAS_OPEN_OPERATIONS");
             if (wasAdministrator && roleCode != "administrator" &&
@@ -228,7 +229,7 @@ public static class UserEndpoints
         }
         await transaction.CommitAsync(cancellationToken);
         return Results.Ok(new UserAssignmentsResponse(roleCode,
-            roleCode == "cashier" ? requested.Order().ToArray() : []));
+            roleCode == "administrator" ? [] : requested.Order().ToArray()));
     }
 
     private static async Task<IResult> ResetUserPasswordAsync(

@@ -211,17 +211,22 @@ public static class AdminExcelImportProcessor
             var modeText = row.Text("ModalidadVenta");
             var unit = row.Text("Unidad");
             var cost = row.NumberValue("CostoARS");
+            var anatomicalGroup = row.Text("AgrupadorAnatomico");
             if (!ValidText(name, 200)) AddIssue(issues, row, "Nombre", "INVALID_NAME", "Nombre de hasta 200 caracteres requerido.");
             if (!ValidText(unit, 24)) AddIssue(issues, row, "Unidad", "INVALID_UNIT", "Unidad de hasta 24 caracteres requerida.");
             if (modeText is not ("weight" or "unit"))
                 AddIssue(issues, row, "ModalidadVenta", "INVALID_MODE", "Usá weight o unit.");
             if (cost is not null && !ValidMoney(cost))
                 AddIssue(issues, row, "CostoARS", "INVALID_COST", "Costo positivo con hasta dos decimales requerido.");
+            if (anatomicalGroup?.Length > 120)
+                AddIssue(issues, row, "AgrupadorAnatomico", "INVALID_ANATOMICAL_GROUP",
+                    "El agrupador no puede superar 120 caracteres.");
             if (!ValidText(categoryName, 120) || !categoriesByName.TryGetValue(categoryName!, out var matches) ||
                 matches.Length != 1 || !matches[0].IsActive)
                 AddIssue(issues, row, "Categoria", "CATEGORY_NOT_ACTIVE", "La categoría debe existir y estar activa en la empresa.");
             if (!ValidText(code, 80) || !ValidText(name, 200) || !ValidText(unit, 24) ||
                 modeText is not ("weight" or "unit") || (cost is not null && !ValidMoney(cost)) ||
+                anatomicalGroup?.Length > 120 ||
                 !ValidText(categoryName, 120) || !categoriesByName.TryGetValue(categoryName!, out matches) ||
                 matches.Length != 1 || !matches[0].IsActive) continue;
             if (alternatesByCode.ContainsKey(normalized))
@@ -230,6 +235,7 @@ public static class AdminExcelImportProcessor
             {
                 var product = new CatalogProduct(companyId, matches[0].Id, code!, name!, unit!,
                     modeText == "weight" ? ProductSaleMode.Weight : ProductSaleMode.Unit, cost);
+                product.SetAnatomicalGroup(anatomicalGroup);
                 productsByCode.Add(normalized, product);
                 newProducts.Add(product);
                 outcomes.Add(new ImportRowOutcome(row.Sheet, row.Number, "create",

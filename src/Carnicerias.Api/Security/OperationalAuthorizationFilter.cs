@@ -2,6 +2,7 @@ using Carnicerias.Api.Contracts;
 using Carnicerias.Api.Federation;
 using Carnicerias.Api.Sessions;
 using Carnicerias.Infrastructure;
+using Carnicerias.PlatformAccess;
 
 namespace Carnicerias.Api.Security;
 
@@ -41,6 +42,15 @@ public sealed class OperationalAuthorizationFilter(string? requiredPermission) :
         if (authorized is null)
         {
             return Error(StatusCodes.Status403Forbidden, "OPERATIONAL_CONTEXT_REQUIRED");
+        }
+
+        if (authorized.Context.Roles is { } roleCodes &&
+            roleCodes.Contains("production") &&
+            !roleCodes.Contains("administrator") &&
+            !roleCodes.Contains("cashier") &&
+            !httpContext.Request.Path.StartsWithSegments("/api/production"))
+        {
+            return Error(StatusCodes.Status403Forbidden, "PRODUCTION_ONLY");
         }
 
         if (requiredPermission is not null && !authorized.Context.Permissions.Contains(requiredPermission))

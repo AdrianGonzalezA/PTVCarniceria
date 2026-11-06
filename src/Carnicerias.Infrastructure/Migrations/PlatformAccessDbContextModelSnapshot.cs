@@ -523,6 +523,14 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<string>("AnatomicalGroup")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("AnatomicalGroupNormalized")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
                     b.Property<Guid>("CategoryId")
                         .HasColumnType("uuid");
 
@@ -564,6 +572,8 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CompanyId", "AnatomicalGroupNormalized");
+
                     b.HasIndex("CompanyId", "NormalizedCode")
                         .IsUnique();
 
@@ -571,6 +581,8 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.ToTable("products", "catalog_pricing", t =>
                         {
+                            t.HasCheckConstraint("CK_products_anatomical_group", "(\"AnatomicalGroup\" IS NULL) = (\"AnatomicalGroupNormalized\" IS NULL)");
+
                             t.HasCheckConstraint("CK_products_cost_positive", "\"Cost\" > 0");
 
                             t.HasCheckConstraint("CK_products_count_policy_override", "\"CountPolicyOverride\" IS NULL OR \"CountPolicyOverride\" IN (0, 1)");
@@ -1514,7 +1526,7 @@ namespace Carnicerias.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_inventory_movements_delta_nonzero", "\"QuantityDelta\" <> 0");
 
-                            t.HasCheckConstraint("CK_inventory_movements_kind", "\"Kind\" IN (0, 1, 2, 3, 4, 5, 6, 7)");
+                            t.HasCheckConstraint("CK_inventory_movements_kind", "\"Kind\" IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)");
                         });
                 });
 
@@ -1560,6 +1572,9 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ProductionOrderId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("RawBarcode")
                         .IsRequired()
                         .HasMaxLength(80)
@@ -1577,6 +1592,9 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.Property<DateTimeOffset?>("ReservedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReservedByProductionOrderId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid?>("ReservedBySaleDraftId")
                         .HasColumnType("uuid");
@@ -1606,6 +1624,10 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.HasIndex("CompanyId", "ProductId");
 
+                    b.HasIndex("CompanyId", "ProductionOrderId");
+
+                    b.HasIndex("CompanyId", "ReservedByProductionOrderId");
+
                     b.HasIndex("CompanyId", "ReservedBySaleDraftId");
 
                     b.HasIndex("CompanyId", "BranchId", "OperationId")
@@ -1623,7 +1645,7 @@ namespace Carnicerias.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_pieces_received_weight_positive", "\"ReceivedWeightKg\" > 0");
 
-                            t.HasCheckConstraint("CK_pieces_reservation_owner", "(\"Status\" = 1 AND \"ReservedBySaleDraftId\" IS NOT NULL AND \"ReservedAtUtc\" IS NOT NULL) OR (\"Status\" <> 1 AND \"ReservedBySaleDraftId\" IS NULL AND \"ReservedAtUtc\" IS NULL)");
+                            t.HasCheckConstraint("CK_pieces_reservation_owner", "(\"Status\" = 1 AND (\"ReservedBySaleDraftId\" IS NOT NULL) <> (\"ReservedByProductionOrderId\" IS NOT NULL) AND \"ReservedAtUtc\" IS NOT NULL) OR (\"Status\" <> 1 AND \"ReservedBySaleDraftId\" IS NULL AND \"ReservedByProductionOrderId\" IS NULL AND \"ReservedAtUtc\" IS NULL)");
 
                             t.HasCheckConstraint("CK_pieces_status", "\"Status\" BETWEEN 0 AND 6");
                         });
@@ -1678,6 +1700,9 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<int?>("PreviousStatus")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("ProductionOrderId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Reason")
                         .IsRequired()
                         .HasMaxLength(240)
@@ -1700,6 +1725,8 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.HasIndex("PieceId");
 
+                    b.HasIndex("CompanyId", "ProductionOrderId");
+
                     b.HasIndex("CompanyId", "ReconciliationOperationId")
                         .IsUnique()
                         .HasFilter("\"ReconciliationOperationId\" IS NOT NULL");
@@ -1710,7 +1737,7 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.ToTable("piece_state_events", "inventory", t =>
                         {
-                            t.HasCheckConstraint("CK_piece_state_events_kind", "\"Kind\" BETWEEN 0 AND 8");
+                            t.HasCheckConstraint("CK_piece_state_events_kind", "\"Kind\" BETWEEN 0 AND 12");
 
                             t.HasCheckConstraint("CK_piece_state_events_reconciliation_evidence", "(\"Kind\" = 8 AND \"PreviousStatus\" IS NOT NULL AND \"PreviousStatus\" = 5 AND \"Status\" IN (0, 6) AND \"ActorUserId\" IS NOT NULL AND \"ReconciliationOperationId\" IS NOT NULL AND \"EvidenceReference\" IS NOT NULL AND \"ObservedWeightKg\" IS NOT NULL AND \"CountedOnHand\" IS NOT NULL AND \"CountedAtUtc\" IS NOT NULL) OR (\"Kind\" <> 8 AND \"ReconciliationOperationId\" IS NULL AND \"EvidenceReference\" IS NULL AND \"EvidenceSha256\" IS NULL AND \"ObservedWeightKg\" IS NULL AND \"CountedOnHand\" IS NULL AND \"CountedAtUtc\" IS NULL AND \"InventoryMovementId\" IS NULL)");
 
@@ -2610,6 +2637,10 @@ namespace Carnicerias.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AnatomicalGroup")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
                     b.Property<Guid>("CompanyId")
                         .HasColumnType("uuid");
 
@@ -3149,6 +3180,229 @@ namespace Carnicerias.Infrastructure.Migrations
                             t.HasCheckConstraint("CK_product_tax_rules_rate", "\"RatePercent\" >= 0 AND \"RatePercent\" <= 100");
 
                             t.HasCheckConstraint("CK_product_tax_rules_treatment", "\"Treatment\" IN (0, 1, 2) AND (\"Treatment\" = 0 OR \"RatePercent\" = 0)");
+                        });
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.ProductionClassifier", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "NormalizedName")
+                        .IsUnique();
+
+                    b.ToTable("production_classifiers", "inventory");
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.ProductionMaterialLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Direction")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("InputPieceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("InventoryMovementId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("MassKg")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("OutputBarcodeProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OutputExternalIdentifier")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("OutputIdentifierField")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid?>("OutputPieceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OutputRawBarcode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("OutputSourceSystem")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("ProductCode")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)");
+
+                    b.Property<int>("SaleMode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InputPieceId");
+
+                    b.HasIndex("InventoryMovementId")
+                        .IsUnique()
+                        .HasFilter("\"InventoryMovementId\" IS NOT NULL");
+
+                    b.HasIndex("OutputBarcodeProfileId");
+
+                    b.HasIndex("OutputPieceId")
+                        .IsUnique()
+                        .HasFilter("\"OutputPieceId\" IS NOT NULL");
+
+                    b.HasIndex("CompanyId", "ProductId");
+
+                    b.HasIndex("CompanyId", "OrderId", "InputPieceId")
+                        .IsUnique()
+                        .HasFilter("\"InputPieceId\" IS NOT NULL");
+
+                    b.HasIndex("CompanyId", "OutputSourceSystem", "OutputExternalIdentifier");
+
+                    b.ToTable("production_lines", "inventory", t =>
+                        {
+                            t.HasCheckConstraint("CK_production_lines_direction", "\"Direction\" IN (0, 1)");
+
+                            t.HasCheckConstraint("CK_production_lines_piece", "(\"InputPieceId\" IS NULL OR \"Direction\" = 0) AND ((\"OutputBarcodeProfileId\" IS NULL AND \"OutputSourceSystem\" IS NULL AND \"OutputExternalIdentifier\" IS NULL AND \"OutputRawBarcode\" IS NULL AND \"OutputIdentifierField\" IS NULL) OR (\"OutputBarcodeProfileId\" IS NOT NULL AND \"Direction\" = 1 AND \"OutputSourceSystem\" IS NOT NULL AND \"OutputExternalIdentifier\" IS NOT NULL AND \"OutputRawBarcode\" IS NOT NULL AND \"OutputIdentifierField\" IS NOT NULL))");
+
+                            t.HasCheckConstraint("CK_production_lines_quantity", "\"Quantity\" > 0 AND \"MassKg\" > 0 AND (\"SaleMode\" <> 1 OR \"Quantity\" = trunc(\"Quantity\")) AND (\"SaleMode\" <> 0 OR \"Quantity\" = \"MassKg\")");
+                        });
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.ProductionOrder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CanceledAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CanceledByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ClassifierId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ClosedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ClosedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CorrectsOrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("ReportedWasteKg")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<string>("WasteReason")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CanceledByUserId");
+
+                    b.HasIndex("ClosedByUserId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("CompanyId", "ClassifierId");
+
+                    b.HasIndex("CompanyId", "CorrectsOrderId");
+
+                    b.HasIndex("CompanyId", "BranchId", "OperationId")
+                        .IsUnique();
+
+                    b.HasIndex("CompanyId", "BranchId", "Status", "CreatedAtUtc");
+
+                    b.ToTable("production_orders", "inventory", t =>
+                        {
+                            t.HasCheckConstraint("CK_production_orders_decision", "(\"Status\" = 0 AND \"ClosedByUserId\" IS NULL AND \"ClosedAtUtc\" IS NULL AND \"CanceledByUserId\" IS NULL AND \"CanceledAtUtc\" IS NULL) OR (\"Status\" = 1 AND \"ClosedByUserId\" IS NOT NULL AND \"ClosedAtUtc\" IS NOT NULL AND \"CanceledByUserId\" IS NULL AND \"CanceledAtUtc\" IS NULL) OR (\"Status\" = 2 AND \"ClosedByUserId\" IS NULL AND \"ClosedAtUtc\" IS NULL AND \"CanceledByUserId\" IS NOT NULL AND \"CanceledAtUtc\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_production_orders_kind", "\"Kind\" IN (0, 1)");
+
+                            t.HasCheckConstraint("CK_production_orders_status", "\"Status\" IN (0, 1, 2)");
+
+                            t.HasCheckConstraint("CK_production_orders_type", "(\"Kind\" = 0 AND \"ClassifierId\" IS NOT NULL AND \"CorrectsOrderId\" IS NULL) OR (\"Kind\" = 1 AND \"ClassifierId\" IS NULL AND \"CorrectsOrderId\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_production_orders_waste", "\"ReportedWasteKg\" BETWEEN 0 AND 100000");
                         });
                 });
 
@@ -4602,6 +4856,18 @@ namespace Carnicerias.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Carnicerias.Infrastructure.ProductionOrder", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "ProductionOrderId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.Infrastructure.ProductionOrder", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "ReservedByProductionOrderId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Carnicerias.Infrastructure.SaleDraft", null)
                         .WithMany()
                         .HasForeignKey("CompanyId", "ReservedBySaleDraftId")
@@ -4626,6 +4892,12 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasForeignKey("PieceId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.ProductionOrder", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "ProductionOrderId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Carnicerias.Infrastructure.SaleDraft", null)
                         .WithMany()
@@ -5142,6 +5414,90 @@ namespace Carnicerias.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("Carnicerias.Infrastructure.ProductionClassifier", b =>
+                {
+                    b.HasOne("Carnicerias.PlatformAccess.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.ProductionMaterialLine", b =>
+                {
+                    b.HasOne("Carnicerias.Infrastructure.InventoryPiece", null)
+                        .WithMany()
+                        .HasForeignKey("InputPieceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.Infrastructure.InventoryMovement", null)
+                        .WithMany()
+                        .HasForeignKey("InventoryMovementId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.Infrastructure.BarcodeProfile", null)
+                        .WithMany()
+                        .HasForeignKey("OutputBarcodeProfileId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.Infrastructure.InventoryPiece", null)
+                        .WithMany()
+                        .HasForeignKey("OutputPieceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.Infrastructure.ProductionOrder", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("CompanyId", "OrderId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.CatalogProduct", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "ProductId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.ProductionOrder", b =>
+                {
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("CanceledByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("ClosedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.PlatformAccess.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "BranchId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.ProductionClassifier", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "ClassifierId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.Infrastructure.ProductionOrder", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "CorrectsOrderId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("Carnicerias.Infrastructure.SaleCheckout", b =>
                 {
                     b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
@@ -5506,6 +5862,11 @@ namespace Carnicerias.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Carnicerias.Infrastructure.PhysicalStockCount", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.ProductionOrder", b =>
                 {
                     b.Navigation("Lines");
                 });

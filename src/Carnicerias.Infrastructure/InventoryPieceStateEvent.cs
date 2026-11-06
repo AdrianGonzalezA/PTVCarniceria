@@ -10,7 +10,11 @@ public enum InventoryPieceEventKind
     MigrationBackfill,
     Transferred,
     Consumed,
-    HistoricalReconciled
+    HistoricalReconciled,
+    ProductionReserved,
+    ProductionReleased,
+    ProductionConsumed,
+    Produced
 }
 
 public sealed class InventoryPieceStateEvent
@@ -60,6 +64,14 @@ public sealed class InventoryPieceStateEvent
     public decimal? CountedOnHand { get; private set; }
     public DateTimeOffset? CountedAtUtc { get; private set; }
     public Guid? InventoryMovementId { get; private set; }
+    public Guid? ProductionOrderId { get; private set; }
+
+    public void LinkProductionOrder(Guid orderId)
+    {
+        if (orderId == Guid.Empty || ProductionOrderId is not null || SaleDraftId is not null)
+            throw new InvalidOperationException("A piece event can link one production order.");
+        ProductionOrderId = orderId;
+    }
 
     public static InventoryPieceStateEvent Reconciled(Guid companyId, Guid branchId, Guid pieceId,
         InventoryPieceStatus outcome, Guid actorUserId, Guid operationId, string reason,

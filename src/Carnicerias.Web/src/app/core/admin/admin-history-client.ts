@@ -168,12 +168,12 @@ export interface StockHistoryItem {
   readonly unit: string;
   readonly userId: string;
   readonly username: string;
-  readonly kind: 'openingBalance' | 'adjustment' | 'sale' | 'pieceReceipt' | 'receipt' | 'transferOut' | 'transferIn' | 'physicalCountAdjustment';
+  readonly kind: 'openingBalance' | 'adjustment' | 'sale' | 'pieceReceipt' | 'receipt' | 'transferOut' | 'transferIn' | 'physicalCountAdjustment' | 'productionInput' | 'productionOutput';
   readonly quantityDelta: number;
   readonly reason: string;
   readonly operationId: string;
   readonly runningBalance: number;
-  readonly documentKind: 'sale' | 'receipt' | 'transfer' | 'transferReceipt' | 'physicalCount' | null;
+  readonly documentKind: 'sale' | 'receipt' | 'transfer' | 'transferReceipt' | 'physicalCount' | 'production' | null;
   readonly documentId: string | null;
   readonly documentNumber: string | null;
 }
@@ -192,6 +192,8 @@ export interface StockHistorySummary {
   readonly transfersOut: number;
   readonly transfersIn: number;
   readonly physicalCountAdjustments: number;
+  readonly productionInputs: number;
+  readonly productionOutputs: number;
   readonly adjustments: number;
   readonly closingBalance: number;
 }

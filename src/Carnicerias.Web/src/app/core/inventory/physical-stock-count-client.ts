@@ -29,6 +29,7 @@ export interface PhysicalCountLine {
   readonly productId: string;
   readonly productCode: string;
   readonly productName: string;
+  readonly anatomicalGroup: string | null;
   readonly unit: string;
   readonly saleMode: 'weight' | 'unit';
   readonly policy: StockCountPolicy;
@@ -59,6 +60,11 @@ export interface PhysicalCount {
   readonly massObservedKg: number;
   readonly massLedgerReferenceKg: number;
   readonly lines: readonly PhysicalCountLine[];
+  readonly anatomicalMasses: readonly {
+    readonly group: string | null;
+    readonly articleCount: number;
+    readonly observedKg: number;
+  }[];
 }
 
 export interface PhysicalCountPage {

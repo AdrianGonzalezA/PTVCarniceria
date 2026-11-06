@@ -131,6 +131,7 @@ public sealed class PhysicalStockCountLine
         ProductId = product.Id;
         ProductCode = product.Code;
         ProductName = product.Name;
+        AnatomicalGroup = product.AnatomicalGroup;
         Unit = product.Unit;
         SaleMode = product.SaleMode;
         Policy = policy;
@@ -151,6 +152,7 @@ public sealed class PhysicalStockCountLine
     public Guid ProductId { get; private set; }
     public string ProductCode { get; private set; }
     public string ProductName { get; private set; }
+    public string? AnatomicalGroup { get; private set; }
     public string Unit { get; private set; }
     public ProductSaleMode SaleMode { get; private set; }
     public StockCountPolicy Policy { get; private set; }

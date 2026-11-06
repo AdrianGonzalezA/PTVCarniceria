@@ -18,7 +18,7 @@ export interface UserListPage {
 }
 
 export interface UserAssignments {
-  readonly role: 'administrator' | 'cashier';
+  readonly role: 'administrator' | 'cashier' | 'production';
   readonly branchIds: readonly string[];
 }
 

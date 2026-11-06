@@ -103,13 +103,15 @@ public sealed class OperationalContextAccessService(PlatformAccessDbContext db)
             return null;
         }
 
-        var roleIds = await db.UserAssignments
-            .Where(assignment => assignment.UserId == userId &&
+        var roles = await (from assignment in db.UserAssignments.AsNoTracking()
+                           join role in db.Roles.AsNoTracking()
+                               on assignment.RoleId equals role.Id
+                           where assignment.UserId == userId &&
                                  assignment.CompanyId == companyId &&
-                                 (assignment.BranchId == null || assignment.BranchId == branchId))
-            .Select(assignment => assignment.RoleId)
-            .Distinct()
-            .ToArrayAsync(cancellationToken);
+                                 (assignment.BranchId == null || assignment.BranchId == branchId)
+                           select new { role.Id, role.Code })
+            .Distinct().ToArrayAsync(cancellationToken);
+        var roleIds = roles.Select(role => role.Id).ToArray();
         var defaults = await (
                 from rolePermission in db.RolePermissions.AsNoTracking()
                 join permission in db.Permissions.AsNoTracking()
@@ -138,7 +140,8 @@ public sealed class OperationalContextAccessService(PlatformAccessDbContext db)
             companyId,
             branchId,
             effective.Values.ToHashSet(StringComparer.Ordinal),
-            sessionId);
+            sessionId,
+            roles.Select(role => role.Code).ToHashSet(StringComparer.Ordinal));
         return new AuthorizedOperationalContext(context, company, branch);
     }
 

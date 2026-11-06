@@ -217,7 +217,9 @@ export class WelcomePage implements OnInit {
   }
 
   private homeFor(session: CurrentSession): string {
-    return session.context?.permissions.includes('platform.users.manage') ? '/admin' : '/pos';
+    if (session.context?.permissions.includes('platform.users.manage')) return '/admin';
+    if (session.context?.permissions.includes('production.operate')) return '/production';
+    return '/pos';
   }
 
   private contextSelectionError(error: HttpErrorResponse): string {

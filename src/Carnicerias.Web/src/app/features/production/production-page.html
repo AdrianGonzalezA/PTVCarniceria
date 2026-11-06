@@ -1,0 +1,248 @@
+<main class="admin-shell">
+  <header class="app-header">
+    <a class="brand" [routerLink]="home()"><span class="brand-mark" aria-hidden="true"></span>
+      <span>Carnicerías <small>· Producción</small></span></a>
+    @if (session(); as current) {
+      <div class="account-bar"><span>{{ current.username }}</span>
+        <button type="button" (click)="signOut()" [disabled]="saving()">Cerrar sesión</button></div>
+    }
+  </header>
+
+  <div class="workspace production-workspace">
+    @if (session()?.context?.permissions?.includes('platform.users.manage')) {
+      <a class="back-link" routerLink="/admin">← Administración</a>
+    }
+    <p class="eyebrow">Negocio · Inventario</p>
+    <h1>Órdenes de producción</h1>
+    <p class="intro">Registrá insumos y productos obtenidos. Las piezas quedan reservadas mientras la orden esté abierta.</p>
+    @if (session()?.context; as context) {
+      <section class="context-bar" aria-label="Contexto de trabajo">
+        <div><span>Empresa</span><strong>{{ context.companyName }}</strong></div>
+        <div><span>Sucursal</span><strong>{{ context.branchName }}</strong></div>
+      </section>
+    }
+    @if (error(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
+    @if (notice(); as message) { <p class="success-message" role="status">{{ message }}</p> }
+
+    <section class="category-panel" aria-labelledby="production-new-title">
+      <header class="panel-heading"><div><h2 id="production-new-title">Nueva orden</h2>
+        <p>Elegí el tipo de trabajo. Las correcciones se crean desde una orden cerrada.</p></div></header>
+      <form class="production-new-form" (submit)="$event.preventDefault(); create()">
+        <label for="production-classifier">Tipo de producción</label>
+        <select id="production-classifier" [value]="classifierId()"
+          (change)="classifierId.set($any($event.target).value)">
+          <option value="">Elegí un tipo</option>
+          @for (classifier of classifiers(); track classifier.id) {
+            @if (classifier.isActive) { <option [value]="classifier.id">{{ classifier.name }}</option> }
+          }
+        </select>
+        <button type="submit" [disabled]="!classifierId() || saving()">Abrir orden</button>
+      </form>
+    </section>
+
+    <section class="category-panel" aria-labelledby="production-summary-title">
+      <header class="panel-heading"><div><h2 id="production-summary-title">Balance por tipo</h2>
+        <p>Órdenes cerradas de esta sucursal. La diferencia conserva su signo.</p></div></header>
+      <div class="table-scroll"><table><thead><tr><th>Tipo</th>
+        <th class="numeric-value">Órdenes</th><th class="numeric-value">Ingreso kg</th>
+        <th class="numeric-value">Salida kg</th><th class="numeric-value">Merma kg</th>
+        <th class="numeric-value">Diferencia kg</th></tr></thead><tbody>
+        @for (row of summary(); track row.kind + (row.classifierId ?? '')) {
+          <tr><td>{{ classifierName(row.classifierId) }}</td>
+            <td class="numeric-value">{{ row.orderCount }}</td>
+            <td class="numeric-value">{{ format(row.inputMassKg) }}</td>
+            <td class="numeric-value">{{ format(row.outputMassKg) }}</td>
+            <td class="numeric-value">{{ format(row.reportedWasteKg) }}</td>
+            <td class="numeric-value">{{ format(row.massDifferenceKg) }}</td></tr>
+        } @empty { <tr><td colspan="6">Aún no hay órdenes cerradas.</td></tr> }
+      </tbody></table></div>
+    </section>
+
+    <section class="category-panel" aria-labelledby="production-list-title">
+      <header class="panel-heading production-list-heading"><div><h2 id="production-list-title">Órdenes de la sucursal</h2>
+        <p>Las cerradas son inmutables. Una corrección queda registrada como otra orden.</p></div>
+        <label>Estado
+          <select [value]="status()" (change)="filterStatus($any($event.target).value)">
+            <option value="">Todos</option><option value="Open">Abiertas</option>
+            <option value="Closed">Cerradas</option><option value="Canceled">Canceladas</option>
+          </select>
+        </label>
+      </header>
+      @if (loading()) { <p class="table-note" role="status">Cargando órdenes…</p> }
+      @else if (page(); as result) {
+        <div class="table-scroll"><table><thead><tr>
+          <th>Fecha</th><th>Tipo</th><th>Estado</th>
+          <th class="numeric-value">Entrada kg</th><th class="numeric-value">Salida kg</th>
+          <th>Acción</th>
+        </tr></thead><tbody>
+          @for (order of result.items; track order.id) {
+            <tr><td>{{ order.createdAtUtc | date:'dd/MM/yyyy HH:mm' }}</td>
+              <td>{{ classifierName(order.classifierId) }}</td>
+              <td>{{ order.status === 'Open' ? 'Abierta' : order.status === 'Closed' ? 'Cerrada' : 'Cancelada' }}</td>
+              <td class="numeric-value">{{ format(order.inputMassKg) }}</td>
+              <td class="numeric-value">{{ format(order.outputMassKg) }}</td>
+              <td><button type="button" class="secondary-button" (click)="open(order.id)">Ver detalle</button></td></tr>
+          } @empty { <tr><td colspan="6">Todavía no hay órdenes.</td></tr> }
+        </tbody></table></div>
+        <div class="receipt-pagination"><button type="button" class="secondary-button"
+            [disabled]="result.page <= 1" (click)="loadPage(result.page - 1)">Anterior</button>
+          <span>Página {{ result.page }} de {{ result.totalPages || 1 }}</span>
+          <button type="button" class="secondary-button" [disabled]="result.page >= result.totalPages"
+            (click)="loadPage(result.page + 1)">Siguiente</button></div>
+      }
+    </section>
+  </div>
+</main>
+
+@if (selected(); as order) {
+  <app-admin-detail-dialog labelledBy="production-detail-title" [canClose]="!saving()"
+    (closed)="dismiss()">
+    <section class="production-detail">
+      <header class="production-detail-heading"><div>
+        <h2 id="production-detail-title">{{ classifierName(order.classifierId) }}</h2>
+        <p>Orden {{ order.id.slice(0, 8) }} · {{ order.status === 'Open' ? 'Abierta' :
+          order.status === 'Closed' ? 'Cerrada' : 'Cancelada' }}</p>
+        @if (order.correctsOrderId) { <p>Corrige la orden {{ order.correctsOrderId.slice(0, 8) }}.</p> }
+      </div><button type="button" class="secondary-button" [disabled]="saving()"
+        (click)="dismiss()">Cerrar detalle</button></header>
+      @if (error(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
+      @if (notice(); as message) { <p class="success-message" role="status">{{ message }}</p> }
+
+      @if (order.status === 'Open') {
+        <section class="production-entry" aria-labelledby="production-entry-title">
+          <h3 id="production-entry-title">Agregar renglón</h3>
+          <div class="production-form-grid">
+            <div><label for="production-direction">Movimiento</label>
+              <select id="production-direction" [value]="direction()"
+                (change)="chooseDirection($any($event.target).value)">
+                <option value="Input">Insumo</option><option value="Output">Producto obtenido</option>
+              </select></div>
+            <div class="production-product-field"><label for="production-product">Artículo</label>
+              <select id="production-product" [value]="productId()"
+                (change)="chooseProduct($any($event.target).value)">
+                <option value="">Elegí un artículo</option>
+                @for (product of products(); track product.id) {
+                  <option [value]="product.id">{{ product.code }} · {{ product.name }} ({{ product.unit }})</option>
+                }
+              </select></div>
+            <div><label for="production-quantity">Cantidad</label>
+              <input id="production-quantity" type="text" inputmode="decimal" class="numeric-value"
+                [readOnly]="!!pieceId()" [value]="quantity()"
+                (input)="quantity.set($any($event.target).value)" /></div>
+            <div><label for="production-mass">Masa real (kg)</label>
+              <input id="production-mass" type="text" inputmode="decimal" class="numeric-value"
+                [readOnly]="!!pieceId()" [value]="massKg()"
+                (input)="massKg.set($any($event.target).value)" /></div>
+          </div>
+          @if (activeProduct()?.saleMode === 'Unit') {
+            <p>Para artículos por unidad, ingresá las unidades y la masa total real por separado.</p>
+          }
+          @if (direction() === 'Input' && activeProduct()?.saleMode === 'Weight') {
+            <div class="production-piece-fields">
+              <label for="production-piece-query">Pieza trazable (opcional)</label>
+              <input id="production-piece-query" type="search" [value]="pieceQuery()"
+                placeholder="Identificador o código de barras"
+                (input)="pieceQuery.set($any($event.target).value)" />
+              <button type="button" class="secondary-button" (click)="searchPieces()">Buscar piezas</button>
+              <select aria-label="Pieza disponible" [value]="pieceId()"
+                (change)="choosePiece($any($event.target).value)">
+                <option value="">Cantidad sin pieza individual</option>
+                @for (piece of pieces(); track piece.id) {
+                  <option [value]="piece.id">{{ piece.externalIdentifier }} · {{ format(piece.weightKg) }} kg
+                    {{ piece.ownedByOrder ? '· Reservada en esta orden' : '' }}</option>
+                }
+              </select>
+            </div>
+          }
+          @if (direction() === 'Output' && activeProduct()?.saleMode === 'Weight') {
+            <div class="production-label-fields">
+              <label for="production-profile">Perfil de etiqueta (opcional)</label>
+              <select id="production-profile" [value]="profileId()"
+                (change)="profileId.set($any($event.target).value)">
+                <option value="">Salida sin pieza individual</option>
+                @for (profile of profiles(); track profile.id) {
+                  <option [value]="profile.id">{{ profile.name }} · revisión {{ profile.revision }}</option>
+                }
+              </select>
+              @if (activeProfile(); as profile) {
+                <p>Fórmula: <code>{{ profile.formula }}</code>. La etiqueta debe codificar los kilos declarados.</p>
+                <div class="production-form-grid">
+                  <div><label for="production-source">Origen</label>
+                    <input id="production-source" maxlength="120" [value]="sourceSystem()"
+                      (input)="sourceSystem.set($any($event.target).value)" /></div>
+                  <div><label for="production-identifier-field">Campo identificador</label>
+                    <input id="production-identifier-field" maxlength="80" [value]="identifierField()"
+                      (input)="identifierField.set($any($event.target).value)" /></div>
+                  <div><label for="production-barcode">Código para etiqueta</label>
+                    <input id="production-barcode" maxlength="80" [value]="rawBarcode()"
+                      (input)="rawBarcode.set($any($event.target).value)" /></div>
+                </div>
+              }
+            </div>
+          }
+          <button type="button" [disabled]="saving() || !productId()" (click)="addLine()">Agregar y reservar</button>
+        </section>
+      }
+
+      <section aria-labelledby="production-lines-title"><h3 id="production-lines-title">Insumos y productos</h3>
+        <div class="table-scroll"><table><thead><tr>
+          <th>Movimiento</th><th>Artículo</th><th>Identificador</th>
+          <th class="numeric-value">Cantidad</th><th class="numeric-value">Masa kg</th><th>Acción</th>
+        </tr></thead><tbody>
+          @for (line of order.lines; track line.id) {
+            <tr><td>{{ line.direction === 'Input' ? 'Insumo' : 'Producto' }}</td>
+              <td>{{ line.productCode }} · {{ line.productName }}</td>
+              <td>{{ line.inputPieceId ? 'Pieza ' + line.inputPieceId.slice(0, 8) :
+                line.outputExternalIdentifier ?? '—' }}</td>
+              <td class="numeric-value">{{ format(line.quantity) }}</td>
+              <td class="numeric-value">{{ format(line.massKg) }}</td>
+              <td>@if (line.direction === 'Output' && line.outputRawBarcode) {
+                <button type="button" class="secondary-button" (click)="labelLine.set(line)">
+                  Etiqueta</button>
+              }
+              @if (order.status === 'Open') {
+                <button type="button" class="secondary-button" [disabled]="saving()"
+                  (click)="removeLine(line.id)">Quitar</button>
+              } @else { Registrado }</td></tr>
+          } @empty { <tr><td colspan="6">Agregá al menos un insumo y un producto obtenido.</td></tr> }
+        </tbody></table></div>
+      </section>
+
+      <section class="production-balance" aria-labelledby="production-balance-title">
+        <h3 id="production-balance-title">Balance de masa</h3>
+        <dl><div><dt>Ingreso</dt><dd>{{ format(order.inputMassKg) }} kg</dd></div>
+          <div><dt>Salida</dt><dd>{{ format(order.outputMassKg) }} kg</dd></div>
+          <div><dt>Merma informada</dt><dd>{{ format(order.reportedWasteKg) }} kg</dd></div>
+          <div><dt>Diferencia</dt><dd>{{ format(order.massDifferenceKg) }} kg</dd></div></dl>
+        <p>La diferencia puede ser positiva o negativa y queda registrada sin tolerancia automática.</p>
+      </section>
+      @if (order.status === 'Open') {
+        <div class="production-close-fields">
+          <div><label for="production-waste">Merma informada (kg)</label>
+            <input id="production-waste" type="text" inputmode="decimal" class="numeric-value"
+              [value]="wasteKg()" (input)="wasteKg.set($any($event.target).value)" /></div>
+          <div><label for="production-waste-reason">Motivo de merma</label>
+            <input id="production-waste-reason" maxlength="240" [value]="wasteReason()"
+              (input)="wasteReason.set($any($event.target).value)" /></div>
+          <button type="button" [disabled]="saving() || !order.lines.length"
+            (click)="closeOrder()">Cerrar producción</button>
+          <button type="button" class="secondary-button" [disabled]="saving()"
+            (click)="cancelOrder()">Cancelar orden</button>
+        </div>
+      }
+      @if (order.status === 'Closed') {
+        <div class="production-closed"><p>Cerrada el {{ order.closedAtUtc | date:'dd/MM/yyyy HH:mm' }}.
+          Los movimientos de esta orden no se editan.</p>
+          <button type="button" [disabled]="saving()" (click)="correct()">Crear corrección</button>
+        </div>
+      }
+    </section>
+  </app-admin-detail-dialog>
+}
+
+@if (labelLine(); as line) {
+  <app-production-label-dialog [line]="line" [orderId]="selected()?.id ?? ''"
+    [companyName]="session()?.context?.companyName ?? ''"
+    [branchName]="session()?.context?.branchName ?? ''"
+    (closed)="labelLine.set(null)" />
+}

@@ -1,0 +1,26 @@
+.production-workspace { max-width: 85rem; }
+.production-new-form { display: flex; flex-wrap: wrap; gap: .75rem; align-items: end; padding: 1.25rem; }
+.production-new-form label { width: 100%; font-weight: 700; }
+.production-new-form select { min-width: min(25rem, 100%); }
+.production-list-heading { align-items: end; }
+.production-list-heading label { display: grid; gap: .35rem; font-weight: 700; }
+.production-detail { box-sizing: border-box; min-width: min(74rem, 86vw); max-width: 86vw; padding: 1.25rem; color: var(--admin-abm-ink); }
+.production-detail-heading { display: flex; justify-content: space-between; align-items: start; gap: 1rem; }
+.production-detail-heading h2 { margin: 0; color: var(--admin-abm-heading); }
+.production-detail h3 { color: var(--admin-abm-heading); }
+.production-entry, .production-balance, .production-close-fields, .production-closed { padding: 1rem 0; border-top: 1px solid var(--admin-abm-border); }
+.production-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .75rem; }
+.production-form-grid > div, .production-piece-fields, .production-label-fields, .production-close-fields > div { display: grid; gap: .35rem; }
+.production-product-field { grid-column: span 2; }
+.production-piece-fields, .production-label-fields { margin: 1rem 0; }
+.production-close-fields { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; }
+.production-close-fields > div { min-width: 12rem; }
+.production-close-fields > div:nth-child(2) { flex: 1; }
+.production-balance dl { display: grid; grid-template-columns: repeat(4, minmax(8rem, 1fr)); gap: .75rem; }
+.production-balance dl > div { padding: .75rem; border: 1px solid var(--admin-abm-border); }
+.production-balance dt { font-weight: 700; }
+.production-balance dd { margin: .25rem 0 0; text-align: right; font-variant-numeric: tabular-nums; }
+.production-detail input, .production-detail select, .production-new-form select, .production-list-heading select { box-sizing: border-box; min-height: 2.5rem; padding: .5rem .65rem; border: 1px solid var(--admin-abm-control-border); border-radius: .25rem; color: var(--admin-abm-ink); background: var(--admin-abm-control); font: inherit; }
+.production-detail input:focus-visible, .production-detail select:focus-visible { outline: 3px solid var(--admin-abm-focus); outline-offset: 2px; }
+.numeric-value { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 48rem) { .production-detail { min-width: 0; max-width: 92vw; } .production-product-field { grid-column: auto; } .production-balance dl { grid-template-columns: repeat(2, 1fr); } }

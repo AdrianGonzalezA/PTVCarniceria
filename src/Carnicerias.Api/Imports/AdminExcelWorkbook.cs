@@ -30,7 +30,8 @@ public static class AdminExcelWorkbook
             ["products"] =
             [
                 new("Articulos", ["Codigo", "Nombre", "Categoria", "ModalidadVenta", "Unidad", "CostoARS"],
-                    ["2546", "CORTITO C/FALDA EXP", "Carnes", "weight", "kg", "1250.00"]),
+                    ["2546", "CORTITO C/FALDA EXP", "Carnes", "weight", "kg", "1250.00", "Lomo"],
+                    OptionalColumns: ["AgrupadorAnatomico"]),
                 new("CodigosAlternativos", ["CodigoArticulo", "CodigoAlternativo"], ["2546", "02546"]),
                 new("CodigosBulto", ["CodigoArticulo", "CodigoBulto", "UnidadesPorBulto"],
                     ["CHORI-1", "CAJA6", "6"], Optional: true)
@@ -62,19 +63,20 @@ public static class AdminExcelWorkbook
         foreach (var definition in sheets)
         {
             var sheet = workbook.Worksheets.Add(definition.Name);
-            for (var column = 0; column < definition.Columns.Length; column++)
+            var allColumns = definition.Columns.Concat(definition.OptionalColumns ?? []).ToArray();
+            for (var column = 0; column < allColumns.Length; column++)
             {
                 var cell = sheet.Cell(1, column + 1);
-                cell.Value = definition.Columns[column];
+                cell.Value = allColumns[column];
                 cell.Style.Font.Bold = true;
                 cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#27383D");
                 cell.Style.Font.FontColor = XLColor.White;
-                sheet.Column(column + 1).Width = Math.Max(18, definition.Columns[column].Length + 4);
-                if (IsNumericColumn(definition.Columns[column]))
+                sheet.Column(column + 1).Width = Math.Max(18, allColumns[column].Length + 4);
+                if (IsNumericColumn(allColumns[column]))
                     sheet.Column(column + 1).Style.NumberFormat.Format =
-                        definition.Columns[column] is "Variacion" or "CantidadEsperada" or
+                        allColumns[column] is "Variacion" or "CantidadEsperada" or
                             "CantidadRecibida" ? "0.000" :
-                            definition.Columns[column] is "CantidadBultos" or "UnidadesPorBulto"
+                            allColumns[column] is "CantidadBultos" or "UnidadesPorBulto"
                                 ? "0" : "0.00";
             }
             sheet.SheetView.FreezeRows(1);
@@ -92,18 +94,19 @@ public static class AdminExcelWorkbook
         var exampleRow = 3;
         foreach (var definition in sheets)
         {
+            var allColumns = definition.Columns.Concat(definition.OptionalColumns ?? []).ToArray();
             examples.Cell(exampleRow, 1).Value = definition.Name;
             examples.Cell(exampleRow, 1).Style.Font.Bold = true;
-            for (var column = 0; column < definition.Columns.Length; column++)
+            for (var column = 0; column < allColumns.Length; column++)
             {
-                examples.Cell(exampleRow + 1, column + 1).Value = definition.Columns[column];
+                examples.Cell(exampleRow + 1, column + 1).Value = allColumns[column];
                 examples.Cell(exampleRow + 1, column + 1).Style.Font.Bold = true;
-                if (IsNumericColumn(definition.Columns[column]))
+                if (IsNumericColumn(allColumns[column]))
                     examples.Cell(exampleRow + 2, column + 1).Value =
                         decimal.Parse(definition.Example[column], CultureInfo.InvariantCulture);
                 else examples.Cell(exampleRow + 2, column + 1).Value = definition.Example[column];
                 examples.Column(column + 1).Width = Math.Max(examples.Column(column + 1).Width,
-                    definition.Columns[column].Length + 4);
+                    allColumns[column].Length + 4);
             }
             if (kind == "stock")
             {
@@ -178,12 +181,13 @@ public static class AdminExcelWorkbook
     private static void ReadSheet(IXLWorksheet sheet, SheetDefinition definition,
         List<ImportRow> rows, List<ImportIssue> issues)
     {
+        var allColumns = definition.Columns.Concat(definition.OptionalColumns ?? []).ToArray();
         var lastColumn = sheet.Row(1).LastCellUsed()?.Address.ColumnNumber ?? 0;
         var columns = new Dictionary<string, int>(StringComparer.Ordinal);
         for (var column = 1; column <= lastColumn; column++)
         {
             var name = sheet.Cell(1, column).GetString().Trim();
-            if (name.Length == 0 || !definition.Columns.Contains(name, StringComparer.Ordinal))
+            if (name.Length == 0 || !allColumns.Contains(name, StringComparer.Ordinal))
                 issues.Add(new ImportIssue(sheet.Name, 1, name, "UNKNOWN_COLUMN", "Encabezado no reconocido."));
             else if (!columns.TryAdd(name, column))
                 issues.Add(new ImportIssue(sheet.Name, 1, name, "DUPLICATE_COLUMN", "Encabezado duplicado."));
@@ -207,9 +211,14 @@ public static class AdminExcelWorkbook
             if (lastCell is not null && lastCell.Address.ColumnNumber > lastColumn)
                 issues.Add(new ImportIssue(sheet.Name, rowNumber, "", "UNKNOWN_COLUMN",
                     "Hay datos fuera de las columnas declaradas."));
-            foreach (var column in definition.Columns)
+            foreach (var column in allColumns)
             {
-                var cell = sheet.Cell(rowNumber, columns[column]);
+                if (!columns.TryGetValue(column, out var columnNumber))
+                {
+                    cells[column] = new ImportCell(null, null);
+                    continue;
+                }
+                var cell = sheet.Cell(rowNumber, columnNumber);
                 var numeric = IsNumericColumn(column);
                 if (cell.IsEmpty())
                 {
@@ -232,7 +241,7 @@ public static class AdminExcelWorkbook
                         numeric ? "Ingresá un importe numérico de Excel." : "Ingresá texto; los códigos deben conservar sus ceros iniciales."));
                 }
             }
-            if (hasValue && cells.Count == definition.Columns.Length)
+            if (hasValue && cells.Count == allColumns.Length)
                 rows.Add(new ImportRow(sheet.Name, rowNumber, cells));
         }
     }
@@ -284,5 +293,5 @@ public static class AdminExcelWorkbook
     }
 
     private sealed record SheetDefinition(string Name, string[] Columns, string[] Example,
-        bool Optional = false);
+        bool Optional = false, string[]? OptionalColumns = null);
 }

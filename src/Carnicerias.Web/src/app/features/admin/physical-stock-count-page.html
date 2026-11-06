@@ -77,23 +77,36 @@
             <p>{{ count.createdAtUtc }} · {{ count.status }}</p></div>
             <button type="button" class="secondary-button" (click)="close()">Cerrar</button></header>
           <div class="table-scroll"><table>
-            <thead><tr><th>Artículo</th><th>Tratamiento</th><th>Saldo al contar</th><th>Físico</th><th>Desvío</th></tr></thead>
+            <thead><tr><th>Artículo</th><th>Agrupador</th><th>Tratamiento</th><th>Saldo al contar</th><th>Físico</th><th>Desvío</th></tr></thead>
             <tbody>
               @for (line of count.lines; track line.id) {
                 <tr><td>{{ line.productCode }} · {{ line.productName }}</td>
+                  <td>{{ line.anatomicalGroup ?? '—' }}</td>
                   <td>{{ policyLabel(line.policy) }}</td>
                   <td class="numeric-value">{{ format(line.systemOnHand, line.saleMode) }} {{ line.unit }}</td>
                   <td class="numeric-value">{{ format(line.countedQuantity, line.saleMode) }} {{ line.unit }}</td>
                   <td class="numeric-value">{{ format(line.delta, line.saleMode) }} {{ line.unit }}
                     @if (line.policy === 'MassObservation') { <small> · medición, sin ajuste</small> }
                   </td></tr>
-              } @empty { <tr><td colspan="5">Aún no se registraron artículos.</td></tr> }
+              } @empty { <tr><td colspan="6">Aún no se registraron artículos.</td></tr> }
             </tbody>
           </table></div>
           @if (count.lines.length) {
             <p><strong>Masa física observada:</strong> {{ format(count.massObservedKg, 'weight') }} kg ·
               <strong>Referencia contable:</strong> {{ format(count.massLedgerReferenceKg, 'weight') }} kg.
               Las mediciones de masa no generan stock teórico por corte ni un ajuste automático.</p>
+          }
+          @if (count.anatomicalMasses.length) {
+            <h3>Masa observada por agrupador</h3>
+            <div class="table-scroll"><table><thead><tr><th>Agrupador</th>
+              <th class="numeric-value">Artículos</th>
+              <th class="numeric-value">Masa observada kg</th></tr></thead><tbody>
+              @for (group of count.anatomicalMasses; track group.group ?? '') {
+                <tr><td>{{ group.group ?? 'Sin agrupar' }}</td>
+                  <td class="numeric-value">{{ group.articleCount }}</td>
+                  <td class="numeric-value">{{ format(group.observedKg, 'weight') }}</td></tr>
+              }
+            </tbody></table></div>
           }
           @if (count.status === 'Draft') {
             <div class="receipt-fields"><div><label for="count-product">Artículo</label><select id="count-product" [value]="selectedProductId()" (change)="selectedProductId.set($any($event.target).value)">

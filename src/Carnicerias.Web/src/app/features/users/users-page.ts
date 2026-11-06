@@ -175,19 +175,20 @@ export class UsersPage implements OnInit {
     const branchIds = this.createBranchIds();
     const role = this.createRole();
     if (!username || !email || password.length < this.minimumPasswordLength() ||
-        (role === 'cashier' && branchIds.length === 0) || this.creating()) {
-      this.actionError.set(`Completá usuario, correo, contraseña de al menos ${this.minimumPasswordLength()} caracteres${role === 'cashier' ? ' y una sucursal' : ''}.`);
+        (role !== 'administrator' && branchIds.length === 0) || this.creating()) {
+      this.actionError.set(`Completá usuario, correo, contraseña de al menos ${this.minimumPasswordLength()} caracteres${role !== 'administrator' ? ' y una sucursal' : ''}.`);
       return;
     }
     this.creating.set(true);
     this.actionError.set(null);
-    this.usersClient.createUser(username, email, password, role, role === 'cashier' ? branchIds : []).subscribe({
+    this.usersClient.createUser(username, email, password, role, role === 'administrator' ? [] : branchIds).subscribe({
       next: () => {
         this.creating.set(false);
         this.closeCreate();
         this.actionMessage.set(role === 'administrator'
           ? 'Administrador creado para esta empresa.'
-          : 'Cajero creado y asignado a las sucursales seleccionadas.');
+          : role === 'production' ? 'Usuario de Producción creado y asignado a las sucursales seleccionadas.'
+            : 'Cajero creado y asignado a las sucursales seleccionadas.');
         this.loadUsers(1);
       },
       error: (error: HttpErrorResponse) => {
@@ -241,14 +242,14 @@ export class UsersPage implements OnInit {
     const userId = this.assignmentUserId();
     if (!userId || userId === this.currentUserId() || this.assignmentSaving()) return;
     const role = this.assignmentRole();
-    if (role === 'cashier' && this.assignmentBranchIds().length === 0) {
-      this.actionError.set('El cajero debe conservar al menos una sucursal.');
+    if (role !== 'administrator' && this.assignmentBranchIds().length === 0) {
+      this.actionError.set('El usuario debe conservar al menos una sucursal.');
       return;
     }
     this.assignmentSaving.set(true);
     this.actionError.set(null);
     this.usersClient.replaceAssignments(userId, role,
-      role === 'cashier' ? this.assignmentBranchIds() : []).subscribe({
+      role === 'administrator' ? [] : this.assignmentBranchIds()).subscribe({
       next: () => {
         this.assignmentSaving.set(false);
         this.closeAssignments();

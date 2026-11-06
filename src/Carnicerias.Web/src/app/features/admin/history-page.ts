@@ -267,7 +267,9 @@ export class HistoryPage implements OnInit {
     return { openingBalance: 'Saldo inicial', adjustment: 'Ajuste', sale: 'Venta',
       pieceReceipt: 'Recepción de pieza', receipt: 'Recepción',
       transferOut: 'Transferencia enviada', transferIn: 'Transferencia recibida',
-      physicalCountAdjustment: 'Ajuste por conteo físico' }[kind];
+      physicalCountAdjustment: 'Ajuste por conteo físico',
+      productionInput: 'Consumo de producción',
+      productionOutput: 'Producto de producción' }[kind];
   }
 
   protected viewStockMovement(movement: StockHistoryItem): void {

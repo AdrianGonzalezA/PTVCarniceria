@@ -18,7 +18,8 @@ describe('ProductsPage', () => {
   };
   const product = { id: 'product-1', categoryId: 'cat-1', categoryName: 'Vacuno',
     code: 'VAC-001', name: 'Asado', unit: 'kg', saleMode: 'weight', cost: 100,
-    isActive: true, allowSaleWithoutStock: true, alternateCodeCount: 0 };
+    isActive: true, allowSaleWithoutStock: true, alternateCodeCount: 0,
+    anatomicalGroup: null };
 
   beforeEach(() => TestBed.configureTestingModule({
     imports: [ProductsPage],
@@ -33,6 +34,7 @@ describe('ProductsPage', () => {
     const http = TestBed.inject(HttpTestingController);
     http.expectOne('/api/sessions/current').flush(adminSession);
     http.expectOne('/api/admin/categories/options').flush([{ id: 'cat-1', name: 'Vacuno' }]);
+    http.expectOne('/api/admin/products/anatomical-groups').flush([]);
     http.expectOne((request) => request.url === '/api/admin/products').flush({
       items, page: 1, pageSize: 20, totalItems: items.length,
       totalPages: items.length ? 1 : 0,
@@ -94,7 +96,7 @@ describe('ProductsPage', () => {
     expect(request.request.method).toBe('POST');
     expect(request.request.body).toEqual({ categoryId: 'cat-1', code: 'CER-001',
       name: 'Bondiola', unit: 'kg', saleMode: 'weight', cost: 400.5,
-      allowSaleWithoutStock: true });
+      allowSaleWithoutStock: true, anatomicalGroup: '' });
     request.flush({ ...product, id: 'product-2', code: 'CER-001', name: 'Bondiola' });
     http.expectOne((candidate) => candidate.url === '/api/admin/products').flush({
       items: [{ ...product, id: 'product-2', code: 'CER-001', name: 'Bondiola' }],

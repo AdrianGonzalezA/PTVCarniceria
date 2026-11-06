@@ -157,12 +157,23 @@
             <p><strong>Borrador:</strong> {{ selected.reservedBySaleDraftId }}</p>
             <p><strong>Reservada desde:</strong> {{ formatEventTime(selected.reservedAtUtc ?? '') }}</p>
           }
+          @if (selected.reservedByProductionOrderId) {
+            <p><strong>Reservada por producción:</strong> {{ selected.reservedByProductionOrderId }}</p>
+            <p><strong>Reservada desde:</strong> {{ formatEventTime(selected.reservedAtUtc ?? '') }}</p>
+          }
+          @if (selected.productionOrderId) {
+            <p><strong>Obtenida en producción:</strong> {{ selected.productionOrderId }}</p>
+          }
+          @if (selected.originPieceId) {
+            <p><strong>Pieza de origen:</strong> {{ selected.originPieceId }}</p>
+          }
           <h3>Auditoría</h3>
           @if (pieceEventsError(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
           @if (pieceEvents().length === 0 && !pieceEventsError()) { <p>No hay eventos para mostrar.</p> }
           <ol class="piece-event-list">
             @for (event of pieceEvents(); track event.id) {
               <li><strong>{{ statusLabel(event.status) }}</strong> · {{ formatEventTime(event.createdAtUtc) }}<br />{{ event.reason }}
+                @if (event.productionOrderId) { <br /><span>Orden de producción: {{ event.productionOrderId }}</span> }
                 @if (event.evidenceReference) {
                   <br /><span>Acta: {{ event.evidenceReference }}. Peso observado: {{ formatWeight(event.observedWeightKg ?? 0) }} kg. Conteo total: {{ formatWeight(event.countedOnHand ?? 0) }} kg.</span>
                 }
@@ -199,7 +210,7 @@
               @if (reconciliationError(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
             </div>
           }
-          @if (selected.status === 'Reserved' && session()?.context?.permissions?.includes('platform.users.manage')) {
+          @if (selected.status === 'Reserved' && selected.reservedBySaleDraftId && session()?.context?.permissions?.includes('platform.users.manage')) {
             <form class="piece-release-form" (submit)="$event.preventDefault(); releasePiece()">
               <label for="piece-release-reason">Motivo de liberación excepcional</label>
               <textarea id="piece-release-reason" required maxlength="240" rows="3"

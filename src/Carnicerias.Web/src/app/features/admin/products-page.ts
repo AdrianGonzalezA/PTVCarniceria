@@ -35,9 +35,11 @@ export class ProductsPage implements OnInit {
     saleMode: ['weight' as SaleMode, Validators.required],
     cost: ['', Validators.pattern(/^\d{1,10}(?:[,.]\d{1,2})?$/)],
     allowSaleWithoutStock: [true],
+    anatomicalGroup: ['', Validators.maxLength(120)],
   });
   protected readonly session = signal<CurrentSession | null>(null);
   protected readonly categories = signal<readonly AdminCategoryOption[]>([]);
+  protected readonly anatomicalGroups = signal<readonly string[]>([]);
   protected readonly categoriesLoading = signal(true);
   protected readonly categoriesError = signal<string | null>(null);
   protected readonly pageData = signal<AdminProductPage | null>(null);
@@ -45,6 +47,7 @@ export class ProductsPage implements OnInit {
   protected readonly appliedSearch = signal('');
   protected readonly categoryFilter = signal('');
   protected readonly statusFilter = signal('');
+  protected readonly anatomicalGroupFilter = signal('');
   protected readonly isLoading = signal(true);
   protected readonly loadError = signal<string | null>(null);
   protected readonly editorOpen = signal(false);
@@ -92,6 +95,7 @@ export class ProductsPage implements OnInit {
         }
         this.session.set(session);
         this.loadCategories();
+        this.loadAnatomicalGroups();
         this.load(1);
       },
       error: () => void this.router.navigateByUrl('/'),
@@ -108,6 +112,10 @@ export class ProductsPage implements OnInit {
 
   protected updateStatusFilter(event: Event): void {
     this.statusFilter.set((event.target as HTMLSelectElement).value);
+  }
+
+  protected updateAnatomicalGroupFilter(event: Event): void {
+    this.anatomicalGroupFilter.set((event.target as HTMLSelectElement).value);
   }
 
   protected search(): void {
@@ -130,7 +138,8 @@ export class ProductsPage implements OnInit {
     this.editingProduct.set(null);
     this.alternateCodes.set([]);
     this.editorForm.reset({ categoryId: this.categories()[0].id, code: '', name: '',
-      unit: 'kg', saleMode: 'weight', cost: '', allowSaleWithoutStock: true });
+      unit: 'kg', saleMode: 'weight', cost: '', allowSaleWithoutStock: true,
+      anatomicalGroup: '' });
     this.actionError.set(null);
     this.actionMessage.set(null);
     this.editorOpen.set(true);
@@ -140,7 +149,8 @@ export class ProductsPage implements OnInit {
     this.editingProduct.set(product);
     this.editorForm.reset({ categoryId: product.categoryId, code: product.code, name: product.name,
       unit: product.unit, saleMode: product.saleMode, cost: product.cost?.toFixed(2) ?? '',
-      allowSaleWithoutStock: product.allowSaleWithoutStock });
+      allowSaleWithoutStock: product.allowSaleWithoutStock,
+      anatomicalGroup: product.anatomicalGroup ?? '' });
     this.actionError.set(null);
     this.actionMessage.set(null);
     this.editorOpen.set(true);
@@ -198,6 +208,7 @@ export class ProductsPage implements OnInit {
     const details = { categoryId: values.categoryId, name: values.name.trim(),
       unit: values.unit.trim(), saleMode: values.saleMode,
       allowSaleWithoutStock: values.allowSaleWithoutStock,
+      anatomicalGroup: values.anatomicalGroup.trim(),
       ...(cost === null ? {} : { cost }) };
     const operation = editing
       ? this.productsClient.update(editing.id, details)
@@ -210,6 +221,10 @@ export class ProductsPage implements OnInit {
         this.actionMessage.set(editing ? 'Artículo actualizado.' : 'Artículo creado sin precio ni stock.');
         if (editing) this.replaceProduct(product);
         else this.load(1);
+        if (product.anatomicalGroup && !this.anatomicalGroups()
+            .some(group => group.toUpperCase() === product.anatomicalGroup!.toUpperCase()))
+          this.anatomicalGroups.update(groups => [...groups, product.anatomicalGroup!]
+            .sort((left, right) => left.localeCompare(right, 'es-AR')));
       },
       error: (error: HttpErrorResponse) => {
         this.isSaving.set(false);
@@ -356,7 +371,8 @@ export class ProductsPage implements OnInit {
   protected load(page: number): void {
     this.isLoading.set(true);
     this.loadError.set(null);
-    this.productsClient.list(page, this.appliedSearch(), this.categoryFilter(), this.statusFilter()).subscribe({
+    this.productsClient.list(page, this.appliedSearch(), this.categoryFilter(),
+      this.statusFilter(), this.anatomicalGroupFilter()).subscribe({
       next: (result) => {
         this.pageData.set(result);
         this.isLoading.set(false);
@@ -384,6 +400,13 @@ export class ProductsPage implements OnInit {
         this.categoriesLoading.set(false);
         this.categoriesError.set('No se pudieron cargar las categorías para editar artículos.');
       },
+    });
+  }
+
+  private loadAnatomicalGroups(): void {
+    this.productsClient.anatomicalGroups().subscribe({
+      next: groups => this.anatomicalGroups.set(groups),
+      error: () => this.anatomicalGroups.set([]),
     });
   }
 

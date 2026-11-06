@@ -419,6 +419,8 @@ public static class AdminHistoryEndpoints
                 Quantity(InventoryMovementKind.TransferIn),
                 Quantity(InventoryMovementKind.Adjustment),
                 Quantity(InventoryMovementKind.PhysicalCountAdjustment),
+                Quantity(InventoryMovementKind.ProductionInput),
+                Quantity(InventoryMovementKind.ProductionOutput),
                 opening + totals.Values.Sum());
         }
         var rows = await query.OrderByDescending(item => item.CreatedAtUtc).ThenByDescending(item => item.Id)
@@ -484,8 +486,15 @@ public static class AdminHistoryEndpoints
             .Select(line => new StockDocumentRow(line.InventoryMovementId!.Value,
                 "physicalCount", line.CountId, line.CountId.ToString()))
             .ToArrayAsync(cancellationToken);
+        var production = await db.ProductionMaterialLines.AsNoTracking()
+            .Where(line => line.CompanyId == companyId &&
+                line.InventoryMovementId.HasValue &&
+                ids.Contains(line.InventoryMovementId.Value))
+            .Select(line => new StockDocumentRow(line.InventoryMovementId!.Value,
+                "production", line.OrderId, line.OrderId.ToString()))
+            .ToArrayAsync(cancellationToken);
         var documents = receipts.Concat(transfers).Concat(transferReceipts)
-            .Concat(counts)
+            .Concat(counts).Concat(production)
             .ToDictionary(row => row.MovementId);
         var result = new StockHistoryPage(rows.Select(row => new StockItem(
             row.Id, row.CreatedAtUtc, row.BranchId, row.BranchName, row.ProductId,
@@ -599,6 +608,7 @@ public static class AdminHistoryEndpoints
         decimal OpeningMovements, decimal Receipts, decimal PieceReceipts,
         decimal Sales, decimal TransfersOut, decimal TransfersIn, decimal Adjustments,
         decimal PhysicalCountAdjustments,
+        decimal ProductionInputs, decimal ProductionOutputs,
         decimal ClosingBalance);
     private sealed class StockBalanceRow
     {

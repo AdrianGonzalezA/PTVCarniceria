@@ -72,8 +72,8 @@ public sealed class InventoryPackageVisualEndpointTests
             var login = await client.PostAsJsonAsync("/api/sessions",
                 new { companyCode = company.Code, credential = user.Username, password });
             Assert.Equal(HttpStatusCode.OK, login.StatusCode);
-            client.DefaultRequestHeaders.Add("Cookie",
-                Assert.Single(login.Headers.GetValues("Set-Cookie")).Split(';', 2)[0]);
+            var cookie = Assert.Single(login.Headers.GetValues("Set-Cookie")).Split(';', 2)[0];
+            client.DefaultRequestHeaders.Add("Cookie", cookie);
             var context = await client.PutAsJsonAsync("/api/sessions/current/context",
                 new { companyId = company.Id, branchId = branch.Id });
             Assert.Equal(HttpStatusCode.OK, context.StatusCode);
@@ -108,8 +108,20 @@ public sealed class InventoryPackageVisualEndpointTests
                 } }));
             Assert.Equal(3, edited.GetProperty("lines").GetArrayLength());
             Assert.Equal(2, edited.GetProperty("packageReads").GetArrayLength());
-            var approved = await OkAsync(await client.PostAsJsonAsync(
-                $"/api/inventory/receipts/{receiptId}/approve", new { version = 4 }));
+            using var concurrentClient = factory.CreateClient(new WebApplicationFactoryClientOptions
+            { BaseAddress = new Uri("https://localhost"), HandleCookies = false });
+            concurrentClient.DefaultRequestHeaders.Add("X-Pos-Terminal-Credential", credential.Token);
+            concurrentClient.DefaultRequestHeaders.Add("Cookie", cookie);
+            var approvalUrl = $"/api/inventory/receipts/{receiptId}/approve";
+            var competing = await Task.WhenAll(
+                client.PostAsJsonAsync(approvalUrl, new { version = 4 }),
+                concurrentClient.PostAsJsonAsync(approvalUrl, new { version = 4 }));
+            Assert.Contains(competing, response => response.StatusCode == HttpStatusCode.OK);
+            Assert.All(competing, response => Assert.Contains(response.StatusCode,
+                new[] { HttpStatusCode.OK, HttpStatusCode.Conflict }));
+            foreach (var response in competing) response.Dispose();
+            var approved = await OkAsync(await client.GetAsync(
+                $"/api/inventory/receipts/{receiptId}"));
             Assert.Equal("Approved", approved.GetProperty("status").GetString());
             var again = await OkAsync(await client.PostAsJsonAsync(
                 $"/api/inventory/receipts/{receiptId}/approve", new { version = 4 }));

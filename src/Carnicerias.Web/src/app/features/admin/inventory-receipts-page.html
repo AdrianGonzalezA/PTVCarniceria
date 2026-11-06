@@ -76,6 +76,15 @@
             <button type="button" class="secondary-button" (click)="addLine()">Agregar renglón</button>
           </div>
           <p class="field-hint">Punto o coma indican decimales. No uses separador de miles; las unidades deben ser enteras.</p>
+          <section class="receipt-scan" aria-labelledby="receipt-package-title">
+            <h3 id="receipt-package-title">Bultos por código</h3>
+            <p class="field-hint">Cada lectura conserva el código, la cantidad de bultos y el factor vigente. La conversión a unidades se aplica solo en esta recepción.</p>
+            <form class="receipt-add-line" (submit)="$event.preventDefault(); scanPackage()">
+              <div><label for="receipt-package-code">Código de bulto</label><input #packageScanInput id="receipt-package-code" maxlength="80" [value]="packageCode()" (input)="packageCode.set($any($event.target).value)" /></div>
+              <div><label for="receipt-package-count">Cantidad de bultos</label><input id="receipt-package-count" type="number" min="1" max="100000" step="1" class="numeric-value" [value]="packageCount()" (input)="packageCount.set($any($event.target).value)" /></div>
+              <button type="submit" class="secondary-button" [disabled]="saving() || lineDirty()">Agregar bulto</button>
+            </form>
+          </section>
           <section class="receipt-scan" aria-labelledby="receipt-scan-title">
             <h3 id="receipt-scan-title">Piezas trazables</h3>
             <p class="field-hint">Cada lectura conserva su identificador y peso por separado. Se suma al stock solo al aprobar este documento.</p>
@@ -130,6 +139,20 @@
                 <tr><td>{{ pieceProductName(read) }}</td><td>{{ read.externalIdentifier }}</td>
                   <td>{{ read.rawBarcode }}</td><td class="numeric-value">{{ quantity(read.weightKg, 'weight') }}</td>
                   <td>{{ read.inventoryPieceId ? 'Ingresada' : 'En borrador' }}</td></tr>
+              }
+            </tbody>
+          </table></div>
+        }
+        @if ((receipt.packageReads ?? []).length > 0) {
+          <h3>Bultos leídos · {{ (receipt.packageReads ?? []).length }}</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th scope="col">Artículo</th><th scope="col">Código</th><th scope="col" class="numeric-value">Bultos</th><th scope="col" class="numeric-value">Unidades por bulto</th><th scope="col" class="numeric-value">Unidades recibidas</th></tr></thead>
+            <tbody>
+              @for (read of receipt.packageReads ?? []; track read.id) {
+                <tr><td>{{ packageProductName(read.lineId) }}</td><td>{{ read.code }}</td>
+                  <td class="numeric-value">{{ read.packageCount }}</td>
+                  <td class="numeric-value">{{ read.unitsPerPackage }}</td>
+                  <td class="numeric-value">{{ read.unitQuantity }}</td></tr>
               }
             </tbody>
           </table></div>

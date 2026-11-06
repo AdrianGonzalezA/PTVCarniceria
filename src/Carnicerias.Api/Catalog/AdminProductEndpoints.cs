@@ -71,7 +71,8 @@ public static class AdminProductEndpoints
                 product.Cost,
                 product.IsActive,
                 db.ProductCodes.Count(code => code.CompanyId == companyId &&
-                    code.ProductId == product.Id && code.IsActive),
+                    code.ProductId == product.Id && code.IsActive &&
+                    code.Kind == ProductCodeKind.SaleAlternative),
                 product.AllowSaleWithoutStock))
             .ToArrayAsync(cancellationToken);
         return Results.Ok(new ProductPage(items, page, pageSize, totalItems,
@@ -207,7 +208,8 @@ public static class AdminProductEndpoints
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         var alternateCodeCount = await db.ProductCodes.CountAsync(code =>
-            code.CompanyId == companyId && code.ProductId == productId && code.IsActive, cancellationToken);
+            code.CompanyId == companyId && code.ProductId == productId && code.IsActive &&
+            code.Kind == ProductCodeKind.SaleAlternative, cancellationToken);
         return Results.Ok(ToResponse(product, category.Name, alternateCodeCount));
     }
 

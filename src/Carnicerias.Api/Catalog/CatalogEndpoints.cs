@@ -91,6 +91,7 @@ public static class CatalogEndpoints
             products = products.Where(product => product.NormalizedCode == exactCode ||
                 db.ProductCodes.Any(alternate => alternate.CompanyId == context.CompanyId &&
                     alternate.ProductId == product.Id && alternate.IsActive &&
+                    alternate.Kind == ProductCodeKind.SaleAlternative &&
                     alternate.NormalizedCode == exactCode));
         }
         else if (!string.IsNullOrEmpty(query))
@@ -100,6 +101,7 @@ public static class CatalogEndpoints
                 EF.Functions.ILike(product.Code, pattern) ||
                 db.ProductCodes.Any(alternate => alternate.CompanyId == context.CompanyId &&
                     alternate.ProductId == product.Id && alternate.IsActive &&
+                    alternate.Kind == ProductCodeKind.SaleAlternative &&
                     EF.Functions.ILike(alternate.Code, pattern)));
         }
 

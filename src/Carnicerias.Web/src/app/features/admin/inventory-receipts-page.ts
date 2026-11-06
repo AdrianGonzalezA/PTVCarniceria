@@ -28,6 +28,7 @@ export class InventoryReceiptsPage implements OnInit {
   private readonly sessions = inject(SessionClient);
   private readonly router = inject(Router);
   @ViewChild('receiptScanInput') private receiptScanInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('packageScanInput') private packageScanInput?: ElementRef<HTMLInputElement>;
 
   protected readonly session = signal<CurrentSession | null>(null);
   protected readonly suppliers = signal<readonly ReceiptSupplierOption[]>([]);
@@ -55,7 +56,10 @@ export class InventoryReceiptsPage implements OnInit {
   protected readonly scanSourceSystem = signal('Frigorífico ciclo 2');
   protected readonly scanIdentifierField = signal('pro_identif');
   protected readonly scanCode = signal('');
+  protected readonly packageCode = signal('');
+  protected readonly packageCount = signal('1');
   private pendingScan: { signature: string; operationId: string } | null = null;
+  private pendingPackage: { signature: string; operationId: string } | null = null;
   protected readonly importOpen = signal(false);
   protected readonly importFile = signal<File | null>(null);
   protected readonly importPreviewResult = signal<ReceiptImportPreview | null>(null);
@@ -165,8 +169,11 @@ export class InventoryReceiptsPage implements OnInit {
 
   private select(receipt: InventoryReceipt): void {
     this.selected.set(receipt);
-    const pieceLineIds = new Set((receipt.pieceReads ?? []).map(read => read.lineId));
-    this.editingLines.set(receipt.lines.filter(line => !pieceLineIds.has(line.id))
+    const capturedLineIds = new Set([
+      ...(receipt.pieceReads ?? []).map(read => read.lineId),
+      ...(receipt.packageReads ?? []).map(read => read.lineId),
+    ]);
+    this.editingLines.set(receipt.lines.filter(line => !capturedLineIds.has(line.id))
       .map(line => ({ id: line.id, productId: line.productId,
       expected: line.expectedQuantity === null ? '' : String(line.expectedQuantity),
       received: String(line.receivedQuantity), differenceStatus: line.differenceStatus })));
@@ -321,6 +328,51 @@ export class InventoryReceiptsPage implements OnInit {
     const line = this.selected()?.lines.find(item => item.id === read.lineId);
     return line?.productName ?? 'Artículo no disponible';
   }
+
+  protected scanPackage(): void {
+    const receipt = this.selected();
+    const code = this.packageCode().trim();
+    const count = Number(this.packageCount());
+    if (!receipt || receipt.status !== 'Draft' || this.saving() || this.lineDirty() ||
+        !code || code.length > 80 || !Number.isInteger(count) || count < 1 || count > 100_000) {
+      this.error.set('Ingresá el código de bulto y una cantidad entera. Guardá primero los cambios pendientes.');
+      return;
+    }
+    const signature = [receipt.id, code.toUpperCase(), count].join('|');
+    if (this.pendingPackage?.signature !== signature)
+      this.pendingPackage = { signature, operationId: crypto.randomUUID() };
+    this.saving.set(true);
+    this.error.set(null);
+    this.receiptsClient.scanPackage(receipt.id, receipt.version,
+      this.pendingPackage.operationId, code, count).subscribe({
+      next: (updated) => {
+        this.saving.set(false);
+        this.pendingPackage = null;
+        this.packageCode.set('');
+        if (this.packageScanInput) this.packageScanInput.nativeElement.value = '';
+        this.select(updated);
+        this.notice.set('Bulto agregado al borrador. Las unidades ingresan al stock al aprobar.');
+        queueMicrotask(() => this.packageScanInput?.nativeElement.focus());
+      },
+      error: (error: HttpErrorResponse) => {
+        this.saving.set(false);
+        const responseCode = error.error?.error?.code;
+        this.error.set(responseCode === 'PACKAGE_CODE_NOT_AVAILABLE'
+          ? 'El código de bulto no existe o está inactivo.'
+          : responseCode === 'INVALID_PACKAGE_QUANTITY'
+          ? 'La cantidad supera el máximo permitido por recepción.'
+          : responseCode === 'RECEIPT_VERSION_CHANGED'
+          ? 'El borrador cambió. Reabrilo antes de repetir la lectura.'
+          : 'No se pudo guardar el bulto. Reabrí el borrador si hubo un corte de comunicación.');
+      },
+    });
+  }
+
+  protected packageProductName(lineId: string): string {
+    const line = this.selected()?.lines.find(item => item.id === lineId);
+    return line ? `${line.productCode} · ${line.productName}` : 'Artículo no disponible';
+  }
+
 
   protected changeLine(index: number, field: 'expected' | 'received', value: string): void {
     this.editingLines.update(lines => lines.map((line, position) => position === index

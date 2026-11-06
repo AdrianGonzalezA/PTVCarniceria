@@ -73,6 +73,30 @@ public sealed class ProductManagementTests
         Assert.True(code.IsActive);
         Assert.Equal("779123456", code.Code);
         Assert.Equal("779123456", code.NormalizedCode);
+        Assert.Equal(ProductCodeKind.SaleAlternative, code.Kind);
+        Assert.Null(code.UnitsPerPackage);
+    }
+
+    [Fact]
+    public void PackageCodeCapturesAnIntegerFactorAndCannotBecomeAnAlternative()
+    {
+        var companyId = Guid.NewGuid();
+        var productId = Guid.NewGuid();
+        var code = new ProductCode(companyId, productId, "  779000006  ",
+            ProductCodeKind.PurchasePackage, 6);
+
+        Assert.Equal("779000006", code.Code);
+        Assert.Equal(ProductCodeKind.PurchasePackage, code.Kind);
+        Assert.Equal(6, code.UnitsPerPackage);
+        code.ChangePackageFactor(12);
+        Assert.Equal(12, code.UnitsPerPackage);
+        Assert.ThrowsAny<ArgumentException>(() => code.ChangePackageFactor(1));
+        Assert.ThrowsAny<ArgumentException>(() => new ProductCode(companyId, productId,
+            "779000001", ProductCodeKind.PurchasePackage, 1));
+        Assert.ThrowsAny<ArgumentException>(() => new ProductCode(companyId, productId,
+            "779000002", ProductCodeKind.SaleAlternative, 6));
+        Assert.Throws<InvalidOperationException>(() =>
+            new ProductCode(companyId, productId, "ALT").ChangePackageFactor(6));
     }
 
     [Fact]

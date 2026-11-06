@@ -58,7 +58,8 @@ public static class AdminExcelImportProcessor
             .Where(code => !string.IsNullOrWhiteSpace(code))
             .Select(code => NormalizeCode(code!)).Distinct(StringComparer.Ordinal).ToArray();
         var alternatives = await db.ProductCodes.AsNoTracking().Where(code =>
-            code.CompanyId == companyId && code.IsActive && codes.Contains(code.NormalizedCode))
+            code.CompanyId == companyId && code.IsActive &&
+            code.Kind == ProductCodeKind.SaleAlternative && codes.Contains(code.NormalizedCode))
             .ToArrayAsync(cancellationToken);
         var alternateProductIds = alternatives.Select(code => code.ProductId).ToArray();
         var products = await db.CatalogProducts.AsNoTracking().Where(product =>
@@ -161,6 +162,7 @@ public static class AdminExcelImportProcessor
     {
         var articleRows = rows.Where(row => row.Sheet == "Articulos").ToArray();
         var codeRows = rows.Where(row => row.Sheet == "CodigosAlternativos").ToArray();
+        var packageRows = rows.Where(row => row.Sheet == "CodigosBulto").ToArray();
         var categories = await db.ProductCategories.AsNoTracking()
             .Where(category => category.CompanyId == companyId).ToArrayAsync(cancellationToken);
         var categoriesByName = categories.GroupBy(category => category.Name, StringComparer.OrdinalIgnoreCase)
@@ -168,6 +170,8 @@ public static class AdminExcelImportProcessor
         var allCodes = articleRows.Select(row => row.Text("Codigo"))
             .Concat(codeRows.Select(row => row.Text("CodigoArticulo")))
             .Concat(codeRows.Select(row => row.Text("CodigoAlternativo")))
+            .Concat(packageRows.Select(row => row.Text("CodigoArticulo")))
+            .Concat(packageRows.Select(row => row.Text("CodigoBulto")))
             .Where(code => !string.IsNullOrWhiteSpace(code)).Select(code => NormalizeCode(code!))
             .Distinct(StringComparer.Ordinal).ToArray();
         var existingProducts = await db.CatalogProducts.AsNoTracking()
@@ -250,7 +254,8 @@ public static class AdminExcelImportProcessor
                 AddIssue(issues, row, "CodigoAlternativo", "CODE_ALREADY_USED", "El código ya es principal de un artículo.");
             else if (alternatesByCode.TryGetValue(alternateKey, out var existing))
             {
-                if (existing.ProductId == product.Id)
+                if (existing.ProductId == product.Id &&
+                    existing.Kind == ProductCodeKind.SaleAlternative)
                     outcomes.Add(new ImportRowOutcome(row.Sheet, row.Number, "unchanged", "Código ya asociado; se conserva su estado."));
                 else AddIssue(issues, row, "CodigoAlternativo", "CODE_ALREADY_USED", "El código pertenece a otro artículo.");
             }
@@ -258,6 +263,51 @@ public static class AdminExcelImportProcessor
             {
                 newCodes.Add(new ProductCode(companyId, product.Id, alternateCode!));
                 outcomes.Add(new ImportRowOutcome(row.Sheet, row.Number, "create", "Agregar código alternativo."));
+            }
+        }
+
+        foreach (var row in packageRows)
+        {
+            var articleCode = row.Text("CodigoArticulo");
+            var packageCode = row.Text("CodigoBulto");
+            var factor = row.NumberValue("UnidadesPorBulto");
+            if (!ValidText(articleCode, 80) || !ValidText(packageCode, 80) ||
+                factor is null or < 2 or > 100_000 || factor != decimal.Truncate(factor.Value))
+            {
+                AddIssue(issues, row, "CodigoBulto", "INVALID_PACKAGE",
+                    "Indicá artículo, código de bulto y factor entero mayor que uno.");
+                continue;
+            }
+            var articleKey = NormalizeCode(articleCode!);
+            var packageKey = NormalizeCode(packageCode!);
+            if (!productsByCode.TryGetValue(articleKey, out var product))
+                AddIssue(issues, row, "CodigoArticulo", "PRODUCT_NOT_FOUND",
+                    "El artículo no existe en esta empresa ni en el archivo.");
+            else if (product.SaleMode != ProductSaleMode.Unit)
+                AddIssue(issues, row, "CodigoArticulo", "PACKAGE_REQUIRES_UNIT_PRODUCT",
+                    "Los bultos requieren un artículo por unidad.");
+            else if (!seenAlt.Add(packageKey))
+                AddIssue(issues, row, "CodigoBulto", "DUPLICATE_ROW",
+                    "Código repetido entre alternativas y bultos del archivo.");
+            else if (productsByCode.ContainsKey(packageKey))
+                AddIssue(issues, row, "CodigoBulto", "CODE_ALREADY_USED",
+                    "El código ya es principal de un artículo.");
+            else if (alternatesByCode.TryGetValue(packageKey, out var existing))
+            {
+                if (existing.ProductId == product.Id &&
+                    existing.Kind == ProductCodeKind.PurchasePackage &&
+                    existing.UnitsPerPackage == (int)factor.Value)
+                    outcomes.Add(new ImportRowOutcome(row.Sheet, row.Number, "unchanged",
+                        "Bulto ya asociado; se conserva su estado y factor."));
+                else AddIssue(issues, row, "CodigoBulto", "CODE_ALREADY_USED",
+                    "El código ya tiene otra asociación o factor.");
+            }
+            else
+            {
+                newCodes.Add(new ProductCode(companyId, product.Id, packageCode!,
+                    ProductCodeKind.PurchasePackage, (int)factor.Value));
+                outcomes.Add(new ImportRowOutcome(row.Sheet, row.Number, "create",
+                    "Agregar presentación de compra por bulto."));
             }
         }
 
@@ -309,6 +359,7 @@ public static class AdminExcelImportProcessor
             .Distinct(StringComparer.Ordinal).ToArray();
         var alternateCodes = await db.ProductCodes.AsNoTracking().Where(code =>
             code.CompanyId == companyId && code.IsActive &&
+            code.Kind == ProductCodeKind.SaleAlternative &&
             productCodes.Contains(code.NormalizedCode)).ToArrayAsync(cancellationToken);
         var alternateProductIdsForPrices = alternateCodes.Select(code => code.ProductId).ToArray();
         var matchingProducts = await db.CatalogProducts.AsNoTracking()

@@ -32,7 +32,9 @@ public static class AdminProductCodeEndpoints
         var codes = await db.ProductCodes.AsNoTracking()
             .Where(code => code.CompanyId == companyId && code.ProductId == productId)
             .OrderBy(code => code.Code)
-            .Select(code => new ProductCodeResponse(code.Code, code.IsActive))
+            .Select(code => new ProductCodeResponse(code.Code, code.IsActive,
+                code.Kind == ProductCodeKind.PurchasePackage ? "purchasePackage" : "saleAlternative",
+                code.UnitsPerPackage))
             .ToArrayAsync(cancellationToken);
         return Results.Ok(codes);
     }
@@ -46,12 +48,26 @@ public static class AdminProductCodeEndpoints
         CancellationToken cancellationToken)
     {
         if (!AllowedOrigin(httpContext)) return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
-        if (request is null || string.IsNullOrWhiteSpace(request.Code) || request.Code.Trim().Length > 80)
+        if (request is null || string.IsNullOrWhiteSpace(request.Code) ||
+            request.Code.Trim().Length > 80)
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+        var kind = request.Kind switch
+        {
+            null or "saleAlternative" => ProductCodeKind.SaleAlternative,
+            "purchasePackage" => ProductCodeKind.PurchasePackage,
+            _ => (ProductCodeKind?)null
+        };
+        if (kind is null || kind == ProductCodeKind.SaleAlternative && request.UnitsPerPackage is not null ||
+            kind == ProductCodeKind.PurchasePackage && request.UnitsPerPackage is null or <= 1 or > 100_000)
+            return Error(StatusCodes.Status400BadRequest, "INVALID_CODE_KIND_OR_FACTOR");
 
         var companyId = contextAccessor.Context.CompanyId;
-        if (!await ProductExistsAsync(db, companyId, productId, cancellationToken))
+        var product = await db.CatalogProducts.AsNoTracking().SingleOrDefaultAsync(item =>
+            item.CompanyId == companyId && item.Id == productId, cancellationToken);
+        if (product is null)
             return Error(StatusCodes.Status404NotFound, "PRODUCT_NOT_FOUND");
+        if (kind == ProductCodeKind.PurchasePackage && product.SaleMode != ProductSaleMode.Unit)
+            return Error(StatusCodes.Status400BadRequest, "PACKAGE_REQUIRES_UNIT_PRODUCT");
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await ProductCodeReservation.AcquireCompanyLockAsync(db, companyId, cancellationToken);
@@ -62,7 +78,8 @@ public static class AdminProductCodeEndpoints
                 code.NormalizedCode == normalized, cancellationToken))
             return Error(StatusCodes.Status409Conflict, "PRODUCT_CODE_ALREADY_EXISTS");
 
-        var alternate = new ProductCode(companyId, productId, request.Code);
+        var alternate = new ProductCode(companyId, productId, request.Code,
+            kind.Value, request.UnitsPerPackage);
         db.ProductCodes.Add(alternate);
         try
         {
@@ -74,7 +91,7 @@ public static class AdminProductCodeEndpoints
             return Error(StatusCodes.Status409Conflict, "PRODUCT_CODE_ALREADY_EXISTS");
         }
         await transaction.CommitAsync(cancellationToken);
-        return Results.Created($"/api/admin/products/{productId}/codes", new ProductCodeResponse(alternate.Code, true));
+        return Results.Created($"/api/admin/products/{productId}/codes", ToResponse(alternate));
     }
 
     private static async Task<IResult> ChangeStateAsync(
@@ -86,7 +103,9 @@ public static class AdminProductCodeEndpoints
         CancellationToken cancellationToken)
     {
         if (!AllowedOrigin(httpContext)) return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
-        if (request is null || string.IsNullOrWhiteSpace(request.Code) || request.Code.Trim().Length > 80)
+        if (request is null || string.IsNullOrWhiteSpace(request.Code) ||
+            request.Code.Trim().Length > 80 ||
+            request.IsActive is null && request.UnitsPerPackage is null)
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var companyId = contextAccessor.Context.CompanyId;
@@ -97,10 +116,20 @@ public static class AdminProductCodeEndpoints
             item.ProductId == productId && item.NormalizedCode == normalized, cancellationToken);
         if (code is null) return Error(StatusCodes.Status404NotFound, "PRODUCT_CODE_NOT_FOUND");
 
-        if (request.IsActive) code.Activate();
-        else code.Deactivate();
+        if (request.UnitsPerPackage.HasValue)
+        {
+            if (code.Kind != ProductCodeKind.PurchasePackage ||
+                request.UnitsPerPackage is < 2 or > 100_000)
+                return Error(StatusCodes.Status400BadRequest, "INVALID_PACKAGE_FACTOR");
+            code.ChangePackageFactor(request.UnitsPerPackage.Value);
+        }
+        if (request.IsActive is bool isActive)
+        {
+            if (isActive) code.Activate();
+            else code.Deactivate();
+        }
         await db.SaveChangesAsync(cancellationToken);
-        return Results.Ok(new ProductCodeResponse(code.Code, code.IsActive));
+        return Results.Ok(ToResponse(code));
     }
 
     private static Task<bool> ProductExistsAsync(
@@ -118,7 +147,13 @@ public static class AdminProductCodeEndpoints
         new ErrorResponse(new ApiError(code, "No se pudo completar la solicitud", [])),
         statusCode: statusCode);
 
-    private sealed record ProductCodeCreateRequest(string Code);
-    private sealed record ProductCodeStateRequest(string Code, bool IsActive);
-    private sealed record ProductCodeResponse(string Code, bool IsActive);
+    private static ProductCodeResponse ToResponse(ProductCode code) => new(code.Code,
+        code.IsActive, code.Kind == ProductCodeKind.PurchasePackage
+            ? "purchasePackage" : "saleAlternative", code.UnitsPerPackage);
+
+    private sealed record ProductCodeCreateRequest(string Code, string? Kind, int? UnitsPerPackage);
+    private sealed record ProductCodeStateRequest(string Code, bool? IsActive,
+        int? UnitsPerPackage);
+    private sealed record ProductCodeResponse(string Code, bool IsActive, string Kind,
+        int? UnitsPerPackage);
 }

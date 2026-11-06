@@ -38,7 +38,8 @@ public static class InventoryEndpoints
                         product.Id,
                         product.Code,
                         db.ProductCodes.Where(code => code.CompanyId == context.CompanyId &&
-                                code.ProductId == product.Id && code.IsActive)
+                                code.ProductId == product.Id && code.IsActive &&
+                                code.Kind == ProductCodeKind.SaleAlternative)
                             .Select(code => code.Code).ToArray(),
                         product.Name,
                         product.Unit,

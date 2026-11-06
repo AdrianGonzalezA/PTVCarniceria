@@ -52,6 +52,41 @@ describe('InventoryReceiptsPage', () => {
     lines: [], pieceReads: [],
   };
 
+  it('keeps a package read separate from editable loose units', () => {
+    const { fixture, http, host } = load();
+    const supplier = host.querySelector<HTMLSelectElement>('#receipt-supplier')!;
+    supplier.value = 'supplier';
+    supplier.dispatchEvent(new Event('change'));
+    input(host, '#receipt-number', 'R-1');
+    host.querySelector<HTMLFormElement>('.receipt-form')!.dispatchEvent(new Event('submit'));
+    http.expectOne('/api/inventory/receipts').flush(draft);
+    http.expectOne((request) => request.url === '/api/inventory/receipts').flush({
+      items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0,
+    });
+    fixture.detectChanges();
+
+    input(host, '#receipt-package-code', 'CAJA6');
+    input(host, '#receipt-package-count', '2');
+    host.querySelector<HTMLFormElement>('section[aria-labelledby="receipt-package-title"] form')!
+      .dispatchEvent(new Event('submit'));
+    const scan = http.expectOne('/api/inventory/receipts/receipt/packages');
+    expect(scan.request.body).toMatchObject({ version: 1, code: 'CAJA6', packageCount: 2 });
+    scan.flush({ ...draft, version: 2, lines: [{ id: 'package-line', productId: 'unit-product',
+      productCode: 'U1', productName: 'Chorizo', unit: 'u.', saleMode: 'unit',
+      expectedQuantity: null, receivedQuantity: 12, differenceStatus: 'None',
+      differenceReason: null, inventoryMovementId: null }], packageReads: [{
+      id: 'package-read', lineId: 'package-line', operationId: scan.request.body.operationId,
+      productId: 'unit-product', code: 'CAJA6', packageCount: 2,
+      unitsPerPackage: 6, unitQuantity: 12, readByUserId: 'receiver',
+      readAtUtc: '2026-11-06T12:00:00Z',
+    }] });
+    fixture.detectChanges();
+    expect(host.textContent).toContain('CAJA6');
+    expect(host.textContent).toContain('12');
+    expect(host.querySelectorAll('.receipt-panel .table-wrap tbody tr').length).toBeGreaterThan(0);
+    expect(host.querySelector<HTMLInputElement>('#receipt-package-code')?.value).toBe('');
+  });
+
   it('scans a traceable piece into a draft without changing stock', () => {
     const { fixture, http, host } = load();
     const supplier = host.querySelector<HTMLSelectElement>('#receipt-supplier')!;
@@ -71,7 +106,8 @@ describe('InventoryReceiptsPage', () => {
     profile.value = 'profile';
     profile.dispatchEvent(new Event('change'));
     input(host, '#receipt-scan-code', '25066151600');
-    host.querySelector<HTMLFormElement>('.receipt-scan form')!.dispatchEvent(new Event('submit'));
+    host.querySelector<HTMLFormElement>('section[aria-labelledby="receipt-scan-title"] form')!
+      .dispatchEvent(new Event('submit'));
     const scan = http.expectOne('/api/inventory/receipts/receipt/pieces');
     expect(scan.request.body).toMatchObject({ version: 1, productId: 'product',
       barcodeProfileId: 'profile', sourceSystem: 'Frigorífico ciclo 2',

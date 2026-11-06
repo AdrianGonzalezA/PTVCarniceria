@@ -45,6 +45,7 @@ public static class AdminProductPriceEndpoints
                 EF.Functions.ILike(product.Code, pattern, "\\") ||
                 db.ProductCodes.Any(code => code.CompanyId == companyId &&
                     code.ProductId == product.Id && code.IsActive &&
+                    code.Kind == ProductCodeKind.SaleAlternative &&
                     EF.Functions.ILike(code.Code, pattern, "\\")));
         }
 

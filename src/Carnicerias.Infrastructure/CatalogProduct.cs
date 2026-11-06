@@ -6,6 +6,12 @@ public enum ProductSaleMode
     Unit
 }
 
+public enum ProductCodeKind
+{
+    SaleAlternative,
+    PurchasePackage
+}
+
 public sealed class ProductCategory
 {
     private ProductCategory() => Name = string.Empty;
@@ -121,17 +127,25 @@ public sealed class ProductCode
         NormalizedCode = string.Empty;
     }
 
-    public ProductCode(Guid companyId, Guid productId, string code)
+    public ProductCode(Guid companyId, Guid productId, string code,
+        ProductCodeKind kind = ProductCodeKind.SaleAlternative, int? unitsPerPackage = null)
     {
         if (companyId == Guid.Empty || productId == Guid.Empty)
             throw new ArgumentException("Company and product ids are required.");
         if (string.IsNullOrWhiteSpace(code) || code.Trim().Length > 80)
             throw new ArgumentException("Product code is required and must not exceed 80 characters.", nameof(code));
+        if (!Enum.IsDefined(kind) || kind == ProductCodeKind.PurchasePackage &&
+                unitsPerPackage is null or <= 1 or > 100_000 ||
+            kind == ProductCodeKind.SaleAlternative && unitsPerPackage is not null)
+            throw new ArgumentException("Package codes require an integer factor greater than one; sale alternatives have no factor.",
+                nameof(unitsPerPackage));
 
         CompanyId = companyId;
         ProductId = productId;
         Code = code.Trim();
         NormalizedCode = Code.ToUpperInvariant();
+        Kind = kind;
+        UnitsPerPackage = unitsPerPackage;
         IsActive = true;
     }
 
@@ -139,11 +153,22 @@ public sealed class ProductCode
     public Guid ProductId { get; private set; }
     public string Code { get; private set; }
     public string NormalizedCode { get; private set; }
+    public ProductCodeKind Kind { get; private set; }
+    public int? UnitsPerPackage { get; private set; }
     public bool IsActive { get; private set; }
 
     public void Activate() => IsActive = true;
 
     public void Deactivate() => IsActive = false;
+
+    public void ChangePackageFactor(int unitsPerPackage)
+    {
+        if (Kind != ProductCodeKind.PurchasePackage)
+            throw new InvalidOperationException("Only package codes have a conversion factor.");
+        if (unitsPerPackage is < 2 or > 100_000)
+            throw new ArgumentOutOfRangeException(nameof(unitsPerPackage));
+        UnitsPerPackage = unitsPerPackage;
+    }
 }
 
 public sealed class ProductCostVersion

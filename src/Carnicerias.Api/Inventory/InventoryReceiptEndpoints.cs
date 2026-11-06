@@ -28,6 +28,7 @@ public static class InventoryReceiptEndpoints
         receipts.MapPost("", CreateAsync);
         receipts.MapPut("/{id:guid}/lines", ReplaceLinesAsync);
         receipts.MapPost("/{id:guid}/pieces", ScanPieceAsync);
+        receipts.MapPost("/{id:guid}/packages", ScanPackageAsync);
         receipts.MapPost("/{id:guid}/approve", ApproveAsync);
         receipts.MapPost("/{id:guid}/cancel", CancelAsync);
         receipts.MapGet("/{id:guid}/import/template", ImportTemplateAsync);
@@ -119,7 +120,7 @@ public static class InventoryReceiptEndpoints
             return Error(400, "VALIDATION_ERROR");
         var context = accessor.Context;
         var existing = await db.InventoryReceipts.Include(item => item.Lines)
-            .Include(item => item.PieceReads).AsSplitQuery()
+            .Include(item => item.PieceReads).Include(item => item.PackageReads).AsSplitQuery()
             .SingleOrDefaultAsync(item => item.CompanyId == context.CompanyId &&
                 item.BranchId == context.BranchId && item.OperationId == request.OperationId,
                 cancellationToken);
@@ -184,13 +185,14 @@ public static class InventoryReceiptEndpoints
                 }
                 catch (ArgumentException) { return Error(400, "INVALID_PRODUCT_QUANTITY"); }
             }
-            var pieceLineIds = receipt.PieceReads.Select(read => read.LineId).ToHashSet();
-            var pieceLines = receipt.Lines.Where(line => pieceLineIds.Contains(line.Id)).ToArray();
-            if (lines.Count + pieceLines.Length > 500)
+            var protectedLineIds = receipt.PieceReads.Select(read => read.LineId)
+                .Concat(receipt.PackageReads.Select(read => read.LineId)).ToHashSet();
+            var protectedLines = receipt.Lines.Where(line => protectedLineIds.Contains(line.Id)).ToArray();
+            if (lines.Count + protectedLines.Length > 500)
                 return Error(400, "RECEIPT_LINE_LIMIT");
             db.InventoryReceiptLines.RemoveRange(receipt.Lines.Where(line =>
-                !pieceLineIds.Contains(line.Id)));
-            receipt.ReplaceLines([..lines, ..pieceLines]);
+                !protectedLineIds.Contains(line.Id)));
+            receipt.ReplaceLines([..lines, ..protectedLines]);
             db.InventoryReceiptLines.AddRange(lines);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -282,6 +284,62 @@ public static class InventoryReceiptEndpoints
         }
     }
 
+    private static async Task<IResult> ScanPackageAsync(Guid id, ScanPackageRequest? request,
+        PlatformAccessDbContext db, OperationalContextAccessor accessor, HttpContext http,
+        TimeProvider clock, CancellationToken cancellationToken)
+    {
+        if (!AllowedOrigin(http)) return Error(403, "CSRF_REJECTED");
+        if (request is null || request.Version < 1 || request.OperationId == Guid.Empty ||
+            !Required(request.Code, 80) || request.PackageCount is < 1 or > 100_000)
+            return Error(400, "VALIDATION_ERROR");
+        var context = accessor.Context;
+        var normalized = request.Code.Trim().ToUpperInvariant();
+        try
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable, cancellationToken);
+            var receipt = await FindAsync(db, accessor, id, true, cancellationToken);
+            if (receipt is null) return Error(404, "RECEIPT_NOT_FOUND");
+            var existing = receipt.PackageReads.SingleOrDefault(read =>
+                read.OperationId == request.OperationId);
+            if (existing is not null)
+                return string.Equals(existing.Code, request.Code.Trim(),
+                           StringComparison.OrdinalIgnoreCase) &&
+                       existing.PackageCount == request.PackageCount
+                    ? Results.Ok(ToResponse(receipt)) : Error(409, "OPERATION_ID_REUSED");
+            if (receipt.Status != InventoryReceiptStatus.Draft)
+                return Error(409, "RECEIPT_NOT_DRAFT");
+            if (receipt.Version != request.Version) return Error(409, "RECEIPT_VERSION_CHANGED");
+            if (receipt.Lines.Count >= 500) return Error(400, "RECEIPT_LINE_LIMIT");
+            var code = await db.ProductCodes.AsNoTracking().SingleOrDefaultAsync(item =>
+                item.CompanyId == context.CompanyId && item.NormalizedCode == normalized &&
+                item.Kind == ProductCodeKind.PurchasePackage && item.IsActive,
+                cancellationToken);
+            if (code is null) return Error(404, "PACKAGE_CODE_NOT_AVAILABLE");
+            var product = await db.CatalogProducts.AsNoTracking().SingleOrDefaultAsync(item =>
+                item.CompanyId == context.CompanyId && item.Id == code.ProductId &&
+                item.IsActive && item.SaleMode == ProductSaleMode.Unit, cancellationToken);
+            if (product is null) return Error(404, "UNIT_PRODUCT_NOT_AVAILABLE");
+            if ((long)request.PackageCount * code.UnitsPerPackage!.Value > 100_000)
+                return Error(400, "INVALID_PACKAGE_QUANTITY");
+            var line = new InventoryReceiptLine(receipt.Id, product,
+                request.PackageCount * code.UnitsPerPackage.Value);
+            var read = new InventoryReceiptPackageRead(context.CompanyId, receipt.Id,
+                line.Id, request.OperationId, code, request.PackageCount,
+                context.UserId, clock.GetUtcNow());
+            receipt.AddPackageRead(line, read);
+            db.InventoryReceiptLines.Add(line);
+            db.InventoryReceiptPackageReads.Add(read);
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return Results.Ok(ToResponse(receipt));
+        }
+        catch (Exception exception) when (IsConcurrencyConflict(exception))
+        {
+            return Error(409, "PACKAGE_READ_CONFLICT");
+        }
+    }
+
     private static async Task<IResult> ImportTemplateAsync(Guid id, PlatformAccessDbContext db,
         OperationalContextAccessor accessor, CancellationToken cancellationToken)
     {
@@ -295,6 +353,7 @@ public static class InventoryReceiptEndpoints
 
     private static async Task<IResult> PreviewImportAsync(Guid id, int version,
         PlatformAccessDbContext db, OperationalContextAccessor accessor, HttpContext http,
+        TimeProvider clock,
         CancellationToken cancellationToken)
     {
         if (!AllowedOrigin(http)) return Error(403, "CSRF_REJECTED");
@@ -306,12 +365,14 @@ public static class InventoryReceiptEndpoints
         if (receipt.Version != version) return Error(409, "RECEIPT_VERSION_CHANGED");
         var upload = await ReadSpreadsheetAsync(http.Request, cancellationToken);
         if (upload.Error is not null) return upload.Error;
-        var plan = await PlanImportAsync(db, receipt, upload.Bytes!, cancellationToken);
+        var plan = await PlanImportAsync(db, receipt, upload.Bytes!,
+            accessor.Context.UserId, clock.GetUtcNow(), cancellationToken);
         return Results.Json(plan.Preview, statusCode: plan.Preview.Issues.Count == 0 ? 200 : 400);
     }
 
     private static async Task<IResult> ApplyImportAsync(Guid id, int version,
         PlatformAccessDbContext db, OperationalContextAccessor accessor, HttpContext http,
+        TimeProvider clock,
         CancellationToken cancellationToken)
     {
         if (!AllowedOrigin(http)) return Error(403, "CSRF_REJECTED");
@@ -327,17 +388,24 @@ public static class InventoryReceiptEndpoints
             if (receipt.Status != InventoryReceiptStatus.Draft)
                 return Error(409, "RECEIPT_NOT_DRAFT");
             if (receipt.Version != version) return Error(409, "RECEIPT_VERSION_CHANGED");
-            var plan = await PlanImportAsync(db, receipt, upload.Bytes!, cancellationToken);
+            var plan = await PlanImportAsync(db, receipt, upload.Bytes!,
+                accessor.Context.UserId, clock.GetUtcNow(), cancellationToken);
             if (!plan.Preview.CanApply)
                 return Results.Json(plan.Preview, statusCode: 400);
-            var pieceLineIds = receipt.PieceReads.Select(read => read.LineId).ToHashSet();
-            var pieceLines = receipt.Lines.Where(line => pieceLineIds.Contains(line.Id)).ToArray();
-            if (plan.Lines.Count + pieceLines.Length > 500)
+            var protectedLineIds = receipt.PieceReads.Select(read => read.LineId)
+                .Concat(receipt.PackageReads.Select(read => read.LineId)).ToHashSet();
+            var protectedLines = receipt.Lines.Where(line => protectedLineIds.Contains(line.Id)).ToArray();
+            if (plan.Lines.Count + protectedLines.Length > 500)
                 return Error(400, "RECEIPT_LINE_LIMIT");
             db.InventoryReceiptLines.RemoveRange(receipt.Lines.Where(line =>
-                !pieceLineIds.Contains(line.Id)));
-            receipt.ReplaceLines([..plan.Lines, ..pieceLines]);
+                !protectedLineIds.Contains(line.Id)));
+            var packageLineIds = plan.PackageReads.Select(read => read.LineId).ToHashSet();
+            receipt.ReplaceLines([..plan.Lines.Where(line => !packageLineIds.Contains(line.Id)),
+                ..protectedLines]);
+            foreach (var read in plan.PackageReads)
+                receipt.AddPackageRead(plan.Lines.Single(line => line.Id == read.LineId), read);
             db.InventoryReceiptLines.AddRange(plan.Lines);
+            db.InventoryReceiptPackageReads.AddRange(plan.PackageReads);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return Results.Ok(ToResponse(receipt));
@@ -349,12 +417,16 @@ public static class InventoryReceiptEndpoints
     }
 
     private static async Task<ReceiptImportPlan> PlanImportAsync(PlatformAccessDbContext db,
-        InventoryReceipt receipt, byte[] bytes, CancellationToken cancellationToken)
+        InventoryReceipt receipt, byte[] bytes, Guid actorUserId, DateTimeOffset now,
+        CancellationToken cancellationToken)
     {
         var parsed = AdminExcelWorkbook.Read("receipts", bytes);
         if (parsed.Issues.Count != 0)
             return ReceiptImportPlanner.Plan(receipt.CompanyId, receipt.Id, parsed, [], []);
-        var codes = parsed.Rows.Select(row => row.Text("CodigoArticulo"))
+        var codes = parsed.Rows.Where(row => row.Sheet == "Recepciones")
+            .Select(row => row.Text("CodigoArticulo"))
+            .Concat(parsed.Rows.Where(row => row.Sheet == "Bultos")
+                .Select(row => row.Text("CodigoBulto")))
             .Where(code => !string.IsNullOrWhiteSpace(code))
             .Select(code => code!.Trim().ToUpperInvariant()).Distinct().ToArray();
         var alternatives = await db.ProductCodes.AsNoTracking().Where(code =>
@@ -367,7 +439,7 @@ public static class InventoryReceiptEndpoints
                 (codes.Contains(product.NormalizedCode) || alternateIds.Contains(product.Id)))
             .ToArrayAsync(cancellationToken);
         return ReceiptImportPlanner.Plan(receipt.CompanyId, receipt.Id, parsed,
-            products, alternatives);
+            products, alternatives, actorUserId, now);
     }
 
     private static async Task<(byte[]? Bytes, IResult? Error)> ReadSpreadsheetAsync(
@@ -420,6 +492,11 @@ public static class InventoryReceiptEndpoints
                     activeProducts[line.ProductId].Unit != line.Unit))
                 return Error(409, "PRODUCT_NOT_AVAILABLE");
             var readsByLine = receipt.PieceReads.ToDictionary(read => read.LineId);
+            if (receipt.PackageReads.Any(read => receipt.Lines.All(line =>
+                    line.Id != read.LineId || line.ProductId != read.ProductId ||
+                    line.ReceivedQuantity != read.UnitQuantity ||
+                    line.SaleMode != ProductSaleMode.Unit)))
+                return Error(409, "PACKAGE_READ_LINE_MISMATCH");
             if (receipt.PieceReads.Any(read => receipt.Lines.All(line =>
                     line.Id != read.LineId || line.ReceivedQuantity != read.WeightKg)))
                 return Error(409, "PIECE_READ_LINE_MISMATCH");
@@ -566,7 +643,8 @@ public static class InventoryReceiptEndpoints
     {
         var context = accessor.Context;
         var query = db.InventoryReceipts.Include(item => item.Lines)
-            .Include(item => item.PieceReads).AsSplitQuery().AsQueryable();
+            .Include(item => item.PieceReads).Include(item => item.PackageReads)
+            .AsSplitQuery().AsQueryable();
         if (!tracked) query = query.AsNoTracking();
         return query.SingleOrDefaultAsync(item => item.Id == id &&
             item.CompanyId == context.CompanyId && item.BranchId == context.BranchId,
@@ -587,7 +665,11 @@ public static class InventoryReceiptEndpoints
         receipt.PieceReads.Select(read => new ReceiptPieceReadResponse(read.Id, read.LineId,
             read.OperationId, read.BarcodeProfileId, read.SourceSystem, read.IdentifierField,
             read.ExternalIdentifier, read.RawBarcode, read.WeightKg,
-            read.InventoryPieceId)).ToArray());
+            read.InventoryPieceId)).ToArray(),
+        receipt.PackageReads.Select(read => new ReceiptPackageReadResponse(read.Id, read.LineId,
+            read.OperationId, read.ProductId, read.Code, read.PackageCount,
+            read.UnitsPerPackage, read.UnitQuantity, read.ReadByUserId,
+            read.ReadAtUtc)).ToArray());
 
     private static bool AllowedOrigin(HttpContext context)
     {
@@ -623,6 +705,8 @@ public static class InventoryReceiptEndpoints
         decimal? ExpectedQuantity);
     private sealed record ScanPieceRequest(int Version, Guid OperationId, Guid ProductId,
         Guid BarcodeProfileId, string SourceSystem, string IdentifierField, string Code);
+    private sealed record ScanPackageRequest(int Version, Guid OperationId,
+        string Code, int PackageCount);
     private sealed record VersionRequest(int Version);
     private sealed record ResolveDifferenceRequest(int Version, string Reason);
     private sealed record ReceiptSummary(Guid Id, Guid OperationId, string SupplierName,
@@ -637,11 +721,16 @@ public static class InventoryReceiptEndpoints
     private sealed record ReceiptPieceReadResponse(Guid Id, Guid LineId, Guid OperationId,
         Guid BarcodeProfileId, string SourceSystem, string IdentifierField,
         string ExternalIdentifier, string RawBarcode, decimal WeightKg, Guid? InventoryPieceId);
+    private sealed record ReceiptPackageReadResponse(Guid Id, Guid LineId,
+        Guid OperationId, Guid ProductId, string Code, int PackageCount,
+        int UnitsPerPackage, int UnitQuantity, Guid ReadByUserId,
+        DateTimeOffset ReadAtUtc);
     private sealed record ReceiptResponse(Guid Id, Guid OperationId, Guid? SupplierId,
         string SupplierCode, string SupplierName, string? SupplierIdentification,
         string? SourceSystem, string DocumentType, string DocumentNumber, DateOnly DocumentDate,
         string? Destination, string? ExternalReference, string Status, int Version,
         DateTimeOffset CreatedAtUtc, DateTimeOffset? ApprovedAtUtc,
         DateTimeOffset? CanceledAtUtc, IReadOnlyList<ReceiptLineResponse> Lines,
-        IReadOnlyList<ReceiptPieceReadResponse> PieceReads);
+        IReadOnlyList<ReceiptPieceReadResponse> PieceReads,
+        IReadOnlyList<ReceiptPackageReadResponse> PackageReads);
 }

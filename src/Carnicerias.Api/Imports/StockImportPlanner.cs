@@ -18,7 +18,8 @@ public static class StockImportPlanner
             .ToDictionary(product => product.NormalizedCode, StringComparer.Ordinal);
         var byId = products.Where(product => product.CompanyId == companyId)
             .ToDictionary(product => product.Id);
-        foreach (var code in alternativeCodes ?? [])
+        foreach (var code in (alternativeCodes ?? []).Where(code =>
+                     code.Kind == ProductCodeKind.SaleAlternative))
             if (code.CompanyId == companyId && code.IsActive &&
                 byId.TryGetValue(code.ProductId, out var article))
                 byCode.TryAdd(code.NormalizedCode, article);

@@ -55,7 +55,10 @@ export class ProductsPage implements OnInit {
   protected readonly actionMessage = signal<string | null>(null);
   protected readonly actionError = signal<string | null>(null);
   protected readonly alternateCodes = signal<readonly AdminProductCode[]>([]);
+  protected readonly codeFactors = signal<Record<string, string>>({});
   protected readonly alternateDraft = signal('');
+  protected readonly codeKind = signal<'saleAlternative' | 'purchasePackage'>('saleAlternative');
+  protected readonly packageFactor = signal('');
   protected readonly codesLoading = signal(false);
   protected readonly codeSaving = signal(false);
   protected readonly codeAction = signal<string | null>(null);
@@ -142,6 +145,8 @@ export class ProductsPage implements OnInit {
     this.actionMessage.set(null);
     this.editorOpen.set(true);
     this.alternateDraft.set('');
+    this.codeKind.set('saleAlternative');
+    this.packageFactor.set('');
     this.loadCodes(product.id);
   }
 
@@ -246,20 +251,41 @@ export class ProductsPage implements OnInit {
     this.alternateDraft.set((event.target as HTMLInputElement).value.slice(0, 80));
   }
 
+  protected updateCodeKind(event: Event): void {
+    this.codeKind.set((event.target as HTMLSelectElement).value as 'saleAlternative' | 'purchasePackage');
+    this.packageFactor.set('');
+  }
+
+  protected updatePackageFactor(event: Event): void {
+    this.packageFactor.set((event.target as HTMLInputElement).value);
+  }
+
+  protected validPackageFactor(): boolean {
+    const value = Number(this.packageFactor());
+    return Number.isInteger(value) && value >= 2 && value <= 100_000;
+  }
+
   protected addCode(): void {
     const product = this.editingProduct();
     const code = this.alternateDraft().trim();
     if (!product || this.codeSaving() || !code) return;
+    const kind = this.codeKind();
+    if (kind === 'purchasePackage' && (product.saleMode !== 'unit' || !this.validPackageFactor())) return;
     this.codeSaving.set(true);
     this.codesError.set(null);
-    this.codesClient.create(product.id, code).subscribe({
+    this.codesClient.create(product.id, code, kind,
+      kind === 'purchasePackage' ? Number(this.packageFactor()) : undefined).subscribe({
       next: (created) => {
         const codes = [...this.alternateCodes(), created];
         this.alternateCodes.set(codes);
+        if (created.kind === 'purchasePackage' && created.unitsPerPackage)
+          this.codeFactors.update(values => ({ ...values,
+            [created.code]: String(created.unitsPerPackage) }));
         this.updateCodeCount(product, codes);
         this.alternateDraft.set('');
+        this.packageFactor.set('');
         this.codeSaving.set(false);
-        this.actionMessage.set('Código alternativo agregado.');
+        this.actionMessage.set(kind === 'purchasePackage' ? 'Código de bulto agregado.' : 'Código alternativo agregado.');
       },
       error: (error: HttpErrorResponse) => {
         this.codeSaving.set(false);
@@ -273,7 +299,9 @@ export class ProductsPage implements OnInit {
   protected toggleCode(code: AdminProductCode): void {
     const product = this.editingProduct();
     if (!product || this.codeSaving()) return;
-    if (code.isActive && !window.confirm('¿Inactivar este código alternativo para la búsqueda en caja?'))
+    if (code.isActive && !window.confirm(code.kind === 'purchasePackage'
+      ? '¿Inactivar este código de bulto para nuevas recepciones?'
+      : '¿Inactivar este código alternativo para la búsqueda en caja?'))
       return;
     this.codeSaving.set(true);
     this.codeAction.set(code.code);
@@ -292,6 +320,35 @@ export class ProductsPage implements OnInit {
         this.codeSaving.set(false);
         this.codeAction.set(null);
         this.codesError.set('No se pudo cambiar el estado del código. Intentá de nuevo.');
+      },
+    });
+  }
+
+  protected updateCodeFactor(code: string, event: Event): void {
+    this.codeFactors.update(values => ({ ...values,
+      [code]: (event.target as HTMLInputElement).value }));
+  }
+
+  protected saveCodeFactor(code: AdminProductCode): void {
+    const product = this.editingProduct();
+    const factor = Number(this.codeFactors()[code.code]);
+    if (!product || code.kind !== 'purchasePackage' || this.codeSaving() ||
+        !Number.isInteger(factor) || factor < 2 || factor > 100_000) {
+      this.codesError.set('Ingresá un factor entero entre 2 y 100.000.');
+      return;
+    }
+    this.codeSaving.set(true);
+    this.codesError.set(null);
+    this.codesClient.changeFactor(product.id, code.code, factor).subscribe({
+      next: (updated) => {
+        this.alternateCodes.update(codes => codes.map(item =>
+          item.code === updated.code ? updated : item));
+        this.codeSaving.set(false);
+        this.actionMessage.set('Factor actualizado. Las recepciones previas conservan el factor capturado.');
+      },
+      error: () => {
+        this.codeSaving.set(false);
+        this.codesError.set('No se pudo actualizar el factor del bulto.');
       },
     });
   }
@@ -337,6 +394,9 @@ export class ProductsPage implements OnInit {
       next: (codes) => {
         if (this.editingProduct()?.id !== productId) return;
         this.alternateCodes.set(codes);
+        this.codeFactors.set(Object.fromEntries(codes.filter(code =>
+          code.kind === 'purchasePackage').map(code =>
+          [code.code, String(code.unitsPerPackage ?? '')])));
         this.codesLoading.set(false);
       },
       error: () => {
@@ -348,7 +408,8 @@ export class ProductsPage implements OnInit {
   }
 
   private updateCodeCount(product: AdminProduct, codes: readonly AdminProductCode[]): void {
-    const updated = { ...product, alternateCodeCount: codes.filter((code) => code.isActive).length };
+    const updated = { ...product, alternateCodeCount: codes.filter((code) =>
+      code.isActive && code.kind !== 'purchasePackage').length };
     this.editingProduct.set(updated);
     this.replaceProduct(updated);
   }

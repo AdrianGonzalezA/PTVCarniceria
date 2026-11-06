@@ -203,6 +203,42 @@ describe('ProductsPage', () => {
     confirmation.mockRestore();
   });
 
+  it('creates a purchase package code with its conversion factor for a unit article', () => {
+    const { fixture, http, page } = load([{ ...product, unit: 'u.', saleMode: 'unit' }]);
+    page.querySelector<HTMLButtonElement>('tbody .edit-button')!.click();
+    http.expectOne('/api/admin/products/product-1/codes').flush([]);
+    fixture.detectChanges();
+
+    const kind = page.querySelector<HTMLSelectElement>('#code-kind')!;
+    kind.value = 'purchasePackage';
+    kind.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    const factor = page.querySelector<HTMLInputElement>('#package-factor')!;
+    factor.value = '6';
+    factor.dispatchEvent(new Event('input'));
+    const code = page.querySelector<HTMLInputElement>('#alternate-code')!;
+    code.value = 'CAJA6';
+    code.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    page.querySelector<HTMLButtonElement>('.add-code-button')!.click();
+
+    const create = http.expectOne('/api/admin/products/product-1/codes');
+    expect(create.request.body).toEqual({ code: 'CAJA6', kind: 'purchasePackage', unitsPerPackage: 6 });
+    create.flush({ code: 'CAJA6', kind: 'purchasePackage', unitsPerPackage: 6, isActive: true });
+    fixture.detectChanges();
+    expect(page.querySelector('.alternate-codes')?.textContent).toContain('Caja de 6 unidades');
+    const updatedFactor = page.querySelector<HTMLInputElement>('#factor-CAJA6')!;
+    updatedFactor.value = '12';
+    updatedFactor.dispatchEvent(new Event('input'));
+    page.querySelector<HTMLButtonElement>('.save-package-factor')!.click();
+    const update = http.expectOne('/api/admin/products/product-1/codes');
+    expect(update.request.method).toBe('PATCH');
+    expect(update.request.body).toEqual({ code: 'CAJA6', unitsPerPackage: 12 });
+    update.flush({ code: 'CAJA6', kind: 'purchasePackage', unitsPerPackage: 12, isActive: true });
+    fixture.detectChanges();
+    expect(page.querySelector('.alternate-codes')?.textContent).toContain('Caja de 12 unidades');
+  });
+
   it('inactivates an article after confirmation', () => {
     const { fixture, http, page } = load();
 

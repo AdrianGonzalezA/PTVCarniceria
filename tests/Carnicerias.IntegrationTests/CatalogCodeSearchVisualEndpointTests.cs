@@ -41,6 +41,8 @@ public sealed class CatalogCodeSearchVisualEndpointTests
         var product = new CatalogProduct(company.Id, category.Id, $"P{suffix}",
             "Artículo I06", "u.", ProductSaleMode.Unit, 10m);
         var activeCode = new ProductCode(company.Id, product.Id, $"A{suffix}");
+        var packageCode = new ProductCode(company.Id, product.Id, $"B{suffix}",
+            ProductCodeKind.PurchasePackage, 6);
         var inactiveCode = new ProductCode(company.Id, product.Id, $"X{suffix}");
         inactiveCode.Deactivate();
         var list = new PriceList(company.Id, $"Lista I06 {suffix}");
@@ -56,7 +58,9 @@ public sealed class CatalogCodeSearchVisualEndpointTests
                 Assert.Equal(2, permissionIds.Length);
                 db.AddRange(company, branch, role, user,
                     new UserAssignment(user.Id, role.Id, company.Id), category,
-                    product, activeCode, inactiveCode, list,
+                    product, activeCode, inactiveCode, packageCode, list,
+                    new ProductPrice(company.Id, list.Id, product.Id, 20m,
+                        DateTimeOffset.UtcNow.AddMinutes(-1), user.Id),
                     new BranchPriceList(company.Id, branch.Id, list.Id),
                     new BranchInventoryBalance(company.Id, branch.Id, product.Id));
                 db.RolePermissions.AddRange(permissionIds.Select(id => new RoleCapability(role.Id, id)));
@@ -77,6 +81,30 @@ public sealed class CatalogCodeSearchVisualEndpointTests
             Assert.True(context.StatusCode == HttpStatusCode.OK,
                 await context.Content.ReadAsStringAsync());
 
+            using (var createdPackage = await client.PostAsJsonAsync(
+                $"/api/admin/products/{product.Id}/codes",
+                new { code = $"C{suffix}", kind = "purchasePackage", unitsPerPackage = 12 }))
+            {
+                Assert.Equal(HttpStatusCode.Created, createdPackage.StatusCode);
+                var body = await createdPackage.Content.ReadFromJsonAsync<JsonElement>();
+                Assert.Equal("purchasePackage", body.GetProperty("kind").GetString());
+                Assert.Equal(12, body.GetProperty("unitsPerPackage").GetInt32());
+            }
+            using (var changedFactor = await client.PatchAsJsonAsync(
+                $"/api/admin/products/{product.Id}/codes",
+                new { code = $"C{suffix}", unitsPerPackage = 18 }))
+            {
+                Assert.Equal(HttpStatusCode.OK, changedFactor.StatusCode);
+                var body = await changedFactor.Content.ReadFromJsonAsync<JsonElement>();
+                Assert.Equal(18, body.GetProperty("unitsPerPackage").GetInt32());
+            }
+            var packageCatalog = await GetAsync(client,
+                $"/api/catalog/products?priceListId={list.Id}&code={packageCode.Code}");
+            Assert.Equal(0, packageCatalog.GetProperty("totalItems").GetInt64());
+            var alternativeCatalog = await GetAsync(client,
+                $"/api/catalog/products?priceListId={list.Id}&code={activeCode.Code}");
+            Assert.Equal(1, alternativeCatalog.GetProperty("totalItems").GetInt64());
+
             foreach (var code in new[] { product.Code, activeCode.Code })
             {
                 var products = await GetAsync(client, $"/api/admin/products?search={code}");
@@ -94,6 +122,9 @@ public sealed class CatalogCodeSearchVisualEndpointTests
             var inactivePrices = await GetAsync(client,
                 $"/api/admin/price-lists/{list.Id}/prices?search={inactiveCode.Code}");
             Assert.Equal(0, inactivePrices.GetProperty("totalItems").GetInt64());
+            var packagePrices = await GetAsync(client,
+                $"/api/admin/price-lists/{list.Id}/prices?search={packageCode.Code}");
+            Assert.Equal(0, packagePrices.GetProperty("totalItems").GetInt64());
             var stock = await GetAsync(client, "/api/inventory/stock");
             var stockItem = Assert.Single(stock.EnumerateArray());
             Assert.Equal(product.Id, stockItem.GetProperty("productId").GetGuid());
@@ -120,6 +151,16 @@ public sealed class CatalogCodeSearchVisualEndpointTests
                             ["Descripcion"] = new(null, null)
                         })], []), DateTimeOffset.UtcNow, false, CancellationToken.None);
                 Assert.Contains(inactivePreview.Issues, item => item.Code == "PRODUCT_NOT_AVAILABLE");
+                var packagePreview = await AdminExcelImportProcessor.AssessAsync(db, company.Id,
+                    branch.Id, user.Id, "stock", new ParsedImport([
+                        new ImportRow("Existencias", 2, new Dictionary<string, ImportCell>
+                        {
+                            ["CodigoArticulo"] = new(packageCode.Code, null),
+                            ["Variacion"] = new(null, 1m),
+                            ["Descripcion"] = new(null, null)
+                        })], []), DateTimeOffset.UtcNow, false, CancellationToken.None);
+                Assert.Contains(packagePreview.Issues,
+                    item => item.Code == "PRODUCT_NOT_AVAILABLE");
                 var pricePreview = await AdminExcelImportProcessor.AssessAsync(db, company.Id,
                     branch.Id, user.Id, "price-lists", new ParsedImport([
                         new ImportRow("Precios", 2, new Dictionary<string, ImportCell>
@@ -129,7 +170,7 @@ public sealed class CatalogCodeSearchVisualEndpointTests
                             ["PrecioARS"] = new(null, 25m)
                         })], []), DateTimeOffset.UtcNow, false, CancellationToken.None);
                 Assert.True(pricePreview.CanApply);
-                Assert.Contains(pricePreview.Rows, item => item.Status == "create");
+                Assert.Contains(pricePreview.Rows, item => item.Status == "update");
                 var inactivePricePreview = await AdminExcelImportProcessor.AssessAsync(db,
                     company.Id, branch.Id, user.Id, "price-lists", new ParsedImport([
                         new ImportRow("Precios", 2, new Dictionary<string, ImportCell>
@@ -151,6 +192,7 @@ public sealed class CatalogCodeSearchVisualEndpointTests
                 await db.Sessions.Where(item => item.UserId == user.Id).ExecuteDeleteAsync();
                 await db.ProductCodes.Where(item => item.CompanyId == company.Id).ExecuteDeleteAsync();
                 await db.BranchInventoryBalances.Where(item => item.CompanyId == company.Id).ExecuteDeleteAsync();
+                await db.ProductPrices.Where(item => item.CompanyId == company.Id).ExecuteDeleteAsync();
                 await db.BranchPriceLists.Where(item => item.CompanyId == company.Id).ExecuteDeleteAsync();
                 await db.CatalogProducts.Where(item => item.CompanyId == company.Id).ExecuteDeleteAsync();
                 await db.ProductCategories.Where(item => item.CompanyId == company.Id).ExecuteDeleteAsync();

@@ -6,6 +6,40 @@ namespace Carnicerias.IntegrationTests;
 public sealed class InventoryReceiptTests
 {
     [Fact]
+    public void PackageReadsPreserveFactorsAndSumWithLooseUnits()
+    {
+        var company = Guid.NewGuid();
+        var actor = Guid.NewGuid();
+        var product = Product(company, ProductSaleMode.Unit);
+        var receipt = new InventoryReceipt(company, Guid.NewGuid(), Guid.NewGuid(),
+            new Supplier(company, "F1", "Proveedor"), "remito", "B-1",
+            new DateOnly(2026, 11, 6), actor, DateTimeOffset.UtcNow);
+        var six = new ProductCode(company, product.Id, "CAJA6", ProductCodeKind.PurchasePackage, 6);
+        var twelve = new ProductCode(company, product.Id, "CAJA12", ProductCodeKind.PurchasePackage, 12);
+
+        AddPackage(six, 2);
+        six.ChangePackageFactor(12);
+        AddPackage(twelve, 1);
+        var loose = new InventoryReceiptLine(receipt.Id, product, 2);
+        receipt.ReplaceLines([.. receipt.Lines, loose]);
+
+        Assert.Equal(26, receipt.Lines.Sum(line => line.ReceivedQuantity));
+        Assert.Equal([6, 12], receipt.PackageReads.Select(read => read.UnitsPerPackage));
+        Assert.Throws<InvalidOperationException>(() => receipt.ReplaceLines([loose]));
+        receipt.Approve(actor, DateTimeOffset.UtcNow);
+        Assert.Equal(InventoryReceiptStatus.Approved, receipt.Status);
+
+        void AddPackage(ProductCode code, int count)
+        {
+            var line = new InventoryReceiptLine(receipt.Id, product,
+                count * code.UnitsPerPackage!.Value);
+            var read = new InventoryReceiptPackageRead(company, receipt.Id, line.Id,
+                Guid.NewGuid(), code, count, actor, DateTimeOffset.UtcNow);
+            receipt.AddPackageRead(line, read);
+        }
+    }
+
+    [Fact]
     public void TraceableReadsRemainIndividualAndCannotBeRemovedByGenericEdits()
     {
         var company = Guid.NewGuid();

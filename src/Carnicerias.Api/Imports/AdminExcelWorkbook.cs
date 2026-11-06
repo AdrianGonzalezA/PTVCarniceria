@@ -31,7 +31,9 @@ public static class AdminExcelWorkbook
             [
                 new("Articulos", ["Codigo", "Nombre", "Categoria", "ModalidadVenta", "Unidad", "CostoARS"],
                     ["2546", "CORTITO C/FALDA EXP", "Carnes", "weight", "kg", "1250.00"]),
-                new("CodigosAlternativos", ["CodigoArticulo", "CodigoAlternativo"], ["2546", "02546"])
+                new("CodigosAlternativos", ["CodigoArticulo", "CodigoAlternativo"], ["2546", "02546"]),
+                new("CodigosBulto", ["CodigoArticulo", "CodigoBulto", "UnidadesPorBulto"],
+                    ["CHORI-1", "CAJA6", "6"], Optional: true)
             ],
             ["price-lists"] =
             [
@@ -43,9 +45,12 @@ public static class AdminExcelWorkbook
                 ["CLI-001", "Cliente de ejemplo", "NO"])],
             ["stock"] = [new("Existencias", ["CodigoArticulo", "Variacion", "Descripcion"],
                 ["2546", "5.500", "Reposición"])],
-            ["receipts"] = [new("Recepciones",
-                ["CodigoArticulo", "CantidadEsperada", "CantidadRecibida"],
-                ["2546", "5.500", "5.250"])]
+            ["receipts"] = [
+                new("Recepciones", ["CodigoArticulo", "CantidadEsperada", "CantidadRecibida"],
+                    ["2546", "5.500", "5.250"]),
+                new("Bultos", ["CodigoBulto", "CantidadBultos", "CantidadEsperada"],
+                    ["CAJA6", "2", "12"], Optional: true)
+            ]
         };
 
     public static bool Supports(string kind) => Definitions.ContainsKey(kind);
@@ -68,7 +73,9 @@ public static class AdminExcelWorkbook
                 if (IsNumericColumn(definition.Columns[column]))
                     sheet.Column(column + 1).Style.NumberFormat.Format =
                         definition.Columns[column] is "Variacion" or "CantidadEsperada" or
-                            "CantidadRecibida" ? "0.000" : "0.00";
+                            "CantidadRecibida" ? "0.000" :
+                            definition.Columns[column] is "CantidadBultos" or "UnidadesPorBulto"
+                                ? "0" : "0.00";
             }
             sheet.SheetView.FreezeRows(1);
         }
@@ -150,7 +157,8 @@ public static class AdminExcelWorkbook
                 var sheet = workbook.Worksheets.FirstOrDefault(item => item.Name == definition.Name);
                 if (sheet is null)
                 {
-                    issues.Add(new ImportIssue(definition.Name, 1, "", "MISSING_SHEET", "Falta la hoja de carga."));
+                    if (!definition.Optional)
+                        issues.Add(new ImportIssue(definition.Name, 1, "", "MISSING_SHEET", "Falta la hoja de carga."));
                     continue;
                 }
                 ReadSheet(sheet, definition, rows, issues);
@@ -230,7 +238,8 @@ public static class AdminExcelWorkbook
     }
 
     private static bool IsNumericColumn(string column) => column is
-        "CostoARS" or "PrecioARS" or "Variacion" or "CantidadEsperada" or "CantidadRecibida";
+        "CostoARS" or "PrecioARS" or "Variacion" or "CantidadEsperada" or
+            "CantidadRecibida" or "CantidadBultos" or "UnidadesPorBulto";
 
     private static bool SafeZip(byte[] bytes)
     {
@@ -274,5 +283,6 @@ public static class AdminExcelWorkbook
             System.Xml.XmlException) { return false; }
     }
 
-    private sealed record SheetDefinition(string Name, string[] Columns, string[] Example);
+    private sealed record SheetDefinition(string Name, string[] Columns, string[] Example,
+        bool Optional = false);
 }

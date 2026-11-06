@@ -1889,6 +1889,67 @@ namespace Carnicerias.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Carnicerias.Infrastructure.InventoryReceiptPackageRead", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("LineId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("PackageCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ReadAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ReadByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ReceiptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("UnitQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UnitsPerPackage")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReadByUserId");
+
+                    b.HasIndex("CompanyId", "LineId")
+                        .IsUnique();
+
+                    b.HasIndex("CompanyId", "ProductId");
+
+                    b.HasIndex("CompanyId", "ReceiptId");
+
+                    b.HasIndex("ReceiptId", "OperationId")
+                        .IsUnique();
+
+                    b.ToTable("receipt_package_reads", "inventory", t =>
+                        {
+                            t.HasCheckConstraint("CK_receipt_package_reads_quantity", "\"UnitsPerPackage\" BETWEEN 2 AND 100000 AND \"PackageCount\" BETWEEN 1 AND 100000 AND \"UnitQuantity\" BETWEEN 1 AND 100000 AND \"UnitQuantity\" = \"PackageCount\"::bigint * \"UnitsPerPackage\"");
+                        });
+                });
+
             modelBuilder.Entity("Carnicerias.Infrastructure.InventoryReceiptPieceRead", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2499,6 +2560,16 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("SaleAlternative");
+
+                    b.Property<int?>("UnitsPerPackage")
+                        .HasColumnType("integer");
+
                     b.HasKey("ProductId", "NormalizedCode");
 
                     b.HasIndex("CompanyId", "NormalizedCode")
@@ -2506,7 +2577,10 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.HasIndex("CompanyId", "ProductId");
 
-                    b.ToTable("product_codes", "catalog_pricing");
+                    b.ToTable("product_codes", "catalog_pricing", t =>
+                        {
+                            t.HasCheckConstraint("CK_product_codes_kind_factor", "(\"Kind\" = 'SaleAlternative' AND \"UnitsPerPackage\" IS NULL) OR (\"Kind\" = 'PurchasePackage' AND \"UnitsPerPackage\" BETWEEN 2 AND 100000)");
+                        });
                 });
 
             modelBuilder.Entity("Carnicerias.Infrastructure.ProductCostVersion", b =>
@@ -4199,6 +4273,36 @@ namespace Carnicerias.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Carnicerias.Infrastructure.InventoryReceiptPackageRead", b =>
+                {
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("ReadByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.InventoryReceiptLine", null)
+                        .WithOne()
+                        .HasForeignKey("Carnicerias.Infrastructure.InventoryReceiptPackageRead", "CompanyId", "LineId")
+                        .HasPrincipalKey("Carnicerias.Infrastructure.InventoryReceiptLine", "CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.CatalogProduct", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "ProductId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.InventoryReceipt", null)
+                        .WithMany("PackageReads")
+                        .HasForeignKey("CompanyId", "ReceiptId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Carnicerias.Infrastructure.InventoryReceiptPieceRead", b =>
                 {
                     b.HasOne("Carnicerias.Infrastructure.InventoryPiece", null)
@@ -4847,6 +4951,8 @@ namespace Carnicerias.Infrastructure.Migrations
             modelBuilder.Entity("Carnicerias.Infrastructure.InventoryReceipt", b =>
                 {
                     b.Navigation("Lines");
+
+                    b.Navigation("PackageReads");
 
                     b.Navigation("PieceReads");
                 });

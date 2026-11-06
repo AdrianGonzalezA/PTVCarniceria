@@ -43,6 +43,19 @@ export interface ReceiptPieceScanInput {
   readonly code: string;
 }
 
+export interface ReceiptPackageRead {
+  readonly id: string;
+  readonly lineId: string;
+  readonly operationId: string;
+  readonly productId: string;
+  readonly code: string;
+  readonly packageCount: number;
+  readonly unitsPerPackage: number;
+  readonly unitQuantity: number;
+  readonly readByUserId: string;
+  readonly readAtUtc: string;
+}
+
 export interface ReceiptLine {
   readonly id: string;
   readonly productId: string;
@@ -77,6 +90,7 @@ export interface InventoryReceipt {
   readonly canceledAtUtc: string | null;
   readonly lines: readonly ReceiptLine[];
   readonly pieceReads?: readonly ReceiptPieceRead[];
+  readonly packageReads?: readonly ReceiptPackageRead[];
 }
 
 export interface ReceiptSummary {
@@ -150,6 +164,12 @@ export class InventoryReceiptClient {
   scanPiece(id: string, input: ReceiptPieceScanInput) {
     return this.http.post<InventoryReceipt>(`${this.root}/${id}/pieces`, input,
       { withCredentials: true });
+  }
+
+  scanPackage(id: string, version: number, operationId: string,
+    code: string, packageCount: number) {
+    return this.http.post<InventoryReceipt>(`${this.root}/${id}/packages`,
+      { version, operationId, code, packageCount }, { withCredentials: true });
   }
 
   templateUrl(id: string): string {

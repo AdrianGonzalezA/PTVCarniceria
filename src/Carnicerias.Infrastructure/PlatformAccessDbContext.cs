@@ -81,6 +81,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
     public DbSet<InventoryMovement> InventoryMovements => Set<InventoryMovement>();
 
     public DbSet<InventoryReceipt> InventoryReceipts => Set<InventoryReceipt>();
+    public DbSet<InventoryReceiptPackageRead> InventoryReceiptPackageReads => Set<InventoryReceiptPackageRead>();
     public DbSet<InventoryReceiptLine> InventoryReceiptLines => Set<InventoryReceiptLine>();
     public DbSet<InventoryTransfer> InventoryTransfers => Set<InventoryTransfer>();
     public DbSet<InventoryTransferLine> InventoryTransferLines => Set<InventoryTransferLine>();
@@ -907,10 +908,15 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
 
         modelBuilder.Entity<ProductCode>(entity =>
         {
-            entity.ToTable("product_codes", "catalog_pricing");
+            entity.ToTable("product_codes", "catalog_pricing", table =>
+                table.HasCheckConstraint("CK_product_codes_kind_factor",
+                    "(\"Kind\" = 'SaleAlternative' AND \"UnitsPerPackage\" IS NULL) OR " +
+                    "(\"Kind\" = 'PurchasePackage' AND \"UnitsPerPackage\" BETWEEN 2 AND 100000)"));
             entity.HasKey(code => new { code.ProductId, code.NormalizedCode });
             entity.Property(code => code.Code).HasMaxLength(80).IsRequired();
             entity.Property(code => code.NormalizedCode).HasMaxLength(80).IsRequired();
+            entity.Property(code => code.Kind).HasConversion<string>()
+                .HasMaxLength(32).HasDefaultValue(ProductCodeKind.SaleAlternative);
             entity.HasOne<CatalogProduct>().WithMany()
                 .HasForeignKey(code => new { code.CompanyId, code.ProductId })
                 .HasPrincipalKey(product => new { product.CompanyId, product.Id })
@@ -1528,6 +1534,37 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .OnDelete(DeleteBehavior.Restrict);
             entity.Navigation(receipt => receipt.PieceReads)
                 .UsePropertyAccessMode(PropertyAccessMode.Field);
+            entity.HasMany(receipt => receipt.PackageReads).WithOne()
+                .HasForeignKey(read => new { read.CompanyId, read.ReceiptId })
+                .HasPrincipalKey(receipt => new { receipt.CompanyId, receipt.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.Navigation(receipt => receipt.PackageReads)
+                .UsePropertyAccessMode(PropertyAccessMode.Field);
+        });
+
+        modelBuilder.Entity<InventoryReceiptPackageRead>(entity =>
+        {
+            entity.ToTable("receipt_package_reads", "inventory", table =>
+                table.HasCheckConstraint("CK_receipt_package_reads_quantity",
+                    "\"UnitsPerPackage\" BETWEEN 2 AND 100000 AND " +
+                    "\"PackageCount\" BETWEEN 1 AND 100000 AND " +
+                    "\"UnitQuantity\" BETWEEN 1 AND 100000 AND " +
+                    "\"UnitQuantity\" = \"PackageCount\"::bigint * \"UnitsPerPackage\""));
+            entity.HasKey(read => read.Id);
+            entity.Property(read => read.Code).HasMaxLength(80).IsRequired();
+            entity.HasOne<InventoryReceiptLine>().WithOne()
+                .HasForeignKey<InventoryReceiptPackageRead>(read => new { read.CompanyId, read.LineId })
+                .HasPrincipalKey<InventoryReceiptLine>(line => new { line.CompanyId, line.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CatalogProduct>().WithMany()
+                .HasForeignKey(read => new { read.CompanyId, read.ProductId })
+                .HasPrincipalKey(product => new { product.CompanyId, product.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany()
+                .HasForeignKey(read => read.ReadByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(read => new { read.ReceiptId, read.OperationId }).IsUnique();
+            entity.HasIndex(read => new { read.CompanyId, read.LineId }).IsUnique();
         });
 
         modelBuilder.Entity<InventoryReceiptPieceRead>(entity =>

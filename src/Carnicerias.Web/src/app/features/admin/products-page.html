@@ -96,23 +96,38 @@
               </app-admin-detail-dialog>
             }
             <section class="alternate-codes" aria-labelledby="alternate-codes-title">
-              <h4 id="alternate-codes-title">Códigos alternativos</h4>
-              <p>Otros códigos para encontrar {{ editing.name }} en caja. Inactivar conserva el registro.</p>
+              <h4 id="alternate-codes-title">Códigos alternativos y de bulto</h4>
+              <p>Los alternativos identifican el artículo en caja. Los códigos de bulto convierten unidades solo al recibir mercadería.</p>
               @if (codesError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
               <div class="alternate-add">
                 <label for="alternate-code">Nuevo código</label>
                 <input id="alternate-code" maxlength="80" [value]="alternateDraft()" (input)="updateAlternateDraft($event)" />
-                <button type="button" class="add-code-button" [disabled]="codeSaving() || codesLoading() || !alternateDraft().trim()" (click)="addCode()">Agregar</button>
+                <label for="code-kind">Uso</label>
+                <select id="code-kind" [value]="codeKind()" (change)="updateCodeKind($event)">
+                  <option value="saleAlternative">Venta</option>
+                  @if (editing.saleMode === 'unit') { <option value="purchasePackage">Bulto de recepción</option> }
+                </select>
+                @if (codeKind() === 'purchasePackage') {
+                  <label for="package-factor">Unidades por bulto</label>
+                  <input id="package-factor" type="number" min="2" max="100000" step="1" class="numeric-value" [value]="packageFactor()" (input)="updatePackageFactor($event)" />
+                }
+                <button type="button" class="add-code-button" [disabled]="codeSaving() || codesLoading() || !alternateDraft().trim() || codeKind() === 'purchasePackage' && !validPackageFactor()" (click)="addCode()">Agregar</button>
               </div>
               @if (codesLoading()) {
                 <p role="status">Cargando códigos…</p>
               } @else if (alternateCodes().length === 0) {
-                <p>Todavía no tiene códigos alternativos.</p>
+                <p>Todavía no tiene códigos adicionales.</p>
               } @else {
                 <ul>
                   @for (code of alternateCodes(); track code.code) {
                     <li>
                       <span>{{ code.code }}</span>
+                      <span>{{ code.kind === 'purchasePackage' ? 'Caja de ' + code.unitsPerPackage + ' unidades' : 'Venta' }}</span>
+                      @if (code.kind === 'purchasePackage') {
+                        <label [for]="'factor-' + code.code">Factor</label>
+                        <input [id]="'factor-' + code.code" type="number" min="2" max="100000" step="1" class="numeric-value" [value]="codeFactors()[code.code]" (input)="updateCodeFactor(code.code, $event)" />
+                        <button type="button" class="secondary-button save-package-factor" [disabled]="codeSaving()" (click)="saveCodeFactor(code)">Guardar factor</button>
+                      }
                       <span>{{ code.isActive ? 'Activo' : 'Inactivo' }}</span>
                       <button type="button" class="secondary-button toggle-code-button" [disabled]="codeSaving()" (click)="toggleCode(code)">
                         {{ codeAction() === code.code ? 'Guardando…' : code.isActive ? 'Inactivar' : 'Activar' }}

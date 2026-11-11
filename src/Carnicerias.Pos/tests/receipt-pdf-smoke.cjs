@@ -100,7 +100,18 @@ app.whenReady().then(async () => {
       mkdirSync(path.dirname(output), { recursive: true });
       writeFileSync(output, shiftPdf);
     }
-    process.stdout.write(`Electron PDF smoke passed (ticket ${pdf.length}; B ${invoicePdf.length}; A ${invoicePdfA.length}; shift ${shiftPdf.length} bytes)\n`);
+    const preview = validateShiftClosingReport({ ...shift, isComplete: false,
+      pendingApprovedCash: 75, pendingApprovedNonCash: 25 });
+    await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(shiftClosingHtml(preview))}`);
+    const previewPdf = await window.webContents.printToPDF({ printBackground: true, pageSize: 'A4' });
+    if (previewPdf.subarray(0, 5).toString() !== '%PDF-' || previewPdf.length < 2000)
+      throw new Error('Electron did not produce a valid shift preview PDF buffer');
+    if (process.env.CARNICERIAS_SHIFT_PREVIEW_PDF_SMOKE_OUTPUT) {
+      const output = path.resolve(process.env.CARNICERIAS_SHIFT_PREVIEW_PDF_SMOKE_OUTPUT);
+      mkdirSync(path.dirname(output), { recursive: true });
+      writeFileSync(output, previewPdf);
+    }
+    process.stdout.write(`Electron PDF smoke passed (ticket ${pdf.length}; B ${invoicePdf.length}; A ${invoicePdfA.length}; shift ${shiftPdf.length}; preview ${previewPdf.length} bytes)\n`);
   } catch (error) {
     process.exitCode = 1;
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);

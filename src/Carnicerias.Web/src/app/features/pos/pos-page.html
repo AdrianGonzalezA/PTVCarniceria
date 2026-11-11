@@ -39,7 +39,9 @@
   @if (!canOperate()) {
     <main class="pos-workspace shift-gate-workspace">
       <section class="shift-gate" aria-labelledby="shift-gate-title">
-        <p class="eyebrow">{{ terminal()?.name ?? 'Caja sin configurar' }} · {{ session()?.context?.branchName }}</p>
+        @if (terminalError() || shiftLoadState() !== 'ready') {
+          <p class="eyebrow">{{ terminal()?.name ?? 'Caja sin configurar' }} · {{ session()?.context?.branchName }}</p>
+        }
         @if (terminalError(); as error) {
           <h1 id="shift-gate-title">Caja no disponible</h1>
           <p role="alert">{{ error }}</p>
@@ -51,9 +53,12 @@
           <p role="alert">{{ shiftError() }}</p>
           <button class="finish-button" type="button" (click)="loadCashierShift()">Reintentar</button>
         } @else {
-          <h1 id="shift-gate-title">Abrí el turno para comenzar a vender</h1>
-          <p>La búsqueda, el ticket, el stock y el cobro quedan bloqueados hasta que te identifiques como responsable de esta caja.</p>
-          <button class="finish-button" type="button" (click)="openShiftDialog()">Abrir turno de {{ terminal()?.name }}</button>
+          <h1 id="shift-gate-title">Abrir turno</h1>
+          <label class="quantity-field" for="opening-cash-gate">Monto que queda en caja
+            <input id="opening-cash-gate" type="text" inputmode="decimal" [appLocalizedDecimal]="shiftOpeningCash()" (input)="updateOpeningCash($event)" />
+          </label>
+          @if (shiftError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
+          <button class="finish-button" type="button" [disabled]="shiftBusy()" (click)="openCashierShift()">{{ shiftBusy() ? 'Abriendo…' : 'Abrir turno' }}</button>
         }
       </section>
     </main>
@@ -804,7 +809,9 @@
     <div class="dialog-backdrop">
       <section class="pos-dialog shift-dialog" role="dialog" aria-modal="true" aria-labelledby="shift-title">
         <button class="dialog-close" type="button" aria-label="Cerrar ventana de turno" (click)="closedShiftReport() ? leaveClosedShift() : shiftDialog.set(false)">×</button>
-        <p class="eyebrow">{{ session()?.context?.branchName }} · {{ session()?.username }}</p>
+        @if (cashierShift() || closedShiftReport()) {
+          <p class="eyebrow">{{ session()?.context?.branchName }} · {{ session()?.username }}</p>
+        }
         <h2 id="shift-title">{{ closedShiftReport() ? 'Rendición de turno' : cashierShift() ? 'Turno de caja activo' : 'Abrir turno de caja' }}</h2>
         @if (closedShiftReport(); as report) {
           <div class="shift-summary closed-shift-summary" role="status">
@@ -856,6 +863,12 @@
             <span>Efectivo registrado en caja</span><strong>{{ formatMoney(shift.cashBalance) }}</strong>
             <small>Turno {{ shift.id.slice(0, 8) }} · El saldo no es un arqueo físico.</small>
           </div>
+          <p class="shift-report-guidance">Resumen provisional del turno en curso. Imprimir o descargar no cierra el turno.</p>
+          @if (shiftReportNotice(); as notice) { <p role="status">{{ notice }}</p> }
+          <div class="shift-preview-actions">
+            <button type="button" class="secondary-button shift-report-print" [disabled]="shiftLoadState() !== 'ready' || shiftBusy()" (click)="reprintShiftReport()">Imprimir resumen</button>
+            <button type="button" class="secondary-button shift-report-pdf" [disabled]="shiftLoadState() !== 'ready' || shiftBusy()" (click)="downloadShiftReport()">Descargar PDF</button>
+          </div>
           @if (lines().length > 0) { <p class="price-list-lock">Hay un ticket abierto. Cerralo o cancelalo antes de cerrar el turno.</p> }
           @if (hasPendingWithdrawal()) { <p class="price-list-lock">Hay un retiro pendiente de aprobación. El turno permanecerá abierto.</p> }
           <label class="quantity-field" for="shift-counted-cash">Efectivo contado al cierre
@@ -865,31 +878,12 @@
             <input id="shift-handed-cash" type="text" inputmode="decimal" [appLocalizedDecimal]="shiftHandedCash()" (input)="updateClosingAmount('handed', $event)" />
           </label>
           @if (shiftError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
-          <p class="shift-report-guidance">Al cerrar el turno vas a poder imprimir o descargar esta rendición con los importes finales.</p>
           <div class="dialog-actions">
             <button class="dialog-cancel" type="button" (click)="shiftDialog.set(false)">Volver al POS</button>
             <button id="close-shift-button" class="finish-button" type="button" [disabled]="shiftBusy() || lines().length > 0 || hasPendingWithdrawal()" (click)="closeCashierShift()">{{ shiftBusy() ? 'Procesando…' : 'Cerrar turno' }}</button>
           </div>
         } @else {
-          @if (lastClosedShift(); as closed) {
-            <div class="shift-summary closed-shift-summary" role="status">
-              <h3 class="shift-summary-title">Último cierre de esta caja · {{ closed.id.slice(0, 8) }}</h3>
-              <span>Cajero anterior</span><strong>{{ closed.cashierName || 'Usuario no disponible' }}</strong>
-              <span>Fecha de cierre</span><strong>{{ closed.closedAtUtc | date:'dd/MM/yyyy HH:mm' }}</strong>
-              <span>Fondo inicial</span><strong>{{ formatMoney(closed.openingCash) }}</strong>
-              <span>Ventas registradas</span><strong>{{ formatMoney(closed.salesTotal) }}</strong>
-              <span>De esas ventas, en efectivo</span><strong>{{ formatMoney(closed.cashSales) }}</strong>
-              <span>Otros medios</span><strong>{{ formatMoney(closed.nonCashSales) }}</strong>
-              <span>A cuenta corriente (sin ingreso de caja)</span><strong>{{ formatMoney(closed.accountSales) }}</strong>
-              <span>Saldo a favor aplicado (sin ingreso de caja)</span><strong>{{ formatMoney(closed.creditApplied) }}</strong>
-              <span>Cobranzas de cuenta en efectivo</span><strong>{{ formatMoney(closed.cashCollections) }}</strong>
-              <span>Cobranzas de cuenta por otros medios</span><strong>{{ formatMoney(closed.nonCashCollections) }}</strong>
-              <span>Efectivo registrado al cierre</span><strong>{{ formatMoney(closed.cashBalance) }}</strong>
-              <small>Saldo calculado desde movimientos; no representa un arqueo físico.</small>
-            </div>
-          }
-          <p>El turno queda asociado a tu usuario y esta sucursal. Ingresá el fondo real de caja; puede ser $0.</p>
-          <label class="quantity-field" for="opening-cash">Fondo inicial en efectivo
+          <label class="quantity-field" for="opening-cash">Monto que queda en caja
             <input id="opening-cash" type="text" inputmode="decimal" [appLocalizedDecimal]="shiftOpeningCash()" (input)="updateOpeningCash($event)" />
           </label>
           @if (shiftError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }

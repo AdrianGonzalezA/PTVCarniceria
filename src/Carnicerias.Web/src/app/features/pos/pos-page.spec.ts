@@ -1140,7 +1140,8 @@ describe('PosPage', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('Caja 1');
-    expect(fixture.nativeElement.textContent).toContain('Abrí el turno');
+    expect(fixture.nativeElement.textContent).toContain('Monto que queda en caja');
+    expect(fixture.nativeElement.querySelector('#opening-cash-gate')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('#product-search')).toBeNull();
     expect(fixture.nativeElement.querySelector('.sale-footer')).toBeNull();
     expect(fixture.nativeElement.querySelector('.ticket-strip')).toBeNull();
@@ -1150,9 +1151,6 @@ describe('PosPage', () => {
     expect(fixture.nativeElement.querySelector('#product-dialog-title')).toBeNull();
 
     (fixture.nativeElement.querySelector('.shift-gate .finish-button') as HTMLButtonElement).click();
-    fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('#shift-title').textContent).toContain('Abrir turno');
-    (fixture.nativeElement.querySelector('.shift-dialog .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(opened).toBe(true);
     expect(fixture.nativeElement.querySelector('#product-search')).not.toBeNull();
@@ -1876,7 +1874,7 @@ describe('PosPage', () => {
     expect(fixture.nativeElement.querySelector('.price-list-lock').textContent).toContain('Borrador guardado');
   });
 
-  it('returns to login after closing and preserves the cash summary for a fresh login', async () => {
+  it('returns to login after closing and suggests remaining cash for the next opening', async () => {
     const session: CurrentSession = {
       userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
       context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
@@ -1895,7 +1893,7 @@ describe('PosPage', () => {
         cashierName: 'cajero-anterior', openedAtUtc: '2026-10-06T15:00:00Z',
         closedAtUtc: '2026-10-06T17:00:00Z', openingCash: 100, salesTotal: 1500,
         cashSales: 1000, nonCashSales: 500, cashCollections: 0, nonCashCollections: 0,
-        cashWithdrawals: 0, expectedCash: 1100, countedCash: 1090, handedCash: 1090,
+        cashWithdrawals: 0, expectedCash: 1100, countedCash: 1090, handedCash: 1000,
         cashDifference: -10, accountSales: 0, creditApplied: 0,
         paymentBreakdown: [{ method: 'cash', amount: 1000 }, { method: 'debit', amount: 500 }],
       } };
@@ -1935,22 +1933,32 @@ describe('PosPage', () => {
     expect(fixture.nativeElement.querySelector('.shift-summary').textContent).toContain('1.100,00');
     expect(fixture.nativeElement.querySelector('.shift-summary').textContent).toContain('Débito');
     expect(fixture.nativeElement.querySelector('.shift-summary').textContent).toContain('500,00');
-    for (const [id, value] of [['shift-counted-cash', '1090'], ['shift-handed-cash', '1090']]) {
+    for (const [id, value] of [['shift-counted-cash', '1090'], ['shift-handed-cash', '1000']]) {
       const input = fixture.nativeElement.querySelector(`#${id}`) as HTMLInputElement;
       input.value = value;
       input.dispatchEvent(new Event('input'));
     }
     fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.shift-dialog .shift-report-print') as HTMLButtonElement).click();
+    (fixture.nativeElement.querySelector('.shift-dialog .shift-report-pdf') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    expect(closingAmounts).toBeNull();
+    expect(printReport).toHaveBeenCalledOnce();
+    expect(printReport.mock.calls[0][0]).toMatchObject({
+      isComplete: false, shiftId: 'shift-id', expectedCash: 1100,
+      countedCash: 1090, handedCash: 1000, cashDifference: -10,
+    });
+    expect(saveReportPdf.mock.calls[0][0]).toMatchObject({ isComplete: false });
     (fixture.nativeElement.querySelector('#close-shift-button') as HTMLButtonElement).click();
     fixture.detectChanges();
-    expect(closingAmounts).toEqual([1090, 1090]);
+    expect(closingAmounts).toEqual([1090, 1000]);
     expect(fixture.nativeElement.querySelector('.closed-shift-summary').textContent).toContain('Diferencia-$');
     expect(fixture.nativeElement.querySelector('.closed-shift-summary').textContent).toContain('Cobros netos');
     (fixture.nativeElement.querySelector('.shift-report-print') as HTMLButtonElement).click();
     (fixture.nativeElement.querySelector('.shift-report-pdf') as HTMLButtonElement).click();
     await fixture.whenStable();
-    expect(printReport).toHaveBeenCalledTimes(2);
-    expect(saveReportPdf).toHaveBeenCalledWith(closedShift.report);
+    expect(printReport).toHaveBeenCalledTimes(3);
+    expect(saveReportPdf).toHaveBeenLastCalledWith(closedShift.report);
     expect(navigate).not.toHaveBeenCalledWith('/');
     (fixture.nativeElement.querySelector('.shift-dialog .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
@@ -1963,16 +1971,43 @@ describe('PosPage', () => {
     await reopened.whenStable();
     (reopened.nativeElement.querySelector('.shift-status') as HTMLButtonElement).click();
     reopened.detectChanges();
-    const previous = reopened.nativeElement.querySelector('.closed-shift-summary').textContent;
-    expect(previous).toContain('1.100,00');
-    expect(previous).toContain('cajero-anterior');
-    expect(previous).toContain('06/10/2026');
+    expect(reopened.nativeElement.querySelector('.closed-shift-summary')).toBeNull();
+    expect(reopened.nativeElement.querySelector('.shift-dialog').textContent).not.toContain('cajero-anterior');
     const opening = reopened.nativeElement.querySelector('#opening-cash') as HTMLInputElement;
+    expect(opening.value).toBe('90,00');
+    expect(opening.closest('label')?.textContent).toContain('Monto que queda en caja');
     opening.value = '44';
     opening.dispatchEvent(new Event('input'));
     reopened.detectChanges();
     (reopened.nativeElement.querySelector('.shift-dialog .finish-button') as HTMLButtonElement).click();
     expect(reopenedCash).toBe(44);
+  });
+
+  it('does not overwrite the cashier opening amount when the previous close arrives late', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const previous = new Subject<{ report: { countedCash: number; handedCash: number } } | null>();
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: CatalogClient, useValue: { priceLists: () => of([]) } },
+      { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of(null) } },
+      { provide: CashierShiftClient, useValue: { current: () => of(null),
+        lastClosed: () => previous.asObservable() } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const opening = fixture.nativeElement.querySelector('#opening-cash-gate') as HTMLInputElement;
+    opening.value = '44';
+    opening.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    previous.next({ report: { countedCash: 100, handedCash: 10 } });
+    fixture.detectChanges();
+    expect(opening.value).toBe('44,00');
   });
 
   it('keeps a pending withdrawal visible and reuses its operation id after a network failure', async () => {

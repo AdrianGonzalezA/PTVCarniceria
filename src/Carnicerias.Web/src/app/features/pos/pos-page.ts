@@ -267,7 +267,6 @@ export class PosPage implements OnInit {
   protected readonly cashierShift = signal<CashierShift | null>(null);
   protected readonly shiftLoadState = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly canOperate = computed(() => !!this.terminal() && !!this.cashierShift());
-  protected readonly lastClosedShift = signal<CashierShift | null>(null);
   protected readonly shiftDialog = signal(false);
   protected readonly withdrawalDialog = signal(false);
   protected readonly shiftOpeningCash = signal('0');
@@ -275,6 +274,7 @@ export class PosPage implements OnInit {
   protected readonly shiftHandedCash = signal('');
   protected readonly closedShiftReport = signal<ShiftClosingReport | null>(null);
   protected readonly shiftReportNotice = signal<string | null>(null);
+  private openingCashEdited = false;
   protected readonly shiftBusy = signal(false);
   protected readonly shiftError = signal<string | null>(null);
   protected readonly withdrawalAmount = signal('');
@@ -1677,6 +1677,7 @@ export class PosPage implements OnInit {
   }
 
   protected updateOpeningCash(event: Event): void {
+    this.openingCashEdited = true;
     this.shiftOpeningCash.set((event.target as HTMLInputElement).value);
   }
 
@@ -1691,6 +1692,7 @@ export class PosPage implements OnInit {
     this.withdrawalDialog.set(false);
     this.shiftDialog.set(true);
     this.shiftError.set(null);
+    this.shiftReportNotice.set(null);
     this.loadCashierShift();
   }
 
@@ -1802,7 +1804,6 @@ export class PosPage implements OnInit {
     this.cashierShiftClient.close(countedCash, handedCash).subscribe({
       next: (closedShift) => {
         this.cashierShift.set(null);
-        this.lastClosedShift.set(closedShift);
         this.shiftBusy.set(false);
         this.closedShiftReport.set(closedShift.report ?? null);
         this.shiftReportNotice.set(null);
@@ -1825,18 +1826,47 @@ export class PosPage implements OnInit {
     });
   }
 
+  private shiftReportForOutput(): ShiftClosingReport | null {
+    if (this.closedShiftReport()) return this.closedShiftReport();
+    const shift = this.cashierShift();
+    const session = this.session();
+    const context = session?.context;
+    const terminal = this.terminal();
+    if (!shift || !session || !context || !terminal || this.shiftLoadState() !== 'ready') return null;
+    const counted = parseLocalizedDecimal(this.shiftCountedCash(), 2);
+    const handed = parseLocalizedDecimal(this.shiftHandedCash(), 2);
+    const hasArqueo = counted !== null && handed !== null && counted >= 0 && handed >= 0;
+    return {
+      version: 1, shiftId: shift.id, companyId: context.companyId, branchId: context.branchId,
+      terminalId: terminal.id, cashierId: session.userId,
+      companyName: context.companyName, branchName: context.branchName,
+      terminalName: terminal.name, cashierName: session.username,
+      openedAtUtc: shift.openedAtUtc, closedAtUtc: new Date().toISOString(),
+      openingCash: shift.openingCash, cashSales: shift.cashSales,
+      nonCashSales: shift.nonCashSales, accountSales: shift.accountSales,
+      salesTotal: shift.salesTotal, cashCollections: shift.cashCollections,
+      nonCashCollections: shift.nonCashCollections, creditApplied: shift.creditApplied,
+      cashWithdrawals: shift.cashWithdrawals ?? 0, expectedCash: shift.cashBalance,
+      countedCash: hasArqueo ? counted : null, handedCash: hasArqueo ? handed : null,
+      cashDifference: hasArqueo ? Math.round((counted - shift.cashBalance) * 100) / 100 : null,
+      pendingApprovedCash: shift.pendingApprovedCash ?? 0,
+      pendingApprovedNonCash: shift.pendingApprovedNonCash ?? 0,
+      paymentBreakdown: shift.paymentBreakdown ?? [], isComplete: false,
+    };
+  }
+
   protected reprintShiftReport(): void {
-    const report = this.closedShiftReport();
+    const report = this.shiftReportForOutput();
     if (!report) return;
-    this.shiftReportNotice.set('Enviando rendición a la impresora…');
+    this.shiftReportNotice.set('Enviando resumen a la impresora…');
     void this.posDeviceClient.printShiftReport(report)
       .then((printed) => this.shiftReportNotice.set(printed
-        ? `Rendición enviada a ${printed.port}.` : 'No hay impresora asignada a esta caja.'))
-      .catch(() => this.shiftReportNotice.set('No se pudo imprimir la rendición. Reintentá.'));
+        ? `Resumen enviado a ${printed.port}.` : 'No hay impresora asignada a esta caja.'))
+      .catch(() => this.shiftReportNotice.set('No se pudo imprimir el resumen. Reintentá.'));
   }
 
   protected downloadShiftReport(): void {
-    const report = this.closedShiftReport();
+    const report = this.shiftReportForOutput();
     if (!report) return;
     void this.posDeviceClient.saveShiftReportPdf(report)
       .then(() => this.shiftReportNotice.set('PDF guardado en Descargas.'))
@@ -2682,8 +2712,13 @@ export class PosPage implements OnInit {
 
   private loadLastClosedShift(): void {
     this.cashierShiftClient.lastClosed().subscribe({
-      next: (shift) => this.lastClosedShift.set(shift),
-      error: () => this.shiftError.set('No se pudo consultar el último turno cerrado.'),
+      next: (shift) => {
+        const report = shift?.report;
+        if (this.openingCashEdited || report?.countedCash == null || report.handedCash == null) return;
+        const remaining = Math.max(0, Math.round((report.countedCash - report.handedCash) * 100) / 100);
+        this.shiftOpeningCash.set(String(remaining));
+      },
+      error: () => { /* El importe sigue editable si el último cierre no está disponible. */ },
     });
   }
 

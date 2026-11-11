@@ -20,6 +20,9 @@ export interface ShiftClosingReport {
   readonly countedCash: number | null;
   readonly handedCash: number | null;
   readonly cashDifference: number | null;
+  readonly isComplete?: boolean;
+  readonly pendingApprovedCash?: number;
+  readonly pendingApprovedNonCash?: number;
   readonly paymentBreakdown: readonly { readonly method: string; readonly amount: number }[];
 }
 
@@ -34,6 +37,9 @@ export function validateShiftClosingReport(value: unknown): ShiftClosingReport {
       ['openedAtUtc', 'closedAtUtc'].some((key) => !Number.isFinite(Date.parse(report[key] as string))) ||
       amounts.some((key) => typeof report[key] !== 'number' || !Number.isFinite(report[key])) ||
       (report.terminalName !== null && typeof report.terminalName !== 'string') ||
+      (report.isComplete !== undefined && typeof report.isComplete !== 'boolean') ||
+      ['pendingApprovedCash', 'pendingApprovedNonCash'].some((key) =>
+        report[key] !== undefined && (typeof report[key] !== 'number' || !Number.isFinite(report[key]))) ||
       ['countedCash', 'handedCash', 'cashDifference'].some((key) =>
         report[key] !== null && (typeof report[key] !== 'number' || !Number.isFinite(report[key]))) ||
       ([report.countedCash, report.handedCash, report.cashDifference].some((amount) => amount === null) &&
@@ -73,11 +79,16 @@ function reportRows(report: ShiftClosingReport): { label: string; amount: number
     { label: 'Saldo a favor aplicado', amount: report.creditApplied },
     { label: 'Cobranzas en efectivo', amount: report.cashCollections },
     { label: 'Cobranzas por otros medios', amount: report.nonCashCollections },
+    ...((report.pendingApprovedCash ?? 0) > 0 || (report.pendingApprovedNonCash ?? 0) > 0 ? [
+      { label: 'Cobros aprobados pendientes · efectivo', amount: report.pendingApprovedCash ?? 0 },
+      { label: 'Cobros aprobados pendientes · otros medios', amount: report.pendingApprovedNonCash ?? 0 },
+    ] : []),
     ...report.paymentBreakdown.map((payment) => ({
       label: `Cobros ${paymentMethodName(payment.method)}`, amount: payment.amount,
     })),
     { label: 'Retiros de efectivo', amount: report.cashWithdrawals },
-    { label: 'Efectivo esperado', amount: report.expectedCash },
+    { label: report.isComplete === false ? 'Efectivo registrado en caja' : 'Efectivo esperado',
+      amount: report.expectedCash },
     ...(report.countedCash === null ? [] : [
       { label: 'Efectivo contado', amount: report.countedCash },
       { label: 'Efectivo entregado', amount: report.handedCash! },
@@ -88,10 +99,12 @@ function reportRows(report: ShiftClosingReport): { label: string; amount: number
 
 export function shiftClosingLines(report: ShiftClosingReport): string[] {
   return [
-    'RENDICION DE TURNO - NO FISCAL', clean(report.companyName),
+    report.isComplete === false ? 'RESUMEN DE TURNO EN CURSO - NO FISCAL' :
+      'RENDICION DE TURNO - NO FISCAL', clean(report.companyName),
     clean(report.branchName), clean(report.terminalName ?? 'Caja historica'),
     `Cajero: ${clean(report.cashierName)}`, `Turno: ${report.shiftId}`,
-    `Apertura: ${date(report.openedAtUtc)}`, `Cierre: ${date(report.closedAtUtc)}`,
+    `Apertura: ${date(report.openedAtUtc)}`,
+    `${report.isComplete === false ? 'Consulta' : 'Cierre'}: ${date(report.closedAtUtc)}`,
     ...reportRows(report).map(({ label, amount }) => `${label}: $ ${money(amount)}`),
     ...(report.countedCash === null ? ['Sin arqueo declarado'] : []),
   ];
@@ -101,7 +114,8 @@ export function shiftClosingHtml(report: ShiftClosingReport): string {
   const metadataRows: [string, string][] = [
     ['Sucursal', report.branchName], ['Caja', report.terminalName ?? 'Caja histórica'],
     ['Cajero', report.cashierName], ['Turno', report.shiftId],
-    ['Apertura', date(report.openedAtUtc)], ['Cierre', date(report.closedAtUtc)],
+    ['Apertura', date(report.openedAtUtc)],
+    [report.isComplete === false ? 'Consulta' : 'Cierre', date(report.closedAtUtc)],
   ];
   const metadata = metadataRows.map(([label, value]) =>
     `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(clean(value))}</strong></div>`).join('');
@@ -116,8 +130,9 @@ export function shiftClosingHtml(report: ShiftClosingReport): string {
     th{text-align:left;font-weight:normal}td{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
     tr:last-child th,tr:last-child td{border-top:2px solid #222;font-weight:bold}
     footer{margin-top:18px;color:#555}
-  </style></head><body><h1>Rendición de turno</h1><h2>${escapeHtml(clean(report.companyName))}</h2>
+  </style></head><body><h1>${report.isComplete === false ? 'Resumen de turno en curso' : 'Rendición de turno'}</h1><h2>${escapeHtml(clean(report.companyName))}</h2>
   <section class="meta">${metadata}</section><table><tbody>${rows}</tbody></table>
   ${report.countedCash === null ? '<p>Sin arqueo declarado</p>' : ''}
-  <footer>Documento interno no fiscal · Generado a partir del cierre registrado.</footer></body></html>`;
+  <footer>${report.isComplete === false ? 'Consulta provisional. No registra ni reemplaza el cierre de turno.' :
+    'Documento interno no fiscal · Generado a partir del cierre registrado.'}</footer></body></html>`;
 }

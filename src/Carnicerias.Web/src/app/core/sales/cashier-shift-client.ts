@@ -29,6 +29,8 @@ export interface ShiftClosingReport {
   readonly handedCash: number | null;
   readonly cashDifference: number | null;
   readonly isComplete: boolean;
+  readonly pendingApprovedCash?: number;
+  readonly pendingApprovedNonCash?: number;
   readonly paymentBreakdown: readonly { readonly method: string; readonly amount: number }[];
 }
 

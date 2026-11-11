@@ -141,7 +141,8 @@ function registerNativeApi(devices: TerminalDevices,
       });
       const directory = app.getPath('downloads');
       await mkdir(directory, { recursive: true });
-      const filePath = path.join(directory, `rendicion-turno-${report.shiftId}-${randomUUID()}.pdf`);
+      const prefix = report.isComplete === false ? 'resumen-turno-en-curso' : 'rendicion-turno';
+      const filePath = path.join(directory, `${prefix}-${report.shiftId}-${randomUUID()}.pdf`);
       await writeFile(filePath, pdf, { flag: 'wx' });
       return { path: filePath };
     } finally { reportWindow.destroy(); }

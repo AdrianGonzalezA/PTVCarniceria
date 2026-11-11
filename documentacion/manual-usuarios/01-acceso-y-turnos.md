@@ -18,17 +18,17 @@ El POS requiere una caja activa y una credencial de esa caja guardada en el perf
 
 ## Abrir un turno
 
-El POS no permite operar tickets ni cobrar sin turno abierto. Después de ingresar con tu usuario, pulsá **Abrir turno**, registrá el **fondo inicial en efectivo** (puede ser $0) y confirmá. La cabecera mostrará la sucursal, caja, cajero y los botones **Cierre de turno** y **Retiro de efectivo**.
+El POS no permite operar tickets ni cobrar sin turno abierto. Después de ingresar con tu usuario, la pantalla de apertura muestra únicamente **Monto que queda en caja** y el botón **Abrir turno**. El importe sugerido es lo contado menos lo entregado en el último cierre de esa caja; podés modificarlo antes de abrir. Si no hay un cierre con arqueo, aparece $0. La cabecera mostrará la sucursal, caja, cajero y los botones **Cierre de turno** y **Retiro de efectivo**.
 
 El turno atribuye ventas, cobros y movimientos al cajero responsable de esa caja. Otras cajas de la misma sucursal pueden estar abiertas al mismo tiempo; sus turnos y tickets no se mezclan.
 
 ## Consultar y cerrar el turno
 
-Pulsá **Cierre de turno** para ver el resumen: ventas, efectivo de esas ventas, cargos a cuenta, cobranzas de cuenta, otros medios y **efectivo registrado en caja**. Este último es un saldo contable que incluye el fondo inicial; **no es un arqueo físico**.
+Pulsá **Cierre de turno** para ver el resumen: ventas, efectivo de esas ventas, cargos a cuenta, cobranzas de cuenta, otros medios y **efectivo registrado en caja**. Este último es un saldo contable que incluye el fondo inicial; **no es un arqueo físico**. En esa misma pantalla, antes de confirmar el cierre, podés **Imprimir resumen** o **Descargar PDF**. El documento se marca como *provisional*: consultar, imprimir o descargar no cierra el turno.
 
 Para pedir un retiro, pulsá **Retiro de efectivo** junto a **Cierre de turno**. Ingresá el importe y el motivo; un administrador debe aprobar o rechazar la solicitud. Un retiro pendiente impide cerrar el turno. El retiro aprobado aparece en la rendición y se descuenta del efectivo esperado.
 
-Antes de pulsar **Cerrar turno**, confirmá o cancelá todos los tickets A–D pendientes. El sistema bloquea el cierre si quedan borradores. Ingresá el efectivo contado y el efectivo entregado; al confirmar, la pantalla muestra la rendición final con ventas, cobranzas, retiros y diferencia. Podés pulsar **Imprimir resumen** si la caja tiene impresora asignada o **Descargar PDF** para guardarlo en Descargas. La impresión y el PDF son documentos internos no fiscales; si falla la impresión, el cierre sigue registrado y podés reintentar antes de salir del turno. El siguiente responsable debe identificarse con su propio usuario y abrir un turno nuevo; no debe continuar con la sesión del cajero anterior.
+Antes de pulsar **Cerrar turno**, confirmá o cancelá todos los tickets A–D pendientes. El sistema bloquea el cierre si quedan borradores. Ingresá el efectivo contado y el efectivo entregado; al confirmar, la pantalla muestra la rendición final con ventas, cobranzas, retiros y diferencia. También podés imprimir o descargar ese informe definitivo antes de salir. La impresión y el PDF son documentos internos no fiscales; si falla la impresión, el cierre sigue registrado y podés reintentar. El siguiente responsable debe identificarse con su propio usuario y abrir un turno nuevo; no debe continuar con la sesión del cajero anterior.
 
 ## Si no aparece la sucursal o la caja
 

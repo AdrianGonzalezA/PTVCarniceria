@@ -53,7 +53,7 @@
 .cashier-name { font-weight: 650; }
 .shift-status { padding: 0.42rem 0.65rem; color: #222; background: var(--pos-lime); border: 0; border-radius: 0.3rem; font: inherit; font-size: 0.73rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .shift-status:disabled { cursor: not-allowed; opacity: 0.6; }
-.shift-withdrawal-trigger { padding: 0.42rem 0.65rem; color: #fff; background: transparent; border: 1px solid #ffffff80; border-radius: 0.3rem; font: inherit; font-size: 0.73rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.shift-withdrawal-trigger { padding: 0.42rem 0.65rem; color: #222; background: var(--pos-lime); border: 0; border-radius: 0.3rem; font: inherit; font-size: 0.73rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .pos-account { position: relative; }
 .menu-trigger { display: grid; width: 2.5rem; gap: 0.25rem; padding: 0.4rem; border: 0; background: transparent; cursor: pointer; }
 .menu-trigger span { height: 0.18rem; border-radius: 2px; background: #fff; }
@@ -225,6 +225,8 @@
 .shift-report-print,.shift-report-pdf { min-height: 2.4rem; padding: 0.5rem 0.8rem; color: var(--pos-ink); background: var(--pos-panel); border: 1px solid var(--pos-border); border-radius: 0.3rem; font: inherit; font-weight: 700; cursor: pointer; }
 .shift-report-print:hover,.shift-report-pdf:hover { border-color: var(--pos-teal); }
 .shift-report-guidance { margin: 0.75rem 0 0; color: var(--pos-muted); font-size: 0.82rem; }
+.shift-preview-actions { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 0.75rem; }
+.shift-preview-actions button:disabled { cursor: not-allowed; opacity: 0.6; }
 .shift-dialog > p:not(.eyebrow) { line-height: 1.5; }
 .shift-dialog .quantity-field { margin-top: 0.75rem; }
 .withdrawal-dialog .quantity-field { margin-top: 0.75rem; }

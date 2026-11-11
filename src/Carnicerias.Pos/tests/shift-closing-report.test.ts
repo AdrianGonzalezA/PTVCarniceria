@@ -38,4 +38,18 @@ describe('shift closing report', () => {
     expect(() => validateShiftClosingReport({ ...report, countedCash: 1, handedCash: null })).toThrow('SHIFT_REPORT_INVALID');
     expect(() => validateShiftClosingReport({ ...report, paymentBreakdown: [{ method: 'cash', amount: Infinity }] })).toThrow('SHIFT_REPORT_INVALID');
   });
+
+  it('marks a report printed before closing as provisional and includes pending payments', () => {
+    const preview = validateShiftClosingReport({ ...report, isComplete: false,
+      pendingApprovedCash: 75, pendingApprovedNonCash: 25 });
+    const lines = shiftClosingLines(preview);
+    expect(lines[0]).toContain('EN CURSO');
+    expect(lines.some((line) => line.startsWith('Cierre:'))).toBe(false);
+    expect(lines).toContain('Cobros aprobados pendientes · efectivo: $ 75,00');
+    expect(lines).toContain('Efectivo registrado en caja: $ 560,00');
+    const html = shiftClosingHtml(preview);
+    expect(html).toContain('Resumen de turno en curso');
+    expect(html).toContain('Consulta provisional');
+    expect(html).not.toContain('Generado a partir del cierre registrado');
+  });
 });

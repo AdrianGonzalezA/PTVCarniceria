@@ -252,4 +252,6 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 
 | 11/11/2026 | 13:40:40 | 13:50:54 | 10 min 14 s medidos | Revisar condición IVA del CUIT `30-50273647-3` y validar el servicio ARCA | La API consultó WSCI homologación y recibió datos generales de ensayo sin inscripción activa en IVA 30, IVA exento 32 ni monotributo 20. Se contrastaron el servicio y método con manual/catálogo oficiales, se pasó al host oficial actual y se corrigió la interpretación de errores del régimen opuesto e IVA exento. Pasaron 22 pruebas focalizadas .NET; consultas reales de CUIT de interés y control, APIs `5197` y `5249` saludables, Caja A Electron activa. Sin migraciones ni escrituras comerciales; sin pausas conocidas. |
 
-**Total activo registrado desde el 16/10/2026:** 2094 min 30 s medidos, más diez tramos menores a 1 min y tramos no cuantificables.
+| 11/11/2026 | 13:53:23 | 13:53:33 | 10 s medidos | Aclarar si los datos del CUIT en ARCA homologación son reales | Se contrastó la respuesta de prueba para `30-50273647-3` con un padrón público oficial de Rentas Córdoba y la documentación de ARCA sobre entornos y certificados. Sin cambios de código ni datos; sin pausas conocidas. |
+
+**Total activo registrado desde el 16/10/2026:** 2094 min 40 s medidos, más diez tramos menores a 1 min y tramos no cuantificables.

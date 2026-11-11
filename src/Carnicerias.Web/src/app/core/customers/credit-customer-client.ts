@@ -16,7 +16,7 @@ export interface FiscalCustomerOption extends CreditCustomerOption {
 }
 
 export interface FiscalLookupResult {
-  readonly source: 'local' | 'arca' | 'manual';
+  readonly source: 'local' | 'arca' | 'manual' | 'simulated';
   readonly customerId: string | null;
   readonly customerCode: string | null;
   readonly name: string | null;

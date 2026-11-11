@@ -50,6 +50,8 @@ cd C:\Proyectos\Carnicerias
 
 El script toma la contraseña del contenedor Docker existente, valida el puerto `55433` y la única base `carnicerias_test_visual`, y le pasa la conexión a la API sin mostrarla ni guardarla en Git. Dejar la consola abierta. En otra consola, verificar la conexión real con:
 
+Durante la demo, este script activa una **respuesta simulada de Responsable Inscripto** para las consultas de CUIT que no tengan ficha fiscal local completa. La respuesta se marca como simulada y no llama al padrón ARCA. Cuando el certificado esté autorizado para el padrón, reiniciar la API con `.\tools\Start-LocalPosApi.ps1 -UseRealArcaRegistry` para desactivar la simulación. El conjunto de sucursal gestionada admite la misma opción en `.\tools\Start-RusticaManagedLab.ps1 -Action StartBranch -UseRealArcaRegistry`. La opción solo afecta la consulta de padrón; no simula CAE ni facturación.
+
 ```powershell
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:5197/api/sessions/current
 ```

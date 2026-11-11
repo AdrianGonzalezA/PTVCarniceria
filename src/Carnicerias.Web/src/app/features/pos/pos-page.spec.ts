@@ -215,6 +215,39 @@ describe('PosPage', () => {
     expect(status.value).toBe('registered');
   });
 
+  it('shows a simulated registered taxpayer as simulated and advances through fiscal checkout', async () => {
+    const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, false, false);
+    const page = fixture.nativeElement as HTMLElement;
+    vi.spyOn(TestBed.inject(CreditCustomerClient), 'lookupFiscal').mockReturnValue(of({
+      source: 'simulated', customerId: null, customerCode: null,
+      name: 'RESPONSABLE INSCRIPTO DE PRUEBA', documentNumber: '20164755100',
+      address: 'DOMICILIO DE PRUEBA', locality: null, province: null,
+      taxStatus: 'registered', notice: 'Datos simulados de homologación. ARCA no fue consultada.',
+    }));
+    const kind = page.querySelector('#checkout-customer-kind') as HTMLSelectElement;
+    kind.value = 'other';
+    kind.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    const cuit = page.querySelector('#checkout-cuit') as HTMLInputElement;
+    cuit.value = '20164755100';
+    cuit.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    page.querySelector<HTMLButtonElement>('.customer-continue-button')!.click();
+    fixture.detectChanges();
+
+    expect((page.querySelector('#checkout-recipient-tax-status') as HTMLSelectElement).value).toBe('registered');
+    expect(page.querySelector('.sale-document')?.textContent).toContain('Datos simulados');
+    const documentType = page.querySelector('#checkout-document-type') as HTMLSelectElement;
+    documentType.value = 'electronicInvoice';
+    documentType.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    expect((page.querySelector('#sale-recipient-name') as HTMLInputElement).value).toBe('RESPONSABLE INSCRIPTO DE PRUEBA');
+    expect((page.querySelector('.document-continue-button') as HTMLButtonElement).disabled).toBe(false);
+    page.querySelector<HTMLButtonElement>('.document-continue-button')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector('.checkout-review')?.textContent).toContain('Factura electrónica');
+  });
+
   it('does not offer a new integrated payment on an unconfigured register', async () => {
     const fixture = await checkoutWithGateways(null);
     const options = fixture.nativeElement.querySelector('.payment-methods').textContent as string;

@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet('Check', 'Start', 'StartBranch', 'Stop', 'StopBranch', 'Verify')]
-    [string]$Action
+    [string]$Action,
+    [switch]$UseRealArcaRegistry
 )
 
 $ErrorActionPreference = 'Stop'
@@ -86,6 +87,7 @@ function New-BranchSettings($vaultData) {
     return @{
         CARNICERIAS_CONNECTION_STRING = $vaultData.ConnectionString
         ConnectionStrings__PlatformAccess = $vaultData.ConnectionString
+        ARCA_HOMO_REGISTRY_MOCK_ENABLED = $(if ($UseRealArcaRegistry) { 'false' } else { 'true' })
         AllowedHosts = '127.0.0.1;localhost'
         Federation__Enabled = 'true'
         Federation__Mode = 'managed'

@@ -159,7 +159,8 @@ public static class PosCustomerEndpoints
     private static async Task<IResult> FiscalLookupAsync(string? cuit,
         PlatformAccessDbContext db, OperationalContextAccessor accessor,
         ArcaSettingsResolver settingsResolver, ArcaHomologationTicketProvider ticketProvider,
-        ArcaRegistryClient registry, ILoggerFactory loggerFactory, CancellationToken cancellationToken)
+        ArcaRegistryClient registry, ILoggerFactory loggerFactory, IConfiguration configuration,
+        CancellationToken cancellationToken)
     {
         if (!FiscalCuit.IsValid(cuit))
             return Results.Json(new ErrorResponse(new ApiError("VALIDATION_ERROR",
@@ -178,6 +179,11 @@ public static class PosCustomerEndpoints
                 TaxStatus(local.FiscalTaxStatus), null));
 
         var logger = loggerFactory.CreateLogger("Carnicerias.ArcaFiscalLookup");
+        if (configuration.GetValue<bool>("ARCA_HOMO_REGISTRY_MOCK_ENABLED"))
+        {
+            LogFiscalLookupState(logger, "homologation registry simulation enabled", null);
+            return Results.Ok(SimulatedRegisteredLookup(local, cuit!));
+        }
         var stage = "settings";
         try
         {
@@ -230,6 +236,12 @@ public static class PosCustomerEndpoints
             TaxStatus(local?.FiscalTaxStatus),
             notice ?? "No se obtuvieron datos de ARCA. Completá y verificá la ficha manualmente."));
 
+    internal static FiscalLookupResponse SimulatedRegisteredLookup(CustomerAccount? local, string cuit) =>
+        new("simulated", null, null, local?.Name ?? "RESPONSABLE INSCRIPTO DE PRUEBA", cuit,
+            local?.FiscalAddress ?? "DOMICILIO DE PRUEBA", local?.FiscalLocality,
+            local?.FiscalProvince, "registered",
+            "Datos simulados de homologación: Responsable Inscripto. ARCA no fue consultada; verificá la ficha antes de emitir.");
+
     private static string? TaxStatus(SaleRecipientTaxStatus? status) => status switch
     {
         SaleRecipientTaxStatus.FinalConsumer => "finalConsumer",
@@ -248,7 +260,7 @@ public static class PosCustomerEndpoints
     private sealed record FiscalCustomerOption(Guid Id, string Code, string Name,
         string FiscalTaxStatus, string? FiscalDocumentNumber, string? FiscalAddress,
         string? FiscalLocality, string? FiscalProvince);
-    private sealed record FiscalLookupResponse(string Source, Guid? CustomerId, string? CustomerCode,
+    internal sealed record FiscalLookupResponse(string Source, Guid? CustomerId, string? CustomerCode,
         string? Name, string DocumentNumber, string? Address, string? Locality, string? Province,
         string? TaxStatus, string? Notice);
     private sealed record AccountSale(Guid SaleId, DateTimeOffset ChargedAtUtc,

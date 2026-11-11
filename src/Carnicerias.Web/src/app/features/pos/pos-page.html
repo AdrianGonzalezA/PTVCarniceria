@@ -481,7 +481,7 @@
               <button type="button" [disabled]="fiscalCustomerLoading() || checkoutBusy() || checkoutCommitted()"
                 (click)="searchFiscalCustomers()">{{ fiscalCustomerLoading() ? 'Buscando…' : 'Buscar cliente' }}</button>
               <button type="button" [disabled]="fiscalRegistryLoading() || checkoutBusy() || checkoutCommitted()"
-                (click)="lookupFiscalCuit()">{{ fiscalRegistryLoading() ? 'Consultando…' : 'Consultar CUIT en ARCA' }}</button>
+                (click)="lookupFiscalCuit()">{{ fiscalRegistryLoading() ? 'Consultando…' : 'Consultar CUIT' }}</button>
               @if (fiscalRegistryNotice(); as notice) { <p class="payment-guidance" role="status">{{ notice }}</p> }
               <label for="sale-fiscal-customer">Ficha fiscal guardada (opcional)</label>
               <select id="sale-fiscal-customer" [disabled]="checkoutBusy() || checkoutCommitted()"
@@ -521,7 +521,11 @@
         <p class="checkout-context">El cobro se registra en la sucursal y el turno del cajero actual. El stock se descuenta al confirmar.</p>
         <section class="checkout-review" aria-label="Resumen del cliente y comprobante">
           <span><strong>Cliente:</strong> {{ customerKind() === 'other' ? formatCuit(recipientDocumentNumber()) : 'Consumidor final' }}</span>
+          @if (customerKind() === 'other' && recipientName()) { <span><strong>Nombre:</strong> {{ recipientName() }}</span> }
           <span><strong>Comprobante:</strong> {{ documentTypeName() }}</span>
+          @if (fiscalRegistryNotice()?.includes('Datos simulados')) {
+            <span class="payment-guidance" role="status">{{ fiscalRegistryNotice() }}</span>
+          }
           @if (!checkoutCommitted() && !mercadoPagoOrderActive()) {
             <button class="change-customer-button" type="button" (click)="returnToDocumentCheckout()">Cambiar comprobante o datos</button>
           }

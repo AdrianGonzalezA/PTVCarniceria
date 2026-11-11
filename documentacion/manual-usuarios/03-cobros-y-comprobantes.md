@@ -6,6 +6,8 @@ Con el borrador guardado, pulsá **Finalizar compra**. El cierre avanza en tres 
 
 En **Cliente**, elegí **Consumidor final** u **Otro**. Para **Otro**, ingresá un CUIT válido. Al continuar, el POS consulta la ficha fiscal local y ARCA homologación; si ARCA no responde o el certificado carece de autorización, podés seleccionar la condición fiscal manualmente y completar los datos requeridos. En **Comprobante**, elegí ticket no fiscal, ticket fiscal o factura electrónica. En **Cobro**, revisá el resumen de cliente y comprobante y asigná uno o varios medios: **efectivo, débito, crédito, transferencia, Mercado Pago y cheque**. Cada importe y referencia están identificados. Solo el efectivo admite un importe mayor al saldo y genera vuelto; los demás importes no pueden superar lo adeudado.
 
+En el laboratorio local, mientras se habilita el servicio de padrón, la consulta de un CUIT sin ficha fiscal local completa devuelve un **Responsable Inscripto de prueba** con nombre y domicilio simulados. La pantalla lo identifica como **Datos simulados** y no consulta ARCA. Revisá o corregí esos campos antes de emitir un comprobante; la simulación se desactiva al volver a usar el servicio real.
+
 Débito, crédito, transferencia y cheque son hoy **registros manuales del medio declarado**; el POS no verifica esas operaciones con bancos o adquirentes. Mercado Pago sí exige una orden acreditada y verificada por la API. El cheque todavía no tiene cartera, depósito ni rechazo gestionados en la aplicación.
 
 ## Mercado Pago: QR dinámico, QR fijo o Point

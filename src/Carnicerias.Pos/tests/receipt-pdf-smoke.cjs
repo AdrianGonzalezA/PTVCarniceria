@@ -3,6 +3,7 @@ const { mkdirSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const { createReceiptHtml, validateReceiptRequest } = require('../dist/receipt-pdf');
 const { createFiscalInvoiceHtml } = require('../dist/fiscal-invoice');
+const { shiftClosingHtml, validateShiftClosingReport } = require('../dist/shift-closing-report');
 
 app.whenReady().then(async () => {
   const window = new BrowserWindow({ show: false, webPreferences: {
@@ -79,7 +80,27 @@ app.whenReady().then(async () => {
       mkdirSync(path.dirname(output), { recursive: true });
       writeFileSync(output, invoicePdfA);
     }
-    process.stdout.write(`Electron PDF smoke passed (ticket ${pdf.length}; B ${invoicePdf.length}; A ${invoicePdfA.length} bytes)\n`);
+    const shift = validateShiftClosingReport({
+      version: 1, shiftId: '11111111-1111-1111-1111-111111111111',
+      companyName: 'Carnicería de prueba', branchName: 'Centro', terminalName: 'Caja A',
+      cashierName: 'cajero1', openedAtUtc: '2026-11-05T10:00:00Z',
+      closedAtUtc: '2026-11-05T18:00:00Z', openingCash: 100,
+      cashSales: 400, nonCashSales: 200, accountSales: 50, salesTotal: 650,
+      cashCollections: 80, nonCashCollections: 25, creditApplied: 10,
+      cashWithdrawals: 20, expectedCash: 560, countedCash: 550,
+      handedCash: 500, cashDifference: -10,
+      paymentBreakdown: [{ method: 'cash', amount: 480 }],
+    });
+    await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(shiftClosingHtml(shift))}`);
+    const shiftPdf = await window.webContents.printToPDF({ printBackground: true, pageSize: 'A4' });
+    if (shiftPdf.subarray(0, 5).toString() !== '%PDF-' || shiftPdf.length < 2000)
+      throw new Error('Electron did not produce a valid shift closing PDF buffer');
+    if (process.env.CARNICERIAS_SHIFT_PDF_SMOKE_OUTPUT) {
+      const output = path.resolve(process.env.CARNICERIAS_SHIFT_PDF_SMOKE_OUTPUT);
+      mkdirSync(path.dirname(output), { recursive: true });
+      writeFileSync(output, shiftPdf);
+    }
+    process.stdout.write(`Electron PDF smoke passed (ticket ${pdf.length}; B ${invoicePdf.length}; A ${invoicePdfA.length}; shift ${shiftPdf.length} bytes)\n`);
   } catch (error) {
     process.exitCode = 1;
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);

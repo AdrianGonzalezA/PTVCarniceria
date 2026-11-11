@@ -53,6 +53,7 @@
 .cashier-name { font-weight: 650; }
 .shift-status { padding: 0.42rem 0.65rem; color: #222; background: var(--pos-lime); border: 0; border-radius: 0.3rem; font: inherit; font-size: 0.73rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .shift-status:disabled { cursor: not-allowed; opacity: 0.6; }
+.shift-withdrawal-trigger { padding: 0.42rem 0.65rem; color: #fff; background: transparent; border: 1px solid #ffffff80; border-radius: 0.3rem; font: inherit; font-size: 0.73rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .pos-account { position: relative; }
 .menu-trigger { display: grid; width: 2.5rem; gap: 0.25rem; padding: 0.4rem; border: 0; background: transparent; cursor: pointer; }
 .menu-trigger span { height: 0.18rem; border-radius: 2px; background: #fff; }
@@ -218,9 +219,15 @@
 .shift-summary strong { text-align: right; }
 .shift-summary small { grid-column: 1 / -1; color: var(--pos-muted); }
 .shift-summary-title { grid-column: 1 / -1; margin: 0 0 0.35rem; font-size: 0.9rem; }
-.shift-dialog { max-height: min(90dvh, 48rem); overflow: auto; }
+.shift-dialog { max-height: min(90dvh, 60rem); overflow: auto; }
+.withdrawal-dialog { width: min(100%, 34rem); max-height: min(90dvh, 48rem); overflow: auto; }
+.shift-dialog .dialog-actions { flex-wrap: wrap; }
+.shift-report-print,.shift-report-pdf { min-height: 2.4rem; padding: 0.5rem 0.8rem; color: var(--pos-ink); background: var(--pos-panel); border: 1px solid var(--pos-border); border-radius: 0.3rem; font: inherit; font-weight: 700; cursor: pointer; }
+.shift-report-print:hover,.shift-report-pdf:hover { border-color: var(--pos-teal); }
+.shift-report-guidance { margin: 0.75rem 0 0; color: var(--pos-muted); font-size: 0.82rem; }
 .shift-dialog > p:not(.eyebrow) { line-height: 1.5; }
 .shift-dialog .quantity-field { margin-top: 0.75rem; }
+.withdrawal-dialog .quantity-field { margin-top: 0.75rem; }
 .shift-withdrawals { margin-top: 0.9rem; padding: 0.8rem; border: 1px solid var(--pos-border); border-radius: 0.3rem; background: var(--pos-panel); }
 .shift-withdrawals-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .shift-withdrawals-heading h3 { margin: 0; font-size: 0.95rem; }
@@ -392,8 +399,8 @@ html[data-visual-theme='nocturno'] app-pos-page {
 .context-label { max-width: 16rem; overflow: hidden; color: var(--nt-muted); text-overflow: ellipsis; white-space: nowrap; }
 .terminal-label { color: var(--nt-copper); border-color: var(--nt-border); }
 .cashier-name { font-size: 0.82rem; }
-.shift-status,.stock-manage-button { min-height: 48px; padding: 0.5rem 0.7rem; color: var(--nt-ink); background: var(--nt-tile); border: 1px solid var(--nt-border); font-size: 0.78rem; touch-action: manipulation; }
-.shift-status:hover,.stock-manage-button:hover { border-color: var(--nt-copper); }
+.shift-status,.shift-withdrawal-trigger,.stock-manage-button { min-height: 48px; padding: 0.5rem 0.7rem; color: var(--nt-ink); background: var(--nt-tile); border: 1px solid var(--nt-border); font-size: 0.78rem; touch-action: manipulation; }
+.shift-status:hover,.shift-withdrawal-trigger:hover,.stock-manage-button:hover { border-color: var(--nt-copper); }
 .menu-trigger { min-width: 48px; min-height: 48px; place-content: center; }
 .menu-trigger span { width: 24px; }
 .account-menu { z-index: 4; background: var(--nt-panel); border: 1px solid var(--nt-border); }

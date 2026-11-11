@@ -19,15 +19,23 @@ describe('shift closing report', () => {
     const lines = shiftClosingLines(valid);
     expect(lines).toContain('Efectivo esperado: $ 560,00');
     expect(lines).toContain('Diferencia: $ -10,00');
-    expect(lines).toContain('Cobros cash: $ 480,00');
+    expect(lines).toContain('Cobros Efectivo: $ 480,00');
     const html = shiftClosingHtml(valid);
     expect(html).toContain('Carnes &amp; Más');
     expect(html).toContain('&lt;Centro&gt;');
     expect(html).not.toContain('<Centro>');
+    expect(html).toContain('<table');
+    expect(html).toContain('Ventas cuenta corriente');
+    expect(html).toContain('Cobros Efectivo');
+    expect(html).toContain('Efectivo entregado');
+    expect(html).toContain('cajero1');
   });
 
   it('rejects malformed and nonfinite reports before native output', () => {
     expect(() => validateShiftClosingReport({ ...report, expectedCash: Infinity })).toThrow('SHIFT_REPORT_INVALID');
     expect(() => validateShiftClosingReport({ ...report, paymentBreakdown: [{ amount: 1 }] })).toThrow('SHIFT_REPORT_INVALID');
+    expect(() => validateShiftClosingReport({ ...report, shiftId: '../outside' })).toThrow('SHIFT_REPORT_INVALID');
+    expect(() => validateShiftClosingReport({ ...report, countedCash: 1, handedCash: null })).toThrow('SHIFT_REPORT_INVALID');
+    expect(() => validateShiftClosingReport({ ...report, paymentBreakdown: [{ method: 'cash', amount: Infinity }] })).toThrow('SHIFT_REPORT_INVALID');
   });
 });

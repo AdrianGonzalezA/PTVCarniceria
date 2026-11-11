@@ -269,6 +269,7 @@ export class PosPage implements OnInit {
   protected readonly canOperate = computed(() => !!this.terminal() && !!this.cashierShift());
   protected readonly lastClosedShift = signal<CashierShift | null>(null);
   protected readonly shiftDialog = signal(false);
+  protected readonly withdrawalDialog = signal(false);
   protected readonly shiftOpeningCash = signal('0');
   protected readonly shiftCountedCash = signal('');
   protected readonly shiftHandedCash = signal('');
@@ -1687,8 +1688,17 @@ export class PosPage implements OnInit {
 
   protected openShiftDialog(): void {
     if (!this.terminal()) return;
+    this.withdrawalDialog.set(false);
     this.shiftDialog.set(true);
     this.shiftError.set(null);
+    this.loadCashierShift();
+  }
+
+  protected openWithdrawalDialog(): void {
+    if (!this.canOperate()) return;
+    this.shiftDialog.set(false);
+    this.withdrawalDialog.set(true);
+    this.withdrawalError.set(null);
     this.loadCashierShift();
   }
 
@@ -2621,7 +2631,7 @@ export class PosPage implements OnInit {
     }).finally(() => this.serialPrintBusy.set(false));
   }
 
-  protected paymentMethodName(method: SalePaymentMethod): string {
+  protected paymentMethodName(method: string): string {
     return this.paymentMethods.find((item) => item.id === method)?.label ?? method;
   }
 
@@ -2648,7 +2658,7 @@ export class PosPage implements OnInit {
         if (shift) {
           this.restoreActiveTicket(shift.id);
           this.loadTicketSlots();
-          if (this.shiftDialog()) this.loadWithdrawals();
+          if (this.shiftDialog() || this.withdrawalDialog()) this.loadWithdrawals();
         } else {
           this.withdrawals.set([]);
           this.ticketSlotsRequestRevision++;

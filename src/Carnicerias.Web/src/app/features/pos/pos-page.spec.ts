@@ -1889,13 +1889,18 @@ describe('PosPage', () => {
       openedAtUtc: '2026-10-06T15:00:00Z', closedAtUtc: null };
     const closedShift = { ...openShift, cashierName: 'cajero-anterior',
       closedAtUtc: '2026-10-06T17:00:00Z', report: {
-        shiftId: 'shift-id', companyName: 'Empresa', branchName: 'Sucursal', terminalName: 'Caja A',
+        version: 1, shiftId: 'shift-id', companyId: 'company-id', branchId: 'branch-id',
+        terminalId: 'terminal-id', cashierId: 'user-id', isComplete: true,
+        companyName: 'Empresa', branchName: 'Sucursal', terminalName: 'Caja A',
         cashierName: 'cajero-anterior', openedAtUtc: '2026-10-06T15:00:00Z',
         closedAtUtc: '2026-10-06T17:00:00Z', openingCash: 100, salesTotal: 1500,
         cashSales: 1000, nonCashSales: 500, cashCollections: 0, nonCashCollections: 0,
         cashWithdrawals: 0, expectedCash: 1100, countedCash: 1090, handedCash: 1090,
-        cashDifference: -10,
+        cashDifference: -10, accountSales: 0, creditApplied: 0,
+        paymentBreakdown: [{ method: 'cash', amount: 1000 }, { method: 'debit', amount: 500 }],
       } };
+    const printReport = vi.fn().mockResolvedValue({ port: 'COM1' });
+    const saveReportPdf = vi.fn().mockResolvedValue('C:\\Users\\cajero\\Downloads\\rendicion.pdf');
     let isOpen = true;
     let reopenedCash: number | null = null;
     let closingAmounts: [number, number] | null = null;
@@ -1918,6 +1923,8 @@ describe('PosPage', () => {
         },
       } },
       { provide: InventoryClient, useValue: { stock: () => of([]) } },
+      { provide: PosDeviceClient, useValue: { printShiftReport: printReport,
+        saveShiftReportPdf: saveReportPdf } },
     ] });
     const fixture = TestBed.createComponent(PosPage);
     const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
@@ -1938,6 +1945,12 @@ describe('PosPage', () => {
     fixture.detectChanges();
     expect(closingAmounts).toEqual([1090, 1090]);
     expect(fixture.nativeElement.querySelector('.closed-shift-summary').textContent).toContain('Diferencia-$');
+    expect(fixture.nativeElement.querySelector('.closed-shift-summary').textContent).toContain('Cobros netos');
+    (fixture.nativeElement.querySelector('.shift-report-print') as HTMLButtonElement).click();
+    (fixture.nativeElement.querySelector('.shift-report-pdf') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    expect(printReport).toHaveBeenCalledTimes(2);
+    expect(saveReportPdf).toHaveBeenCalledWith(closedShift.report);
     expect(navigate).not.toHaveBeenCalledWith('/');
     (fixture.nativeElement.querySelector('.shift-dialog .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
@@ -1991,12 +2004,22 @@ describe('PosPage', () => {
     const fixture = TestBed.createComponent(PosPage);
     fixture.detectChanges();
     await fixture.whenStable();
-    (fixture.nativeElement.querySelector('.shift-status') as HTMLButtonElement).click();
+    const closeTrigger = fixture.nativeElement.querySelector('.shift-status') as HTMLButtonElement;
+    const withdrawalTrigger = fixture.nativeElement.querySelector('.shift-withdrawal-trigger') as HTMLButtonElement;
+    expect(closeTrigger.textContent).toContain('Cierre de turno');
+    expect(closeTrigger.nextElementSibling).toBe(withdrawalTrigger);
+    closeTrigger.click();
     fixture.detectChanges();
-    const dialog = fixture.nativeElement.querySelector('.shift-dialog') as HTMLElement;
+    const closingDialog = fixture.nativeElement.querySelector('.shift-dialog') as HTMLElement;
+    expect(closingDialog.textContent).toContain('100,00');
+    expect(closingDialog.querySelector<HTMLButtonElement>('#close-shift-button')!.disabled).toBe(true);
+    expect(closingDialog.querySelector('#withdrawal-amount')).toBeNull();
+    closingDialog.querySelector<HTMLButtonElement>('.dialog-close')!.click();
+    fixture.detectChanges();
+    withdrawalTrigger.click();
+    fixture.detectChanges();
+    const dialog = fixture.nativeElement.querySelector('.withdrawal-dialog') as HTMLElement;
     expect(dialog.textContent).toContain('Rendición');
-    expect(dialog.textContent).toContain('100,00');
-    expect(dialog.querySelector<HTMLButtonElement>('#close-shift-button')!.disabled).toBe(true);
     const amount = dialog.querySelector<HTMLInputElement>('#withdrawal-amount')!;
     amount.value = '10,50';
     amount.dispatchEvent(new Event('input', { bubbles: true }));
@@ -2004,7 +2027,7 @@ describe('PosPage', () => {
     reason.value = 'Nuevo retiro';
     reason.dispatchEvent(new Event('input', { bubbles: true }));
     fixture.detectChanges();
-    const send = [...dialog.querySelectorAll<HTMLButtonElement>('.shift-withdrawals .finish-button')][0];
+    const send = dialog.querySelector<HTMLButtonElement>('.shift-withdrawals .finish-button')!;
     send.click();
     fixture.detectChanges();
     expect(dialog.textContent).toContain('La solicitud puede haberse guardado');

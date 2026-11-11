@@ -97,6 +97,16 @@ public sealed class FiscalDocument
         Status = FiscalDocumentStatus.Rejected;
     }
 
+    public void ConfirmNotIssued()
+    {
+        if (Status != FiscalDocumentStatus.NeedsReconciliation)
+            throw new InvalidOperationException("Only an uncertain request can be confirmed absent.");
+        // FECompConsultar returned 602 and FECompUltimoAutorizado was below Number.
+        // Keep this attempt for audit while allowing the number to be allocated again.
+        ErrorCodes = "602";
+        Status = FiscalDocumentStatus.Rejected;
+    }
+
     public void Authorize(int pointOfSale, int voucherType, long number,
         string cae, DateOnly expiry, DateTimeOffset authorizedAtUtc)
     {

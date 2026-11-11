@@ -1397,7 +1397,8 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasFilter("\"Status\" <> 2");
 
                     b.HasIndex("IssuerCuit", "PointOfSale", "VoucherType", "Number")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"Status\" <> 2");
 
                     b.ToTable("fiscal_documents", "pos_sales", t =>
                         {

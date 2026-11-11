@@ -118,6 +118,22 @@ public sealed class ArcaWsfeClientTests
     }
 
     [Fact]
+    public async Task ReportsAnAbsentInvoiceWithoutTreatingOtherWsfeErrorsAsAbsence()
+    {
+        var client = new ArcaWsfeClient(new HttpClient(new FakeHandler("""
+            <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>
+              <FECompConsultarResult><Errors><Err><Code>602</Code>
+                <Msg>No existen datos en nuestros registros.</Msg></Err></Errors></FECompConsultarResult>
+            </soap:Body></soap:Envelope>
+            """)));
+
+        var error = await Assert.ThrowsAsync<ArcaWsfeErrorException>(() =>
+            client.ConsultAsync(Ticket, 12, 6, 43));
+
+        Assert.Equal([602], error.Codes);
+    }
+
+    [Fact]
     public async Task AcceptsTheSoap12ResponseShapeShownInTheArcaManual()
     {
         var handler = new FakeHandler("""

@@ -8,6 +8,20 @@ namespace Carnicerias.Api.Fiscal;
 
 public static class FiscalDocumentEndpoints
 {
+    private static readonly Action<ILogger, Guid, Exception?> LogLockUnavailable =
+        LoggerMessage.Define<Guid>(LogLevel.Error, new EventId(3001, "FiscalLockUnavailable"),
+            "Fiscal issuance lock unavailable for sale {SaleId}");
+    private static readonly Action<ILogger, Guid, long, Exception?> LogCollision =
+        LoggerMessage.Define<Guid, long>(LogLevel.Warning, new EventId(3002, "FiscalCollision"),
+            "ARCA fiscal number collision reconciled for attempt {AttemptId}, number {Number}");
+    private static readonly Action<ILogger, Guid, long, long, Exception?> LogConfirmedAbsent =
+        LoggerMessage.Define<Guid, long, long>(LogLevel.Information,
+            new EventId(3003, "FiscalAttemptNotIssued"),
+            "ARCA confirmed fiscal attempt {AttemptId}, number {Number} was not issued; last authorized {LastAuthorized}");
+    private static readonly Action<ILogger, Guid, Exception?> LogReconciliationFailed =
+        LoggerMessage.Define<Guid>(LogLevel.Warning, new EventId(3004, "FiscalReconciliationFailed"),
+            "ARCA fiscal reconciliation failed for attempt {AttemptId}");
+
     public static IEndpointRouteBuilder MapFiscalDocumentEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet("/api/sales/{saleId:guid}/fiscal-document", GetAsync)
@@ -32,7 +46,7 @@ public static class FiscalDocumentEndpoints
     private static async Task<IResult> IssueAsync(Guid saleId, PlatformAccessDbContext db,
         OperationalContextAccessor accessor, ArcaHomologationTicketProvider provider,
         ArcaSettingsResolver settingsResolver, ArcaWsfeClient wsfe,
-        TimeProvider timeProvider, HttpContext httpContext,
+        TimeProvider timeProvider, ILoggerFactory loggerFactory, HttpContext httpContext,
         CancellationToken cancellationToken)
     {
         var origin = httpContext.Request.Headers.Origin.ToString();
@@ -58,6 +72,34 @@ public static class FiscalDocumentEndpoints
             return Error(503, "ARCA_HOMO_NOT_CONFIGURED");
 
         // The sale, payments and stock were committed independently; ARCA failure never rolls them back.
+        ArcaAccessTicket ticket;
+        try { ticket = await provider.GetAsync(settings, cancellationToken); }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        { return Error(503, "ARCA_AUTH_UNAVAILABLE"); }
+        var logger = loggerFactory.CreateLogger("Carnicerias.FiscalIssuance");
+
+        // Serialise local issuers sharing a CUIT, point and voucher type, including across API processes.
+        // The lock also prevents a slow request from being mistaken for an abandoned one.
+        FiscalIssuanceLock? issuanceLock;
+        try
+        {
+            issuanceLock = await FiscalIssuanceLock.TryAcquireAsync(db,
+                settings.IssuerCuit, settings.PointOfSale, VoucherType(sale), cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            LogLockUnavailable(logger, sale.Id, exception);
+            return Error(503, "FISCAL_NUMBER_LOCK_UNAVAILABLE");
+        }
+        await using var heldLock = issuanceLock;
+        if (issuanceLock is null) return Error(409, "FISCAL_REQUEST_IN_PROGRESS");
+        db.ChangeTracker.Clear();
+        current = await LatestAsync(db, sale, cancellationToken);
+        if (current?.Status == FiscalDocumentStatus.Authorized)
+            return Results.Ok(ToResponse(sale, current, settings));
+        if (current?.Status is FiscalDocumentStatus.Prepared or FiscalDocumentStatus.NeedsReconciliation &&
+            !IsSameSequence(current, settings.IssuerCuit, settings.PointOfSale, VoucherType(sale)))
+            return Error(409, "FISCAL_RECONCILIATION_PENDING");
         if (current?.Status == FiscalDocumentStatus.Prepared)
         {
             if (current.CreatedAtUtc > timeProvider.GetUtcNow().AddMinutes(-1))
@@ -67,36 +109,17 @@ public static class FiscalDocumentEndpoints
             await db.SaveChangesAsync(CancellationToken.None);
         }
         if (current?.Status == FiscalDocumentStatus.Rejected &&
-            current.ErrorCodes?.Split(',').Contains("10016") != true)
+            current.ErrorCodes?.Split(',').Any(code => code is "10016" or "602") != true)
             return Results.Ok(ToResponse(sale, current, settings));
-
-        ArcaAccessTicket ticket;
-        try { ticket = await provider.GetAsync(settings, cancellationToken); }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        { return Error(503, "ARCA_AUTH_UNAVAILABLE"); }
 
         if (current?.Status == FiscalDocumentStatus.NeedsReconciliation)
         {
-            try
-            {
-                var lookup = await wsfe.ConsultAsync(ticket, current.PointOfSale,
-                    current.VoucherType, current.Number, cancellationToken);
-                if (Matches(current, lookup))
-                {
-                    // WSFE has no merchant operation ID. On a shared point of sale an
-                    // identical-looking invoice could belong to the other team.
-                    // Never claim an uncertain CAE as ours without independent proof.
-                    return Error(409, "FISCAL_RECONCILIATION_PENDING");
-                }
-                // The shared point of sale assigned this number to another request.
-                current.RejectReconciledCollision();
-                await db.SaveChangesAsync(CancellationToken.None);
-            }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            { return Error(409, "FISCAL_RECONCILIATION_PENDING"); }
+            if (!await ReconcileAsync(current, db, wsfe, ticket, timeProvider, logger,
+                    cancellationToken))
+                return Error(409, "FISCAL_RECONCILIATION_PENDING");
         }
 
-        // POS 99 is shared: consult the live last authorized number for *every* attempt.
+        // A point may be shared with another issuer client: consult ARCA for every attempt.
         for (var retry = 0; retry < 2; retry++)
         {
             long last;
@@ -118,6 +141,28 @@ public static class FiscalDocumentEndpoints
             catch (FiscalSaleNotReadyException exception)
             { return Error(409, exception.Code); }
 
+            var blocking = await db.FiscalDocuments.FirstOrDefaultAsync(item =>
+                item.IssuerCuit == settings.IssuerCuit &&
+                item.PointOfSale == request.PointOfSale &&
+                item.VoucherType == request.VoucherType &&
+                item.Number == request.Number &&
+                item.Status != FiscalDocumentStatus.Rejected, cancellationToken);
+            if (blocking is not null)
+            {
+                if (blocking.Status == FiscalDocumentStatus.Authorized)
+                    return Error(409, "FISCAL_NUMBER_CONFLICT");
+                if (blocking.Status == FiscalDocumentStatus.Prepared)
+                {
+                    if (blocking.CreatedAtUtc > timeProvider.GetUtcNow().AddMinutes(-1))
+                        return Error(409, "FISCAL_REQUEST_IN_PROGRESS");
+                    blocking.RequireReconciliation();
+                    await db.SaveChangesAsync(CancellationToken.None);
+                }
+                if (!await ReconcileAsync(blocking, db, wsfe, ticket, timeProvider, logger,
+                        cancellationToken))
+                    return Error(409, "FISCAL_RECONCILIATION_PENDING");
+            }
+
             var document = new FiscalDocument(sale.CompanyId, sale.Id, settings.IssuerCuit,
                 request.PointOfSale, request.VoucherType, request.Number, request.IssueDate,
                 request.Total, request.ReceiverDocumentType, request.ReceiverDocumentNumber,
@@ -130,7 +175,10 @@ public static class FiscalDocumentEndpoints
             db.FiscalDocuments.Add(document);
             try { await db.SaveChangesAsync(cancellationToken); }
             catch (DbUpdateException exception) when (IsUniqueConflict(exception))
-            { return Error(409, "FISCAL_NUMBER_CONFLICT"); }
+            {
+                db.ChangeTracker.Clear();
+                return Error(409, "FISCAL_REQUEST_IN_PROGRESS");
+            }
 
             ArcaCaeResult result;
             try
@@ -159,6 +207,67 @@ public static class FiscalDocumentEndpoints
         }
         return Error(409, "FISCAL_NUMBER_CONFLICT");
     }
+
+    private static async Task<bool> ReconcileAsync(FiscalDocument attempt,
+        PlatformAccessDbContext db, ArcaWsfeClient wsfe, ArcaAccessTicket ticket,
+        TimeProvider timeProvider, ILogger logger, CancellationToken cancellationToken)
+    {
+        if (attempt.IssuerCuit != ticket.Cuit) return false;
+        try
+        {
+            var lookup = await wsfe.ConsultAsync(ticket, attempt.PointOfSale,
+                attempt.VoucherType, attempt.Number, cancellationToken);
+            if (Matches(attempt, lookup))
+            {
+                // WSFE has no merchant operation ID. Identical data on a shared point
+                // is insufficient proof that this sale owns the CAE.
+                return false;
+            }
+            if (lookup.Result != "A") return false;
+            attempt.RejectReconciledCollision();
+            await db.SaveChangesAsync(CancellationToken.None);
+            LogCollision(logger, attempt.Id, attempt.Number, null);
+            return true;
+        }
+        catch (ArcaWsfeErrorException exception) when (exception.Codes.SequenceEqual([602]))
+        {
+            try
+            {
+                var last = await wsfe.GetLastAuthorizedAsync(ticket, attempt.PointOfSale,
+                    attempt.VoucherType, cancellationToken);
+                if (!CanConfirmNotIssued(attempt, exception.Codes, last,
+                        timeProvider.GetUtcNow())) return false;
+                attempt.ConfirmNotIssued();
+                await db.SaveChangesAsync(CancellationToken.None);
+                LogConfirmedAbsent(logger, attempt.Id, attempt.Number, last, null);
+                return true;
+            }
+            catch (Exception error) when (error is not OperationCanceledException)
+            {
+                LogReconciliationFailed(logger, attempt.Id, error);
+                return false;
+            }
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            LogReconciliationFailed(logger, attempt.Id, exception);
+            return false;
+        }
+    }
+
+    public static bool CanConfirmNotIssued(FiscalDocument attempt,
+        IReadOnlyList<int> consultationErrorCodes, long lastAuthorized,
+        DateTimeOffset observedAtUtc) =>
+        attempt.Status == FiscalDocumentStatus.NeedsReconciliation &&
+        consultationErrorCodes.Count == 1 && consultationErrorCodes[0] == 602 &&
+        lastAuthorized >= 0 && lastAuthorized < attempt.Number &&
+        // An interrupted request can still complete remotely after our HTTP timeout.
+        attempt.CreatedAtUtc <= observedAtUtc.AddMinutes(-2);
+
+    public static bool IsSameSequence(FiscalDocument attempt,
+        string issuerCuit, int pointOfSale, int voucherType) =>
+        attempt.IssuerCuit == issuerCuit && attempt.PointOfSale == pointOfSale &&
+        attempt.VoucherType == voucherType;
 
     public static bool Matches(FiscalDocument attempt, ArcaInvoiceLookup lookup) =>
         lookup.Result == "A" && lookup.AuthorizationKind == "CAE" &&

@@ -1150,7 +1150,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 document.PointOfSale,
                 document.VoucherType,
                 document.Number
-            }).IsUnique();
+            }).IsUnique().HasFilter("\"Status\" <> 2");
             entity.HasIndex(document => new { document.CompanyId, document.SaleId })
                 .IsUnique().HasFilter("\"Status\" <> 2");
         });

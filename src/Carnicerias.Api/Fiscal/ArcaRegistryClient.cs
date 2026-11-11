@@ -7,6 +7,18 @@ namespace Carnicerias.Api.Fiscal;
 public sealed record ArcaRegistryPerson(string Cuit, string? Name, string? Address,
     string? Locality, string? Province, string? TaxStatus);
 
+public enum ArcaRegistryUnavailability
+{
+    NotFound,
+    ConstanciaUnavailable,
+    MissingGeneral,
+    CuitMismatch,
+    Inactive
+}
+
+public sealed record ArcaRegistryLookupResult(ArcaRegistryPerson? Person,
+    ArcaRegistryUnavailability? Unavailability, string? Detail = null);
+
 /// <summary>Read-only CUIT lookup in ARCA homologation; never changes customer records.</summary>
 public sealed class ArcaRegistryClient(HttpClient httpClient)
 {
@@ -16,6 +28,10 @@ public sealed class ArcaRegistryClient(HttpClient httpClient)
     private static readonly XNamespace Registry = "http://a5.soap.ws.server.puc.sr/";
 
     public async Task<ArcaRegistryPerson?> GetPersonAsync(ArcaAccessTicket ticket,
+        string cuit, CancellationToken cancellationToken = default) =>
+        (await LookupAsync(ticket, cuit, cancellationToken)).Person;
+
+    public async Task<ArcaRegistryLookupResult> LookupAsync(ArcaAccessTicket ticket,
         string cuit, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ticket);
@@ -49,10 +65,23 @@ public sealed class ArcaRegistryClient(HttpClient httpClient)
         var result = body?.Elements().SingleOrDefault(item => item.Name.LocalName == "getPersona_v2Response")
             ?.Elements().SingleOrDefault(item => item.Name.LocalName == "personaReturn")
             ?? throw new InvalidDataException("ARCA registry response is incomplete.");
-        if (Child(result, "errorConstancia") is not null) return null;
+        if (Child(result, "errorConstancia") is { } constanciaError)
+        {
+            var detail = constanciaError.Elements().FirstOrDefault(item =>
+                item.Name.LocalName == "error")?.Value.Trim();
+            var safeDetail = detail is { Length: > 0 and <= 200 } &&
+                detail.All(character => !char.IsControl(character)) ? detail : null;
+            var notFound = string.Equals(detail, "No existe persona con ese Id",
+                StringComparison.OrdinalIgnoreCase);
+            return new(null, notFound ? ArcaRegistryUnavailability.NotFound :
+                ArcaRegistryUnavailability.ConstanciaUnavailable, safeDetail);
+        }
         var general = Child(result, "datosGenerales");
-        if (general is null || Read(general, "idPersona") != cuit ||
-            Read(general, "estadoClave") != "ACTIVO") return null;
+        if (general is null) return new(null, ArcaRegistryUnavailability.MissingGeneral);
+        if (Read(general, "idPersona") != cuit)
+            return new(null, ArcaRegistryUnavailability.CuitMismatch);
+        if (Read(general, "estadoClave") != "ACTIVO")
+            return new(null, ArcaRegistryUnavailability.Inactive);
 
         var address = Child(general, "domicilioFiscal");
         var name = Read(general, "razonSocial") ??
@@ -62,10 +91,10 @@ public sealed class ArcaRegistryClient(HttpClient httpClient)
         var status = Child(result, "errorRegimenGeneral") is not null ||
             Child(result, "errorMonotributo") is not null || registered == smallTaxpayer
                 ? null : registered ? "registered" : "smallTaxpayer";
-        return new ArcaRegistryPerson(cuit, Bounded(name, 200),
+        return new(new ArcaRegistryPerson(cuit, Bounded(name, 200),
             Bounded(Read(address, "direccion"), 200),
             Bounded(Read(address, "localidad"), 100),
-            Bounded(Read(address, "descripcionProvincia"), 100), status);
+            Bounded(Read(address, "descripcionProvincia"), 100), status), null);
     }
 
     private static bool HasActiveTax(XElement? group, string id) =>

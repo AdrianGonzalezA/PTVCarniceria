@@ -68,6 +68,45 @@ public sealed class ArcaRegistryClientTests
     }
 
     [Theory]
+    [InlineData("No existe persona con ese Id", ArcaRegistryUnavailability.NotFound)]
+    [InlineData("No se puede emitir la constancia", ArcaRegistryUnavailability.ConstanciaUnavailable)]
+    public async Task DistinguishesMissingTaxpayerFromUnavailableConstancia(
+        string message, ArcaRegistryUnavailability expected)
+    {
+        var response = Response($"<errorConstancia><idPersona>{Cuit}</idPersona>" +
+            $"<error>{message}</error></errorConstancia>");
+        var lookup = await new ArcaRegistryClient(new HttpClient(new Handler(response)))
+            .LookupAsync(Ticket, Cuit);
+
+        Assert.Null(lookup.Person);
+        Assert.Equal(expected, lookup.Unavailability);
+        Assert.Equal(message, lookup.Detail);
+    }
+
+    [Fact]
+    public async Task DoesNotExposeOversizedRegistryErrorText()
+    {
+        var response = Response($"<errorConstancia><error>{new string('X', 201)}</error></errorConstancia>");
+        var lookup = await new ArcaRegistryClient(new HttpClient(new Handler(response)))
+            .LookupAsync(Ticket, Cuit);
+
+        Assert.Equal(ArcaRegistryUnavailability.ConstanciaUnavailable, lookup.Unavailability);
+        Assert.Null(lookup.Detail);
+    }
+
+    [Fact]
+    public async Task DistinguishesInactiveTaxpayerFromMissingTaxpayer()
+    {
+        var response = Response("").Replace("<estadoClave>ACTIVO</estadoClave>",
+            "<estadoClave>INACTIVO</estadoClave>", StringComparison.Ordinal);
+        var lookup = await new ArcaRegistryClient(new HttpClient(new Handler(response)))
+            .LookupAsync(Ticket, Cuit);
+
+        Assert.Null(lookup.Person);
+        Assert.Equal(ArcaRegistryUnavailability.Inactive, lookup.Unavailability);
+    }
+
+    [Theory]
     [InlineData(null, false)]
     [InlineData("20164755100", true)]
     [InlineData("20164755101", false)]

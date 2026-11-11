@@ -1,8 +1,8 @@
 namespace Carnicerias.Api.Fiscal;
 
-/// <summary>In-process WSAA ticket cache for the selected company credential.</summary>
+/// <summary>In-process and encrypted cross-process WSAA ticket cache for each credential and service.</summary>
 public sealed class ArcaHomologationTicketProvider(
-    ArcaWsaaClient wsaa, TimeProvider timeProvider) : IDisposable
+    ArcaWsaaClient wsaa, TimeProvider timeProvider, ArcaWsaaTicketCache persistentCache) : IDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Dictionary<string, ArcaAccessTicket> _tickets = [];
@@ -30,8 +30,9 @@ public sealed class ArcaHomologationTicketProvider(
             foreach (var stale in _tickets.Where(item => item.Value.ExpiresAtUtc <= now)
                          .Select(item => item.Key).ToArray())
                 _tickets.Remove(stale);
-            var ticket = await wsaa.RequestTicketAsync(certificate, settings.IssuerCuit,
-                service, cancellationToken);
+            var ticket = await persistentCache.GetOrRequestAsync(key, settings.IssuerCuit,
+                timeProvider, token => wsaa.RequestTicketAsync(certificate, settings.IssuerCuit,
+                    service, token), cancellationToken);
             _tickets[key] = ticket;
             return ticket;
         }

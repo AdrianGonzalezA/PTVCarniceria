@@ -193,11 +193,25 @@ public static class PosCustomerEndpoints
             var ticket = await ticketProvider.GetAsync(settings,
                 ArcaWsaaClient.RegistryService, cancellationToken);
             stage = "registry";
-            var person = await registry.GetPersonAsync(ticket, cuit!, cancellationToken);
-            if (person is null)
+            var lookup = await registry.LookupAsync(ticket, cuit!, cancellationToken);
+            if (lookup.Person is not { } person)
             {
-                LogFiscalLookupState(logger, "taxpayer unavailable in homologation registry", null);
-                return ManualFallback(local, cuit!);
+                LogFiscalLookupState(logger,
+                    $"taxpayer unavailable in homologation registry: {lookup.Unavailability}", null);
+                return ManualFallback(local, cuit!, lookup.Unavailability switch
+                {
+                    ArcaRegistryUnavailability.NotFound =>
+                        "El CUIT no figura en el padrón de ARCA homologación. Completá y verificá la ficha manualmente.",
+                    ArcaRegistryUnavailability.Inactive =>
+                        "ARCA informó que el CUIT no está activo. Verificá la situación fiscal antes de emitir.",
+                    ArcaRegistryUnavailability.CuitMismatch =>
+                        "ARCA devolvió una ficha para otro CUIT. Verificá los datos antes de emitir.",
+                    ArcaRegistryUnavailability.ConstanciaUnavailable =>
+                        lookup.Detail is { } detail
+                            ? $"ARCA informó: {detail.TrimEnd('.')}. Verificá la ficha manualmente."
+                            : "ARCA no pudo emitir una constancia para este CUIT. Verificá la ficha manualmente.",
+                    _ => "ARCA devolvió una ficha incompleta. Completá y verificá los datos manualmente."
+                });
             }
             return Results.Ok(new FiscalLookupResponse("arca", null, null,
                 local?.Name ?? person.Name, cuit!, local?.FiscalAddress ?? person.Address,
@@ -212,16 +226,19 @@ public static class PosCustomerEndpoints
         catch (Exception error) when (!cancellationToken.IsCancellationRequested &&
             error is HttpRequestException or TaskCanceledException or InvalidDataException or
                 InvalidOperationException or System.Xml.XmlException or
-                System.Security.Cryptography.CryptographicException or ArcaWsaaFaultException)
+                System.Security.Cryptography.CryptographicException or ArcaWsaaFaultException or IOException)
         {
             var reason = error is ArcaWsaaFaultException fault ? $"WSAA_{fault.Code}" :
                 error is HttpRequestException http ? $"HTTP_{http.HttpRequestError}" :
                 error.GetType().Name;
             LogFiscalLookupFailure(logger, stage, reason, null);
-            return ManualFallback(local, cuit!, error is ArcaWsaaFaultException authorization &&
-                authorization.Code.EndsWith("coe.notAuthorized", StringComparison.OrdinalIgnoreCase)
+            return ManualFallback(local, cuit!, error is ArcaWsaaFaultException authorization
+                ? authorization.Code.EndsWith("coe.notAuthorized", StringComparison.OrdinalIgnoreCase)
                     ? "ARCA no autorizó este certificado para consultar el padrón. Avisá al administrador y completá la ficha manualmente."
-                    : null);
+                    : authorization.Code.EndsWith("coe.alreadyAuthenticated", StringComparison.OrdinalIgnoreCase)
+                        ? "ARCA mantiene un ticket de acceso vigente que esta instancia no pudo recuperar. Reintentá más tarde; el padrón no fue consultado."
+                        : null
+                : null);
         }
     }
 

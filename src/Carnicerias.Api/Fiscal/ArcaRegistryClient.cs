@@ -10,7 +10,8 @@ public sealed record ArcaRegistryPerson(string Cuit, string? Name, string? Addre
 /// <summary>Read-only CUIT lookup in ARCA homologation; never changes customer records.</summary>
 public sealed class ArcaRegistryClient(HttpClient httpClient)
 {
-    private const string Endpoint = "https://awshomo.arca.gob.ar/sr-padron/webservices/personaServiceA5";
+    // ARCA's homologation manual also publishes this host; the arca.gob.ar alias does not resolve here.
+    private const string Endpoint = "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5";
     private static readonly XNamespace Soap = "http://schemas.xmlsoap.org/soap/envelope/";
     private static readonly XNamespace Registry = "http://a5.soap.ws.server.puc.sr/";
 

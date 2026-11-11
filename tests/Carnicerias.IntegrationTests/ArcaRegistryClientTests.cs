@@ -20,7 +20,7 @@ public sealed class ArcaRegistryClientTests
         var person = await new ArcaRegistryClient(new HttpClient(handler))
             .GetPersonAsync(Ticket, Cuit);
 
-        Assert.Equal("https://awshomo.arca.gob.ar/sr-padron/webservices/personaServiceA5",
+        Assert.Equal("https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5",
             handler.Url);
         var request = XDocument.Parse(handler.Body);
         Assert.Equal("getPersona_v2", request.Descendants()

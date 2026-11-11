@@ -10,6 +10,13 @@ namespace Carnicerias.Api.Customers;
 
 public static class PosCustomerEndpoints
 {
+    private static readonly Action<ILogger, string, Exception?> LogFiscalLookupState =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(1501, "FiscalLookupState"),
+            "Fiscal lookup fallback: {Reason}");
+    private static readonly Action<ILogger, string, string, Exception?> LogFiscalLookupFailure =
+        LoggerMessage.Define<string, string>(LogLevel.Warning, new EventId(1502, "FiscalLookupFailure"),
+            "Fiscal lookup fallback at {Stage}: {Reason}");
+
     public static IEndpointRouteBuilder MapPosCustomerEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet("/api/customers/credit-options", OptionsAsync)
@@ -152,7 +159,7 @@ public static class PosCustomerEndpoints
     private static async Task<IResult> FiscalLookupAsync(string? cuit,
         PlatformAccessDbContext db, OperationalContextAccessor accessor,
         ArcaSettingsResolver settingsResolver, ArcaHomologationTicketProvider ticketProvider,
-        ArcaRegistryClient registry, CancellationToken cancellationToken)
+        ArcaRegistryClient registry, ILoggerFactory loggerFactory, CancellationToken cancellationToken)
     {
         if (!FiscalCuit.IsValid(cuit))
             return Results.Json(new ErrorResponse(new ApiError("VALIDATION_ERROR",
@@ -170,15 +177,27 @@ public static class PosCustomerEndpoints
                 cuit!, local.FiscalAddress, local.FiscalLocality, local.FiscalProvince,
                 TaxStatus(local.FiscalTaxStatus), null));
 
+        var logger = loggerFactory.CreateLogger("Carnicerias.ArcaFiscalLookup");
+        var stage = "settings";
         try
         {
             var settings = await settingsResolver.ResolveAsync(accessor.Context.CompanyId,
                 cancellationToken);
-            if (!settings.IsConfigured) return ManualFallback(local, cuit!);
+            if (!settings.IsConfigured)
+            {
+                LogFiscalLookupState(logger, "ARCA configuration incomplete", null);
+                return ManualFallback(local, cuit!);
+            }
+            stage = "wsaa";
             var ticket = await ticketProvider.GetAsync(settings,
                 ArcaWsaaClient.RegistryService, cancellationToken);
+            stage = "registry";
             var person = await registry.GetPersonAsync(ticket, cuit!, cancellationToken);
-            if (person is null) return ManualFallback(local, cuit!);
+            if (person is null)
+            {
+                LogFiscalLookupState(logger, "taxpayer unavailable in homologation registry", null);
+                return ManualFallback(local, cuit!);
+            }
             return Results.Ok(new FiscalLookupResponse("arca", null, null,
                 local?.Name ?? person.Name, cuit!, local?.FiscalAddress ?? person.Address,
                 local?.FiscalLocality ?? person.Locality,
@@ -194,15 +213,22 @@ public static class PosCustomerEndpoints
                 InvalidOperationException or System.Xml.XmlException or
                 System.Security.Cryptography.CryptographicException or ArcaWsaaFaultException)
         {
-            return ManualFallback(local, cuit!);
+            var reason = error is ArcaWsaaFaultException fault ? $"WSAA_{fault.Code}" :
+                error is HttpRequestException http ? $"HTTP_{http.HttpRequestError}" :
+                error.GetType().Name;
+            LogFiscalLookupFailure(logger, stage, reason, null);
+            return ManualFallback(local, cuit!, error is ArcaWsaaFaultException authorization &&
+                authorization.Code.EndsWith("coe.notAuthorized", StringComparison.OrdinalIgnoreCase)
+                    ? "ARCA no autorizó este certificado para consultar el padrón. Avisá al administrador y completá la ficha manualmente."
+                    : null);
         }
     }
 
-    private static IResult ManualFallback(CustomerAccount? local, string cuit) =>
+    private static IResult ManualFallback(CustomerAccount? local, string cuit, string? notice = null) =>
         Results.Ok(new FiscalLookupResponse("manual", null, null, local?.Name, cuit,
             local?.FiscalAddress, local?.FiscalLocality, local?.FiscalProvince,
             TaxStatus(local?.FiscalTaxStatus),
-            "No se obtuvieron datos de ARCA. Completá y verificá la ficha manualmente."));
+            notice ?? "No se obtuvieron datos de ARCA. Completá y verificá la ficha manualmente."));
 
     private static string? TaxStatus(SaleRecipientTaxStatus? status) => status switch
     {

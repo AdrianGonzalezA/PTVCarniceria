@@ -2,7 +2,7 @@ import '@angular/compiler';
 import { HttpErrorResponse } from '@angular/common/http';
 import { provideHttpClient } from '@angular/common/http';
 import { provideRouter, Router } from '@angular/router';
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NEVER, of, Subject, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { CatalogClient } from '../../core/catalog/catalog-client';
@@ -70,6 +70,23 @@ describe('PosPage', () => {
     };
   }
 
+  function continueToDocument(fixture: ComponentFixture<PosPage>): void {
+    const button = fixture.nativeElement.querySelector('.customer-continue-button') as HTMLButtonElement | null;
+    if (button) {
+      button.click();
+      fixture.detectChanges();
+    }
+  }
+
+  function continueAsFinalConsumer(fixture: ComponentFixture<PosPage>): void {
+    continueToDocument(fixture);
+    const button = fixture.nativeElement.querySelector('.document-continue-button') as HTMLButtonElement | null;
+    if (button) {
+      button.click();
+      fixture.detectChanges();
+    }
+  }
+
   it('does not offer branch switching from the menu of an Electron box', () => {
     TestBed.configureTestingModule({ providers: [
       provideRouter([]), provideHttpClient(),
@@ -88,7 +105,7 @@ describe('PosPage', () => {
 
   async function checkoutWithGateways(intent: MercadoPagoIntent | null, unavailable = false,
     modes: readonly MercadoPagoMode[] = [], total = 2500, recovered?: SaleCheckout,
-    fiscal = false) {
+    fiscal = false, advance = true) {
     const checkoutClient = checkoutClientMock();
     if (recovered) checkoutClient.current.mockReturnValue(of(recovered));
     const session: CurrentSession = {
@@ -118,16 +135,85 @@ describe('PosPage', () => {
     const fixture = TestBed.createComponent(PosPage);
     fixture.detectChanges();
     await fixture.whenStable();
-    if (fiscal) {
-      const documentType = fixture.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement;
-      documentType.value = 'electronicInvoice';
-      documentType.dispatchEvent(new Event('change', { bubbles: true }));
-      fixture.detectChanges();
-    }
     (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
+    if (advance && !recovered) {
+      if (fiscal) {
+        continueToDocument(fixture);
+        const documentType = fixture.nativeElement.querySelector('#checkout-document-type') as HTMLSelectElement;
+        documentType.value = 'electronicInvoice';
+        documentType.dispatchEvent(new Event('change', { bubbles: true }));
+        fixture.detectChanges();
+      } else continueAsFinalConsumer(fixture);
+    }
     return fixture;
   }
+
+  it('asks for customer type at the start of checkout instead of the open sale', async () => {
+    const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, true, false);
+    const page = fixture.nativeElement as HTMLElement;
+    const lookup = vi.spyOn(TestBed.inject(CreditCustomerClient), 'lookupFiscal');
+    expect(page.querySelector('.sale-metadata #sale-recipient-tax-status')).toBeNull();
+    expect(page.querySelector('.sale-metadata #sale-document-type')).toBeNull();
+    expect((page.querySelector('#checkout-customer-kind') as HTMLSelectElement).value).toBe('finalConsumer');
+    expect(page.querySelector('.payment-methods')).toBeNull();
+    const customerKind = page.querySelector('#checkout-customer-kind') as HTMLSelectElement;
+    customerKind.value = 'other';
+    customerKind.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    const cuit = page.querySelector('#checkout-cuit') as HTMLInputElement;
+    cuit.value = '20164755101';
+    cuit.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect((page.querySelector('.customer-continue-button') as HTMLButtonElement).disabled).toBe(true);
+    expect(lookup).not.toHaveBeenCalled();
+    cuit.value = '20164755100';
+    cuit.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(cuit.value).toBe('20-16475510-0');
+    page.querySelector<HTMLButtonElement>('.customer-continue-button')!.click();
+    fixture.detectChanges();
+    expect(lookup).toHaveBeenCalledExactlyOnceWith('20164755100');
+    expect(page.querySelector('.payment-methods')).toBeNull();
+    expect((page.querySelector('#checkout-document-type') as HTMLSelectElement).value).toBe('nonFiscalTicket');
+    const documentType = page.querySelector('#checkout-document-type') as HTMLSelectElement;
+    documentType.value = 'electronicInvoice';
+    documentType.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    expect((page.querySelector('#checkout-recipient-tax-status') as HTMLSelectElement).value).toBe('');
+    expect((page.querySelector('.document-continue-button') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('allows manual tax status if the CUIT lookup is still pending', async () => {
+    const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, false, false);
+    const page = fixture.nativeElement as HTMLElement;
+    const pending = new Subject<FiscalLookupResult>();
+    vi.spyOn(TestBed.inject(CreditCustomerClient), 'lookupFiscal').mockReturnValue(pending.asObservable());
+    const kind = page.querySelector('#checkout-customer-kind') as HTMLSelectElement;
+    kind.value = 'other';
+    kind.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    const cuit = page.querySelector('#checkout-cuit') as HTMLInputElement;
+    cuit.value = '20164755100';
+    cuit.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    page.querySelector<HTMLButtonElement>('.customer-continue-button')!.click();
+    fixture.detectChanges();
+    expect((page.querySelector('.document-continue-button') as HTMLButtonElement).disabled).toBe(true);
+    const status = page.querySelector('#checkout-recipient-tax-status') as HTMLSelectElement;
+    status.value = 'registered';
+    status.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    expect((page.querySelector('.document-continue-button') as HTMLButtonElement).disabled).toBe(false);
+    page.querySelector<HTMLButtonElement>('.document-continue-button')!.click();
+    fixture.detectChanges();
+    expect((page.querySelector('.checkout-dialog .finish-button') as HTMLButtonElement).disabled).toBe(false);
+    pending.next({ source: 'arca', customerId: null, customerCode: null, name: 'Cliente tardío',
+      documentNumber: '20164755100', address: 'Otra calle', locality: null, province: null,
+      taxStatus: 'exempt', notice: null });
+    fixture.detectChanges();
+    expect(status.value).toBe('registered');
+  });
 
   it('does not offer a new integrated payment on an unconfigured register', async () => {
     const fixture = await checkoutWithGateways(null);
@@ -327,7 +413,7 @@ describe('PosPage', () => {
     expect((fixture.nativeElement.querySelector('#sale-recipient-name') as HTMLInputElement).value).toBe('Cliente fiscal');
     expect((fixture.nativeElement.querySelector('#sale-recipient-address') as HTMLInputElement).value).toBe('Calle 123');
     expect((fixture.nativeElement.querySelector('#sale-fiscal-customer') as HTMLSelectElement).value).toBe('customer-1');
-    expect(fixture.nativeElement.querySelector('.checkout-dialog')?.textContent).toContain('2.500,00');
+    expect(fixture.nativeElement.querySelector('.ticket-lines')?.textContent).toContain('2.500,00');
   });
 
   it('keeps manual fiscal fields when registry lookup fails', async () => {
@@ -419,34 +505,47 @@ describe('PosPage', () => {
       element.dispatchEvent(new Event('input', { bubbles: true }));
       fixture.detectChanges();
     };
-    select('sale-document-type', 'electronicInvoice');
-    select('sale-recipient-tax-status', 'registered');
-    expect(fixture.nativeElement.querySelector('.sale-metadata #sale-document-type')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('.sale-metadata #sale-recipient-tax-status')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.sale-metadata #sale-document-type')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.sale-metadata #sale-recipient-tax-status')).toBeNull();
     (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
+    expect((fixture.nativeElement.querySelector('#checkout-customer-kind') as HTMLSelectElement).value).toBe('finalConsumer');
+    select('checkout-customer-kind', 'other');
+    expect((fixture.nativeElement.querySelector('.customer-continue-button') as HTMLButtonElement).disabled).toBe(true);
+    input('checkout-cuit', '20164755100');
+    expect((fixture.nativeElement.querySelector('.customer-continue-button') as HTMLButtonElement).disabled).toBe(false);
+    (fixture.nativeElement.querySelector('.customer-continue-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    select('checkout-document-type', 'electronicInvoice');
     expect(fixture.nativeElement.querySelector('.checkout-dialog #sale-document-type')).toBeNull();
-    expect(fixture.nativeElement.querySelector('.checkout-dialog #sale-recipient-tax-status')).toBeNull();
     expect(fixture.nativeElement.querySelector('.sale-document').textContent).toContain('Factura electr');
-    (fixture.nativeElement.querySelector('.checkout-dialog .dialog-cancel') as HTMLButtonElement).click();
+    (fixture.nativeElement.querySelector('.checkout-dialog .dialog-close') as HTMLButtonElement).click();
     fixture.detectChanges();
-    expect((fixture.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement).value).toBe('electronicInvoice');
+    expect(fixture.nativeElement.querySelector('#sale-document-type')).toBeNull();
     (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
-    expect((fixture.nativeElement.querySelector('.checkout-dialog .finish-button') as HTMLButtonElement).disabled).toBe(true);
+    select('checkout-customer-kind', 'other');
+    input('checkout-cuit', '20164755100');
+    (fixture.nativeElement.querySelector('.customer-continue-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect((fixture.nativeElement.querySelector('#checkout-document-type') as HTMLSelectElement).value).toBe('electronicInvoice');
+    expect((fixture.nativeElement.querySelector('.document-continue-button') as HTMLButtonElement).disabled).toBe(true);
     expect(confirm).not.toHaveBeenCalled();
+    select('checkout-recipient-tax-status', 'registered');
     input('sale-recipient-name', 'Cliente');
-    input('sale-recipient-document-number', '20000000001');
     input('sale-recipient-address', 'Calle 123');
+    expect((fixture.nativeElement.querySelector('.document-continue-button') as HTMLButtonElement).disabled).toBe(false);
+    (fixture.nativeElement.querySelector('.document-continue-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
     expect((fixture.nativeElement.querySelector('.checkout-dialog .finish-button') as HTMLButtonElement).disabled).toBe(false);
     (fixture.nativeElement.querySelector('.checkout-dialog .finish-button') as HTMLButtonElement).click();
     await fixture.whenStable();
     fixture.detectChanges();
     expect(confirm).toHaveBeenCalledWith('draft-id', [{ method: 'cash', amount: 2500 }], undefined,
       { documentType: 'electronicInvoice', recipientTaxStatus: 'registered', recipientName: 'Cliente',
-        recipientDocumentNumber: '20000000001', recipientAddress: 'Calle 123' }, undefined);
-    expect((fixture.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement).value).toBe('nonFiscalTicket');
-    expect((fixture.nativeElement.querySelector('#sale-recipient-tax-status') as HTMLSelectElement).value).toBe('finalConsumer');
+        recipientDocumentNumber: '20164755100', recipientAddress: 'Calle 123' }, undefined);
+    expect(fixture.nativeElement.querySelector('#sale-document-type')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#sale-recipient-tax-status')).toBeNull();
     expect(fixture.nativeElement.querySelector('.sale-receipt').textContent).toContain('pendiente de emisión');
     expect(fixture.nativeElement.querySelector('.serial-print-button')).toBeNull();
     expect(fixture.nativeElement.querySelector('.save-pdf-button')).toBeNull();
@@ -521,18 +620,25 @@ describe('PosPage', () => {
       element.dispatchEvent(new Event('change', { bubbles: true }));
       fixture.detectChanges();
     };
-    choose('sale-document-type', 'electronicInvoice');
-    choose('sale-recipient-tax-status', 'registered');
+    (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    continueToDocument(fixture);
+    choose('checkout-document-type', 'electronicInvoice');
+    (fixture.nativeElement.querySelector('.checkout-dialog .dialog-close') as HTMLButtonElement).click();
+    fixture.detectChanges();
 
     (fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).click();
     await fixture.whenStable();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('Bondiola');
     expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).not.toContain('Asado');
-    expect((fixture.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement).value).toBe('nonFiscalTicket');
-    expect((fixture.nativeElement.querySelector('#sale-recipient-tax-status') as HTMLSelectElement).value).toBe('finalConsumer');
-    choose('sale-document-type', 'fiscalTicket');
-    choose('sale-recipient-tax-status', 'exempt');
+    (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    continueToDocument(fixture);
+    expect((fixture.nativeElement.querySelector('#checkout-document-type') as HTMLSelectElement).value).toBe('nonFiscalTicket');
+    choose('checkout-document-type', 'fiscalTicket');
+    (fixture.nativeElement.querySelector('.checkout-dialog .dialog-close') as HTMLButtonElement).click();
+    fixture.detectChanges();
     (fixture.nativeElement.querySelectorAll('.ticket-tab')[2] as HTMLButtonElement).click();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -553,13 +659,22 @@ describe('PosPage', () => {
     (reopened.nativeElement.querySelectorAll('.ticket-tab')[0] as HTMLButtonElement).click();
     await reopened.whenStable();
     reopened.detectChanges();
-    expect((reopened.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement).value).toBe('electronicInvoice');
-    expect((reopened.nativeElement.querySelector('#sale-recipient-tax-status') as HTMLSelectElement).value).toBe('registered');
+    expect(reopened.nativeElement.querySelector('#sale-document-type')).toBeNull();
+    expect(reopened.nativeElement.querySelector('#sale-recipient-tax-status')).toBeNull();
+    (reopened.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
+    reopened.detectChanges();
+    expect((reopened.nativeElement.querySelector('#checkout-customer-kind') as HTMLSelectElement).value).toBe('finalConsumer');
+    continueToDocument(reopened);
+    expect((reopened.nativeElement.querySelector('#checkout-document-type') as HTMLSelectElement).value).toBe('electronicInvoice');
+    (reopened.nativeElement.querySelector('.checkout-dialog .dialog-close') as HTMLButtonElement).click();
+    reopened.detectChanges();
     (reopened.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).click();
     await reopened.whenStable();
     reopened.detectChanges();
-    expect((reopened.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement).value).toBe('fiscalTicket');
-    expect((reopened.nativeElement.querySelector('#sale-recipient-tax-status') as HTMLSelectElement).value).toBe('exempt');
+    (reopened.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
+    reopened.detectChanges();
+    continueToDocument(reopened);
+    expect((reopened.nativeElement.querySelector('#checkout-document-type') as HTMLSelectElement).value).toBe('fiscalTicket');
   });
 
   it('shows which tickets were saved after reopening the POS', async () => {
@@ -748,15 +863,20 @@ describe('PosPage', () => {
       const fixture = TestBed.createComponent(PosPage);
       fixture.detectChanges();
       await fixture.whenStable();
-      const documentType = fixture.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement;
+      (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      continueToDocument(fixture);
+      const documentType = fixture.nativeElement.querySelector('#checkout-document-type') as HTMLSelectElement;
       documentType.value = 'electronicInvoice';
       documentType.dispatchEvent(new Event('change', { bubbles: true }));
+      fixture.detectChanges();
+      (fixture.nativeElement.querySelector('.checkout-dialog .dialog-close') as HTMLButtonElement).click();
       fixture.detectChanges();
       (fixture.nativeElement.querySelector('.remove-line-button') as HTMLButtonElement).click();
       fixture.detectChanges();
       expect(cancel).toHaveBeenCalledExactlyOnceWith('A');
       expect(fixture.nativeElement.querySelector('.ticket-lines')).toBeNull();
-      expect((fixture.nativeElement.querySelector('#sale-document-type') as HTMLSelectElement).value).toBe('nonFiscalTicket');
+      expect(Object.keys(window.localStorage).filter((key) => key.includes('ticket-document'))).toHaveLength(0);
       expect((fixture.nativeElement.querySelectorAll('.ticket-tab')[1] as HTMLButtonElement).disabled).toBe(false);
     } finally {
       confirm.mockRestore();
@@ -934,6 +1054,7 @@ describe('PosPage', () => {
     (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#checkout-title').textContent).toContain('Cobrar venta');
+    continueAsFinalConsumer(fixture);
     const cashAmount = fixture.nativeElement.querySelector('.payment-amount') as HTMLInputElement;
     cashAmount.value = '1000';
     cashAmount.dispatchEvent(new Event('input', { bubbles: true }));
@@ -983,6 +1104,7 @@ describe('PosPage', () => {
     (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#checkout-title').textContent).toContain('Cobrar venta');
+    continueAsFinalConsumer(fixture);
     printerAssigned = false;
     const secondCash = fixture.nativeElement.querySelector('.payment-amount') as HTMLInputElement;
     secondCash.value = '2400';
@@ -1193,6 +1315,7 @@ describe('PosPage', () => {
     (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#checkout-title').textContent).toContain('Cobrar venta');
+    continueAsFinalConsumer(fixture);
     (fixture.nativeElement.querySelector('.checkout-dialog .finish-button') as HTMLButtonElement).click();
     await fixture.whenStable();
     expect(confirmedDraftId).toBe('draft-id');
@@ -1824,6 +1947,7 @@ describe('PosPage', () => {
     await fixture.whenStable();
     (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
+    continueAsFinalConsumer(fixture);
     const options = fixture.nativeElement.querySelectorAll('.payment-option input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
     options[0].click();
     options[4].click();
@@ -1882,6 +2006,7 @@ describe('PosPage', () => {
     try {
       (fixture.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
       fixture.detectChanges();
+      continueAsFinalConsumer(fixture);
       expect(fixture.nativeElement.querySelector('.mercado-pago-state').textContent).toContain('Pendiente');
       await vi.advanceTimersByTimeAsync(5000);
       fixture.detectChanges();

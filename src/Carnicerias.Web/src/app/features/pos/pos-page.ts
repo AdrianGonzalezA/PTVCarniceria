@@ -293,6 +293,9 @@ export class PosPage implements OnInit {
   protected readonly mercadoPagoQrImage = signal<string | null>(null);
   protected readonly mercadoPagoMessage = signal<string | null>(null);
   protected readonly documentType = signal<SaleDocumentType>('nonFiscalTicket');
+  protected readonly checkoutStep = signal<'customer' | 'document' | 'payment'>('customer');
+  protected readonly customerKind = signal<'finalConsumer' | 'other'>('finalConsumer');
+  protected readonly customerTaxStatusKnown = signal(true);
   protected readonly recipientTaxStatus = signal<SaleRecipientTaxStatus>('finalConsumer');
   protected readonly recipientName = signal('');
   protected readonly recipientDocumentNumber = signal('');
@@ -308,12 +311,20 @@ export class PosPage implements OnInit {
   protected readonly fiscalRegistryLoading = signal(false);
   protected readonly fiscalRegistryNotice = signal<string | null>(null);
   private fiscalLookupRequestId = 0;
+  protected readonly customerCuitProblem = computed(() => this.customerKind() === 'other' &&
+    !this.validCuit(this.recipientDocumentNumber().replace(/\D/g, ''))
+    ? 'Ingresá un CUIT válido con dígito verificador.' : null);
   protected readonly documentProblem = computed(() => {
+    if (this.customerKind() === 'other') {
+      if (this.customerCuitProblem()) return this.customerCuitProblem();
+      if (this.fiscalRegistryLoading()) return 'Esperá la consulta fiscal del cliente.';
+      if (!this.customerTaxStatusKnown()) return 'Seleccioná la condición fiscal del cliente.';
+    }
     if (this.documentType() === 'nonFiscalTicket') return null;
     const name = this.recipientName().trim();
     const address = this.recipientAddress().trim();
     const document = this.recipientDocumentNumber().replace(/[- ]/g, '');
-    if (this.recipientTaxStatus() !== 'finalConsumer') {
+    if (this.customerKind() === 'other' || this.recipientTaxStatus() !== 'finalConsumer') {
       if (!name || !address || !document)
         return 'Para este cliente necesitás nombre o razón social, CUIT y domicilio.';
       if (!this.validCuit(document)) return 'Ingresá un CUIT válido para el comprobante fiscal.';
@@ -1414,6 +1425,10 @@ export class PosPage implements OnInit {
     this.creditCustomerLoadError.set(null);
     this.recipientName.set('');
     this.recipientDocumentNumber.set('');
+    this.checkoutStep.set('customer');
+    this.customerKind.set('finalConsumer');
+    this.customerTaxStatusKnown.set(true);
+    this.recipientTaxStatus.set('finalConsumer');
     this.recipientAddress.set('');
     this.recipientLocality.set('');
     this.recipientProvince.set('');
@@ -1425,7 +1440,6 @@ export class PosPage implements OnInit {
     this.fiscalRegistryNotice.set(null);
     this.fiscalRegistryLoading.set(false);
     this.fiscalLookupRequestId++;
-    if (this.documentType() !== 'nonFiscalTicket') this.searchFiscalCustomers();
     if (this.canChargeToAccount()) this.searchCreditCustomers();
     this.checkoutError.set(null);
     this.checkoutNotice.set(true);
@@ -1517,6 +1531,10 @@ export class PosPage implements OnInit {
     }
     this.documentType.set(terms.documentType as SaleDocumentType);
     this.recipientTaxStatus.set(terms.recipientTaxStatus as SaleRecipientTaxStatus);
+    this.customerKind.set(terms.recipientTaxStatus !== 'finalConsumer' ||
+      this.validCuit((terms.recipientDocumentNumber ?? '').replace(/\D/g, '')) ? 'other' : 'finalConsumer');
+    this.customerTaxStatusKnown.set(true);
+    this.checkoutStep.set('payment');
     this.recipientName.set(terms.recipientName ?? '');
     this.recipientDocumentNumber.set(terms.recipientDocumentNumber ?? '');
     this.recipientAddress.set(terms.recipientAddress ?? '');
@@ -2002,10 +2020,86 @@ export class PosPage implements OnInit {
   }
 
   protected selectRecipientTaxStatus(event: Event): void {
-    this.recipientTaxStatus.set((event.target as HTMLSelectElement).value as SaleRecipientTaxStatus);
+    const status = (event.target as HTMLSelectElement).value;
+    if (!['finalConsumer', 'registered', 'smallTaxpayer', 'exempt'].includes(status)) {
+      this.customerTaxStatusKnown.set(false);
+      return;
+    }
+    if (this.fiscalRegistryLoading()) {
+      this.fiscalLookupRequestId++;
+      this.fiscalRegistryLoading.set(false);
+      this.fiscalRegistryNotice.set('Condición fiscal ingresada manualmente; verificá los datos antes de emitir.');
+    }
+    this.recipientTaxStatus.set(status as SaleRecipientTaxStatus);
+    this.customerTaxStatusKnown.set(true);
     this.fiscalCustomerId.set('');
-    this.rememberDocumentChoice();
     this.checkoutError.set(null);
+  }
+
+  protected selectCustomerKind(event: Event): void {
+    const kind = (event.target as HTMLSelectElement).value === 'other' ? 'other' : 'finalConsumer';
+    if (kind === this.customerKind()) return;
+    this.customerKind.set(kind);
+    this.customerTaxStatusKnown.set(kind === 'finalConsumer');
+    this.recipientTaxStatus.set('finalConsumer');
+    this.recipientName.set('');
+    this.recipientDocumentNumber.set('');
+    this.recipientAddress.set('');
+    this.recipientLocality.set('');
+    this.recipientProvince.set('');
+    this.fiscalCustomerId.set('');
+    this.fiscalCustomerSearch.set('');
+    this.fiscalRegistryNotice.set(null);
+    this.checkoutError.set(null);
+    this.fiscalLookupRequestId++;
+  }
+
+  protected updateCheckoutCuit(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const cuit = input.value.replace(/\D/g, '').slice(0, 11);
+    if (cuit !== this.recipientDocumentNumber()) {
+      this.recipientName.set('');
+      this.recipientAddress.set('');
+      this.recipientLocality.set('');
+      this.recipientProvince.set('');
+      this.recipientTaxStatus.set('finalConsumer');
+      this.fiscalRegistryNotice.set(null);
+      this.fiscalRegistryLoading.set(false);
+      this.fiscalLookupRequestId++;
+    }
+    this.recipientDocumentNumber.set(cuit);
+    this.fiscalCustomerSearch.set(cuit);
+    this.customerTaxStatusKnown.set(false);
+    this.fiscalCustomerId.set('');
+    input.value = this.formatCuit(cuit);
+  }
+
+  protected formatCuit(value: string): string {
+    const digits = value.replace(/\D/g, '').slice(0, 11);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 10) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+    return `${digits.slice(0, 2)}-${digits.slice(2, 10)}-${digits.slice(10)}`;
+  }
+
+  protected continueCustomerCheckout(): void {
+    if (this.customerCuitProblem()) return;
+    this.checkoutStep.set('document');
+    if (this.customerKind() === 'other') this.lookupFiscalCuit();
+  }
+
+  protected returnToCustomerCheckout(): void {
+    if (this.checkoutCommitted() || this.mercadoPagoOrderActive()) return;
+    this.checkoutStep.set('customer');
+  }
+
+  protected continueDocumentCheckout(): void {
+    if (this.documentProblem()) return;
+    this.checkoutStep.set('payment');
+  }
+
+  protected returnToDocumentCheckout(): void {
+    if (this.checkoutCommitted() || this.mercadoPagoOrderActive()) return;
+    this.checkoutStep.set('document');
   }
 
   protected documentTypeName(): string {
@@ -2074,7 +2168,7 @@ export class PosPage implements OnInit {
       this.fiscalRegistryNotice.set('Ingresá un CUIT válido para consultar ARCA.');
       return;
     }
-    const before = [this.documentType(), this.recipientTaxStatus(), this.fiscalCustomerSearch(),
+    const before = [this.documentType(), this.recipientTaxStatus(), this.customerTaxStatusKnown(), this.fiscalCustomerSearch(),
       this.recipientName(), this.recipientDocumentNumber(), this.recipientAddress(),
       this.recipientLocality(), this.recipientProvince()].join('\u0000');
     const requestId = ++this.fiscalLookupRequestId;
@@ -2085,7 +2179,7 @@ export class PosPage implements OnInit {
         if (requestId !== this.fiscalLookupRequestId || !this.checkoutNotice() ||
             this.checkoutCommitted()) return;
         this.fiscalRegistryLoading.set(false);
-        const current = [this.documentType(), this.recipientTaxStatus(), this.fiscalCustomerSearch(),
+        const current = [this.documentType(), this.recipientTaxStatus(), this.customerTaxStatusKnown(), this.fiscalCustomerSearch(),
           this.recipientName(), this.recipientDocumentNumber(), this.recipientAddress(),
           this.recipientLocality(), this.recipientProvince()].join('\u0000');
         if (current !== before) {
@@ -2097,7 +2191,10 @@ export class PosPage implements OnInit {
         this.recipientAddress.set(result.address ?? this.recipientAddress());
         this.recipientLocality.set(result.locality ?? this.recipientLocality());
         this.recipientProvince.set(result.province ?? this.recipientProvince());
-        if (result.taxStatus) this.recipientTaxStatus.set(result.taxStatus);
+        if (result.taxStatus) {
+          this.recipientTaxStatus.set(result.taxStatus);
+          this.customerTaxStatusKnown.set(true);
+        }
         this.fiscalCustomerId.set(result.source === 'local' ? result.customerId ?? '' : '');
         if (result.source === 'local' && result.customerId && result.customerCode && result.taxStatus) {
           const option: FiscalCustomerOption = {
@@ -2128,6 +2225,7 @@ export class PosPage implements OnInit {
     this.fiscalCustomerId.set(customer?.id ?? '');
     if (!customer) return;
     this.recipientTaxStatus.set(customer.fiscalTaxStatus);
+    this.customerTaxStatusKnown.set(true);
     this.recipientName.set(customer.name);
     this.recipientDocumentNumber.set(customer.fiscalDocumentNumber ?? '');
     this.recipientAddress.set(customer.fiscalAddress ?? '');
@@ -2680,11 +2778,9 @@ export class PosPage implements OnInit {
     } catch { choice = null; }
     const saved = Array.isArray(choice) ? choice : [];
     const documentType = saved[0];
-    const taxStatus = saved[1];
     this.documentType.set(documentType === 'fiscalTicket' || documentType === 'electronicInvoice'
       ? documentType : 'nonFiscalTicket');
-    this.recipientTaxStatus.set(taxStatus === 'registered' || taxStatus === 'smallTaxpayer' || taxStatus === 'exempt'
-      ? taxStatus : 'finalConsumer');
+    this.recipientTaxStatus.set('finalConsumer');
   }
 
   private rememberDocumentChoice(): void {
@@ -2692,7 +2788,7 @@ export class PosPage implements OnInit {
     if (!shift) return;
     try {
       window.localStorage.setItem(this.documentChoiceStorageKey(shift.id, this.activeTicketSlot()),
-        JSON.stringify([this.documentType(), this.recipientTaxStatus()]));
+        JSON.stringify([this.documentType()]));
     } catch { /* The sale remains usable if local storage is unavailable. */ }
   }
 
@@ -2704,5 +2800,7 @@ export class PosPage implements OnInit {
     }
     this.documentType.set('nonFiscalTicket');
     this.recipientTaxStatus.set('finalConsumer');
+    this.customerKind.set('finalConsumer');
+    this.customerTaxStatusKnown.set(true);
   }
 }

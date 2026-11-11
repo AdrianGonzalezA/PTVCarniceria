@@ -2,7 +2,9 @@
 
 ## Cerrar el ticket
 
-Con el borrador guardado, pulsá **Finalizar compra**. En **Cobrar venta** revisá el total, el comprobante solicitado y el tipo de cliente. Podés combinar medios de pago: **efectivo, débito, crédito, transferencia, Mercado Pago y cheque**. Solo el efectivo admite un importe mayor al saldo y genera vuelto; los demás importes no pueden superar lo adeudado.
+Con el borrador guardado, pulsá **Finalizar compra**. El cierre avanza en tres pasos: **1. Cliente**, **2. Comprobante** y **3. Cobro**. Podés volver a un paso anterior antes de comprometer una operación de pago. Al reabrir una venta con pagos ya iniciados, el POS recupera directamente el cobro pendiente.
+
+En **Cliente**, elegí **Consumidor final** u **Otro**. Para **Otro**, ingresá un CUIT válido. Al continuar, el POS consulta la ficha fiscal local y ARCA homologación; si ARCA no responde o el certificado carece de autorización, podés seleccionar la condición fiscal manualmente y completar los datos requeridos. En **Comprobante**, elegí ticket no fiscal, ticket fiscal o factura electrónica. En **Cobro**, revisá el resumen de cliente y comprobante y asigná uno o varios medios: **efectivo, débito, crédito, transferencia, Mercado Pago y cheque**. Cada importe y referencia están identificados. Solo el efectivo admite un importe mayor al saldo y genera vuelto; los demás importes no pueden superar lo adeudado.
 
 Débito, crédito, transferencia y cheque son hoy **registros manuales del medio declarado**; el POS no verifica esas operaciones con bancos o adquirentes. Mercado Pago sí exige una orden acreditada y verificada por la API. El cheque todavía no tiene cartera, depósito ni rechazo gestionados en la aplicación.
 
@@ -11,7 +13,7 @@ Débito, crédito, transferencia y cheque son hoy **registros manuales del medio
 1. Marcá **Mercado Pago** y verificá el importe asignado a ese medio.
 2. Elegí **QR dinámico**, **QR fijo del puesto** o **Terminal Point** y pulsá **Solicitar cobro**. El dinámico genera un QR para esta venta; el fijo reutiliza el QR de la caja, pero crea una orden por el importe de esta venta; Point envía la orden a la terminal vinculada.
 3. Esperá a que la orden figure **Acreditado**. Mientras el cierre permanezca abierto, el POS consulta automáticamente cada 5 segundos. **Consultar pago** permite verificar manualmente si hace falta.
-4. Solo entonces pulsá **Confirmar venta**. La acreditación externa por sí sola **no cierra** el ticket ni descuenta stock.
+4. Solo entonces pulsá **Registrar pagos y confirmar venta**. La acreditación externa por sí sola **no cierra** el ticket ni descuenta stock.
 
 Si la orden sigue **Pendiente**, no vuelvas a cobrar por otro medio ni generes otra orden para el mismo ticket sin aclarar su estado. **Cancelar orden** se usa únicamente para una orden no acreditada; un resultado incierto requiere nueva consulta. Si se cierra la ventana de cobro, la consulta automática se detiene; al volver a abrir el ticket se recupera la orden y se consulta nuevamente.
 
@@ -27,7 +29,7 @@ Para usar **Mercado Pago** en una cobranza, asignale un importe, elegí uno de l
 
 ## Tipo de comprobante y datos del receptor
 
-El tipo se selecciona en la pantalla principal del ticket: **Ticket no fiscal**, **Ticket fiscal** o **Factura electrónica**. También se elige **Consumidor final**, **Responsable inscripto**, **Monotributista** o **Exento**. Para comprobantes fiscales, la ventana de cobro permite buscar un cliente con ficha fiscal; completa nombre/razón social, DNI o CUIT, domicilio, localidad y provincia. Podés corregir esos datos para la venta y añadir un número de pedido u orden de compra. El cierre valida los campos requeridos y guarda una copia de los datos fiscales en la venta para que futuros cambios del cliente no alteren el comprobante emitido.
+El comprobante se selecciona en el segundo paso del cierre: **Ticket no fiscal**, **Ticket fiscal** o **Factura electrónica**. Si elegiste **Otro** como cliente, allí se muestra la condición fiscal detectada o podés elegir **Consumidor final**, **Responsable inscripto**, **Monotributista** o **Exento** manualmente. Para comprobantes fiscales, también podés buscar una ficha fiscal guardada y completar nombre/razón social, DNI o CUIT, domicilio, localidad y provincia. Podés corregir esos datos para la venta y añadir un número de pedido u orden de compra. El cierre valida los campos requeridos y guarda una copia de los datos fiscales en la venta para que futuros cambios del cliente no alteren el comprobante emitido.
 
 Al pulsar **Confirmar venta**, primero se registra la venta con pagos y egreso de stock. Si se pidió un comprobante fiscal, después se consulta **ARCA homologación**. Solo cuando la pantalla informa CAE autorizado se habilita la salida fiscal de prueba. Si ARCA falla, **la venta ya quedó registrada**: usá **Consultar ARCA / reintentar**; no repitas la venta ni el cobro.
 

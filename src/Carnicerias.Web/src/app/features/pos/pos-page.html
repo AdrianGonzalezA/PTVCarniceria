@@ -251,23 +251,6 @@
           @if (lines().length > 0) {
             <p class="price-list-lock">Para cambiar la lista, cancelá primero esta venta.</p>
           }
-          <label>
-            <span>Tipo de comprobante</span>
-            <select id="sale-document-type" [value]="documentType()" (change)="selectDocumentType($event)">
-              <option value="nonFiscalTicket">Ticket no fiscal</option>
-              <option value="fiscalTicket">Ticket fiscal</option>
-              <option value="electronicInvoice">Factura electrónica</option>
-            </select>
-          </label>
-          <label>
-            <span>Tipo de cliente</span>
-            <select id="sale-recipient-tax-status" [value]="recipientTaxStatus()" (change)="selectRecipientTaxStatus($event)">
-              <option value="finalConsumer">Consumidor final</option>
-              <option value="registered">Responsable inscripto</option>
-              <option value="smallTaxpayer">Monotributista</option>
-              <option value="exempt">Exento</option>
-            </select>
-          </label>
         </div>
 
         @if (lines().length > 0) {
@@ -432,10 +415,62 @@
         <button class="dialog-close" type="button" aria-label="Cerrar" [disabled]="checkoutBusy()" (click)="closeCheckout()">×</button>
         <p class="eyebrow">Cobro · {{ session()?.username }} · turno abierto</p>
         <h2 id="checkout-title">Cobrar venta</h2>
-        <p class="checkout-context">El cobro se registra en la sucursal y el turno del cajero actual. El stock se descuenta al confirmar.</p>
+        <ol class="checkout-steps" aria-label="Pasos para cerrar la venta">
+          <li [attr.aria-current]="checkoutStep() === 'customer' ? 'step' : null">1. Cliente</li>
+          <li [attr.aria-current]="checkoutStep() === 'document' ? 'step' : null">2. Comprobante</li>
+          <li [attr.aria-current]="checkoutStep() === 'payment' ? 'step' : null">3. Cobro</li>
+        </ol>
+        @if (checkoutStep() === 'customer') {
+          <section class="checkout-customer" aria-labelledby="checkout-customer-title">
+            <h3 id="checkout-customer-title">Cliente de la venta</h3>
+            <label for="checkout-customer-kind">Tipo de cliente</label>
+            <select id="checkout-customer-kind" [value]="customerKind()" (change)="selectCustomerKind($event)">
+              <option value="finalConsumer">Consumidor final</option>
+              <option value="other">Otro</option>
+            </select>
+            @if (customerKind() === 'other') {
+              <label for="checkout-cuit">CUIT del cliente</label>
+              <input id="checkout-cuit" type="text" inputmode="numeric" autocomplete="off" maxlength="13"
+                placeholder="##-########-#" [value]="formatCuit(recipientDocumentNumber())"
+                (input)="updateCheckoutCuit($event)" />
+              @if (customerCuitProblem(); as problem) { <p class="pos-error" role="alert">{{ problem }}</p> }
+            }
+          </section>
+          <div class="dialog-actions">
+            <button class="dialog-cancel" type="button" (click)="closeCheckout()">Volver</button>
+            <button class="customer-continue-button" type="button" [disabled]="!!customerCuitProblem()"
+              (click)="continueCustomerCheckout()">Continuar a comprobante</button>
+          </div>
+        } @else if (checkoutStep() === 'document') {
         <section class="sale-document" aria-labelledby="sale-document-title">
-          <h3 id="sale-document-title">Comprobante solicitado</h3>
-          <p class="sale-document-choice">{{ documentTypeName() }} · {{ recipientTaxStatusName() }}</p>
+          <h3 id="sale-document-title">Comprobante de la venta</h3>
+          <label for="checkout-document-type">Tipo de comprobante</label>
+          <select id="checkout-document-type" [value]="documentType()"
+            [disabled]="checkoutBusy() || checkoutCommitted()" (change)="selectDocumentType($event)">
+            <option value="nonFiscalTicket">Ticket no fiscal</option>
+            <option value="fiscalTicket">Ticket fiscal</option>
+            <option value="electronicInvoice">Factura electrónica</option>
+          </select>
+          <p class="sale-document-choice">{{ documentTypeName() }} · {{ customerKind() === 'other' && !customerTaxStatusKnown() ? 'Condición fiscal pendiente' : recipientTaxStatusName() }}</p>
+          @if (customerKind() === 'other') {
+            <p class="sale-document-choice">CUIT {{ formatCuit(recipientDocumentNumber()) }}</p>
+            <label for="checkout-recipient-tax-status">Condición fiscal del cliente</label>
+            <select id="checkout-recipient-tax-status" [value]="customerTaxStatusKnown() ? recipientTaxStatus() : ''"
+              [disabled]="checkoutBusy() || checkoutCommitted()" (change)="selectRecipientTaxStatus($event)">
+              <option value="">Seleccioná la condición fiscal</option>
+              <option value="finalConsumer">Consumidor final</option>
+              <option value="registered">Responsable inscripto</option>
+              <option value="smallTaxpayer">Monotributista</option>
+              <option value="exempt">Exento</option>
+            </select>
+            @if (fiscalRegistryLoading()) { <p class="payment-guidance" role="status">Consultando la ficha fiscal… Podés elegir la condición fiscal manualmente para continuar.</p> }
+            @if (documentType() === 'nonFiscalTicket') {
+              @if (fiscalRegistryNotice(); as notice) { <p class="payment-guidance" role="status">{{ notice }}</p> }
+            }
+            @if (!checkoutCommitted()) {
+              <button class="change-customer-button" type="button" (click)="returnToCustomerCheckout()">Cambiar cliente o CUIT</button>
+            }
+          }
           @if (documentType() !== 'nonFiscalTicket') {
             <p class="payment-guidance">La venta y el cobro se guardan primero. Luego se consulta ARCA homologación: solo si llega el CAE se habilitan la impresión serial y el PDF fiscal de prueba.</p>
             <div class="fiscal-customer-lookup">
@@ -459,11 +494,13 @@
               @if (fiscalCustomerError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
             </div>
             <div class="sale-document-fields">
-              <label for="sale-recipient-name">Nombre o razón social @if (recipientTaxStatus() !== 'finalConsumer') { (obligatorio) }</label>
+              <label for="sale-recipient-name">Nombre o razón social @if (customerKind() === 'other' || recipientTaxStatus() !== 'finalConsumer') { (obligatorio) }</label>
               <input id="sale-recipient-name" maxlength="200" autocomplete="off" [value]="recipientName()" [disabled]="checkoutBusy() || checkoutCommitted()" (input)="updateRecipientName($event)" />
-              <label for="sale-recipient-document-number">{{ recipientTaxStatus() === 'finalConsumer' ? 'DNI o CUIT' : 'CUIT (obligatorio)' }}</label>
-              <input id="sale-recipient-document-number" inputmode="numeric" maxlength="20" autocomplete="off" [value]="recipientDocumentNumber()" [disabled]="checkoutBusy() || checkoutCommitted()" (input)="updateRecipientDocumentNumber($event)" />
-              <label for="sale-recipient-address">Domicilio @if (recipientTaxStatus() !== 'finalConsumer') { (obligatorio) }</label>
+              <label for="sale-recipient-document-number">{{ customerKind() === 'other' || recipientTaxStatus() !== 'finalConsumer' ? 'CUIT (obligatorio)' : 'DNI o CUIT' }}</label>
+              <input id="sale-recipient-document-number" inputmode="numeric" maxlength="20" autocomplete="off"
+                [value]="customerKind() === 'other' ? formatCuit(recipientDocumentNumber()) : recipientDocumentNumber()"
+                [disabled]="checkoutBusy() || checkoutCommitted() || customerKind() === 'other'" (input)="updateRecipientDocumentNumber($event)" />
+              <label for="sale-recipient-address">Domicilio @if (customerKind() === 'other' || recipientTaxStatus() !== 'finalConsumer') { (obligatorio) }</label>
               <input id="sale-recipient-address" maxlength="200" autocomplete="off" [value]="recipientAddress()" [disabled]="checkoutBusy() || checkoutCommitted()" (input)="updateRecipientAddress($event)" />
               <label for="sale-recipient-locality">Localidad (opcional)</label>
               <input id="sale-recipient-locality" maxlength="100" autocomplete="off" [value]="recipientLocality()" [disabled]="checkoutBusy() || checkoutCommitted()" (input)="updateRecipientLocality($event)" />
@@ -472,21 +509,39 @@
               <label for="sale-purchase-order">Pedido u orden de compra (opcional)</label>
               <input id="sale-purchase-order" maxlength="80" autocomplete="off" [value]="purchaseOrderNumber()" [disabled]="checkoutBusy() || checkoutCommitted()" (input)="updatePurchaseOrderNumber($event)" />
             </div>
-            @if (documentProblem(); as problem) { <p class="pos-error" role="alert">{{ problem }}</p> }
+          }
+          @if (documentProblem(); as problem) { <p class="pos-error" role="alert">{{ problem }}</p> }
+        </section>
+        <div class="dialog-actions">
+          <button class="dialog-cancel" type="button" (click)="returnToCustomerCheckout()">Volver al cliente</button>
+          <button class="document-continue-button" type="button" [disabled]="!!documentProblem()"
+            (click)="continueDocumentCheckout()">Continuar al cobro</button>
+        </div>
+        } @else {
+        <p class="checkout-context">El cobro se registra en la sucursal y el turno del cajero actual. El stock se descuenta al confirmar.</p>
+        <section class="checkout-review" aria-label="Resumen del cliente y comprobante">
+          <span><strong>Cliente:</strong> {{ customerKind() === 'other' ? formatCuit(recipientDocumentNumber()) : 'Consumidor final' }}</span>
+          <span><strong>Comprobante:</strong> {{ documentTypeName() }}</span>
+          @if (!checkoutCommitted() && !mercadoPagoOrderActive()) {
+            <button class="change-customer-button" type="button" (click)="returnToDocumentCheckout()">Cambiar comprobante o datos</button>
           }
         </section>
         <div class="payment-methods" aria-label="Medios de pago">
           @for (method of visiblePaymentMethods(); track method.id) {
-            <label class="payment-option">
-              <span><input type="checkbox" [checked]="hasPayment(method.id)" [disabled]="checkoutCommitted() || (method.id === 'mercadoPago' && mercadoPagoOrderActive())" (change)="togglePayment(method.id, $event)" /> {{ method.label }}</span>
+            <div class="payment-option">
+              <label class="payment-toggle"><input type="checkbox" [checked]="hasPayment(method.id)" [disabled]="checkoutCommitted() || (method.id === 'mercadoPago' && mercadoPagoOrderActive())" (change)="togglePayment(method.id, $event)" /> {{ method.label }}</label>
               @if (firstPayment(method.id); as first) {
-                <input class="payment-amount" type="text" inputmode="decimal" [attr.aria-label]="'Importe en ' + method.label" [appLocalizedDecimal]="first.amount" [disabled]="checkoutCommitted() || (method.id === 'mercadoPago' && mercadoPagoOrderActive())" (input)="updatePaymentAmount(method.id, $event)" />
+                <label class="payment-field">Importe
+                  <input class="payment-amount" type="text" inputmode="decimal" [attr.aria-label]="'Importe en ' + method.label" [appLocalizedDecimal]="first.amount" [disabled]="checkoutCommitted() || (method.id === 'mercadoPago' && mercadoPagoOrderActive())" (input)="updatePaymentAmount(method.id, $event)" />
+                </label>
                 @if (method.id !== 'mercadoPago') {
-                  <input type="text" maxlength="200" [attr.aria-label]="'Referencia de ' + method.label" [value]="first.reference ?? ''" [disabled]="checkoutCommitted()" (input)="updateOperationReference(first.id, $event)" />
+                  <label class="payment-field">Referencia (opcional)
+                    <input type="text" maxlength="200" [attr.aria-label]="'Referencia de ' + method.label" [value]="first.reference ?? ''" [disabled]="checkoutCommitted()" (input)="updateOperationReference(first.id, $event)" />
+                  </label>
                 }
                 @if (!checkoutCommitted()) { <button type="button" (click)="addPaymentOperation(method.id)">Otro pago</button> }
               }
-            </label>
+            </div>
           }
         </div>
         @if (extraPayments().length > 0) {
@@ -646,6 +701,7 @@
           <button class="dialog-cancel" type="button" [disabled]="checkoutBusy()" (click)="closeCheckout()">Volver</button>
           <button class="finish-button" type="button" [disabled]="checkoutBusy() || !!paymentProblem() || !!documentProblem()" (click)="confirmSale()">{{ checkoutBusy() ? 'Confirmando…' : 'Registrar pagos y confirmar venta' }}</button>
         </div>
+        }
       </section>
     </div>
   }

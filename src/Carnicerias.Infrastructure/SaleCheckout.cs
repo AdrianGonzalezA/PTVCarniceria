@@ -13,10 +13,57 @@ public sealed record SaleCheckoutTerms(Guid? CustomerId, decimal AccountChargeAm
     decimal CreditAppliedAmount, bool AccountChargeConfirmed, string DocumentType,
     string RecipientTaxStatus, string? RecipientName = null, string? RecipientDocumentNumber = null,
     string? RecipientAddress = null, string? RecipientLocality = null, string? RecipientProvince = null,
-    Guid? FiscalCustomerId = null, string? PurchaseOrderNumber = null);
+    Guid? FiscalCustomerId = null, string? PurchaseOrderNumber = null,
+    string? AccountChargeReference = null);
+
+public sealed record SalePaymentInstrumentDetails(
+    string? CardBrand = null, string? Processor = null, string? Terminal = null,
+    string? Batch = null, string? Voucher = null, string? Authorization = null,
+    string? Entity = null, string? Date = null, string? Reference = null,
+    string? Bank = null, string? Branch = null, string? Number = null,
+    string? Holder = null, string? HolderCuit = null, string? IssuedOn = null,
+    string? PayableOn = null)
+{
+    public bool IsValidFor(PaymentMethod method)
+    {
+        var fields = new[] { CardBrand, Processor, Terminal, Batch, Voucher, Authorization,
+            Entity, Date, Reference, Bank, Branch, Number, Holder, HolderCuit, IssuedOn, PayableOn };
+        if (fields.Any(value => value is { Length: > 120 }) ||
+            JsonSerializer.Serialize(this).Length > 2000) return false;
+        bool Has(string? value) => !string.IsNullOrWhiteSpace(value);
+        bool NoCard() => !new[] { CardBrand, Processor, Terminal, Batch, Voucher, Authorization }.Any(Has);
+        bool NoTransfer() => !new[] { Entity, Date, Reference }.Any(Has);
+        bool NoCheque() => !new[] { Bank, Branch, Number, Holder, HolderCuit, IssuedOn, PayableOn }.Any(Has);
+        return method switch
+        {
+            PaymentMethod.Debit or PaymentMethod.Credit =>
+                Has(CardBrand) && (Has(Processor) || Has(Terminal)) && Has(Batch) &&
+                Has(Voucher) && Has(Authorization) && NoTransfer() && NoCheque(),
+            PaymentMethod.Transfer => Has(Entity) && Has(Reference) && ValidDate(Date) &&
+                NoCard() && NoCheque(),
+            PaymentMethod.Cheque => Has(Bank) && Has(Branch) && Has(Number) && Has(Holder) &&
+                ValidCuit(HolderCuit) && ValidDate(IssuedOn) && ValidDate(PayableOn) &&
+                string.CompareOrdinal(PayableOn, IssuedOn) >= 0 && NoCard() && NoTransfer(),
+            _ => false,
+        };
+    }
+
+    private static bool ValidDate(string? value) => value is not null &&
+        DateOnly.TryParseExact(value, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out _);
+
+    private static bool ValidCuit(string? value)
+    {
+        if (value is null || value.Length != 11 || !value.All(char.IsAsciiDigit)) return false;
+        int[] weights = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
+        var sum = weights.Select((weight, index) => weight * (value[index] - '0')).Sum();
+        var check = 11 - sum % 11;
+        return (check == 11 ? 0 : check == 10 ? 9 : check) == value[10] - '0';
+    }
+}
 
 public sealed record SaleCheckoutPayment(Guid Id, PaymentMethod Method, decimal Amount,
-    string? Reference = null);
+    string? Reference = null, SalePaymentInstrumentDetails? Details = null);
 
 /// <summary>The durable payment plan. A confirmed sale is created only after every active operation settles.</summary>
 public sealed class SaleCheckout
@@ -82,7 +129,9 @@ public sealed class SaleCheckout
         ArgumentNullException.ThrowIfNull(payments);
         if (Status != SaleCheckoutStatus.Prepared || expectedRevision != Revision ||
             payments.Count > 20 || payments.Any(item => item.Id == Guid.Empty ||
-                item.Reference?.Length > 200) || payments.Select(item => item.Id).Distinct().Count() != payments.Count ||
+                item.Reference?.Length > 200 || item.Details is not null &&
+                !item.Details.IsValidFor(item.Method)) ||
+            payments.Select(item => item.Id).Distinct().Count() != payments.Count ||
             terms.CustomerId == Guid.Empty || terms.FiscalCustomerId == Guid.Empty ||
             updatedTotal is <= 0 or > 9_999_999_999.99m ||
             updatedTotal is not null && decimal.Round(updatedTotal.Value, 2) != updatedTotal ||
@@ -162,7 +211,8 @@ public sealed class SaleCheckout
             Instruments.Count >= 20 || payment.Id == Guid.Empty ||
             Instruments.Any(item => item.Id == payment.Id) || payment.Amount <= 0 ||
             payment.Amount > 9_999_999_999.99m || decimal.Round(payment.Amount, 2) != payment.Amount ||
-            !Enum.IsDefined(payment.Method) || payment.Reference?.Length > 200)
+            !Enum.IsDefined(payment.Method) || payment.Reference?.Length > 200 ||
+            payment.Details is not null && !payment.Details.IsValidFor(payment.Method))
             throw new InvalidOperationException("Only a rejected payment can be replaced.");
         Instruments.Add(new SaleCheckoutInstrument(payment));
         Events.Add(new SaleCheckoutEvent("Rejected", "Prepared", payment.Id, CashierId,
@@ -250,12 +300,14 @@ public sealed class SaleCheckoutInstrument
     {
         if (payment.Id == Guid.Empty || !Enum.IsDefined(payment.Method) || payment.Amount <= 0 ||
             payment.Amount > 9_999_999_999.99m || decimal.Round(payment.Amount, 2) != payment.Amount ||
-            payment.Reference?.Length > 200)
+            payment.Reference?.Length > 200 || payment.Details is not null &&
+            !payment.Details.IsValidFor(payment.Method))
             throw new ArgumentException("Invalid payment operation.");
         Id = payment.Id;
         Method = payment.Method;
         Amount = payment.Amount;
         Reference = payment.Reference?.Trim();
+        DetailsJson = payment.Details is null ? null : JsonSerializer.Serialize(payment.Details);
     }
 
     public Guid Id { get; private set; }
@@ -264,6 +316,9 @@ public sealed class SaleCheckoutInstrument
     public decimal Amount { get; private set; }
     public SaleCheckoutInstrumentStatus Status { get; private set; }
     public string? Reference { get; private set; }
+    public string? DetailsJson { get; private set; }
+    public SalePaymentInstrumentDetails? Details => DetailsJson is null ? null :
+        JsonSerializer.Deserialize<SalePaymentInstrumentDetails>(DetailsJson);
     public Guid? PointPaymentIntentId { get; private set; }
     public DateTimeOffset? ApprovedAtUtc { get; private set; }
     public DateTimeOffset? UpdatedAtUtc { get; private set; }

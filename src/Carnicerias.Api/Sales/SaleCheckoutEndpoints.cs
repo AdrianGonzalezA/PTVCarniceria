@@ -38,7 +38,8 @@ public static class SaleCheckoutEndpoints
     {
         if (request?.Payments is null || request.Payments.Count > 20 ||
             request.Payments.Any(item => item is null || item.Id == Guid.Empty ||
-                item.Reference?.Length > 200 || !TryParseMethod(item.Method, out _)) ||
+                item.Reference?.Length > 200 || !TryParseMethod(item.Method, out var method) ||
+                item.Details is not null && !item.Details.IsValidFor(method)) ||
             request.Terms is null || !ValidTerms(request.Terms) || accessor.TerminalId is null)
             return Error(400, "VALIDATION_ERROR");
         var context = accessor.Context;
@@ -93,7 +94,7 @@ public static class SaleCheckoutEndpoints
             {
                 checkout.Prepare(request.ExpectedRevision, request.Terms,
                     request.Payments.Select(item => new SaleCheckoutPayment(item.Id,
-                        ParseMethod(item.Method!), item.Amount, item.Reference)).ToArray(),
+                        ParseMethod(item.Method!), item.Amount, item.Reference, item.Details)).ToArray(),
                     clock.GetUtcNow(), draft.TotalAfterDiscount, draft.UpdatedAtUtc);
             }
             catch (Exception exception) when (exception is ArgumentException or
@@ -202,7 +203,9 @@ public static class SaleCheckoutEndpoints
         PaymentRequest? request, PlatformAccessDbContext db, OperationalContextAccessor accessor,
         TimeProvider clock, CancellationToken cancellationToken)
     {
-        if (request is null || request.Id == Guid.Empty || !TryParseMethod(request.Method, out var method))
+        if (request is null || request.Id == Guid.Empty || !TryParseMethod(request.Method, out var method) ||
+            request.Reference?.Length > 200 || request.Details is not null &&
+            !request.Details.IsValidFor(method))
             return Error(400, "VALIDATION_ERROR");
         try
         {
@@ -219,9 +222,10 @@ public static class SaleCheckoutEndpoints
             try
             {
                 checkout.AddReplacement(new SaleCheckoutPayment(request.Id, method,
-                    request.Amount, request.Reference), clock.GetUtcNow());
+                    request.Amount, request.Reference, request.Details), clock.GetUtcNow());
             }
-            catch (InvalidOperationException) { return Error(409, "CHECKOUT_OPERATION_CONFLICT"); }
+            catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+            { return Error(409, "CHECKOUT_OPERATION_CONFLICT"); }
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return Results.Ok(ToResponse(checkout));
@@ -262,7 +266,7 @@ public static class SaleCheckoutEndpoints
         instruments = checkout.Instruments.OrderBy(item => item.Id).Select(item => new
         {
             id = item.Id, method = MethodName(item.Method), amount = item.Amount,
-            status = item.Status.ToString(), reference = item.Reference,
+            status = item.Status.ToString(), reference = item.Reference, details = item.Details,
             pointPaymentIntentId = item.PointPaymentIntentId, approvedAtUtc = item.ApprovedAtUtc
         }).ToArray()
     };
@@ -276,6 +280,7 @@ public static class SaleCheckoutEndpoints
         terms.RecipientLocality is null or { Length: <= 100 } &&
         terms.RecipientProvince is null or { Length: <= 100 } &&
         terms.PurchaseOrderNumber is null or { Length: <= 80 } &&
+        terms.AccountChargeReference is null or { Length: <= 120 } &&
         (terms.AccountChargeAmount == 0 || terms.AccountChargeConfirmed) &&
         (terms.CustomerId is not null || terms.AccountChargeAmount == 0 &&
             terms.CreditAppliedAmount == 0) &&
@@ -375,7 +380,8 @@ public static class SaleCheckoutEndpoints
 
     private sealed record PrepareRequest(int ExpectedRevision, SaleCheckoutTerms? Terms,
         IReadOnlyList<PaymentRequest>? Payments);
-    private sealed record PaymentRequest(Guid Id, string? Method, decimal Amount, string? Reference = null);
+    private sealed record PaymentRequest(Guid Id, string? Method, decimal Amount,
+        string? Reference = null, SalePaymentInstrumentDetails? Details = null);
     private sealed record CommitRequest(int ExpectedRevision, Guid Key);
     private sealed record DecisionRequest(string? Reference);
 }

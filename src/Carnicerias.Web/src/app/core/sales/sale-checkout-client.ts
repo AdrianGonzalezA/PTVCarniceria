@@ -5,11 +5,31 @@ import { ConfirmedSale, SalePaymentMethod } from './sale-draft-client';
 export type CheckoutStatus = 'Prepared' | 'Committed' | 'PendingBalance' | 'Ready' | 'Completed' | 'Canceled';
 export type CheckoutInstrumentStatus = 'Prepared' | 'InProcess' | 'Approved' | 'Rejected' | 'Uncertain';
 
+export interface PaymentInstrumentDetails {
+  readonly cardBrand?: string;
+  readonly processor?: string;
+  readonly terminal?: string;
+  readonly batch?: string;
+  readonly voucher?: string;
+  readonly authorization?: string;
+  readonly entity?: string;
+  readonly date?: string;
+  readonly reference?: string;
+  readonly bank?: string;
+  readonly branch?: string;
+  readonly number?: string;
+  readonly holder?: string;
+  readonly holderCuit?: string;
+  readonly issuedOn?: string;
+  readonly payableOn?: string;
+}
+
 export interface CheckoutTerms {
   readonly customerId: string | null;
   readonly accountChargeAmount: number;
   readonly creditAppliedAmount: number;
   readonly accountChargeConfirmed: boolean;
+  readonly accountChargeReference?: string | null;
   readonly documentType: string;
   readonly recipientTaxStatus: string;
   readonly recipientName?: string | null;
@@ -27,6 +47,7 @@ export interface CheckoutInstrument {
   readonly amount: number;
   readonly status: CheckoutInstrumentStatus;
   readonly reference: string | null;
+  readonly details?: PaymentInstrumentDetails | null;
   readonly pointPaymentIntentId: string | null;
   readonly approvedAtUtc: string | null;
 }
@@ -56,7 +77,8 @@ export class SaleCheckoutClient {
 
   prepare(draftId: string, expectedRevision: number, terms: CheckoutTerms,
     payments: readonly { readonly id: string; readonly method: SalePaymentMethod;
-      readonly amount: number; readonly reference?: string | null }[]) {
+      readonly amount: number; readonly reference?: string | null;
+      readonly details?: PaymentInstrumentDetails | null }[]) {
     return this.http.put<SaleCheckout>(this.url(draftId),
       { expectedRevision, terms, payments }, { withCredentials: true });
   }
@@ -80,7 +102,7 @@ export class SaleCheckoutClient {
 
   addReplacement(draftId: string, checkoutId: string,
     payment: { readonly id: string; readonly method: SalePaymentMethod; readonly amount: number;
-      readonly reference?: string | null }) {
+      readonly reference?: string | null; readonly details?: PaymentInstrumentDetails | null }) {
     return this.http.post<SaleCheckout>(`${this.url(draftId)}/${checkoutId}/instruments`, payment,
       { withCredentials: true });
   }

@@ -13,7 +13,7 @@ import { InventoryPieceClient } from '../../core/inventory/inventory-piece-clien
 import { CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { CashWithdrawalClient } from '../../core/sales/cash-withdrawal-client';
 import { SaleDraftClient } from '../../core/sales/sale-draft-client';
-import { CheckoutTerms, SaleCheckout, SaleCheckoutClient } from '../../core/sales/sale-checkout-client';
+import { CheckoutTerms, PaymentInstrumentDetails, SaleCheckout, SaleCheckoutClient } from '../../core/sales/sale-checkout-client';
 import { MercadoPagoClient } from '../../core/sales/mercado-pago-client';
 import type { MercadoPagoIntent } from '../../core/sales/mercado-pago-client';
 import type { MercadoPagoMode } from '../../core/sales/mercado-pago-client';
@@ -35,13 +35,15 @@ describe('PosPage', () => {
     return {
       current: vi.fn(() => of(checkout)),
       prepare: vi.fn((draftId: string, expectedRevision: number, terms: CheckoutTerms,
-        payments: readonly { id: string; method: 'cash' | 'debit' | 'credit' | 'transfer' | 'mercadoPago' | 'cheque'; amount: number }[]) => {
+        payments: readonly { id: string; method: 'cash' | 'debit' | 'credit' | 'transfer' | 'mercadoPago' | 'cheque';
+          amount: number; reference?: string | null; details?: PaymentInstrumentDetails | null }[]) => {
         checkout = { id: 'checkout-id', saleDraftId: draftId, status: 'Prepared', revision: expectedRevision + 1,
           total: payments.reduce((sum, payment) => sum + payment.amount, 0), planHash: 'hash',
           commitKey: null, approvedAmount: 0, remainingAmount: payments.reduce((sum, payment) => sum + payment.amount, 0),
           confirmedSaleId: null, terms,
           instruments: payments.map((payment) => ({ ...payment, status: 'Prepared' as const,
-            reference: null, pointPaymentIntentId: null, approvedAtUtc: null })) };
+            reference: payment.reference ?? null, details: payment.details ?? null,
+            pointPaymentIntentId: null, approvedAtUtc: null })) };
         return of(checkout);
       }),
       commit: vi.fn((_draftId: string, _checkoutId: string, _revision: number, key: string) => {
@@ -105,13 +107,14 @@ describe('PosPage', () => {
 
   async function checkoutWithGateways(intent: MercadoPagoIntent | null, unavailable = false,
     modes: readonly MercadoPagoMode[] = [], total = 2500, recovered?: SaleCheckout,
-    fiscal = false, advance = true) {
+    fiscal = false, advance = true, credit = false) {
     const checkoutClient = checkoutClientMock();
     if (recovered) checkoutClient.current.mockReturnValue(of(recovered));
     const session: CurrentSession = {
       userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-14T20:00:00Z',
       context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
-        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+        branchId: 'branch-id', branchName: 'Sucursal',
+        permissions: credit ? ['pos.account.charge'] : [], sessionId: 'session-id' },
     };
     TestBed.configureTestingModule({ providers: [
       provideRouter([]),
@@ -131,6 +134,11 @@ describe('PosPage', () => {
         ? throwError(() => new HttpErrorResponse({ status: 503 })) : of({ gateways: modes.length
           ? [{ provider: 'mercadoPago', modes }] : [] }) } },
       { provide: InventoryClient, useValue: { stock: () => of([]) } },
+      ...(credit ? [{ provide: CreditCustomerClient, useValue: {
+        search: () => of([{ id: 'customer-id', code: 'C001', name: 'Cliente de prueba' }]),
+        account: () => of({ customerId: 'customer-id', customerCode: 'C001',
+          customerName: 'Cliente de prueba', totalDebt: 0, creditAvailable: 0, saleCount: 0 }),
+      } }] : []),
     ] });
     const fixture = TestBed.createComponent(PosPage);
     fixture.detectChanges();
@@ -215,14 +223,14 @@ describe('PosPage', () => {
     expect(status.value).toBe('registered');
   });
 
-  it('shows a simulated registered taxpayer as simulated and advances through fiscal checkout', async () => {
+  it('uses a taxpayer returned by ARCA and advances through fiscal checkout', async () => {
     const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, false, false);
     const page = fixture.nativeElement as HTMLElement;
     vi.spyOn(TestBed.inject(CreditCustomerClient), 'lookupFiscal').mockReturnValue(of({
-      source: 'simulated', customerId: null, customerCode: null,
-      name: 'RESPONSABLE INSCRIPTO DE PRUEBA', documentNumber: '20164755100',
-      address: 'DOMICILIO DE PRUEBA', locality: null, province: null,
-      taxStatus: 'registered', notice: 'Datos simulados de homologación. ARCA no fue consultada.',
+      source: 'arca', customerId: null, customerCode: null,
+      name: 'CONTRIBUYENTE CONSULTADO', documentNumber: '20164755100',
+      address: 'DOMICILIO CONSULTADO', locality: null, province: null,
+      taxStatus: 'registered', notice: null,
     }));
     const kind = page.querySelector('#checkout-customer-kind') as HTMLSelectElement;
     kind.value = 'other';
@@ -236,12 +244,12 @@ describe('PosPage', () => {
     fixture.detectChanges();
 
     expect((page.querySelector('#checkout-recipient-tax-status') as HTMLSelectElement).value).toBe('registered');
-    expect(page.querySelector('.sale-document')?.textContent).toContain('Datos simulados');
+    expect(page.querySelector('.sale-document')?.textContent).not.toContain('Datos simulados');
     const documentType = page.querySelector('#checkout-document-type') as HTMLSelectElement;
     documentType.value = 'electronicInvoice';
     documentType.dispatchEvent(new Event('change', { bubbles: true }));
     fixture.detectChanges();
-    expect((page.querySelector('#sale-recipient-name') as HTMLInputElement).value).toBe('RESPONSABLE INSCRIPTO DE PRUEBA');
+    expect((page.querySelector('#sale-recipient-name') as HTMLInputElement).value).toBe('CONTRIBUYENTE CONSULTADO');
     expect((page.querySelector('.document-continue-button') as HTMLButtonElement).disabled).toBe(false);
     page.querySelector<HTMLButtonElement>('.document-continue-button')!.click();
     fixture.detectChanges();
@@ -253,6 +261,145 @@ describe('PosPage', () => {
     const options = fixture.nativeElement.querySelector('.payment-methods').textContent as string;
     expect(options).toContain('Efectivo');
     expect(options).not.toContain('Mercado Pago');
+  });
+
+  it('keeps fiscal fields but removes the redundant lookup block and allows stepping back', async () => {
+    const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, true);
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('.fiscal-customer-lookup')).toBeNull();
+    expect(page.textContent).not.toContain('La venta y el cobro se guardan primero');
+    expect(page.querySelector('#sale-recipient-name')).not.toBeNull();
+    page.querySelector<HTMLButtonElement>('.document-continue-button')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector('.payment-methods')).not.toBeNull();
+    page.querySelector<HTMLButtonElement>('.payment-back-button')!.click();
+    fixture.detectChanges();
+    expect((page.querySelector('#checkout-document-type') as HTMLSelectElement).value).toBe('electronicInvoice');
+    page.querySelector<HTMLButtonElement>('.dialog-cancel')!.click();
+    fixture.detectChanges();
+    expect((page.querySelector('#checkout-customer-kind') as HTMLSelectElement).value).toBe('finalConsumer');
+  });
+
+  it('treats account charge as a selectable mixed payment and asks for its customer', async () => {
+    const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, false, true, true);
+    const page = fixture.nativeElement as HTMLElement;
+    const accountOption = page.querySelector<HTMLElement>('.payment-option[data-payment-method="account"]')!;
+    expect(accountOption).not.toBeNull();
+    expect(page.querySelector('.credit-payment')).toBeNull();
+    accountOption.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector('#credit-customer')).not.toBeNull();
+    expect(page.querySelector('.credit-payment')?.textContent).toContain('Importe a cuenta corriente');
+    expect(page.querySelector('.payment-guidance')?.textContent).toContain('cliente habilitado');
+  });
+
+  it('shows instrument fields instead of a generic reference or another cash payment', async () => {
+    const fixture = await checkoutWithGateways(null);
+    const page = fixture.nativeElement as HTMLElement;
+    const option = (method: string) => page.querySelector<HTMLElement>(
+      `.payment-option[data-payment-method="${method}"]`)!;
+    expect(option('cash').querySelector('input[aria-label^="Referencia"]')).toBeNull();
+    expect(option('cash').textContent).not.toContain('Otro pago');
+    expect(option('cash').querySelector('.add-payment-operation')).toBeNull();
+    option('debit').querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    option('transfer').querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    option('cheque').querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    fixture.detectChanges();
+    expect(option('debit').querySelector('[data-instrument-field="cardBrand"]')).not.toBeNull();
+    expect(option('debit').querySelector('[data-instrument-field="authorization"]')).not.toBeNull();
+    expect(option('transfer').querySelector('[data-instrument-field="entity"]')).not.toBeNull();
+    expect(option('transfer').querySelector('[data-instrument-field="date"]')).not.toBeNull();
+    expect(option('cheque').querySelector('[data-instrument-field="bank"]')).not.toBeNull();
+    expect(option('cheque').querySelector('[data-instrument-field="holderCuit"]')).not.toBeNull();
+    expect(option('transfer').textContent).not.toContain('Otro pago');
+    expect(option('transfer').querySelector('.add-payment-operation')?.textContent).toContain('Agregar otra transferencia');
+  });
+
+  it('keeps transfer details when stepping back and sends them per operation', async () => {
+    const fixture = await checkoutWithGateways(null);
+    const page = fixture.nativeElement as HTMLElement;
+    const cash = page.querySelector<HTMLElement>('.payment-option[data-payment-method="cash"]')!;
+    cash.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    const transfer = page.querySelector<HTMLElement>('.payment-option[data-payment-method="transfer"]')!;
+    transfer.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    fixture.detectChanges();
+    const fill = (field: string, value: string) => {
+      const input = transfer.querySelector<HTMLInputElement>(`[data-instrument-field="${field}"]`)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges();
+    };
+    fill('entity', 'Banco Nación');
+    fill('date', '2026-11-11');
+    fill('reference', 'TR-123');
+    page.querySelector<HTMLButtonElement>('.payment-back-button')!.click();
+    fixture.detectChanges();
+    page.querySelector<HTMLButtonElement>('.document-continue-button')!.click();
+    fixture.detectChanges();
+    expect(page.querySelector<HTMLInputElement>('.payment-option[data-payment-method="transfer"] [data-instrument-field="reference"]')!.value).toBe('TR-123');
+    const checkout = TestBed.inject(SaleCheckoutClient);
+    page.querySelector<HTMLButtonElement>('.checkout-dialog .finish-button')!.click();
+    await vi.waitFor(() => expect(vi.mocked(checkout.prepare)).toHaveBeenCalledOnce());
+    const operations = vi.mocked(checkout.prepare).mock.calls[0][3];
+    expect(operations).toHaveLength(1);
+    expect(operations[0]).toMatchObject({ method: 'transfer', amount: 2500,
+      reference: 'TR-123', details: { entity: 'Banco Nación', date: '2026-11-11', reference: 'TR-123' } });
+  });
+
+  it('keeps two transfers as separate instruments with their own references', async () => {
+    const fixture = await checkoutWithGateways(null);
+    const page = fixture.nativeElement as HTMLElement;
+    page.querySelector<HTMLElement>('.payment-option[data-payment-method="cash"] input[type="checkbox"]')!.click();
+    page.querySelector<HTMLElement>('.payment-option[data-payment-method="transfer"] input[type="checkbox"]')!.click();
+    fixture.detectChanges();
+    const option = page.querySelector<HTMLElement>('.payment-option[data-payment-method="transfer"]')!;
+    option.querySelector<HTMLButtonElement>('.add-payment-operation')!.click();
+    fixture.detectChanges();
+    const instruments = option.querySelectorAll<HTMLElement>('.payment-instrument');
+    expect(instruments).toHaveLength(2);
+    const fill = (index: number, selector: string, value: string) => {
+      const input = instruments[index].querySelector<HTMLInputElement>(selector)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges();
+    };
+    fill(0, '.payment-amount', '1000');
+    fill(1, '.payment-amount', '1500');
+    for (let index = 0; index < 2; index++) {
+      fill(index, '[data-instrument-field="entity"]', 'Banco');
+      fill(index, '[data-instrument-field="date"]', '2026-11-11');
+      fill(index, '[data-instrument-field="reference"]', `TR-${index + 1}`);
+    }
+    const checkout = TestBed.inject(SaleCheckoutClient);
+    page.querySelector<HTMLButtonElement>('.checkout-dialog .finish-button')!.click();
+    await vi.waitFor(() => expect(vi.mocked(checkout.prepare)).toHaveBeenCalledOnce());
+    const operations = vi.mocked(checkout.prepare).mock.calls[0][3];
+    expect(operations.map((item) => item.reference)).toEqual(['TR-1', 'TR-2']);
+    expect(operations.map((item) => item.amount)).toEqual([1000, 1500]);
+    expect(new Set(operations.map((item) => item.id)).size).toBe(2);
+  });
+
+  it('sends account charge through the existing customer terms, without a cash instrument', async () => {
+    const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, false, true, true);
+    const page = fixture.nativeElement as HTMLElement;
+    page.querySelector<HTMLElement>('.payment-option[data-payment-method="account"] input[type="checkbox"]')!.click();
+    fixture.detectChanges();
+    const customer = page.querySelector<HTMLSelectElement>('#credit-customer')!;
+    customer.value = 'customer-id';
+    customer.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    const reference = page.querySelector<HTMLInputElement>('#account-charge-reference')!;
+    reference.value = 'Autorización cliente 45';
+    reference.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(page.querySelector<HTMLInputElement>('.payment-option[data-payment-method="cash"] input[type="checkbox"]')!.checked).toBe(false);
+    const checkout = TestBed.inject(SaleCheckoutClient);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    page.querySelector<HTMLButtonElement>('.checkout-dialog .finish-button')!.click();
+    await vi.waitFor(() => expect(vi.mocked(checkout.prepare)).toHaveBeenCalledOnce());
+    expect(vi.mocked(checkout.prepare).mock.calls[0][2]).toMatchObject({ customerId: 'customer-id',
+      accountChargeAmount: 2500, accountChargeReference: 'Autorización cliente 45' });
+    expect(vi.mocked(checkout.prepare).mock.calls[0][3]).toHaveLength(0);
   });
 
   it('rounds the remaining amount to cents when adding a payment method', async () => {
@@ -382,7 +529,8 @@ describe('PosPage', () => {
         accountChargeConfirmed: false, documentType: 'nonFiscalTicket', recipientTaxStatus: 'finalConsumer' },
       instruments: [
         { id: 'operation-1', method: 'transfer', amount: 1000, status: 'Approved',
-          reference: 'transfer-001', pointPaymentIntentId: null, approvedAtUtc: '2026-10-13T15:01:00Z' },
+          reference: 'transfer-001', details: { entity: 'Banco Nación', date: '2026-11-11',
+            reference: 'transfer-001' }, pointPaymentIntentId: null, approvedAtUtc: '2026-10-13T15:01:00Z' },
         { id: 'operation-2', method: 'transfer', amount: 1500, status: 'Prepared',
           reference: null, pointPaymentIntentId: null, approvedAtUtc: null },
       ],
@@ -393,10 +541,10 @@ describe('PosPage', () => {
 
     expect(dialog.textContent).toContain('1.000,00');
     expect(dialog.textContent).toContain('1.500,00');
-    expect(dialog.querySelectorAll('.payment-operations .payment-operation')).toHaveLength(1);
+    expect(dialog.querySelectorAll('.payment-option[data-payment-method="transfer"] .payment-instrument')).toHaveLength(2);
     const transfer = [...dialog.querySelectorAll<HTMLElement>('.payment-option')]
       .find((option) => option.textContent?.includes('Transferencia'))!;
-    expect(transfer.querySelector<HTMLInputElement>('input[aria-label="Referencia de Transferencia"]')?.value).toBe('transfer-001');
+    expect(transfer.querySelector<HTMLInputElement>('[data-instrument-field="reference"]')?.value).toBe('transfer-001');
     expect((dialog.querySelector('.payment-option input[type="checkbox"]') as HTMLInputElement).disabled).toBe(true);
   });
 
@@ -427,59 +575,83 @@ describe('PosPage', () => {
   });
 
   it('loads an exact local CUIT profile without changing the open ticket', async () => {
-    const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, true);
+    const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, false, false);
     const client = TestBed.inject(CreditCustomerClient);
     const lookup = vi.spyOn(client, 'lookupFiscal').mockReturnValue(of({
       source: 'local', customerId: 'customer-1', customerCode: 'CLI-1', name: 'Cliente fiscal',
       documentNumber: '20164755100', address: 'Calle 123', locality: 'Córdoba',
       province: 'Córdoba', taxStatus: 'registered', notice: null,
     }));
-    const search = fixture.nativeElement.querySelector('#sale-fiscal-customer-search') as HTMLInputElement;
-    search.value = '20164755100';
-    search.dispatchEvent(new Event('input', { bubbles: true }));
+    const kind = fixture.nativeElement.querySelector('#checkout-customer-kind') as HTMLSelectElement;
+    kind.value = 'other';
+    kind.dispatchEvent(new Event('change', { bubbles: true }));
     fixture.detectChanges();
-    [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.fiscal-customer-lookup button')]
-      .find((button) => button.textContent?.includes('Consultar CUIT'))!.click();
+    const cuit = fixture.nativeElement.querySelector('#checkout-cuit') as HTMLInputElement;
+    cuit.value = '20164755100';
+    cuit.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.customer-continue-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const document = fixture.nativeElement.querySelector('#checkout-document-type') as HTMLSelectElement;
+    document.value = 'electronicInvoice';
+    document.dispatchEvent(new Event('change', { bubbles: true }));
     fixture.detectChanges();
 
     expect(lookup).toHaveBeenCalledWith('20164755100');
     expect((fixture.nativeElement.querySelector('#sale-recipient-name') as HTMLInputElement).value).toBe('Cliente fiscal');
     expect((fixture.nativeElement.querySelector('#sale-recipient-address') as HTMLInputElement).value).toBe('Calle 123');
-    expect((fixture.nativeElement.querySelector('#sale-fiscal-customer') as HTMLSelectElement).value).toBe('customer-1');
+    expect(fixture.nativeElement.querySelector('#sale-fiscal-customer')).toBeNull();
     expect(fixture.nativeElement.querySelector('.ticket-lines')?.textContent).toContain('2.500,00');
   });
 
   it('keeps manual fiscal fields when registry lookup fails', async () => {
-    const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, true);
+    const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, false, false);
     vi.spyOn(TestBed.inject(CreditCustomerClient), 'lookupFiscal')
       .mockReturnValue(throwError(() => new HttpErrorResponse({ status: 503 })));
+    const kind = fixture.nativeElement.querySelector('#checkout-customer-kind') as HTMLSelectElement;
+    kind.value = 'other';
+    kind.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    const cuit = fixture.nativeElement.querySelector('#checkout-cuit') as HTMLInputElement;
+    cuit.value = '20164755100';
+    cuit.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.customer-continue-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const document = fixture.nativeElement.querySelector('#checkout-document-type') as HTMLSelectElement;
+    document.value = 'electronicInvoice';
+    document.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
     const name = fixture.nativeElement.querySelector('#sale-recipient-name') as HTMLInputElement;
     name.value = 'Nombre manual';
     name.dispatchEvent(new Event('input', { bubbles: true }));
-    const search = fixture.nativeElement.querySelector('#sale-fiscal-customer-search') as HTMLInputElement;
-    search.value = '20164755100';
-    search.dispatchEvent(new Event('input', { bubbles: true }));
-    fixture.detectChanges();
-    [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.fiscal-customer-lookup button')]
-      .find((button) => button.textContent?.includes('Consultar CUIT'))!.click();
     fixture.detectChanges();
 
     expect(name.value).toBe('Nombre manual');
-    expect(fixture.nativeElement.querySelector('.fiscal-customer-lookup')?.textContent)
-      .toContain('Completá los datos manualmente');
+    expect(fixture.nativeElement.querySelector('#checkout-recipient-tax-status')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.fiscal-lookup-notice')?.textContent)
+      .toContain('No se pudo consultar el CUIT');
   });
 
   it('does not overwrite fiscal data edited while ARCA is responding', async () => {
-    const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, true);
+    const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, false, false);
     const pending = new Subject<FiscalLookupResult>();
     vi.spyOn(TestBed.inject(CreditCustomerClient), 'lookupFiscal')
       .mockReturnValue(pending.asObservable());
-    const search = fixture.nativeElement.querySelector('#sale-fiscal-customer-search') as HTMLInputElement;
-    search.value = '20164755100';
-    search.dispatchEvent(new Event('input', { bubbles: true }));
+    const kind = fixture.nativeElement.querySelector('#checkout-customer-kind') as HTMLSelectElement;
+    kind.value = 'other';
+    kind.dispatchEvent(new Event('change', { bubbles: true }));
     fixture.detectChanges();
-    [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.fiscal-customer-lookup button')]
-      .find((button) => button.textContent?.includes('Consultar CUIT'))!.click();
+    const cuit = fixture.nativeElement.querySelector('#checkout-cuit') as HTMLInputElement;
+    cuit.value = '20164755100';
+    cuit.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.customer-continue-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const document = fixture.nativeElement.querySelector('#checkout-document-type') as HTMLSelectElement;
+    document.value = 'electronicInvoice';
+    document.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
     const name = fixture.nativeElement.querySelector('#sale-recipient-name') as HTMLInputElement;
     name.value = 'Nombre corregido';
     name.dispatchEvent(new Event('input', { bubbles: true }));
@@ -489,8 +661,7 @@ describe('PosPage', () => {
     fixture.detectChanges();
 
     expect(name.value).toBe('Nombre corregido');
-    expect(fixture.nativeElement.querySelector('.fiscal-customer-lookup')?.textContent)
-      .toContain('no se reemplazaron');
+    expect(fixture.nativeElement.querySelector('.fiscal-customer-lookup')).toBeNull();
   });
 
   it('requires fiscal recipient details before confirming an electronic invoice and keeps it pending', async () => {

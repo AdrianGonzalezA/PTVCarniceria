@@ -117,6 +117,40 @@ public sealed class SaleCheckoutTests
         Assert.Throws<InvalidOperationException>(() => committed.CancelPrepared(Now));
     }
 
+    [Fact]
+    public void CardInstrumentKeepsItsOwnNonSensitiveDetails()
+    {
+        var checkout = NewCheckout(100m);
+        var details = new SalePaymentInstrumentDetails(CardBrand: "Visa", Processor: "Clover",
+            Terminal: "T1", Batch: "12", Voucher: "34", Authorization: "ABC123");
+        checkout.Prepare(0, Terms(),
+            [new(Guid.NewGuid(), PaymentMethod.Debit, 100m, "ABC123", details)], Now);
+
+        Assert.Equal(details, checkout.Instruments.Single().Details);
+        Assert.Equal("ABC123", checkout.Instruments.Single().Reference);
+        Assert.Throws<InvalidOperationException>(() => checkout.Prepare(1, Terms(),
+            [new(Guid.NewGuid(), PaymentMethod.Cash, 100m, null, details)], Now));
+    }
+
+    [Fact]
+    public void TransferAndChequeRequireTheirOwnFieldsAndDates()
+    {
+        var transfer = new SalePaymentInstrumentDetails(Entity: "Banco", Date: "2026-11-11",
+            Reference: "TR-123");
+        var cheque = new SalePaymentInstrumentDetails(Bank: "Banco", Branch: "001",
+            Number: "12345", Holder: "Titular", HolderCuit: "20164755100",
+            IssuedOn: "2026-11-10", PayableOn: "2026-11-20");
+        var checkout = NewCheckout(200m);
+        checkout.Prepare(0, Terms(),
+            [new(Guid.NewGuid(), PaymentMethod.Transfer, 100m, "TR-123", transfer),
+             new(Guid.NewGuid(), PaymentMethod.Cheque, 100m, "12345", cheque)], Now);
+
+        Assert.Equal(transfer, checkout.Instruments.Single(item => item.Method == PaymentMethod.Transfer).Details);
+        Assert.Equal(cheque, checkout.Instruments.Single(item => item.Method == PaymentMethod.Cheque).Details);
+        Assert.False((cheque with { PayableOn = "2026-11-01" }).IsValidFor(PaymentMethod.Cheque));
+        Assert.False((transfer with { Entity = null }).IsValidFor(PaymentMethod.Transfer));
+    }
+
     private static SaleCheckout NewCheckout(decimal total) => new(Guid.NewGuid(), Guid.NewGuid(),
         Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), total, Now, Now);
 

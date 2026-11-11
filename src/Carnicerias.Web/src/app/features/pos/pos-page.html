@@ -464,35 +464,14 @@
               <option value="exempt">Exento</option>
             </select>
             @if (fiscalRegistryLoading()) { <p class="payment-guidance" role="status">Consultando la ficha fiscal… Podés elegir la condición fiscal manualmente para continuar.</p> }
-            @if (documentType() === 'nonFiscalTicket') {
-              @if (fiscalRegistryNotice(); as notice) { <p class="payment-guidance" role="status">{{ notice }}</p> }
+            @if (fiscalRegistryNotice() && !customerTaxStatusKnown()) {
+              <p class="payment-guidance fiscal-lookup-notice" role="status">{{ fiscalRegistryNotice() }}</p>
             }
             @if (!checkoutCommitted()) {
               <button class="change-customer-button" type="button" (click)="returnToCustomerCheckout()">Cambiar cliente o CUIT</button>
             }
           }
           @if (documentType() !== 'nonFiscalTicket') {
-            <p class="payment-guidance">La venta y el cobro se guardan primero. Luego se consulta ARCA homologación: solo si llega el CAE se habilitan la impresión serial y el PDF fiscal de prueba.</p>
-            <div class="fiscal-customer-lookup">
-              <label for="sale-fiscal-customer-search">Cliente con ficha fiscal</label>
-              <input id="sale-fiscal-customer-search" maxlength="100" autocomplete="off"
-                [value]="fiscalCustomerSearch()" [disabled]="checkoutBusy() || checkoutCommitted()"
-                (input)="updateFiscalCustomerSearch($event)" />
-              <button type="button" [disabled]="fiscalCustomerLoading() || checkoutBusy() || checkoutCommitted()"
-                (click)="searchFiscalCustomers()">{{ fiscalCustomerLoading() ? 'Buscando…' : 'Buscar cliente' }}</button>
-              <button type="button" [disabled]="fiscalRegistryLoading() || checkoutBusy() || checkoutCommitted()"
-                (click)="lookupFiscalCuit()">{{ fiscalRegistryLoading() ? 'Consultando…' : 'Consultar CUIT' }}</button>
-              @if (fiscalRegistryNotice(); as notice) { <p class="payment-guidance" role="status">{{ notice }}</p> }
-              <label for="sale-fiscal-customer">Ficha fiscal guardada (opcional)</label>
-              <select id="sale-fiscal-customer" [disabled]="checkoutBusy() || checkoutCommitted()"
-                (change)="selectFiscalCustomer($event)">
-                <option value="" [selected]="!fiscalCustomerId()">Ingresar datos manualmente</option>
-                @for (customer of fiscalCustomerOptions(); track customer.id) {
-                  <option [value]="customer.id" [selected]="customer.id === fiscalCustomerId()">{{ customer.code }} · {{ customer.name }}</option>
-                }
-              </select>
-              @if (fiscalCustomerError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
-            </div>
             <div class="sale-document-fields">
               <label for="sale-recipient-name">Nombre o razón social @if (customerKind() === 'other' || recipientTaxStatus() !== 'finalConsumer') { (obligatorio) }</label>
               <input id="sale-recipient-name" maxlength="200" autocomplete="off" [value]="recipientName()" [disabled]="checkoutBusy() || checkoutCommitted()" (input)="updateRecipientName($event)" />
@@ -523,49 +502,51 @@
           <span><strong>Cliente:</strong> {{ customerKind() === 'other' ? formatCuit(recipientDocumentNumber()) : 'Consumidor final' }}</span>
           @if (customerKind() === 'other' && recipientName()) { <span><strong>Nombre:</strong> {{ recipientName() }}</span> }
           <span><strong>Comprobante:</strong> {{ documentTypeName() }}</span>
-          @if (fiscalRegistryNotice()?.includes('Datos simulados')) {
-            <span class="payment-guidance" role="status">{{ fiscalRegistryNotice() }}</span>
-          }
           @if (!checkoutCommitted() && !mercadoPagoOrderActive()) {
             <button class="change-customer-button" type="button" (click)="returnToDocumentCheckout()">Cambiar comprobante o datos</button>
           }
         </section>
         <div class="payment-methods" aria-label="Medios de pago">
           @for (method of visiblePaymentMethods(); track method.id) {
-            <div class="payment-option">
+            <div class="payment-option" [attr.data-payment-method]="method.id">
               <label class="payment-toggle"><input type="checkbox" [checked]="hasPayment(method.id)" [disabled]="checkoutCommitted() || (method.id === 'mercadoPago' && mercadoPagoOrderActive())" (change)="togglePayment(method.id, $event)" /> {{ method.label }}</label>
-              @if (firstPayment(method.id); as first) {
-                <label class="payment-field">Importe
-                  <input class="payment-amount" type="text" inputmode="decimal" [attr.aria-label]="'Importe en ' + method.label" [appLocalizedDecimal]="first.amount" [disabled]="checkoutCommitted() || (method.id === 'mercadoPago' && mercadoPagoOrderActive())" (input)="updatePaymentAmount(method.id, $event)" />
-                </label>
-                @if (method.id !== 'mercadoPago') {
-                  <label class="payment-field">Referencia (opcional)
-                    <input type="text" maxlength="200" [attr.aria-label]="'Referencia de ' + method.label" [value]="first.reference ?? ''" [disabled]="checkoutCommitted()" (input)="updateOperationReference(first.id, $event)" />
+              @for (payment of paymentsForMethod(method.id); track payment.id; let index = $index) {
+                <div class="payment-instrument">
+                  @if (index > 0) { <strong>Operación {{ index + 1 }}</strong> }
+                  <label class="payment-field">{{ method.id === 'cash' ? 'Importe recibido' : 'Importe' }}
+                    <input class="payment-amount" type="text" inputmode="decimal" [attr.aria-label]="'Importe en ' + method.label + (index > 0 ? ' · operación ' + (index + 1) : '')"
+                      [appLocalizedDecimal]="payment.amount" [disabled]="checkoutCommitted() || (method.id === 'mercadoPago' && mercadoPagoOrderActive())"
+                      (input)="updateOperationAmount(payment.id, $event)" />
                   </label>
-                }
-                @if (!checkoutCommitted()) { <button type="button" (click)="addPaymentOperation(method.id)">Otro pago</button> }
+                  @if (instrumentFields(method.id).length > 0) {
+                    <div class="payment-instrument-fields">
+                      @for (field of instrumentFields(method.id); track field.key) {
+                        <label class="payment-field">{{ field.label }}
+                          <input [attr.data-instrument-field]="field.key" [type]="field.type ?? 'text'"
+                            [attr.maxlength]="field.maxLength ?? null"
+                            [attr.inputmode]="field.key === 'holderCuit' ? 'numeric' : null"
+                            [value]="field.key === 'holderCuit' ? formatCuit(payment.details?.[field.key] ?? '') : payment.details?.[field.key] ?? ''"
+                            [disabled]="checkoutCommitted()" (input)="updateInstrumentField(payment.id, field.key, $event)" />
+                        </label>
+                      }
+                    </div>
+                  }
+                  @if (index > 0 && !checkoutCommitted()) { <button type="button" (click)="removePaymentOperation(payment.id)">Quitar operación</button> }
+                  @if (checkoutCommitted() && payment.reference && !payment.details) { <small>Referencia registrada: {{ payment.reference }}</small> }
+                </div>
+              }
+              @if (hasPayment(method.id) && method.id !== 'cash' && !checkoutCommitted()) {
+                <button class="add-payment-operation" type="button" (click)="addPaymentOperation(method.id)">Agregar {{ method.id === 'transfer' ? 'otra transferencia' : method.id === 'cheque' ? 'otro cheque' : method.id === 'mercadoPago' ? 'otro cobro de Mercado Pago' : 'otra tarjeta' }}</button>
               }
             </div>
           }
+          @if (canChargeToAccount()) {
+            <div class="payment-option" data-payment-method="account">
+              <label class="payment-toggle"><input type="checkbox" [checked]="accountSelected()" [disabled]="checkoutCommitted()" (change)="toggleAccountPayment($event)" /> Cuenta corriente</label>
+              @if (accountSelected()) { <span>Elegí el cliente y el importe a imputar a su cuenta.</span> }
+            </div>
+          }
         </div>
-        @if (extraPayments().length > 0) {
-          <div class="payment-operations" aria-label="Operaciones adicionales">
-            @for (payment of extraPayments(); track payment.id) {
-              <div class="payment-operation">
-                <span>{{ paymentMethodName(payment.method) }} · {{ payment.status ?? 'Preparado' }}</span>
-                <input type="text" inputmode="decimal" [attr.aria-label]="'Importe de operación ' + payment.id"
-                  [appLocalizedDecimal]="payment.amount" [disabled]="checkoutCommitted()"
-                  (input)="updateOperationAmount(payment.id, $event)" />
-                @if (payment.method !== 'mercadoPago') {
-                  <input type="text" maxlength="200" [attr.aria-label]="'Referencia de operación ' + payment.id"
-                    [value]="payment.reference ?? ''" [disabled]="checkoutCommitted()"
-                    (input)="updateOperationReference(payment.id, $event)" />
-                }
-                @if (!checkoutCommitted()) { <button type="button" (click)="removePaymentOperation(payment.id)">Quitar</button> }
-              </div>
-            }
-          </div>
-        }
         @if (checkoutCommitted() && checkout(); as process) {
           <p class="payment-guidance" role="status">Proceso {{ process.status }} · acreditado {{ formatMoney(process.approvedAmount) }} · pendiente {{ formatMoney(process.remainingAmount) }}. El turno permanece abierto hasta resolverlo.</p>
         }
@@ -573,13 +554,27 @@
           <div class="payment-operation">
             <label for="replacement-method">Reemplazar pago rechazado</label>
             <select id="replacement-method" [value]="replacementMethod()"
-              (change)="replacementMethod.set($any($event.target).value)">
+              (change)="selectReplacementMethod($event)">
               @for (method of visiblePaymentMethods(); track method.id) {
                 <option [value]="method.id">{{ method.label }}</option>
               }
             </select>
             <span>Saldo: {{ formatMoney(process.remainingAmount) }}</span>
-            <button type="button" [disabled]="checkoutBusy() || process.remainingAmount <= 0"
+            @if (instrumentFields(replacementMethod()).length > 0) {
+              <div class="payment-instrument-fields">
+                @for (field of instrumentFields(replacementMethod()); track field.key) {
+                  <label class="payment-field">{{ field.label }}
+                    <input [attr.data-replacement-field]="field.key" [type]="field.type ?? 'text'"
+                      [attr.maxlength]="field.maxLength ?? null"
+                      [attr.inputmode]="field.key === 'holderCuit' ? 'numeric' : null"
+                      [value]="field.key === 'holderCuit' ? formatCuit(replacementDetails()[field.key] ?? '') : replacementDetails()[field.key] ?? ''"
+                      [disabled]="checkoutBusy()" (input)="updateReplacementField(field.key, $event)" />
+                  </label>
+                }
+              </div>
+            }
+            @if (replacementProblem(); as problem) { <p class="payment-guidance" role="status">{{ problem }}</p> }
+            <button type="button" [disabled]="checkoutBusy() || process.remainingAmount <= 0 || !!replacementProblem()"
               (click)="addReplacement()">Agregar operación</button>
           </div>
         }
@@ -648,7 +643,7 @@
             }
           </section>
         }
-        @if (canChargeToAccount()) {
+        @if (canChargeToAccount() && accountSelected()) {
           <section class="credit-payment" aria-labelledby="credit-payment-title">
             <h3 id="credit-payment-title">Cuenta corriente</h3>
             <p>Podés cargar a cuenta solo el saldo que el cliente no paga ahora. No ingresa dinero a caja por ese importe.</p>
@@ -681,6 +676,8 @@
             }
             <label for="account-charge">Importe a cuenta corriente</label>
             <input id="account-charge" type="text" inputmode="decimal" [appLocalizedDecimal]="accountChargeDraft()" [disabled]="checkoutBusy() || checkoutCommitted()" (input)="updateAccountCharge($event)" />
+            <label for="account-charge-reference">Referencia de la operación (opcional)</label>
+            <input id="account-charge-reference" maxlength="120" [value]="accountChargeReference()" [disabled]="checkoutBusy() || checkoutCommitted()" (input)="accountChargeReference.set($any($event.target).value)" />
             <label for="credit-applied">Aplicar saldo a favor (parcial o total)</label>
             <input id="credit-applied" type="text" inputmode="decimal"
               [appLocalizedDecimal]="creditAppliedDraft()"
@@ -702,7 +699,11 @@
         @if (changePreview() > 0) { <p class="change-preview">Vuelto estimado en efectivo: <strong>{{ formatMoney(changePreview()) }}</strong></p> }
         @if (checkoutError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
         <div class="dialog-actions">
-          <button class="dialog-cancel" type="button" [disabled]="checkoutBusy()" (click)="closeCheckout()">Volver</button>
+          @if (!checkoutCommitted()) {
+            <button class="dialog-cancel payment-back-button" type="button" [disabled]="checkoutBusy() || mercadoPagoOrderActive()" (click)="returnToDocumentCheckout()">Volver al comprobante</button>
+          } @else {
+            <button class="dialog-cancel" type="button" [disabled]="checkoutBusy()" (click)="closeCheckout()">Volver a la venta</button>
+          }
           <button class="finish-button" type="button" [disabled]="checkoutBusy() || !!paymentProblem() || !!documentProblem()" (click)="confirmSale()">{{ checkoutBusy() ? 'Confirmando…' : 'Registrar pagos y confirmar venta' }}</button>
         </div>
         }

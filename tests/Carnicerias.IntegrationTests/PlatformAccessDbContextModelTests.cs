@@ -29,6 +29,7 @@ public sealed class PlatformAccessDbContextModelTests
         Assert.Contains(instrument.GetIndexes(), index => index.IsUnique &&
             index.Properties.Select(property => property.Name).SequenceEqual([
                 nameof(SaleCheckoutInstrument.PointPaymentIntentId)]));
+        Assert.Equal(2000, instrument.FindProperty(nameof(SaleCheckoutInstrument.DetailsJson))?.GetMaxLength());
         Assert.Contains(intent.GetIndexes(), index => index.IsUnique &&
             index.Properties.Select(property => property.Name).SequenceEqual([
                 nameof(PointPaymentIntent.CheckoutInstrumentId)]));

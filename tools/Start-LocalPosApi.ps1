@@ -1,8 +1,7 @@
 param(
     [ValidateRange(1024, 65535)]
     [int]$Port = 5197,
-    [string]$BindAddress = 'localhost',
-    [switch]$UseRealArcaRegistry
+    [string]$BindAddress = 'localhost'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -58,12 +57,9 @@ if ($LASTEXITCODE -ne 0 -or $actualDatabase.Trim() -ne $databaseName) {
 
 $previousPosConnection = [Environment]::GetEnvironmentVariable('CARNICERIAS_CONNECTION_STRING', 'Process')
 $previousEfConnection = [Environment]::GetEnvironmentVariable('ConnectionStrings__PlatformAccess', 'Process')
-$previousRegistryMock = [Environment]::GetEnvironmentVariable('ARCA_HOMO_REGISTRY_MOCK_ENABLED', 'Process')
 try {
     [Environment]::SetEnvironmentVariable('CARNICERIAS_CONNECTION_STRING', $connectionString, 'Process')
     [Environment]::SetEnvironmentVariable('ConnectionStrings__PlatformAccess', $connectionString, 'Process')
-    [Environment]::SetEnvironmentVariable('ARCA_HOMO_REGISTRY_MOCK_ENABLED',
-        $(if ($UseRealArcaRegistry) { 'false' } else { 'true' }), 'Process')
     Write-Output "API POS en http://$($BindAddress):$Port con $databaseName. La contraseña no se muestra."
     & dotnet run --no-launch-profile --project (Join-Path $root 'src\Carnicerias.Api\Carnicerias.Api.csproj') `
         --configuration Release -- --urls "http://$($BindAddress):$Port"
@@ -72,5 +68,4 @@ try {
 finally {
     [Environment]::SetEnvironmentVariable('CARNICERIAS_CONNECTION_STRING', $previousPosConnection, 'Process')
     [Environment]::SetEnvironmentVariable('ConnectionStrings__PlatformAccess', $previousEfConnection, 'Process')
-    [Environment]::SetEnvironmentVariable('ARCA_HOMO_REGISTRY_MOCK_ENABLED', $previousRegistryMock, 'Process')
 }

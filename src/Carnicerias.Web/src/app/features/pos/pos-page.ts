@@ -25,7 +25,7 @@ import { AccountCollectionDialog } from './account-collection-dialog';
 import QRCode from 'qrcode';
 import { MercadoPagoClient, MercadoPagoIntent, MercadoPagoMode } from '../../core/sales/mercado-pago-client';
 import { IntegratedGatewayClient } from '../../core/sales/integrated-gateway-client';
-import { CheckoutInstrumentStatus, SaleCheckout, SaleCheckoutClient } from '../../core/sales/sale-checkout-client';
+import { CheckoutInstrumentStatus, PaymentInstrumentDetails, SaleCheckout, SaleCheckoutClient } from '../../core/sales/sale-checkout-client';
 
 type SaleMode = 'weight' | 'unit';
 
@@ -34,9 +34,40 @@ interface SelectedPayment {
   readonly method: SalePaymentMethod;
   readonly amount: number;
   readonly reference?: string | null;
+  readonly details?: PaymentInstrumentDetails | null;
   readonly status?: CheckoutInstrumentStatus;
   readonly pointPaymentIntentId?: string | null;
 }
+
+interface PaymentField {
+  readonly key: keyof PaymentInstrumentDetails;
+  readonly label: string;
+  readonly type?: 'date';
+  readonly maxLength?: number;
+}
+
+const cardPaymentFields: readonly PaymentField[] = [
+  { key: 'cardBrand', label: 'Marca de tarjeta', maxLength: 40 },
+  { key: 'processor', label: 'Procesador', maxLength: 60 },
+  { key: 'terminal', label: 'Terminal', maxLength: 60 },
+  { key: 'batch', label: 'Lote', maxLength: 40 },
+  { key: 'voucher', label: 'Cupón', maxLength: 40 },
+  { key: 'authorization', label: 'Autorización', maxLength: 60 },
+];
+const transferPaymentFields: readonly PaymentField[] = [
+  { key: 'entity', label: 'Entidad de origen', maxLength: 100 },
+  { key: 'date', label: 'Fecha de transferencia', type: 'date' },
+  { key: 'reference', label: 'Número o referencia', maxLength: 120 },
+];
+const chequePaymentFields: readonly PaymentField[] = [
+  { key: 'bank', label: 'Banco', maxLength: 100 },
+  { key: 'branch', label: 'Sucursal bancaria', maxLength: 80 },
+  { key: 'number', label: 'Número de cheque', maxLength: 40 },
+  { key: 'holder', label: 'Titular', maxLength: 120 },
+  { key: 'holderCuit', label: 'CUIT del titular', maxLength: 13 },
+  { key: 'issuedOn', label: 'Fecha de emisión', type: 'date' },
+  { key: 'payableOn', label: 'Fecha de cobro', type: 'date' },
+];
 
 interface PosProduct {
   readonly id: string;
@@ -266,19 +297,16 @@ export class PosPage implements OnInit {
   protected readonly checkoutLoadState = signal<'idle' | 'loading' | 'ready' | 'error'>('idle');
   protected readonly checkoutCommitted = computed(() => !!this.checkout() &&
     this.checkout()!.status !== 'Prepared');
-  protected readonly extraPayments = computed(() => {
-    const seen = new Set<SalePaymentMethod>();
-    return this.selectedPayments().filter((payment) => {
-      if (seen.has(payment.method)) return true;
-      seen.add(payment.method);
-      return false;
-    });
-  });
   protected readonly mercadoPagoPayments = computed(() =>
     this.selectedPayments().filter((payment) => payment.method === 'mercadoPago'));
   protected readonly hasRejectedPayment = computed(() =>
     this.checkout()?.instruments.some((item) => item.status === 'Rejected') ?? false);
   protected readonly replacementMethod = signal<SalePaymentMethod>('cash');
+  protected readonly replacementDetails = signal<PaymentInstrumentDetails>({});
+  protected readonly replacementProblem = computed(() => this.instrumentProblem({
+    id: 'replacement', method: this.replacementMethod(), amount: this.checkout()?.remainingAmount ?? 0,
+    details: this.replacementDetails(),
+  }));
   private checkoutCommitKey: string | null = null;
   private mercadoPagoPollIndex = 0;
   private readonly mercadoPagoIntentsByOperation = signal<Record<string, MercadoPagoIntent>>({});
@@ -362,6 +390,8 @@ export class PosPage implements OnInit {
   protected readonly creditCustomerLoading = signal(false);
   protected readonly creditCustomerLoadError = signal<string | null>(null);
   protected readonly accountChargeDraft = signal('0');
+  protected readonly accountChargeReference = signal('');
+  protected readonly accountSelected = signal(false);
   protected readonly discountDraft = signal('0');
   protected readonly discountReason = signal('');
   private readonly persistedDiscountAmount = signal(0);
@@ -422,11 +452,17 @@ export class PosPage implements OnInit {
     if ((accountCharge > 0 || creditApplied > 0) &&
         (!this.canChargeToAccount() || !this.creditCustomerId() || !this.creditCustomerAccount()))
       return 'Elegí un cliente habilitado para cuenta corriente.';
+    if (this.accountSelected() && accountCharge + creditApplied <= 0)
+      return 'Ingresá un importe para cuenta corriente o saldo a favor.';
     const payments = this.selectedPayments();
     if (payments.length === 0 && this.dueNow() !== 0) return 'Seleccioná al menos un medio de pago.';
     if (payments.some((payment) => !Number.isFinite(payment.amount) || payment.amount <= 0 ||
         Math.round(payment.amount * 100) !== payment.amount * 100))
       return 'Completá cada medio de pago con un importe válido.';
+    for (const payment of payments) {
+      const problem = this.instrumentProblem(payment);
+      if (problem) return problem;
+    }
     const nonCash = payments.filter((payment) => payment.method !== 'cash')
       .reduce((sum, payment) => sum + payment.amount, 0);
     if (nonCash > this.dueNow()) return 'Los medios sin efectivo no pueden superar el importe a cobrar ahora.';
@@ -1416,6 +1452,8 @@ export class PosPage implements OnInit {
     this.mercadoPagoIntentsByOperation.set({});
     this.mercadoPagoPollIndex = 0;
     this.accountChargeDraft.set('0');
+    this.accountChargeReference.set('');
+    this.accountSelected.set(false);
     this.creditAppliedDraft.set('0');
     this.creditCustomerId.set('');
     this.creditCustomerAccount.set(null);
@@ -1511,10 +1549,12 @@ export class PosPage implements OnInit {
     this.legacyPayment.set(false);
     this.selectedPayments.set(checkout.instruments.map((item) => ({
       id: item.id, method: item.method, amount: item.amount, reference: item.reference,
-      status: item.status, pointPaymentIntentId: item.pointPaymentIntentId,
+      details: item.details ?? null, status: item.status, pointPaymentIntentId: item.pointPaymentIntentId,
     })));
     const terms = checkout.terms;
     this.accountChargeDraft.set(String(terms.accountChargeAmount));
+    this.accountChargeReference.set(terms.accountChargeReference ?? '');
+    this.accountSelected.set(terms.accountChargeAmount > 0 || terms.creditAppliedAmount > 0);
     this.creditAppliedDraft.set(String(terms.creditAppliedAmount));
     this.creditCustomerId.set(terms.customerId ?? '');
     if (terms.customerId && this.creditCustomerAccount()?.customerId !== terms.customerId) {
@@ -1556,6 +1596,7 @@ export class PosPage implements OnInit {
       accountChargeAmount: this.accountChargeAmount(),
       creditAppliedAmount: this.creditAppliedAmount(),
       accountChargeConfirmed: this.accountChargeAmount() > 0,
+      accountChargeReference: this.accountSelected() ? this.accountChargeReference().trim() || null : null,
       documentType: this.documentType(), recipientTaxStatus: this.recipientTaxStatus(),
       recipientName: this.recipientName().trim() || null,
       recipientDocumentNumber: this.recipientDocumentNumber().trim() || null,
@@ -1580,7 +1621,7 @@ export class PosPage implements OnInit {
     const prepared = await firstValueFrom(this.saleCheckoutClient.prepare(draftId,
       remote?.revision ?? 0, this.checkoutTerms(), this.selectedPayments().map((payment) => ({
         id: payment.id ?? crypto.randomUUID(), method: payment.method,
-        amount: payment.amount, reference: payment.reference,
+        amount: payment.amount, reference: this.paymentReference(payment), details: payment.details ?? null,
       }))));
     this.restoreCheckout(prepared);
     const key = this.checkoutCommitKey ?? crypto.randomUUID();
@@ -1815,20 +1856,95 @@ export class PosPage implements OnInit {
     this.checkoutError.set(null);
   }
 
-  protected updatePaymentAmount(method: SalePaymentMethod, event: Event): void {
-    if (this.checkoutCommitted()) return;
-    const amount = parseLocalizedDecimal((event.target as HTMLInputElement).value, 2) ?? NaN;
-    let updated = false;
-    this.selectedPayments.update((payments) => payments.map((payment) => {
-      if (payment.method !== method || updated) return payment;
-      updated = true;
-      return { ...payment, amount };
-    }));
+  protected toggleAccountPayment(event: Event): void {
+    if (this.checkoutCommitted() || !this.canChargeToAccount()) return;
+    const checked = (event.target as HTMLInputElement).checked;
+    const previousDueNow = this.dueNow();
+    this.accountSelected.set(checked);
+    if (checked) {
+      const otherPayments = this.selectedPayments().reduce((sum, payment) => sum + payment.amount, 0);
+      const suggested = this.selectedPayments().length === 1 &&
+        this.selectedPayments()[0].method === 'cash' && otherPayments === previousDueNow
+        ? previousDueNow : Math.max(0, Math.round((previousDueNow - otherPayments) * 100) / 100);
+      this.accountChargeDraft.set(String(suggested));
+      if (this.creditCustomerOptions().length === 0) this.searchCreditCustomers();
+    } else {
+      this.accountChargeDraft.set('0');
+      this.creditAppliedDraft.set('0');
+      this.accountChargeReference.set('');
+      this.creditCustomerId.set('');
+      this.creditCustomerAccount.set(null);
+    }
+    this.adjustCashToDue(previousDueNow);
     this.checkoutError.set(null);
   }
 
-  protected addPaymentOperation(method: SalePaymentMethod): void {
+  protected paymentsForMethod(method: SalePaymentMethod): readonly SelectedPayment[] {
+    return this.selectedPayments().filter((payment) => payment.method === method);
+  }
+
+  protected instrumentFields(method: SalePaymentMethod): readonly PaymentField[] {
+    return method === 'debit' || method === 'credit' ? cardPaymentFields
+      : method === 'transfer' ? transferPaymentFields
+      : method === 'cheque' ? chequePaymentFields : [];
+  }
+
+  protected selectReplacementMethod(event: Event): void {
+    this.replacementMethod.set((event.target as HTMLSelectElement).value as SalePaymentMethod);
+    this.replacementDetails.set({});
+  }
+
+  protected updateReplacementField(field: keyof PaymentInstrumentDetails, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const value = field === 'holderCuit' ? input.value.replace(/\D/g, '').slice(0, 11) : input.value;
+    if (field === 'holderCuit') input.value = this.formatCuit(value);
+    this.replacementDetails.update((details) => ({ ...details, [field]: value }));
+  }
+
+  protected updateInstrumentField(id: string, field: keyof PaymentInstrumentDetails,
+    event: Event): void {
     if (this.checkoutCommitted()) return;
+    const input = event.target as HTMLInputElement;
+    const value = field === 'holderCuit' ? input.value.replace(/\D/g, '').slice(0, 11) : input.value;
+    if (field === 'holderCuit') input.value = this.formatCuit(value);
+    this.selectedPayments.update((payments) => payments.map((payment) => payment.id === id
+      ? { ...payment, details: { ...payment.details, [field]: value } } : payment));
+    this.checkoutError.set(null);
+  }
+
+  private paymentReference(payment: SelectedPayment): string | null {
+    if (payment.method === 'debit' || payment.method === 'credit')
+      return payment.details?.authorization?.trim() || payment.reference || null;
+    if (payment.method === 'transfer')
+      return payment.details?.reference?.trim() || payment.reference || null;
+    if (payment.method === 'cheque')
+      return payment.details?.number?.trim() || payment.reference || null;
+    return payment.method === 'cash' ? null : payment.reference ?? null;
+  }
+
+  private instrumentProblem(payment: SelectedPayment): string | null {
+    const details = payment.details;
+    if (payment.method === 'debit' || payment.method === 'credit') {
+      if (!details?.cardBrand?.trim() || !(details.processor?.trim() || details.terminal?.trim()) ||
+          !details.batch?.trim() || !details.voucher?.trim() || !details.authorization?.trim())
+        return `Completá marca, procesador o terminal, lote, cupón y autorización de ${this.paymentMethodName(payment.method)}.`;
+    }
+    if (payment.method === 'transfer' &&
+        (!details?.entity?.trim() || !details.date || !details.reference?.trim()))
+      return 'Completá entidad, fecha y referencia de la transferencia.';
+    if (payment.method === 'cheque') {
+      if (!details?.bank?.trim() || !details.branch?.trim() || !details.number?.trim() ||
+          !details.holder?.trim() || !this.validCuit(details.holderCuit ?? '') ||
+          !details.issuedOn || !details.payableOn)
+        return 'Completá banco, sucursal, número, titular, CUIT y fechas del cheque.';
+      if (details.payableOn < details.issuedOn)
+        return 'La fecha de cobro del cheque no puede ser anterior a la emisión.';
+    }
+    return null;
+  }
+
+  protected addPaymentOperation(method: SalePaymentMethod): void {
+    if (this.checkoutCommitted() || method === 'cash') return;
     const remaining = Math.max(0, Math.round((this.dueNow() -
       this.selectedPayments().reduce((sum, item) => sum + item.amount, 0)) * 100) / 100);
     this.selectedPayments.update((payments) => [...payments, this.newPayment(method, remaining)]);
@@ -1841,13 +1957,6 @@ export class PosPage implements OnInit {
       item.id === id ? { ...item, amount } : item));
   }
 
-  protected updateOperationReference(id: string, event: Event): void {
-    if (this.checkoutCommitted()) return;
-    const reference = (event.target as HTMLInputElement).value;
-    this.selectedPayments.update((payments) => payments.map((item) =>
-      item.id === id ? { ...item, reference } : item));
-  }
-
   protected removePaymentOperation(id: string): void {
     if (this.checkoutCommitted()) return;
     this.selectedPayments.update((payments) => payments.filter((item) => item.id !== id));
@@ -1857,18 +1966,19 @@ export class PosPage implements OnInit {
     return this.mercadoPagoIntentsByOperation()[id] ?? null;
   }
 
-  protected firstPayment(method: SalePaymentMethod): SelectedPayment | null {
-    return this.selectedPayments().find((item) => item.method === method) ?? null;
-  }
-
   protected async addReplacement(): Promise<void> {
     const checkout = this.checkout();
-    if (!checkout || !this.draftId() || !this.hasRejectedPayment() || this.checkoutBusy()) return;
+    if (!checkout || !this.draftId() || !this.hasRejectedPayment() || this.checkoutBusy() ||
+        this.replacementProblem()) return;
     this.checkoutBusy.set(true);
     try {
+      const payment = { ...this.newPayment(this.replacementMethod(), checkout.remainingAmount),
+        details: this.instrumentFields(this.replacementMethod()).length > 0
+          ? this.replacementDetails() : null };
       const updated = await firstValueFrom(this.saleCheckoutClient.addReplacement(this.draftId(),
-        checkout.id, this.newPayment(this.replacementMethod(), checkout.remainingAmount)));
+        checkout.id, { ...payment, reference: this.paymentReference(payment) }));
       this.restoreCheckout(updated);
+      this.replacementDetails.set({});
       this.checkoutError.set(null);
     } catch {
       this.checkoutError.set('No se pudo agregar el pago de reemplazo. Recuperá el cobro e intentá de nuevo.');

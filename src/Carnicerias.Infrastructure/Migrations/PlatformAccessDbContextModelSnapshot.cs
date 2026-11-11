@@ -3551,6 +3551,10 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<DateTimeOffset?>("ApprovedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DetailsJson")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<int>("Method")
                         .HasColumnType("integer");
 

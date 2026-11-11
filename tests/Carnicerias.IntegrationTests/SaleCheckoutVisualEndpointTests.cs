@@ -256,12 +256,18 @@ public sealed class SaleCheckoutVisualEndpointTests
                     "nonFiscalTicket", "finalConsumer"),
                 payments = new[]
                 {
-                    new { id = firstPayment, method = "transfer", amount = 80m, reference = "I03A-1" },
-                    new { id = secondPayment, method = "transfer", amount = 120m, reference = "I03A-2" }
+                    new { id = firstPayment, method = "transfer", amount = 80m, reference = "I03A-1",
+                        details = new SalePaymentInstrumentDetails(Entity: "Banco A", Date: "2026-11-11",
+                            Reference: "I03A-1") },
+                    new { id = secondPayment, method = "transfer", amount = 120m, reference = "I03A-2",
+                        details = new SalePaymentInstrumentDetails(Entity: "Banco B", Date: "2026-11-11",
+                            Reference: "I03A-2") }
                 }
             }));
             var checkoutId = prepared.GetProperty("id").GetGuid();
             Assert.Equal(2, prepared.GetProperty("instruments").GetArrayLength());
+            Assert.Contains(prepared.GetProperty("instruments").EnumerateArray(), item =>
+                item.GetProperty("details").GetProperty("entity").GetString() == "Banco A");
             await using (var db = new PlatformAccessDbContext(options))
             {
                 var draft = await db.SaleDrafts.Include(item => item.Lines)
@@ -305,6 +311,8 @@ public sealed class SaleCheckoutVisualEndpointTests
             var recovered = await OkAsync(await recoveredCashier.GetAsync(checkoutPath));
             Assert.Equal(80m, recovered.GetProperty("approvedAmount").GetDecimal());
             Assert.Equal(checkoutId, recovered.GetProperty("id").GetGuid());
+            Assert.Contains(recovered.GetProperty("instruments").EnumerateArray(), item =>
+                item.GetProperty("details").GetProperty("reference").GetString() == "I03A-2");
             var ready = await OkAsync(await recoveredCashier.PostAsJsonAsync(
                 $"{checkoutPath}/{checkoutId}/instruments/{secondPayment}/approve",
                 new { reference = "I03A-2-approved" }));
@@ -321,6 +329,11 @@ public sealed class SaleCheckoutVisualEndpointTests
                 var payments = await db.SalePayments.Where(item => item.SaleId == saleId).ToArrayAsync();
                 Assert.Equal(2, payments.Length);
                 Assert.All(payments, item => Assert.Equal(PaymentMethod.Transfer, item.Method));
+                var instruments = await db.SaleCheckoutInstruments.Where(item =>
+                    item.SaleCheckoutId == checkoutId).ToArrayAsync();
+                Assert.Collection(instruments.OrderBy(item => item.Details!.Entity),
+                    item => Assert.Equal("Banco A", item.Details!.Entity),
+                    item => Assert.Equal("Banco B", item.Details!.Entity));
                 Assert.Equal(new[] { firstPayment, secondPayment }.Order(),
                     payments.Select(item => item.CheckoutInstrumentId!.Value).Order());
                 var ledger = await db.CashLedgerMovements.Where(item =>

@@ -1281,6 +1281,8 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(item => item.Status).HasConversion<int>().IsRequired();
             entity.Property(item => item.Amount).HasPrecision(12, 2);
             entity.Property(item => item.Reference).HasMaxLength(200);
+            entity.Property(item => item.DetailsJson).HasMaxLength(2000);
+            entity.Ignore(item => item.Details);
             entity.HasOne<PointPaymentIntent>().WithMany()
                 .HasForeignKey(item => item.PointPaymentIntentId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(item => item.PointPaymentIntentId).IsUnique()

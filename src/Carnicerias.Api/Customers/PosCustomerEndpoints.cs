@@ -220,7 +220,7 @@ public static class PosCustomerEndpoints
                 TaxStatus(local?.FiscalTaxStatus) ?? person.TaxStatus,
                 person.TaxStatus is null || string.IsNullOrWhiteSpace(person.Name) ||
                 string.IsNullOrWhiteSpace(person.Address)
-                    ? "ARCA devolvió datos incompletos o ambiguos; verificá la ficha antes de emitir."
+                    ? lookup.Detail ?? "ARCA devolvió datos incompletos o ambiguos; verificá la ficha antes de emitir."
                     : null));
         }
         catch (Exception error) when (!cancellationToken.IsCancellationRequested &&

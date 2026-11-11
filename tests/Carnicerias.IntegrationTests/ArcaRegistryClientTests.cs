@@ -20,7 +20,7 @@ public sealed class ArcaRegistryClientTests
         var person = await new ArcaRegistryClient(new HttpClient(handler))
             .GetPersonAsync(Ticket, Cuit);
 
-        Assert.Equal("https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5",
+        Assert.Equal("https://awshomo.arca.gob.ar/sr-padron/webservices/personaServiceA5",
             handler.Url);
         var request = XDocument.Parse(handler.Body);
         Assert.Equal("getPersona_v2", request.Descendants()
@@ -52,6 +52,71 @@ public sealed class ArcaRegistryClientTests
             "<datosMonotributo><impuesto><idImpuesto>20</idImpuesto>" +
             "<estadoImpuesto>AC</estadoImpuesto></impuesto></datosMonotributo>"))));
         Assert.Null((await ambiguous.GetPersonAsync(Ticket, Cuit))?.TaxStatus);
+    }
+
+    [Fact]
+    public async Task OppositeRegimeErrorDoesNotHideActiveIvaRegistration()
+    {
+        var response = Response("<datosRegimenGeneral><impuesto>" +
+            "<idImpuesto>30</idImpuesto><estadoImpuesto>AC</estadoImpuesto>" +
+            "</impuesto></datosRegimenGeneral>" +
+            "<errorMonotributo><mensaje>No cumple con las condiciones para enviar datos monotributo</mensaje>" +
+            "</errorMonotributo>");
+        var person = await new ArcaRegistryClient(new HttpClient(new Handler(response)))
+            .GetPersonAsync(Ticket, Cuit);
+
+        Assert.Equal("registered", person?.TaxStatus);
+    }
+
+    [Fact]
+    public async Task OppositeRegimeErrorDoesNotHideActiveMonotributoRegistration()
+    {
+        var response = Response("<datosMonotributo><impuesto>" +
+            "<idImpuesto>20</idImpuesto><estadoImpuesto>AC</estadoImpuesto>" +
+            "</impuesto></datosMonotributo>" +
+            "<errorRegimenGeneral><mensaje>No cumple con las condiciones para enviar datos del regimen general</mensaje>" +
+            "</errorRegimenGeneral>");
+        var person = await new ArcaRegistryClient(new HttpClient(new Handler(response)))
+            .GetPersonAsync(Ticket, Cuit);
+
+        Assert.Equal("smallTaxpayer", person?.TaxStatus);
+    }
+
+    [Fact]
+    public async Task MapsActiveIvaExemptionWithoutGuessingOtherStatuses()
+    {
+        var response = Response("<datosRegimenGeneral><impuesto>" +
+            "<idImpuesto>32</idImpuesto><estadoImpuesto>AC</estadoImpuesto>" +
+            "</impuesto></datosRegimenGeneral>");
+        var person = await new ArcaRegistryClient(new HttpClient(new Handler(response)))
+            .GetPersonAsync(Ticket, Cuit);
+
+        Assert.Equal("exempt", person?.TaxStatus);
+    }
+
+    [Fact]
+    public async Task LeavesConflictingActiveIvaRegistrationsUnresolved()
+    {
+        var response = Response("<datosRegimenGeneral>" +
+            "<impuesto><idImpuesto>30</idImpuesto><estadoImpuesto>AC</estadoImpuesto></impuesto>" +
+            "<impuesto><idImpuesto>32</idImpuesto><estadoImpuesto>AC</estadoImpuesto></impuesto>" +
+            "</datosRegimenGeneral>");
+        var lookup = await new ArcaRegistryClient(new HttpClient(new Handler(response)))
+            .LookupAsync(Ticket, Cuit);
+
+        Assert.Null(lookup.Person?.TaxStatus);
+        Assert.Contains("más de una condición fiscal activa", lookup.Detail);
+    }
+
+    [Fact]
+    public async Task ExplainsMissingActiveFiscalRegistrationWithoutInventingOne()
+    {
+        var lookup = await new ArcaRegistryClient(new HttpClient(new Handler(Response(""))))
+            .LookupAsync(Ticket, Cuit);
+
+        Assert.NotNull(lookup.Person);
+        Assert.Null(lookup.Person.TaxStatus);
+        Assert.Contains("no informó IVA, IVA exento ni monotributo activos", lookup.Detail);
     }
 
     [Fact]

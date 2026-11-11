@@ -22,8 +22,7 @@ public sealed record ArcaRegistryLookupResult(ArcaRegistryPerson? Person,
 /// <summary>Read-only CUIT lookup in ARCA homologation; never changes customer records.</summary>
 public sealed class ArcaRegistryClient(HttpClient httpClient)
 {
-    // ARCA's homologation manual also publishes this host; the arca.gob.ar alias does not resolve here.
-    private const string Endpoint = "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5";
+    private const string Endpoint = "https://awshomo.arca.gob.ar/sr-padron/webservices/personaServiceA5";
     private static readonly XNamespace Soap = "http://schemas.xmlsoap.org/soap/envelope/";
     private static readonly XNamespace Registry = "http://a5.soap.ws.server.puc.sr/";
 
@@ -87,14 +86,26 @@ public sealed class ArcaRegistryClient(HttpClient httpClient)
         var name = Read(general, "razonSocial") ??
             Join(Read(general, "apellido"), Read(general, "nombre"));
         var registered = HasActiveTax(Child(result, "datosRegimenGeneral"), "30");
+        var exempt = HasActiveTax(Child(result, "datosRegimenGeneral"), "32");
         var smallTaxpayer = HasActiveTax(Child(result, "datosMonotributo"), "20");
-        var status = Child(result, "errorRegimenGeneral") is not null ||
-            Child(result, "errorMonotributo") is not null || registered == smallTaxpayer
-                ? null : registered ? "registered" : "smallTaxpayer";
+        var generalError = Child(result, "errorRegimenGeneral") is not null;
+        var smallTaxpayerError = Child(result, "errorMonotributo") is not null;
+        var status = registered && !exempt && !smallTaxpayer &&
+            !generalError ? "registered" :
+            exempt && !registered && !smallTaxpayer &&
+            !generalError ? "exempt" :
+            smallTaxpayer && !registered && !exempt &&
+            !smallTaxpayerError ? "smallTaxpayer" : null;
+        var statusNotice = status is not null ? null :
+            (registered ? 1 : 0) + (exempt ? 1 : 0) + (smallTaxpayer ? 1 : 0) > 1
+                ? "ARCA homologación informó más de una condición fiscal activa; verificá la ficha antes de emitir."
+                : generalError || smallTaxpayerError
+                    ? "ARCA homologación no devolvió una condición fiscal verificable y comunicó un error de régimen; verificá la ficha antes de emitir."
+                    : "ARCA homologación no informó IVA, IVA exento ni monotributo activos para este CUIT; verificá la ficha antes de emitir.";
         return new(new ArcaRegistryPerson(cuit, Bounded(name, 200),
             Bounded(Read(address, "direccion"), 200),
             Bounded(Read(address, "localidad"), 100),
-            Bounded(Read(address, "descripcionProvincia"), 100), status), null);
+            Bounded(Read(address, "descripcionProvincia"), 100), status), null, statusNotice);
     }
 
     private static bool HasActiveTax(XElement? group, string id) =>

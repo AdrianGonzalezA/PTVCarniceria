@@ -270,4 +270,6 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 
 | 17/11/2026 | 08:14:02 | 08:14:24 | 22 s medidos | Confirmar cancelación del retiro pendiente de $100 | Consulta de solo lectura en `carnicerias_test_visual`: el retiro de Caja A sigue rechazado, con motivo registrado, sin movimiento de caja y sin otros retiros pendientes de $100 en Alta Córdoba. Sin pausas conocidas. |
 
+| 17/11/2026 | 08:27:18 | 08:45:23 | No cuantificable (18 min 05 s transcurridos) | Levantar Administración para configurar PIN de usuario | Se confirmó API `5197`, se inició Angular en `4200`, se verificó HTTP 200 en `/users` y `/api/health` por el proxy, y se abrió `/users` en el navegador. Hubo espera de aprobación para abrir la URL, sin marcas separadas suficientes para calcular tiempo activo; no se suma al total medido. |
+
 **Total activo registrado desde el 16/10/2026:** 2205 min 28 s medidos, más diez tramos menores a 1 min y tramos no cuantificables.

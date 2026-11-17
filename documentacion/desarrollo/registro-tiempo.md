@@ -295,4 +295,6 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 
 | 17/11/2026 | 16:34:46 | 16:40:38 | 5 min 52 s medidos | Quitar «Piezas físicas (opcional)» de la venta por kilos | Se reprodujo el campo en un artículo pesable de Caja A Electron. Se eliminó el control, su estado y validación manual; la pieza trazable identificada por código conserva internamente `pieceCount = 1`. Se actualizaron el manual y las pruebas, incluida una aserción del conteo trazable. Pasaron 306 pruebas Angular, 81 focalizadas, lint, build y captura visual Electron. Sin migraciones, cambios de base ni pausas conocidas. |
 
-**Total activo registrado desde el 16/10/2026:** 2323 min 47 s medidos, más diez tramos menores a 1 min y tramos no cuantificables.
+| 17/11/2026 | 16:41:57 | 17:03:34 | 21 min 06 s medidos | Leer desde Caja A el QR vigente del simulador de balanza virtual | Se agregó **Leer QR** junto a la búsqueda solo para cajas con balanza virtual asignada. El canal local entrega el QR y la empresa; se reutiliza la carga del ticket con PLU, kilos, precios y reserva. Pasaron 308 pruebas Angular, 112 Electron, lint y builds. La captura real de Caja A Electron mostró tres cortes separados en el Ticket A y **Borrador guardado**; no se confirmó la venta. Commit `afcc755`. Se descontaron 31 s de espera por aprobación de herramienta; sin otras pausas conocidas. |
+
+**Total activo registrado desde el 16/10/2026:** 2344 min 53 s medidos, más diez tramos menores a 1 min y tramos no cuantificables.

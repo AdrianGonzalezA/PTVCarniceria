@@ -959,6 +959,21 @@
             <h3>Autorizar y retirar</h3>
             <button type="button" [disabled]="withdrawalLoading() || withdrawalAuthorizersLoading()" (click)="refreshWithdrawals()">Actualizar</button>
           </div>
+          @if (shiftLoadState() === 'loading') {
+            <p role="status">Consultando el efectivo de esta caja…</p>
+          } @else if (shiftLoadState() === 'error') {
+            <p class="pos-error" role="alert">No se pudo consultar el efectivo. Pulsá Actualizar para reintentar.</p>
+          } @else if (cashierShift(); as shift) {
+            <div class="withdrawal-balance" aria-live="polite">
+              <span>Efectivo registrado en caja</span><strong>{{ formatMoney(shift.cashBalance) }}</strong>
+              <span>Disponible para retirar</span><strong class="withdrawal-balance-available">{{ formatMoney(withdrawalAvailableCash()) }}</strong>
+            </div>
+            @if ((shift.pendingApprovedCash ?? 0) > 0) {
+              <p class="withdrawal-balance-note">{{ formatMoney(shift.pendingApprovedCash ?? 0) }} corresponden a cobros de ventas pendientes y no pueden retirarse todavía.</p>
+            }
+          } @else {
+            <p class="pos-error" role="alert">El turno ya no está abierto. Actualizá el estado de la caja.</p>
+          }
           <p>El responsable presente autoriza con su PIN. Al confirmar, el efectivo se descuenta de este turno.</p>
           <label class="quantity-field" for="withdrawal-amount">Importe
             <input id="withdrawal-amount" type="text" inputmode="decimal" [appLocalizedDecimal]="withdrawalAmount()" (input)="updateWithdrawalAmount($event)" />

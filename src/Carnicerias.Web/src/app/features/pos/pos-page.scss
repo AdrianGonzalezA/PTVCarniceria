@@ -239,6 +239,10 @@
 .shift-withdrawals-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .shift-withdrawals-heading h3 { margin: 0; font-size: 0.95rem; }
 .shift-withdrawals-heading button { min-height: 2rem; }
+.withdrawal-balance { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 0.45rem 0.75rem; margin-top: 0.8rem; padding: 0.8rem; border: 1px solid var(--pos-border); border-left: 4px solid var(--pos-teal); border-radius: 0.3rem; background: var(--pos-panel); font-size: 0.85rem; }
+.withdrawal-balance strong { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.withdrawal-balance-available { color: var(--pos-teal); font-size: 1.2rem; }
+.withdrawal-balance-note { margin: 0.45rem 0 0; color: var(--pos-muted); }
 .shift-withdrawals p { font-size: 0.8rem; }
 .shift-withdrawals .finish-button { margin-top: 0.7rem; }
 .withdrawal-dialog .pos-success { margin: 0.7rem 0 0; padding: 0.65rem 0.75rem; color: #155438; background: #e7f6ed; border-left: 3px solid #29805a; border-radius: 0.2rem; font-size: 0.82rem; line-height: 1.4; }

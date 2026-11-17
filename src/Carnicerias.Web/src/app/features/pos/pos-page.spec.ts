@@ -2434,22 +2434,26 @@ describe('PosPage', () => {
     };
     const shift = { id: 'shift-id', openingCash: 1000, cashSales: 0, nonCashSales: 0,
       accountSales: 0, creditApplied: 0, cashCollections: 0, nonCashCollections: 0,
-      salesTotal: 0, cashBalance: 900, cashWithdrawals: 100,
+      salesTotal: 0, cashBalance: 900, pendingApprovedCash: 40, cashWithdrawals: 100,
       openedAtUtc: '2026-11-04T18:00:00Z', closedAtUtc: null, paymentBreakdown: [] };
+    let currentShift = shift;
     const pending = { id: 'withdrawal-id', operationId: 'old-operation', cashierShiftId: 'shift-id',
       method: 'cash' as const, amount: 100, reason: 'Rendición', status: 'pending' as const,
       requestedByUserId: 'cashier-id', requesterName: 'cajero',
       requestedAtUtc: '2026-11-04T18:30:00Z', decidedByUserId: null,
       decisionByName: null, decidedAtUtc: null, decisionReason: null, ledgerMovementId: null };
     const approveOnSite = vi.fn().mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 0 })))
-      .mockReturnValueOnce(of({ ...pending, id: 'new-withdrawal', status: 'approved',
-        decisionByName: 'dueño', amount: 10.5 }));
+      .mockImplementationOnce(() => {
+        currentShift = { ...shift, cashBalance: 889.5, cashWithdrawals: 110.5 };
+        return of({ ...pending, id: 'new-withdrawal', status: 'approved',
+          decisionByName: 'dueño', amount: 10.5 });
+      });
     TestBed.configureTestingModule({ providers: [
       provideRouter([]),
       { provide: SessionClient, useValue: { current: () => of(session) } },
       { provide: CatalogClient, useValue: { priceLists: () => of([]) } },
       { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of(null) } },
-      { provide: CashierShiftClient, useValue: { current: () => of(shift), lastClosed: () => of(null) } },
+      { provide: CashierShiftClient, useValue: { current: () => of(currentShift), lastClosed: () => of(null) } },
       { provide: CashWithdrawalClient, useValue: { current: () => of([pending]),
         authorizers: () => of([{ userId: 'owner-id', username: 'dueño' }]), approveOnSite } },
       { provide: InventoryClient, useValue: { stock: () => of([]) } },
@@ -2473,6 +2477,14 @@ describe('PosPage', () => {
     fixture.detectChanges();
     const dialog = fixture.nativeElement.querySelector('.withdrawal-dialog') as HTMLElement;
     expect(dialog.textContent).toContain('Rendición');
+    const balance = dialog.querySelector('.withdrawal-balance') as HTMLElement;
+    expect(Array.from(balance.querySelectorAll('span'), item => item.textContent)).toEqual([
+      'Efectivo registrado en caja', 'Disponible para retirar',
+    ]);
+    expect(Array.from(balance.querySelectorAll('strong'), item => item.textContent?.replace(/\s/g, ' '))).toEqual([
+      '$ 900,00', '$ 860,00',
+    ]);
+    expect(dialog.textContent).toContain('40,00');
     const amount = dialog.querySelector<HTMLInputElement>('#withdrawal-amount')!;
     amount.value = '10,50';
     amount.dispatchEvent(new Event('input', { bubbles: true }));
@@ -2496,6 +2508,7 @@ describe('PosPage', () => {
     expect(approveOnSite.mock.calls[0][0]).toBe(approveOnSite.mock.calls[1][0]);
     expect(approveOnSite.mock.calls[0].slice(1)).toEqual([10.5, 'Nuevo retiro', 'owner-id', '123456']);
     expect(dialog.textContent?.replace(/\s/g, ' ')).toContain('Retiro de $ 10,50 autorizado por dueño');
+    expect(balance.querySelector('.withdrawal-balance-available')?.textContent?.replace(/\s/g, ' ')).toBe('$ 849,50');
   });
 
   it('prefills kilograms from a received piece barcode before adding the product', async () => {

@@ -300,6 +300,11 @@ export class PosPage implements OnInit {
   protected readonly checkoutNotice = signal(false);
   protected readonly cashierShift = signal<CashierShift | null>(null);
   protected readonly shiftLoadState = signal<'loading' | 'ready' | 'error'>('loading');
+  protected readonly withdrawalAvailableCash = computed(() => {
+    const shift = this.cashierShift();
+    return shift ? Math.max(0, Math.round((shift.cashBalance -
+      (shift.pendingApprovedCash ?? 0)) * 100) / 100) : 0;
+  });
   protected readonly canOperate = computed(() => !!this.terminal() && !!this.cashierShift());
   protected readonly shiftDialog = signal(false);
   protected readonly withdrawalDialog = signal(false);

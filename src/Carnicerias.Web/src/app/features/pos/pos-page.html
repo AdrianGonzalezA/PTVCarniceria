@@ -288,7 +288,7 @@
                         [attr.inputmode]="line.product.mode === 'weight' ? 'decimal' : 'numeric'"
                         [appLocalizedDecimal]="line.quantity"
                         [decimalPlaces]="line.product.mode === 'weight' ? 3 : 0"
-                        [readOnly]="!!line.inventoryPieceId"
+                        [readOnly]="!!line.inventoryPieceId || line.product.mode === 'weight' && (!deviceConfigReady() || !!devices().scale || deviceConfigError())"
                         [disabled]="!!liveDataProblem()"
                         [attr.aria-label]="line.product.mode === 'weight' ? 'Peso en kilogramos de ' + line.product.name : 'Cantidad de ' + unitLabel(line.product) + ' de ' + line.product.name"
                         (change)="updateLineQuantity(line.id, $event)"
@@ -374,8 +374,9 @@
             <p class="scale-status" role="status">Pieza {{ identifier }} · {{ formatQuantityDraft() }} kg leídos de la etiqueta · peso fijo</p>
             <p class="scale-status">La pieza se guarda por separado en el ticket; el saldo de stock se calcula por artículo.</p>
           } @else {
-            <p class="scale-status">{{ devices().scale ? 'Peso manual o balanza serial asignada' :
-              deviceConfigError() ? 'No se pudo verificar la balanza; ingresá el peso manualmente.' :
+            <p class="scale-status">{{ !deviceConfigReady() ? 'Verificando la balanza de esta caja…' :
+              devices().scale ? 'Peso obligatorio desde la balanza asignada' :
+              deviceConfigError() ? 'No se pudo verificar la balanza; reintentá cuando vuelva la conexión.' :
               'Esta caja no tiene balanza asignada; ingresá el peso manualmente.' }}</p>
           }
         }
@@ -386,7 +387,7 @@
             id="product-quantity"
             type="text"
             [attr.inputmode]="product.mode === 'weight' ? 'decimal' : 'numeric'"
-            [readOnly]="!!scannedPieceIdentifier()"
+            [readOnly]="!!scannedPieceIdentifier() || product.mode === 'weight' && (!deviceConfigReady() || !!devices().scale || deviceConfigError())"
             [appLocalizedDecimal]="quantityDraft()"
             [decimalPlaces]="product.mode === 'weight' ? 3 : 0"
             (input)="updateQuantity($event)"

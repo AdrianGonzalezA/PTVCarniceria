@@ -184,6 +184,7 @@ export class PosPage implements OnInit {
   protected readonly terminalError = signal<string | null>(null);
   protected readonly devices = signal<PosDeviceAvailability>({ scale: null, printer: null });
   protected readonly deviceConfigError = signal(false);
+  protected readonly deviceConfigReady = signal(false);
   protected readonly demoPriceLists = demoPriceLists;
   protected readonly realPriceLists = signal<readonly PriceListOption[]>([]);
   protected readonly unavailablePriceListName = signal('');
@@ -243,11 +244,21 @@ export class PosPage implements OnInit {
   protected readonly scaleBusy = signal(false);
   protected readonly scaleNotice = signal<string | null>(null);
   protected readonly scaleError = signal<string | null>(null);
+  private readonly scaleReadWeightKg = signal<number | null>(null);
   protected readonly quantityProblem = computed(() => {
     const product = this.selectedProduct();
     if (!product) return null;
     if (!this.isDemoPriceList() && this.liveDataProblem()) return this.liveDataProblem();
+    if (product.mode === 'weight' && !this.scannedPieceIdentifier()) {
+      if (!this.deviceConfigReady() || this.deviceConfigError())
+        return 'No se pudo verificar la balanza de esta caja. Reintentá cuando vuelva la conexión.';
+      if (this.devices().scale && this.scaleReadWeightKg() === null)
+        return 'Leé el peso de la balanza antes de agregar el producto.';
+    }
     const quantity = parseLocalizedDecimal(this.quantityDraft(), product.mode === 'weight' ? 3 : 0) ?? NaN;
+    if (product.mode === 'weight' && this.devices().scale && !this.scannedPieceIdentifier() &&
+        quantity !== this.scaleReadWeightKg())
+      return 'El peso debe coincidir con la última lectura de la balanza.';
     if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 10000 ||
         Math.abs(Math.round(quantity * 1000) - quantity * 1000) > 0.000001)
       return product.mode === 'weight' ? 'Ingresá un peso válido mayor a cero (hasta 3 decimales).' : 'Ingresá una cantidad entera válida mayor a cero.';
@@ -671,10 +682,12 @@ export class PosPage implements OnInit {
       const devices = await this.posDeviceClient.deviceAvailability();
       this.devices.set(devices);
       this.deviceConfigError.set(false);
+      this.deviceConfigReady.set(true);
       return devices;
     } catch (error) {
       this.devices.set({ scale: null, printer: null });
       this.deviceConfigError.set(true);
+      this.deviceConfigReady.set(true);
       throw error;
     }
   }
@@ -689,6 +702,7 @@ export class PosPage implements OnInit {
   @HostListener('window:online')
   protected refreshLiveData(): void {
     if (!this.canOperate()) return;
+    void this.refreshDevices().catch(() => undefined);
     this.refreshPriceLists();
     this.refreshStock();
     this.refreshCategories();
@@ -1121,20 +1135,25 @@ export class PosPage implements OnInit {
     }
     this.selectedProduct.set(product);
     this.scaleRequestRevision++;
+    this.scaleReadWeightKg.set(null);
     this.scannedPieceIdentifier.set(pieceIdentifier);
     this.scannedPieceId.set(pieceId);
-    this.quantityDraft.set(String(quantity));
+    this.quantityDraft.set(product.mode === 'weight' && !pieceIdentifier &&
+      (this.devices().scale || !this.deviceConfigReady() || this.deviceConfigError())
+      ? '' : String(quantity));
     this.pieceCountDraft.set(pieceId ? '1' : '');
     this.scaleNotice.set(null);
     this.scaleError.set(null);
-    if (!pieceIdentifier) setTimeout(() => {
+    if (!pieceIdentifier && (product.mode !== 'weight' ||
+        this.deviceConfigReady() && !this.deviceConfigError() && !this.devices().scale)) setTimeout(() => {
       if (this.selectedProduct()?.id === product.id && !this.scannedPieceIdentifier() && this.canOperate())
         this.quantityInput?.nativeElement.focus();
     }, 0);
   }
 
   protected updateQuantity(event: Event): void {
-    if (this.scannedPieceIdentifier()) {
+    if (this.scannedPieceIdentifier() || this.selectedProduct()?.mode === 'weight' &&
+        (!this.deviceConfigReady() || this.deviceConfigError() || !!this.devices().scale)) {
       (event.target as HTMLInputElement).value = this.quantityDraft();
       return;
     }
@@ -1160,11 +1179,12 @@ export class PosPage implements OnInit {
     this.scaleNotice.set(null);
     void this.posDeviceClient.readScale().then((weightKg) => {
       if (this.selectedProduct()?.id !== productId || this.scaleRequestRevision !== revision) return;
+      this.scaleReadWeightKg.set(weightKg);
       this.quantityDraft.set(String(weightKg));
       this.scaleNotice.set(`Balanza: ${weightKg.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`);
     }).catch(() => {
       if (this.selectedProduct()?.id === productId && this.scaleRequestRevision === revision)
-        this.scaleError.set('No hay una lectura estable y reciente en la balanza configurada. Ingresá el peso manualmente o revisá la conexión.');
+        this.scaleError.set('No hay una lectura estable y reciente en la balanza configurada. Revisá la conexión para continuar.');
     }).finally(() => this.scaleBusy.set(false));
   }
 
@@ -1219,9 +1239,10 @@ export class PosPage implements OnInit {
       this.errorMessage.set(this.liveDataProblem());
       return;
     }
-    if (line?.inventoryPieceId) {
+    if (line?.inventoryPieceId || line?.product.mode === 'weight' &&
+        (!this.deviceConfigReady() || this.deviceConfigError() || !!this.devices().scale)) {
       input.value = String(line.quantity);
-      this.errorMessage.set('El peso de una pieza leída no se puede modificar. Quitá la pieza si no corresponde.');
+      this.errorMessage.set('El peso leído no se puede modificar. Quitá el renglón y volvé a pesarlo si no corresponde.');
       return;
     }
     if (!line || !Number.isFinite(quantity) || quantity <= 0 ||

@@ -24,10 +24,23 @@ import { CurrentSession, SessionClient } from '../../core/session/session-client
 import { PosPage } from './pos-page';
 import { CreditCustomerClient, FiscalLookupResult } from '../../core/customers/credit-customer-client';
 import { POS_ELECTRON_MODE } from '../../core/pos/pos-electron-mode';
+import { PaymentDetailCatalog, PaymentDetailCatalogClient } from '../../core/sales/payment-detail-catalog';
 
 describe('PosPage', () => {
+  const paymentCatalog: PaymentDetailCatalog = {
+    cardBrands: [
+      { id: 'visa', name: 'Visa', supportsDebit: true, supportsCredit: true },
+      { id: 'maestro', name: 'Maestro', supportsDebit: true, supportsCredit: false },
+      { id: 'amex', name: 'American Express', supportsDebit: false, supportsCredit: true },
+    ],
+    processors: [{ id: 'payway', name: 'Payway' }, { id: 'getnet', name: 'Getnet' }],
+    banks: [{ id: 'bcra-0011', name: 'Banco Nación' },
+      { id: 'bcra-0020', name: 'Banco de la Provincia de Córdoba' }],
+    wallets: [{ id: 'mercado-pago', name: 'Mercado Pago' }],
+  };
   beforeEach(() => TestBed.configureTestingModule({ providers: [
     { provide: CashWithdrawalClient, useValue: { current: () => of([]), request: () => NEVER } },
+    { provide: PaymentDetailCatalogClient, useValue: { get: () => of(paymentCatalog) } },
   ] }));
 
   function checkoutClientMock() {
@@ -430,6 +443,133 @@ describe('PosPage', () => {
       reference: 'TR-123', details: { entity: 'Banco Nación', date: '2026-11-11', reference: 'TR-123' } });
   });
 
+  it('offers separate card brands and selectable processors, banks and transfer entities', async () => {
+    const fixture = await checkoutWithGateways(null);
+    const page = fixture.nativeElement as HTMLElement;
+    for (const method of ['debit', 'credit', 'transfer', 'cheque']) {
+      page.querySelector<HTMLInputElement>(`.payment-option[data-payment-method="${method}"] input[type="checkbox"]`)!.click();
+    }
+    fixture.detectChanges();
+    const field = (method: string, key: string) => page.querySelector<HTMLInputElement>(
+      `.payment-option[data-payment-method="${method}"] input[data-instrument-field="${key}"]`)!;
+    const choices = (method: string, key: string) => [...page.querySelectorAll<HTMLOptionElement>(
+      `datalist[id="${field(method, key).getAttribute('list')}"] option`)].map(option => option.value);
+    expect(choices('debit', 'cardBrand')).toContain('Maestro');
+    expect(choices('debit', 'cardBrand')).not.toContain('American Express');
+    expect(choices('credit', 'cardBrand')).toContain('American Express');
+    expect(choices('debit', 'processor')).toContain('Payway');
+    expect(choices('transfer', 'entity')).toContain('Mercado Pago');
+    expect(choices('cheque', 'bank')).toContain('Banco de la Provincia de Córdoba');
+    const entity = field('transfer', 'entity');
+    entity.value = 'Mercado Pago';
+    entity.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(field('transfer', 'entity').value).toBe('Mercado Pago');
+  });
+
+  it('allows an entity outside the suggested catalog to be typed directly', async () => {
+    const fixture = await checkoutWithGateways(null);
+    const page = fixture.nativeElement as HTMLElement;
+    page.querySelector<HTMLInputElement>('.payment-option[data-payment-method="transfer"] input[type="checkbox"]')!.click();
+    fixture.detectChanges();
+    const input = page.querySelector<HTMLInputElement>('.payment-option[data-payment-method="transfer"] input[data-instrument-field="entity"]')!;
+    input.value = 'Entidad fuera de catálogo';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(input.value).toBe('Entidad fuera de catálogo');
+    expect(input.getAttribute('list')).toBeTruthy();
+  });
+
+  it('keeps manual payment entry available when the catalog endpoint fails', async () => {
+    TestBed.overrideProvider(PaymentDetailCatalogClient, { useValue: {
+      get: () => throwError(() => new HttpErrorResponse({ status: 503 })),
+    } });
+    const fixture = await checkoutWithGateways(null);
+    const page = fixture.nativeElement as HTMLElement;
+    page.querySelector<HTMLInputElement>('.payment-option[data-payment-method="transfer"] input[type="checkbox"]')!.click();
+    fixture.detectChanges();
+    const input = page.querySelector<HTMLInputElement>('.payment-option[data-payment-method="transfer"] input[data-instrument-field="entity"]')!;
+    expect(input.getAttribute('list')).toBeNull();
+    expect(page.textContent).toContain('Podés escribir el nombre manualmente');
+    input.value = 'Banco propio';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(input.value).toBe('Banco propio');
+  });
+
+  it('persists selected card brand and processor in the existing payment details contract', async () => {
+    const fixture = await checkoutWithGateways(null);
+    const page = fixture.nativeElement as HTMLElement;
+    page.querySelector<HTMLInputElement>('.payment-option[data-payment-method="cash"] input[type="checkbox"]')!.click();
+    page.querySelector<HTMLInputElement>('.payment-option[data-payment-method="debit"] input[type="checkbox"]')!.click();
+    fixture.detectChanges();
+    const debit = page.querySelector<HTMLElement>('.payment-option[data-payment-method="debit"]')!;
+    for (const [field, value] of [['cardBrand', 'Visa'], ['processor', 'Payway']]) {
+      const input = debit.querySelector<HTMLInputElement>(`input[data-instrument-field="${field}"]`)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges();
+    }
+    for (const [field, value] of [['batch', 'L-1'], ['voucher', 'C-1'], ['authorization', 'A-1']]) {
+      const input = debit.querySelector<HTMLInputElement>(`input[data-instrument-field="${field}"]`)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges();
+    }
+    page.querySelector<HTMLButtonElement>('.checkout-dialog .finish-button')!.click();
+    const checkout = TestBed.inject(SaleCheckoutClient);
+    await vi.waitFor(() => expect(vi.mocked(checkout.prepare)).toHaveBeenCalledOnce());
+    expect(vi.mocked(checkout.prepare).mock.calls[0][3][0].details).toMatchObject({
+      cardBrand: 'Visa', processor: 'Payway', batch: 'L-1', voucher: 'C-1', authorization: 'A-1',
+    });
+  });
+
+  it('shows a recovered historical entity that is absent from the current catalog', async () => {
+    const recovered: SaleCheckout = {
+      id: 'checkout-id', saleDraftId: 'draft-id', status: 'Prepared', revision: 1,
+      total: 2500, planHash: 'hash', commitKey: null, approvedAmount: 0,
+      remainingAmount: 2500, confirmedSaleId: null,
+      terms: { customerId: null, accountChargeAmount: 0, creditAppliedAmount: 0,
+        accountChargeConfirmed: false, documentType: 'nonFiscalTicket', recipientTaxStatus: 'finalConsumer' },
+      instruments: [{ id: 'operation-1', method: 'transfer', amount: 2500, status: 'Prepared',
+        reference: 'TR-1', details: { entity: 'Banco histórico', date: '2026-11-11', reference: 'TR-1' },
+        pointPaymentIntentId: null, approvedAtUtc: null }],
+    };
+    const fixture = await checkoutWithGateways(null, false, [], 2500, recovered);
+    const transfer = (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLElement>('.payment-option[data-payment-method="transfer"]')!;
+    const entity = transfer.querySelector<HTMLInputElement>('input[data-instrument-field="entity"]')!;
+    expect(entity.value).toBe('Banco histórico');
+    expect(entity.getAttribute('list')).toBeTruthy();
+  });
+
+  it('offers the same catalogs when replacing a rejected payment', async () => {
+    const recovered: SaleCheckout = {
+      id: 'checkout-id', saleDraftId: 'draft-id', status: 'PendingBalance', revision: 1,
+      total: 2500, planHash: 'hash', commitKey: 'commit-key', approvedAmount: 0,
+      remainingAmount: 2500, confirmedSaleId: null,
+      terms: { customerId: null, accountChargeAmount: 0, creditAppliedAmount: 0,
+        accountChargeConfirmed: false, documentType: 'nonFiscalTicket', recipientTaxStatus: 'finalConsumer' },
+      instruments: [{ id: 'operation-1', method: 'transfer', amount: 2500, status: 'Rejected',
+        reference: 'TR-1', details: { entity: 'Banco Nación', date: '2026-11-11', reference: 'TR-1' },
+        pointPaymentIntentId: null, approvedAtUtc: null }],
+    };
+    const fixture = await checkoutWithGateways(null, false, [], 2500, recovered);
+    const page = fixture.nativeElement as HTMLElement;
+    const method = page.querySelector<HTMLSelectElement>('#replacement-method')!;
+    method.value = 'debit';
+    method.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    const brand = page.querySelector<HTMLInputElement>('input[data-replacement-field="cardBrand"]')!;
+    brand.value = 'Maestro';
+    brand.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(page.querySelector<HTMLInputElement>('input[data-replacement-field="cardBrand"]')!.value).toBe('Maestro');
+    const processor = page.querySelector<HTMLInputElement>('input[data-replacement-field="processor"]')!;
+    expect([...page.querySelectorAll<HTMLOptionElement>(`datalist[id="${processor.getAttribute('list')}"] option`)]
+      .map(option => option.value)).toContain('Getnet');
+  });
+
   it('keeps two transfers as separate instruments with their own references', async () => {
     const fixture = await checkoutWithGateways(null);
     const page = fixture.nativeElement as HTMLElement;
@@ -450,7 +590,7 @@ describe('PosPage', () => {
     fill(0, '.payment-amount', '1000');
     fill(1, '.payment-amount', '1500');
     for (let index = 0; index < 2; index++) {
-      fill(index, '[data-instrument-field="entity"]', 'Banco');
+      fill(index, '[data-instrument-field="entity"]', 'Banco Nación');
       fill(index, '[data-instrument-field="date"]', '2026-11-11');
       fill(index, '[data-instrument-field="reference"]', `TR-${index + 1}`);
     }
@@ -488,25 +628,25 @@ describe('PosPage', () => {
 
   it('rounds the remaining amount to cents when adding a payment method', async () => {
     const fixture = await checkoutWithGateways(null, false, ['qr'], 79398.7);
-    const methods = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.payment-option')];
-    const payment = (name: string) => methods.find((method) => method.textContent?.includes(name))!;
+    const payment = (name: string) => (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLElement>(`.payment-option[data-payment-method="${name}"]`)!;
     const setAmount = (name: string, amount: string) => {
       const input = payment(name).querySelector<HTMLInputElement>('.payment-amount')!;
       input.value = amount;
       input.dispatchEvent(new Event('input', { bubbles: true }));
       fixture.detectChanges();
     };
-    setAmount('Efectivo', '50000');
-    payment('Débito').querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    setAmount('cash', '50000');
+    payment('debit').querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
     fixture.detectChanges();
-    setAmount('Débito', '10000');
-    payment('Mercado Pago').querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    setAmount('debit', '10000');
+    payment('mercadoPago').querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
     fixture.detectChanges();
-    setAmount('Mercado Pago', '19000');
-    payment('Transferencia').querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    setAmount('mercadoPago', '19000');
+    payment('transfer').querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
     fixture.detectChanges();
 
-    expect(payment('Transferencia').querySelector<HTMLInputElement>('.payment-amount')!.value).toBe('398,70');
+    expect(payment('transfer').querySelector<HTMLInputElement>('.payment-amount')!.value).toBe('398,70');
     expect((fixture.nativeElement as HTMLElement).querySelector('.checkout-dialog')!.textContent)
       .not.toContain('Completá cada medio de pago con un importe válido.');
   });

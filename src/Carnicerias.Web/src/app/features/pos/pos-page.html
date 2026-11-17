@@ -519,6 +519,9 @@
             <button class="change-customer-button" type="button" (click)="returnToDocumentCheckout()">Cambiar comprobante o datos</button>
           }
         </section>
+        @if (paymentDetailCatalogError()) {
+          <p class="payment-guidance" role="status">No se pudieron actualizar las sugerencias de tarjetas y entidades. Podés escribir el nombre manualmente.</p>
+        }
         <div class="payment-methods" aria-label="Medios de pago">
           @for (method of visiblePaymentMethods(); track method.id) {
             <div class="payment-option" [attr.data-payment-method]="method.id">
@@ -536,10 +539,18 @@
                       @for (field of instrumentFields(method.id); track field.key) {
                         <label class="payment-field">{{ field.label }}
                           <input [attr.data-instrument-field]="field.key" [type]="field.type ?? 'text'"
+                            [attr.list]="catalogOptions(method.id, field.key).length ? 'payment-options-' + payment.id + '-' + field.key : null"
                             [attr.maxlength]="field.maxLength ?? null"
                             [attr.inputmode]="field.key === 'holderCuit' ? 'numeric' : null"
                             [value]="field.key === 'holderCuit' ? formatCuit(payment.details?.[field.key] ?? '') : payment.details?.[field.key] ?? ''"
                             [disabled]="checkoutCommitted()" (input)="updateInstrumentField(payment.id, field.key, $event)" />
+                          @if (catalogOptions(method.id, field.key).length) {
+                            <datalist [id]="'payment-options-' + payment.id + '-' + field.key">
+                              @for (option of catalogOptions(method.id, field.key); track option.id) {
+                                <option [value]="option.name"></option>
+                              }
+                            </datalist>
+                          }
                         </label>
                       }
                     </div>
@@ -578,10 +589,18 @@
                 @for (field of instrumentFields(replacementMethod()); track field.key) {
                   <label class="payment-field">{{ field.label }}
                     <input [attr.data-replacement-field]="field.key" [type]="field.type ?? 'text'"
+                      [attr.list]="catalogOptions(replacementMethod(), field.key).length ? 'replacement-options-' + field.key : null"
                       [attr.maxlength]="field.maxLength ?? null"
                       [attr.inputmode]="field.key === 'holderCuit' ? 'numeric' : null"
                       [value]="field.key === 'holderCuit' ? formatCuit(replacementDetails()[field.key] ?? '') : replacementDetails()[field.key] ?? ''"
                       [disabled]="checkoutBusy()" (input)="updateReplacementField(field.key, $event)" />
+                    @if (catalogOptions(replacementMethod(), field.key).length) {
+                      <datalist [id]="'replacement-options-' + field.key">
+                        @for (option of catalogOptions(replacementMethod(), field.key); track option.id) {
+                          <option [value]="option.name"></option>
+                        }
+                      </datalist>
+                    }
                   </label>
                 }
               </div>

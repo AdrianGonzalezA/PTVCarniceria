@@ -157,6 +157,7 @@ app.MapManufacturerEndpoints();
 app.MapUserEndpoints();
 app.MapCompanyRolePermissionEndpoints();
 app.MapCatalogEndpoints();
+app.MapPaymentDetailCatalogEndpoints();
 app.MapAdminCategoryEndpoints();
 app.MapAdminProductEndpoints();
 app.MapAdminProductTaxEndpoints();

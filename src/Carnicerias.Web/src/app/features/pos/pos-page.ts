@@ -26,6 +26,7 @@ import QRCode from 'qrcode';
 import { MercadoPagoClient, MercadoPagoIntent, MercadoPagoMode } from '../../core/sales/mercado-pago-client';
 import { IntegratedGatewayClient } from '../../core/sales/integrated-gateway-client';
 import { CheckoutInstrumentStatus, PaymentInstrumentDetails, SaleCheckout, SaleCheckoutClient } from '../../core/sales/sale-checkout-client';
+import { emptyPaymentDetailCatalog, PaymentDetailCatalog, PaymentDetailCatalogClient, paymentDetailOptions } from '../../core/sales/payment-detail-catalog';
 
 type SaleMode = 'weight' | 'unit';
 
@@ -149,6 +150,7 @@ export class PosPage implements OnInit {
   private readonly pieceClient = inject(InventoryPieceClient);
   private readonly terminalClient = inject(PosTerminalClient);
   private readonly creditCustomerClient = inject(CreditCustomerClient);
+  private readonly paymentDetailCatalogClient = inject(PaymentDetailCatalogClient);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   @ViewChild('scanInput') private scanInput?: ElementRef<HTMLInputElement>;
@@ -394,6 +396,8 @@ export class PosPage implements OnInit {
   protected readonly serialPrintResult = signal<SerialPrintResult | HasarSalePrintResult | null>(null);
   protected readonly serialPrintError = signal<string | null>(null);
   protected readonly selectedPayments = signal<readonly SelectedPayment[]>([]);
+  private readonly paymentDetailCatalog = signal<PaymentDetailCatalog>(emptyPaymentDetailCatalog);
+  protected readonly paymentDetailCatalogError = signal(false);
   protected readonly creditCustomerOptions = signal<readonly CreditCustomerOption[]>([]);
   protected readonly creditCustomerSearch = signal('');
   protected readonly creditCustomerId = signal('');
@@ -1457,6 +1461,7 @@ export class PosPage implements OnInit {
       return;
     }
     this.selectedPayments.set([this.newPayment('cash', this.subtotal())]);
+    this.loadPaymentDetailCatalog();
     this.checkout.set(null);
     this.legacyPayment.set(false);
     this.checkoutLoadState.set('loading');
@@ -1996,6 +2001,19 @@ export class PosPage implements OnInit {
     return method === 'debit' || method === 'credit' ? cardPaymentFields
       : method === 'transfer' ? transferPaymentFields
       : method === 'cheque' ? chequePaymentFields : [];
+  }
+
+  protected catalogOptions(method: SalePaymentMethod,
+    field: keyof PaymentInstrumentDetails) {
+    return paymentDetailOptions(this.paymentDetailCatalog(), method, field);
+  }
+
+  private loadPaymentDetailCatalog(): void {
+    this.paymentDetailCatalogError.set(false);
+    this.paymentDetailCatalogClient.get().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (catalog) => this.paymentDetailCatalog.set(catalog),
+      error: () => this.paymentDetailCatalogError.set(true),
+    });
   }
 
   protected selectReplacementMethod(event: Event): void {

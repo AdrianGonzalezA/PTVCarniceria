@@ -38,6 +38,10 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
     public DbSet<UserSession> Sessions => Set<UserSession>();
 
     public DbSet<PriceList> PriceLists => Set<PriceList>();
+    public DbSet<PaymentCardBrand> PaymentCardBrands => Set<PaymentCardBrand>();
+    public DbSet<PaymentProcessor> PaymentProcessors => Set<PaymentProcessor>();
+    public DbSet<FinancialInstitution> FinancialInstitutions => Set<FinancialInstitution>();
+    public DbSet<PaymentWallet> PaymentWallets => Set<PaymentWallet>();
 
     public DbSet<CustomerAccount> CustomerAccounts => Set<CustomerAccount>();
 
@@ -124,6 +128,39 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("platform_access");
+
+        modelBuilder.Entity<PaymentCardBrand>(entity =>
+        {
+            entity.ToTable("card_brands", "payment_config");
+            entity.HasKey(item => item.Code);
+            entity.Property(item => item.Code).HasMaxLength(40);
+            entity.Property(item => item.Name).HasMaxLength(100).IsRequired();
+            entity.HasIndex(item => item.Name).IsUnique();
+        });
+        modelBuilder.Entity<PaymentProcessor>(entity =>
+        {
+            entity.ToTable("payment_processors", "payment_config");
+            entity.HasKey(item => item.Code);
+            entity.Property(item => item.Code).HasMaxLength(40);
+            entity.Property(item => item.Name).HasMaxLength(100).IsRequired();
+            entity.HasIndex(item => item.Name).IsUnique();
+        });
+        modelBuilder.Entity<FinancialInstitution>(entity =>
+        {
+            entity.ToTable("financial_institutions", "payment_config");
+            entity.HasKey(item => item.Code);
+            entity.Property(item => item.Code).HasMaxLength(40);
+            entity.Property(item => item.Name).HasMaxLength(100).IsRequired();
+            entity.HasIndex(item => item.Name).IsUnique();
+        });
+        modelBuilder.Entity<PaymentWallet>(entity =>
+        {
+            entity.ToTable("digital_wallets", "payment_config");
+            entity.HasKey(item => item.Code);
+            entity.Property(item => item.Code).HasMaxLength(40);
+            entity.Property(item => item.Name).HasMaxLength(100).IsRequired();
+            entity.HasIndex(item => item.Name).IsUnique();
+        });
 
         modelBuilder.Entity<UserIdentity>(entity =>
         {

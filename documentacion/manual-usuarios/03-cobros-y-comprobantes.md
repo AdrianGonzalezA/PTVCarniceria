@@ -10,6 +10,8 @@ La consulta de un CUIT sin ficha fiscal local completa utiliza el padrón real d
 
 El **efectivo** solo pide importe recibido. **Débito y crédito** piden marca, procesador o terminal, lote, cupón y autorización. **Transferencia** pide entidad de origen, fecha y referencia. **Cheque** pide banco, sucursal, número, titular, CUIT del titular, fecha de emisión y fecha de cobro. Débito, crédito, transferencia y cheque son hoy **registros manuales del medio declarado**; el POS no verifica esas operaciones con bancos o adquirentes. Mercado Pago sí exige una orden acreditada y verificada por la API. El cheque todavía no tiene cartera, depósito ni rechazo gestionados en la aplicación.
 
+En **marca de tarjeta**, **procesador**, **entidad de transferencia** y **banco del cheque**, el campo ofrece sugerencias del catálogo de configuración. Podés elegir una sin escribir o ingresar un nombre distinto si falta. Las marcas se filtran según débito o crédito; las transferencias ofrecen bancos y billeteras, y el cheque solo bancos. Los demás campos corresponden a datos de esa operación y se completan manualmente. Si falla la consulta del catálogo, el cobro sigue disponible con ingreso manual.
+
 ## Mercado Pago: QR dinámico, QR fijo o Point
 
 1. Marcá **Mercado Pago** y verificá el importe asignado a ese medio.

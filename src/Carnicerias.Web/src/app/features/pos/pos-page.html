@@ -279,7 +279,7 @@
                   <tr class="ticket-line">
                     <th scope="row" class="ticket-line-identity">
                       <strong class="line-product-name">{{ line.product.name }}</strong>
-                      <small>{{ line.product.code }}@if (line.pieceIdentifier) { · Pieza {{ line.pieceIdentifier }} }@if (line.scaleLabelReference) { · Balanza }</small>
+                      <small>{{ line.product.code }}@if (line.pieceIdentifier) { · Pieza {{ line.pieceIdentifier }} }@if (line.scaleLabelReference) { · Balanza }@if (line.scaleManualOverrideId) { · Peso manual autorizado }</small>
                     </th>
                     <td class="ticket-line-quantity">
                       <input
@@ -288,7 +288,7 @@
                         [attr.inputmode]="line.product.mode === 'weight' ? 'decimal' : 'numeric'"
                         [appLocalizedDecimal]="line.quantity"
                         [decimalPlaces]="line.product.mode === 'weight' ? 3 : 0"
-                        [readOnly]="!!line.inventoryPieceId || !!line.scaleLabelReference || line.product.mode === 'weight' && (!deviceConfigReady() || !!devices().scale || deviceConfigError())"
+                        [readOnly]="!!line.inventoryPieceId || !!line.scaleLabelReference || !!line.scaleManualOverrideId || line.product.mode === 'weight' && (!deviceConfigReady() || !!devices().scale || deviceConfigError())"
                         [disabled]="!!liveDataProblem()"
                         [attr.aria-label]="line.product.mode === 'weight' ? 'Peso en kilogramos de ' + line.product.name : 'Cantidad de ' + unitLabel(line.product) + ' de ' + line.product.name"
                         (change)="updateLineQuantity(line.id, $event)"
@@ -387,7 +387,8 @@
             id="product-quantity"
             type="text"
             [attr.inputmode]="product.mode === 'weight' ? 'decimal' : 'numeric'"
-            [readOnly]="!!scannedPieceIdentifier() || product.mode === 'weight' && (!deviceConfigReady() || !!devices().scale || deviceConfigError())"
+            [readOnly]="!!scannedPieceIdentifier() || product.mode === 'weight' &&
+              (!deviceConfigReady() || !!devices().scale && !scaleOverrideGrantId() || deviceConfigError())"
             [appLocalizedDecimal]="quantityDraft()"
             [decimalPlaces]="product.mode === 'weight' ? 3 : 0"
             (input)="updateQuantity($event)"
@@ -407,6 +408,34 @@
           </button>
           @if (scaleNotice(); as notice) { <p class="scale-status" role="status">{{ notice }}</p> }
           @if (scaleError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
+          <details class="scale-override-panel">
+            <summary>Excepción: ingresar peso manual con PIN</summary>
+            <p>Un responsable habilitado debe autorizar un solo peso manual. La autorización queda registrada en la venta.</p>
+            <label for="scale-override-authorizer">Responsable
+              <select id="scale-override-authorizer" [value]="scaleOverrideAuthorizerId()"
+                (change)="updateScaleOverrideAuthorizer($event)">
+                @for (authorizer of scaleOverrideAuthorizers(); track authorizer.userId) {
+                  <option [value]="authorizer.userId">{{ authorizer.username }}</option>
+                }
+              </select>
+            </label>
+            <label for="scale-override-reason">Motivo
+              <input id="scale-override-reason" type="text" maxlength="200"
+                [value]="scaleOverrideReason()" (input)="updateScaleOverrideReason($event)" />
+            </label>
+            <label for="scale-override-pin">PIN del responsable
+              <input id="scale-override-pin" type="password" inputmode="numeric" autocomplete="off"
+                maxlength="6" [value]="scaleOverridePin()" (input)="updateScaleOverridePin($event)" />
+            </label>
+            <button type="button" class="receipt-pdf-button" [disabled]="scaleOverrideBusy() ||
+              !scaleOverrideAuthorizerId() || !!scaleOverrideGrantId()" (click)="authorizeManualScaleWeight()">
+              {{ scaleOverrideBusy() ? 'Autorizando…' : 'Autorizar un peso manual' }}
+            </button>
+            @if (scaleOverrideAuthorizers().length === 0) {
+              <p class="scale-status">Configurá un PIN y el permiso de excepción de balanza para un responsable desde Administración.</p>
+            }
+            @if (scaleOverrideError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
+          </details>
         }
         @if (quantityProblem(); as problem) { <p class="pos-error" role="alert">{{ problem }}</p> }
         @else if (errorMessage(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }

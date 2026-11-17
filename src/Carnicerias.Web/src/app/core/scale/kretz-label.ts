@@ -17,6 +17,11 @@ export interface KretzConsolidatedQr {
   readonly labels: readonly KretzWeightLabel[];
 }
 
+export function scaleQrTicketKey(reference: string | null | undefined): string | null {
+  return reference?.startsWith('QR:') && reference.length >= 24
+    ? reference.slice(3, 24) : null;
+}
+
 export function decodeKretzWeightEan(value: string): KretzWeightLabel | null {
   const code = value.trim();
   if (!/^\d{13}$/.test(code) || !code.startsWith(kretzLabWeightProfile.prefix)) return null;

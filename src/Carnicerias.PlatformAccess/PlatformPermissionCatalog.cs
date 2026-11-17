@@ -14,6 +14,7 @@ public static class PlatformPermissionCatalog
     public const string PosAccountCorrect = "pos.account.correct";
     public const string PosDiscountApply = "pos.discount.apply";
     public const string CashWithdrawalApprove = "cash.withdrawal.approve";
+    public const string PosScaleOverride = "pos.scale.override";
     public const string ProductionOperate = "production.operate";
 
     public static IReadOnlyCollection<PermissionDefinition> CreateDefaultPermissions() =>
@@ -30,6 +31,7 @@ public static class PlatformPermissionCatalog
         new PermissionDefinition(PosAccountCorrect, "Corregir cobranzas de cuenta corriente con constancia interna"),
         new PermissionDefinition(PosDiscountApply, "Aplicar descuentos comerciales al ticket"),
         new PermissionDefinition(CashWithdrawalApprove, "Aprobar o rechazar retiros extraordinarios de efectivo"),
+        new PermissionDefinition(PosScaleOverride, "Autorizar por PIN un peso manual cuando falla la balanza de caja"),
         new PermissionDefinition(ProductionOperate, "Operar órdenes de producción")
     ];
 }

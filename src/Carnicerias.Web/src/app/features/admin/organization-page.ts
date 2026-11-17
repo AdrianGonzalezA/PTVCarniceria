@@ -295,6 +295,12 @@ export class OrganizationPage implements OnInit {
     if (!this.catalogSaving()) this.catalogEditorOpen.set(false);
   }
 
+  protected syncCatalogDeviceType(): void {
+    const scale = this.catalogForm.controls.type.value === 'scale';
+    this.catalogForm.controls.driver.setValue(scale ? 'serial-scale' : 'escpos');
+    this.catalogForm.controls.port.setValue(scale ? 'COM6' : 'COM1');
+  }
+
   protected saveCatalogDevice(): void {
     const company = this.selectedCompany();
     const branch = this.selectedTerminalBranch();
@@ -303,10 +309,12 @@ export class OrganizationPage implements OnInit {
       return;
     }
     const value = this.catalogForm.getRawValue();
-    const driver = value.type === 'scale' ? 'serial-scale' : value.driver;
+    const driver = value.type === 'scale'
+      ? value.driver === 'virtual-scale' ? 'virtual-scale' : 'serial-scale'
+      : value.driver;
     const changes = { name: value.name.trim(), type: value.type,
-      driver, port: value.port.trim().toUpperCase(),
-      baudRate: driver === 'hasar' ? 9600 : value.baudRate,
+      driver, port: driver === 'virtual-scale' ? 'COM99' : value.port.trim().toUpperCase(),
+      baudRate: driver === 'hasar' || driver === 'virtual-scale' ? 9600 : value.baudRate,
       paperWidthMm: driver === 'escpos' ? value.paperWidthMm : null,
       isActive: value.isActive } as BranchDeviceChanges;
     if (!changes.name || !/^COM[1-9][0-9]{0,2}$/.test(changes.port)) {

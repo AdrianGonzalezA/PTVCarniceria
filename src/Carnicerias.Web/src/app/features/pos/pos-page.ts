@@ -19,6 +19,7 @@ import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { AuthorizedFiscalDocument, FiscalDocumentClient } from '../../core/sales/fiscal-document-client';
 import { CashierShift, CashierShiftClient, ShiftClosingReport } from '../../core/sales/cashier-shift-client';
 import { CashWithdrawal, CashWithdrawalAuthorizer, CashWithdrawalClient } from '../../core/sales/cash-withdrawal-client';
+import { ScaleManualOverrideClient, ScaleOverrideAuthorizer } from '../../core/sales/scale-manual-override-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { CreditCustomerAccount, CreditCustomerClient, CreditCustomerOption, FiscalCustomerOption } from '../../core/customers/credit-customer-client';
 import { AccountCollectionDialog } from './account-collection-dialog';
@@ -28,7 +29,7 @@ import { IntegratedGatewayClient } from '../../core/sales/integrated-gateway-cli
 import { CheckoutInstrumentStatus, PaymentInstrumentDetails, SaleCheckout, SaleCheckoutClient } from '../../core/sales/sale-checkout-client';
 import { emptyPaymentDetailCatalog, PaymentDetailCatalog, PaymentDetailCatalogClient, paymentDetailOptions } from '../../core/sales/payment-detail-catalog';
 import { decodeKretzWeightEan, kretzQrExpectedCount, KretzWeightLabel,
-  parseKretzConsolidatedQr } from '../../core/scale/kretz-label';
+  parseKretzConsolidatedQr, scaleQrTicketKey } from '../../core/scale/kretz-label';
 
 type SaleMode = 'weight' | 'unit';
 
@@ -91,6 +92,8 @@ interface SaleLine {
   readonly inventoryPieceId?: string;
   readonly pieceIdentifier?: string;
   readonly scaleLabelReference?: string;
+  readonly scaleManualOverrideId?: string;
+  readonly scaleReadFromDevice?: boolean;
 }
 
 const categories = [
@@ -149,6 +152,7 @@ export class PosPage implements OnInit {
   private readonly posDeviceClient = inject(PosDeviceClient);
   private readonly cashierShiftClient = inject(CashierShiftClient);
   private readonly cashWithdrawalClient = inject(CashWithdrawalClient);
+  private readonly scaleManualOverrideClient = inject(ScaleManualOverrideClient);
   private readonly inventoryClient = inject(InventoryClient);
   private readonly pieceClient = inject(InventoryPieceClient);
   private readonly terminalClient = inject(PosTerminalClient);
@@ -251,6 +255,13 @@ export class PosPage implements OnInit {
   protected readonly scaleNotice = signal<string | null>(null);
   protected readonly scaleError = signal<string | null>(null);
   private readonly scaleReadWeightKg = signal<number | null>(null);
+  protected readonly scaleOverrideAuthorizers = signal<readonly ScaleOverrideAuthorizer[]>([]);
+  protected readonly scaleOverrideAuthorizerId = signal('');
+  protected readonly scaleOverridePin = signal('');
+  protected readonly scaleOverrideReason = signal('');
+  protected readonly scaleOverrideGrantId = signal<string | null>(null);
+  protected readonly scaleOverrideBusy = signal(false);
+  protected readonly scaleOverrideError = signal<string | null>(null);
   protected readonly quantityProblem = computed(() => {
     const product = this.selectedProduct();
     if (!product) return null;
@@ -258,11 +269,13 @@ export class PosPage implements OnInit {
     if (product.mode === 'weight' && !this.scannedPieceIdentifier()) {
       if (!this.deviceConfigReady() || this.deviceConfigError())
         return 'No se pudo verificar la balanza de esta caja. Reintentá cuando vuelva la conexión.';
-      if (this.devices().scale && this.scaleReadWeightKg() === null)
+      if (this.devices().scale && this.scaleReadWeightKg() === null &&
+          !this.scaleOverrideGrantId())
         return 'Leé el peso de la balanza antes de agregar el producto.';
     }
     const quantity = parseLocalizedDecimal(this.quantityDraft(), product.mode === 'weight' ? 3 : 0) ?? NaN;
     if (product.mode === 'weight' && this.devices().scale && !this.scannedPieceIdentifier() &&
+        !this.scaleOverrideGrantId() &&
         quantity !== this.scaleReadWeightKg())
       return 'El peso debe coincidir con la última lectura de la balanza.';
     if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 10000 ||
@@ -566,6 +579,8 @@ export class PosPage implements OnInit {
               ...(line.pieceCount != null ? { pieceCount: line.pieceCount } : {}),
               ...(line.inventoryPieceId ? { inventoryPieceId: line.inventoryPieceId } : {}),
               ...(line.scaleLabelReference ? { scaleLabelReference: line.scaleLabelReference } : {}),
+              ...(line.scaleManualOverrideId ? { scaleManualOverrideId: line.scaleManualOverrideId } : {}),
+              ...(line.scaleReadFromDevice ? { scaleReadFromDevice: true } : {}),
             })), slot, operation.discountAmount, operation.discountReason);
         return request.pipe(
           map((result) => ({ revision, slot, operation, result, error: null as HttpErrorResponse | null })),
@@ -589,7 +604,8 @@ export class PosPage implements OnInit {
           if (operation === 'cancel') this.lines.set(this.persistedLines());
           if (['INSUFFICIENT_STOCK', 'PIECE_ALREADY_USED', 'PIECE_NOT_AVAILABLE',
             'PIECE_RECONCILIATION_REQUIRED', 'ARTICLE_RECONCILIATION_IN_PROGRESS',
-            'MERCADO_PAGO_ORDER_ACTIVE'].includes(error.error?.error?.code)) {
+            'MERCADO_PAGO_ORDER_ACTIVE', 'SCALE_TICKET_RESERVED',
+            'SCALE_TICKET_ALREADY_CHARGED', 'INVALID_SCALE_TICKET'].includes(error.error?.error?.code)) {
             this.lines.set(this.persistedLines());
             this.discountDraft.set(String(this.persistedDiscountAmount()));
             this.discountReason.set(this.persistedDiscountReason());
@@ -602,6 +618,12 @@ export class PosPage implements OnInit {
               ? 'Esta pieza histórica está inmovilizada hasta que Administración concilie su estado.'
               : error.error?.error?.code === 'INSUFFICIENT_STOCK'
               ? 'No hay stock suficiente. El producto o la cantidad rechazada no se agregó al ticket. Revisá las existencias.'
+              : error.error?.error?.code === 'SCALE_TICKET_ALREADY_CHARGED'
+              ? 'Este ticket de balanza ya fue cobrado. No se agregó a la venta.'
+              : error.error?.error?.code === 'SCALE_TICKET_RESERVED'
+              ? 'Este ticket de balanza está en otra caja. No se agregó a la venta.'
+              : error.error?.error?.code === 'INVALID_SCALE_TICKET'
+              ? 'El ticket de balanza debe incluir todos sus cortes. Volvé a escanearlo completo.'
               : 'Esta pieza ya no está disponible. No se agregó al ticket.');
             this.refreshStock();
           } else {
@@ -627,7 +649,8 @@ export class PosPage implements OnInit {
         this.lines.update((currentLines) => currentLines.map((line) => {
           const savedLine = savedDraft.lines.find((item) => item.productId === line.product.id &&
             (item.inventoryPieceId ?? null) === (line.inventoryPieceId ?? null) &&
-            (item.scaleLabelReference ?? null) === (line.scaleLabelReference ?? null));
+            (item.scaleLabelReference ?? null) === (line.scaleLabelReference ?? null) &&
+            (item.scaleManualOverrideId ?? null) === (line.scaleManualOverrideId ?? null));
           return savedLine ? { ...line, product: { ...line.product, price: savedLine.unitPrice } } : line;
         }));
         this.persistedLines.set(savedDraft.lines.map((item) => ({
@@ -646,6 +669,8 @@ export class PosPage implements OnInit {
           ...(item.inventoryPieceId ? { inventoryPieceId: item.inventoryPieceId } : {}),
           ...(item.pieceIdentifier ? { pieceIdentifier: item.pieceIdentifier } : {}),
           ...(item.scaleLabelReference ? { scaleLabelReference: item.scaleLabelReference } : {}),
+          ...(item.scaleManualOverrideId ? { scaleManualOverrideId: item.scaleManualOverrideId } : {}),
+          ...(item.weightSource === 'SerialScale' ? { scaleReadFromDevice: true } : {}),
         })));
       }
       if (revision === this.draftRevision) {
@@ -1253,6 +1278,12 @@ export class PosPage implements OnInit {
     this.selectedProduct.set(product);
     this.scaleRequestRevision++;
     this.scaleReadWeightKg.set(null);
+    this.scaleOverrideGrantId.set(null);
+    this.scaleOverridePin.set('');
+    this.scaleOverrideReason.set('Balanza sin lectura estable');
+    this.scaleOverrideError.set(null);
+    this.scaleOverrideAuthorizers.set([]);
+    this.scaleOverrideAuthorizerId.set('');
     this.scannedPieceIdentifier.set(pieceIdentifier);
     this.scannedPieceId.set(pieceId);
     this.quantityDraft.set(product.mode === 'weight' && !pieceIdentifier &&
@@ -1261,6 +1292,18 @@ export class PosPage implements OnInit {
     this.pieceCountDraft.set(pieceId ? '1' : '');
     this.scaleNotice.set(null);
     this.scaleError.set(null);
+    if (product.mode === 'weight' && !pieceIdentifier && this.devices().scale)
+      this.scaleManualOverrideClient.authorizers().subscribe({
+        next: authorizers => {
+          if (this.selectedProduct()?.id !== product.id) return;
+          this.scaleOverrideAuthorizers.set(authorizers);
+          this.scaleOverrideAuthorizerId.set(authorizers[0]?.userId ?? '');
+        },
+        error: () => {
+          if (this.selectedProduct()?.id === product.id)
+            this.scaleOverrideError.set('No se pudieron consultar los responsables. Reintentá la apertura del producto.');
+        },
+      });
     if (!pieceIdentifier && (product.mode !== 'weight' ||
         this.deviceConfigReady() && !this.deviceConfigError() && !this.devices().scale)) setTimeout(() => {
       if (this.selectedProduct()?.id === product.id && !this.scannedPieceIdentifier() && this.canOperate())
@@ -1270,7 +1313,8 @@ export class PosPage implements OnInit {
 
   protected updateQuantity(event: Event): void {
     if (this.scannedPieceIdentifier() || this.selectedProduct()?.mode === 'weight' &&
-        (!this.deviceConfigReady() || this.deviceConfigError() || !!this.devices().scale)) {
+        (!this.deviceConfigReady() || this.deviceConfigError() ||
+          !!this.devices().scale && !this.scaleOverrideGrantId())) {
       (event.target as HTMLInputElement).value = this.quantityDraft();
       return;
     }
@@ -1297,12 +1341,64 @@ export class PosPage implements OnInit {
     void this.posDeviceClient.readScale().then((weightKg) => {
       if (this.selectedProduct()?.id !== productId || this.scaleRequestRevision !== revision) return;
       this.scaleReadWeightKg.set(weightKg);
+      this.scaleOverrideGrantId.set(null);
       this.quantityDraft.set(String(weightKg));
       this.scaleNotice.set(`Balanza: ${weightKg.toLocaleString('es-AR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`);
     }).catch(() => {
       if (this.selectedProduct()?.id === productId && this.scaleRequestRevision === revision)
         this.scaleError.set('No hay una lectura estable y reciente en la balanza configurada. Revisá la conexión para continuar.');
     }).finally(() => this.scaleBusy.set(false));
+  }
+
+  protected updateScaleOverrideAuthorizer(event: Event): void {
+    this.scaleOverrideAuthorizerId.set((event.target as HTMLSelectElement).value);
+    this.scaleOverridePin.set('');
+  }
+
+  protected updateScaleOverridePin(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    input.value = input.value.replace(/\D/g, '').slice(0, 6);
+    this.scaleOverridePin.set(input.value);
+  }
+
+  protected updateScaleOverrideReason(event: Event): void {
+    this.scaleOverrideReason.set((event.target as HTMLInputElement).value);
+  }
+
+  protected authorizeManualScaleWeight(): void {
+    const product = this.selectedProduct();
+    if (!product || this.scaleOverrideBusy() || !this.devices().scale) return;
+    const reason = this.scaleOverrideReason().trim();
+    if (!this.scaleOverrideAuthorizerId() || !/^\d{6}$/.test(this.scaleOverridePin()) ||
+        reason.length < 10 || reason.length > 200) {
+      this.scaleOverrideError.set('Seleccioná un responsable, ingresá su PIN y un motivo de 10 a 200 caracteres.');
+      return;
+    }
+    this.scaleOverrideBusy.set(true);
+    this.scaleOverrideError.set(null);
+    this.scaleManualOverrideClient.authorize(product.id, this.scaleOverrideAuthorizerId(),
+      this.scaleOverridePin(), reason).subscribe({
+      next: grant => {
+        this.scaleOverrideBusy.set(false);
+        this.scaleOverridePin.set('');
+        if (this.selectedProduct()?.id !== product.id) return;
+        this.scaleOverrideGrantId.set(grant.grantId);
+        this.scaleReadWeightKg.set(null);
+        this.quantityDraft.set('');
+        this.scaleError.set(null);
+        this.scaleNotice.set(`Peso manual habilitado por ${grant.authorizerName} para este producto.`);
+        setTimeout(() => this.quantityInput?.nativeElement.focus(), 0);
+      },
+      error: (error: HttpErrorResponse) => {
+        this.scaleOverrideBusy.set(false);
+        this.scaleOverridePin.set('');
+        this.scaleOverrideError.set(error.status === 429
+          ? 'Demasiados intentos. Esperá un minuto.'
+          : error.error?.error?.code === 'SCALE_OVERRIDE_AUTHORIZATION_FAILED'
+            ? 'El PIN o el permiso del responsable no son válidos.'
+            : 'No se pudo autorizar el peso manual. Verificá el turno y la conexión.');
+      },
+    });
   }
 
   protected addSelectedProduct(): void {
@@ -1339,10 +1435,13 @@ export class PosPage implements OnInit {
     }
     const pieceCount = product.mode === 'weight' && this.pieceCountDraft().trim()
       ? parseLocalizedDecimal(this.pieceCountDraft(), 0) : null;
-    this.addProductLine(product, quantity, pieceId, this.scannedPieceIdentifier(), pieceCount);
+    this.addProductLine(product, quantity, pieceId, this.scannedPieceIdentifier(), pieceCount,
+      null, this.scaleOverrideGrantId(), product.mode === 'weight' && !pieceId &&
+        !this.scannedPieceIdentifier() && !!this.devices().scale && !this.scaleOverrideGrantId());
     this.selectedProduct.set(null);
     this.scannedPieceIdentifier.set(null);
     this.scannedPieceId.set(null);
+    this.scaleOverrideGrantId.set(null);
     this.focusScanInput();
   }
 
@@ -1356,7 +1455,8 @@ export class PosPage implements OnInit {
       this.errorMessage.set(this.liveDataProblem());
       return;
     }
-    if (line?.inventoryPieceId || line?.scaleLabelReference || line?.product.mode === 'weight' &&
+    if (line?.inventoryPieceId || line?.scaleLabelReference || line?.scaleManualOverrideId ||
+        line?.product.mode === 'weight' &&
         (!this.deviceConfigReady() || this.deviceConfigError() || !!this.devices().scale)) {
       input.value = String(line.quantity);
       this.errorMessage.set('El peso leído no se puede modificar. Quitá el renglón y volvé a pesarlo si no corresponde.');
@@ -1393,8 +1493,13 @@ export class PosPage implements OnInit {
     if (!this.canOperate()) return;
     if (!this.isDemoPriceList() && this.liveDataProblem()) return;
     const line = this.lines().find((item) => item.id === lineId);
-    if (!line || !window.confirm(`¿Querés quitar ${line.product.name} del detalle?`)) return;
-    this.lines.update((lines) => lines.filter((item) => item.id !== lineId));
+    const qrKey = scaleQrTicketKey(line?.scaleLabelReference);
+    if (!line || !window.confirm(qrKey
+      ? '¿Querés quitar el ticket completo de la balanza y todos sus cortes?'
+      : `¿Querés quitar ${line.product.name} del detalle?`)) return;
+    this.lines.update((lines) => lines.filter((item) => qrKey
+      ? scaleQrTicketKey(item.scaleLabelReference) !== qrKey
+      : item.id !== lineId));
     if (this.lines().length === 0 && !this.isDemoPriceList() && this.selectedPriceListId()) {
       this.discountDraft.set('0');
       this.discountReason.set('');
@@ -1552,6 +1657,8 @@ export class PosPage implements OnInit {
     this.selectedProduct.set(null);
     this.scannedPieceIdentifier.set(null);
     this.scannedPieceId.set(null);
+    this.scaleOverrideGrantId.set(null);
+    this.scaleOverridePin.set('');
     this.errorMessage.set(null);
     this.focusScanInput();
   }
@@ -3047,15 +3154,19 @@ export class PosPage implements OnInit {
 
   private addProductLine(product: PosProduct, quantity: number, pieceId: string | null = null,
     pieceIdentifier: string | null = null, pieceCount: number | null = null,
-    scaleLabelReference: string | null = null): void {
+    scaleLabelReference: string | null = null,
+    scaleManualOverrideId: string | null = null, scaleReadFromDevice = false): void {
     this.lines.update((lines) => {
-      const existing = pieceId || scaleLabelReference ? undefined : lines.find((line) =>
-        line.product.id === product.id && !line.inventoryPieceId && !line.scaleLabelReference);
+      const existing = pieceId || scaleLabelReference || scaleManualOverrideId ? undefined : lines.find((line) =>
+        line.product.id === product.id && !line.inventoryPieceId && !line.scaleLabelReference &&
+        !line.scaleManualOverrideId && !!line.scaleReadFromDevice === scaleReadFromDevice);
       if (!existing) return [...lines, { id: crypto.randomUUID(), product, quantity,
         pieceCount,
         ...(pieceId ? { inventoryPieceId: pieceId } : {}),
         ...(pieceIdentifier ? { pieceIdentifier } : {}),
-        ...(scaleLabelReference ? { scaleLabelReference } : {}) }];
+        ...(scaleLabelReference ? { scaleLabelReference } : {}),
+        ...(scaleManualOverrideId ? { scaleManualOverrideId } : {}),
+        ...(scaleReadFromDevice ? { scaleReadFromDevice: true } : {}) }];
       return lines.map((line) => line.id === existing.id
         ? { ...line, quantity: this.roundQuantity(line.quantity + quantity),
             pieceCount: line.pieceCount != null && pieceCount != null
@@ -3133,6 +3244,8 @@ export class PosPage implements OnInit {
           ...(item.inventoryPieceId ? { inventoryPieceId: item.inventoryPieceId } : {}),
           ...(item.pieceIdentifier ? { pieceIdentifier: item.pieceIdentifier } : {}),
           ...(item.scaleLabelReference ? { scaleLabelReference: item.scaleLabelReference } : {}),
+          ...(item.scaleManualOverrideId ? { scaleManualOverrideId: item.scaleManualOverrideId } : {}),
+          ...(item.weightSource === 'SerialScale' ? { scaleReadFromDevice: true } : {}),
         })));
         this.persistedLines.set(this.lines());
         this.draftStatus.set('saved');

@@ -1,5 +1,6 @@
-import type { SerialDeviceConfig } from './deployment-config';
+import type { ScaleDeviceConfig, SerialDeviceConfig } from './deployment-config';
 import { SerialScale, type ScaleReading } from './serial-scale';
+import { requestVirtualDevice, virtualDevicePipe, type VirtualDeviceResponse } from './virtual-device-protocol';
 
 export interface AssignedPrinter extends SerialDeviceConfig {
   readonly kind: 'text' | 'hasar' | 'escpos';
@@ -7,7 +8,7 @@ export interface AssignedPrinter extends SerialDeviceConfig {
 }
 
 export interface AssignedDevices {
-  readonly scale: SerialDeviceConfig | null;
+  readonly scale: ScaleDeviceConfig | null;
   readonly printer: AssignedPrinter | null;
 }
 
@@ -32,7 +33,12 @@ export function parseAssignedDevices(value: unknown): AssignedDevices {
   const devices = record(record(value).devices);
   if (!Object.hasOwn(devices, 'scale') || !Object.hasOwn(devices, 'printer'))
     throw new Error('POS_DEVICE_CONFIG_INVALID');
-  const scale = devices.scale === null ? null : serial(devices.scale);
+  const scale = devices.scale === null ? null : (() => {
+    const input = record(devices.scale);
+    if (input.driver !== undefined && input.driver !== 'serial-scale' &&
+        input.driver !== 'virtual-scale') throw new Error('POS_DEVICE_CONFIG_INVALID');
+    return { ...serial(input), ...(input.driver ? { driver: input.driver } : {}) } as ScaleDeviceConfig;
+  })();
   let printer: AssignedPrinter | null = null;
   if (devices.printer !== null) {
     const input = record(devices.printer);
@@ -73,16 +79,20 @@ export class TerminalDevices {
   private settings: AssignedDevices = noDevices;
 
   constructor(private readonly createScale: (config: SerialDeviceConfig) => ScaleReader =
-    (config) => new SerialScale(undefined, config)) {}
+    (config) => new SerialScale(undefined, config),
+    private readonly readVirtual: () => Promise<VirtualDeviceResponse> =
+      () => requestVirtualDevice(virtualDevicePipe, { action: 'read-scale' })) {}
 
   availability(): AssignedDevices { return this.settings; }
 
   async apply(settings: AssignedDevices): Promise<void> {
     const previous = this.settings.scale;
     if (previous?.port !== settings.scale?.port ||
-        previous?.baudRate !== settings.scale?.baudRate) {
+        previous?.baudRate !== settings.scale?.baudRate ||
+        previous?.driver !== settings.scale?.driver) {
       await this.scale?.stop();
-      this.scale = settings.scale ? this.createScale(settings.scale) : undefined;
+      this.scale = settings.scale && settings.scale.driver !== 'virtual-scale'
+        ? this.createScale(settings.scale) : undefined;
       this.scale?.start();
     }
     this.settings = settings;
@@ -91,6 +101,20 @@ export class TerminalDevices {
   readScale(): ScaleReading {
     if (!this.scale) throw new Error('SERIAL_SCALE_NOT_CONFIGURED');
     return this.scale.read();
+  }
+
+  async readScaleAsync(): Promise<ScaleReading> {
+    if (!this.settings.scale) throw new Error('SERIAL_SCALE_NOT_CONFIGURED');
+    if (this.settings.scale.driver !== 'virtual-scale') return this.readScale();
+    const response = await this.readVirtual();
+    if (!response.ok) throw new Error('VIRTUAL_SCALE_UNAVAILABLE');
+    const reading = response.reading;
+    if (!Number.isFinite(reading.weightKg) || reading.weightKg <= 0 ||
+        reading.weightKg > 10000 || typeof reading.stable !== 'boolean' ||
+        !Number.isFinite(Date.parse(reading.observedAtUtc)) ||
+        Date.now() - Date.parse(reading.observedAtUtc) > 30000)
+      throw new Error('VIRTUAL_SCALE_INVALID_READING');
+    return reading;
   }
 
   textPrinter(): SerialDeviceConfig {

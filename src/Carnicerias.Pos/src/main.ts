@@ -177,7 +177,7 @@ function registerNativeApi(devices: TerminalDevices,
   ipcMain.handle(NativeChannel.ReadSerialScale, async (event) => {
     validateIpcSender(event);
     await synchronizeDevices();
-    return devices.readScale();
+    return devices.readScaleAsync();
   });
   ipcMain.handle(NativeChannel.PrintSerialReceipt, async (event, payload: unknown) => {
     validateIpcSender(event);

@@ -5,7 +5,7 @@ export interface BranchDevice {
   readonly id: string;
   readonly name: string;
   readonly type: 'scale' | 'printer';
-  readonly driver: 'serial-scale' | 'text' | 'hasar' | 'escpos';
+  readonly driver: 'serial-scale' | 'virtual-scale' | 'text' | 'hasar' | 'escpos';
   readonly port: string;
   readonly baudRate: number;
   readonly paperWidthMm: 58 | 80 | null;

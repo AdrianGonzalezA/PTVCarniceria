@@ -81,9 +81,13 @@ public static class SaleDraftEndpoints
             request.Lines.Count is < 1 or > 100 || request.Lines.Any(line =>
                 line.ProductId == Guid.Empty || line.Quantity <= 0 || line.Quantity > 10000 ||
                 decimal.Round(line.Quantity, 3) != line.Quantity || line.InventoryPieceId == Guid.Empty ||
-                line.ScaleLabelReference is { Length: > 80 }) ||
+                line.ScaleLabelReference is { Length: > 80 } ||
+                line.ScaleManualOverrideId == Guid.Empty) ||
             request.Lines.Select(line => (line.ProductId, line.InventoryPieceId,
-                line.ScaleLabelReference)).Distinct().Count() != request.Lines.Count ||
+                line.ScaleLabelReference, line.ScaleManualOverrideId)).Distinct().Count() != request.Lines.Count ||
+            request.Lines.Where(line => line.ScaleManualOverrideId is not null)
+                .Select(line => line.ScaleManualOverrideId).Distinct().Count() !=
+                request.Lines.Count(line => line.ScaleManualOverrideId is not null) ||
             request.Lines.Where(line => line.InventoryPieceId is not null)
                 .Select(line => line.InventoryPieceId).Distinct().Count() !=
             request.Lines.Count(line => line.InventoryPieceId is not null) ||
@@ -91,6 +95,9 @@ public static class SaleDraftEndpoints
             (request.DiscountAmount > 0 && (string.IsNullOrWhiteSpace(request.DiscountReason) ||
                 request.DiscountReason.Trim().Length is < 10 or > 200)))
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+        if (!ScaleTicketGuard.TryGetCompleteTicketKeys(
+                request.Lines.Select(line => line.ScaleLabelReference), out var scaleTicketKeys))
+            return Error(StatusCodes.Status400BadRequest, "INVALID_SCALE_TICKET");
 
         var context = accessor.Context;
         if (request.DiscountAmount > 0 &&
@@ -102,6 +109,12 @@ public static class SaleDraftEndpoints
             await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
             var shift = await FindOpenShiftAsync(db, accessor, cancellationToken);
             if (shift is null) return Error(StatusCodes.Status409Conflict, "CASHIER_SHIFT_REQUIRED");
+            var terminalScalePort = accessor.TerminalId is Guid terminalId
+                ? await db.PosTerminals.AsNoTracking().Where(item => item.Id == terminalId &&
+                    item.CompanyId == context.CompanyId && item.BranchId == context.BranchId)
+                    .Select(item => item.ScalePort).SingleOrDefaultAsync(cancellationToken)
+                : null;
+            var hasAssignedScale = terminalScalePort is not null;
             var listAvailable = await (
                 from assignment in db.BranchPriceLists
                 join list in db.PriceLists on assignment.PriceListId equals list.Id
@@ -134,6 +147,11 @@ public static class SaleDraftEndpoints
                 return Error(StatusCodes.Status409Conflict, "CHECKOUT_IN_PROGRESS");
             if (draft is not null && await HasActiveMercadoPagoOrderAsync(db, draft.Id, cancellationToken))
                 return Error(StatusCodes.Status409Conflict, "MERCADO_PAGO_ORDER_ACTIVE");
+            var scaleTicketConflict = await ScaleTicketGuard.CheckAndLockAsync(db,
+                context.CompanyId, context.BranchId, draft?.Id ?? Guid.Empty,
+                scaleTicketKeys, cancellationToken);
+            if (scaleTicketConflict is not null)
+                return Error(StatusCodes.Status409Conflict, scaleTicketConflict);
 
             var currentDraftId = draft?.Id ?? Guid.Empty;
             var requestedPieces = new Dictionary<Guid, InventoryPiece>();
@@ -146,7 +164,11 @@ public static class SaleDraftEndpoints
                 if (product is null) return Error(StatusCodes.Status400BadRequest, "PRODUCT_NOT_AVAILABLE");
                 var existingLine = draft?.Lines.SingleOrDefault(line => line.ProductId == product.Id &&
                     line.InventoryPieceId == requestedLine.InventoryPieceId &&
-                    line.ScaleLabelReference == requestedLine.ScaleLabelReference);
+                    line.ScaleLabelReference == requestedLine.ScaleLabelReference &&
+                    line.ScaleManualOverrideId == requestedLine.ScaleManualOverrideId);
+                if (existingLine?.ScaleManualOverrideId is not null &&
+                    existingLine.Quantity != requestedLine.Quantity)
+                    return Error(StatusCodes.Status409Conflict, "SCALE_OVERRIDE_WEIGHT_LOCKED");
                 var saleMode = existingLine?.SaleMode ?? product.SaleMode;
                 if ((saleMode == ProductSaleMode.Unit && requestedLine.Quantity != decimal.Truncate(requestedLine.Quantity)) ||
                     (saleMode == ProductSaleMode.Weight && requestedLine.Quantity <= 0))
@@ -157,11 +179,25 @@ public static class SaleDraftEndpoints
                     return Error(StatusCodes.Status400BadRequest, "INVALID_PIECE_COUNT");
 
                 if (requestedLine.ScaleLabelReference is not null &&
-                    (requestedLine.InventoryPieceId is not null || saleMode != ProductSaleMode.Weight ||
+                    (requestedLine.InventoryPieceId is not null ||
+                     requestedLine.ScaleManualOverrideId is not null ||
+                     requestedLine.ScaleReadFromDevice || saleMode != ProductSaleMode.Weight ||
                      !KretzScaleLabel.TryDecode(requestedLine.ScaleLabelReference, out var label) ||
                      (existingLine is null && product.ScalePlu != label.Plu) ||
                      requestedLine.Quantity != label.WeightKg))
                     return Error(StatusCodes.Status400BadRequest, "INVALID_SCALE_LABEL");
+                if (requestedLine.ScaleManualOverrideId is not null &&
+                    (requestedLine.InventoryPieceId is not null || saleMode != ProductSaleMode.Weight ||
+                     requestedLine.ScaleReadFromDevice ||
+                     existingLine is null && !hasAssignedScale) ||
+                    requestedLine.ScaleReadFromDevice &&
+                    (requestedLine.InventoryPieceId is not null || saleMode != ProductSaleMode.Weight ||
+                     existingLine is null && !hasAssignedScale) ||
+                    existingLine is null && saleMode == ProductSaleMode.Weight &&
+                    requestedLine.InventoryPieceId is null &&
+                    requestedLine.ScaleLabelReference is null && hasAssignedScale &&
+                    requestedLine.ScaleManualOverrideId is null && !requestedLine.ScaleReadFromDevice)
+                    return Error(StatusCodes.Status409Conflict, "SCALE_READING_REQUIRED");
 
                 InventoryPiece? piece = null;
                 if (requestedLine.InventoryPieceId is Guid pieceId)
@@ -208,7 +244,8 @@ public static class SaleDraftEndpoints
                     existingLine?.Unit ?? product.Unit, saleMode, requestedLine.Quantity, price,
                     piece?.Id, piece?.ExternalIdentifier,
                     piece is null ? requestedLine.PieceCount : 1,
-                    requestedLine.ScaleLabelReference));
+                    requestedLine.ScaleLabelReference, requestedLine.ScaleManualOverrideId,
+                    requestedLine.ScaleReadFromDevice));
             }
 
             var undiscountedTotal = lines.Sum(line => decimal.Round(line.Quantity * line.UnitPrice,
@@ -223,6 +260,19 @@ public static class SaleDraftEndpoints
                 db.SaleDrafts.Add(draft);
                 // Persist the header in this transaction before a piece can reference its id.
                 await db.SaveChangesAsync(cancellationToken);
+            }
+            foreach (var line in lines.Where(line => line.ScaleManualOverrideId is not null &&
+                         draft.Lines.All(existing => existing.ScaleManualOverrideId !=
+                             line.ScaleManualOverrideId)))
+            {
+                var grant = await db.ScaleManualOverrides.SingleOrDefaultAsync(item =>
+                    item.Id == line.ScaleManualOverrideId && item.CompanyId == context.CompanyId &&
+                    item.BranchId == context.BranchId && item.PosTerminalId == accessor.TerminalId &&
+                    item.CashierShiftId == shift.Id && item.CashierId == context.UserId,
+                    cancellationToken);
+                if (grant is null || !grant.CanApply(draft.Id, line.ProductId, line.Quantity, now))
+                    return Error(StatusCodes.Status409Conflict, "SCALE_OVERRIDE_INVALID");
+                grant.Apply(draft.Id, line.ProductId, line.Quantity, now);
             }
             var affectedProductIds = lines.Select(line => line.ProductId)
                 .Concat(draft.Lines.Select(line => line.ProductId)).Distinct().Order().ToArray();
@@ -426,7 +476,8 @@ public static class SaleDraftEndpoints
                 line.Id, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
                 line.SaleMode == ProductSaleMode.Weight ? "weight" : "unit", line.Quantity, line.UnitPrice,
                 line.InventoryPieceId, line.PieceIdentifier, line.PieceCount,
-                line.ScaleLabelReference)).ToArray());
+                line.ScaleLabelReference, line.ScaleManualOverrideId,
+                line.WeightSource.ToString())).ToArray());
 
     private static IResult Error(int statusCode, string code) => Results.Json(
         new Carnicerias.Api.Contracts.ErrorResponse(
@@ -436,12 +487,13 @@ public static class SaleDraftEndpoints
     private sealed record SaveSaleDraftRequest(Guid PriceListId, IReadOnlyList<SaveSaleDraftLineRequest> Lines,
         decimal DiscountAmount = 0, string? DiscountReason = null);
     private sealed record SaveSaleDraftLineRequest(Guid ProductId, decimal Quantity,
-        Guid? InventoryPieceId = null, int? PieceCount = null, string? ScaleLabelReference = null);
+        Guid? InventoryPieceId = null, int? PieceCount = null, string? ScaleLabelReference = null,
+        Guid? ScaleManualOverrideId = null, bool ScaleReadFromDevice = false);
     private sealed record SaleDraftResponse(Guid Id, string TicketSlot, Guid PriceListId, DateTimeOffset UpdatedAtUtc,
         decimal DiscountAmount, string? DiscountReason,
         IReadOnlyList<SaleDraftLineResponse> Lines);
     private sealed record SaleDraftLineResponse(Guid Id, Guid ProductId, string ProductCode, string ProductName,
         string Unit, string SaleMode, decimal Quantity, decimal UnitPrice,
         Guid? InventoryPieceId, string? PieceIdentifier, int? PieceCount,
-        string? ScaleLabelReference);
+        string? ScaleLabelReference, Guid? ScaleManualOverrideId, string WeightSource);
 }

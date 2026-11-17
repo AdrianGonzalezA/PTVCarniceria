@@ -36,7 +36,8 @@ public sealed class BranchDevice
         if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 120 ||
             port is null || !Regex.IsMatch(port, "\\ACOM[1-9][0-9]{0,2}\\z", RegexOptions.IgnoreCase) ||
             baudRate is not (1200 or 2400 or 4800 or 9600 or 19200 or 38400 or 57600 or 115200) ||
-            (type, driver) is not (("scale", "serial-scale") or ("printer", "text") or
+            (type, driver) is not (("scale", "serial-scale") or ("scale", "virtual-scale") or
+                ("printer", "text") or
                 ("printer", "hasar") or ("printer", "escpos")) ||
             (driver == "hasar" && baudRate != 9600) ||
             (driver == "escpos" ? paperWidthMm is not (58 or 80) : paperWidthMm is not null))
@@ -54,7 +55,7 @@ public sealed class BranchDevice
 
     public SerialDeviceAssignment ScaleAssignment() =>
         Type == "scale" && IsActive
-            ? new SerialDeviceAssignment(Port, BaudRate)
+            ? new SerialDeviceAssignment(Port, BaudRate, Driver)
             : throw new InvalidOperationException("Active scale required.");
 
     public PrinterDeviceAssignment PrinterAssignment() =>

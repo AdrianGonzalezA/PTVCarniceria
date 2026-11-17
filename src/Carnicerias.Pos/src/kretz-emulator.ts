@@ -10,6 +10,24 @@ export interface KretzEmulatorTicket {
   readonly scaleNumber: number;
 }
 
+/** Independent laboratory readings; the caller controls when to publish each one. */
+export function nextSimulatedWeight(random: () => number = Math.random): number {
+  return Math.round((0.2 + random() * 3.3) * 1000) / 1000;
+}
+
+export function makeRandomKretzCuts(pluCodes: readonly string[],
+  random: () => number = Math.random): KretzEmulatorItem[] {
+  if (pluCodes.length < 3 || pluCodes.some(plu => !/^\d{5}$/.test(plu)) ||
+      new Set(pluCodes).size !== pluCodes.length)
+    throw new Error('INVALID_KRETZ_PLU_LIST');
+  const count = Math.min(3 + Math.floor(random() * 4), pluCodes.length);
+  const available = [...pluCodes];
+  return Array.from({ length: count }, () => {
+    const plu = available.splice(Math.floor(random() * available.length), 1)[0]!;
+    return { plu, weightKg: Math.round((0.3 + random() * 2.3) * 1000) / 1000 };
+  });
+}
+
 /** Sólo perfil de laboratorio: EAN13 20 + PLU(5) + peso en gramos(5) + control. */
 export function makeKretzWeightEan(plu: string, weightKg: number): string {
   if (!/^\d{1,5}$/.test(plu) || !Number.isFinite(weightKg) || weightKg <= 0 ||

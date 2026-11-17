@@ -15,6 +15,15 @@ public enum SaleTicketSlot
     D
 }
 
+public enum SaleWeightSource
+{
+    Unspecified,
+    SerialScale,
+    ManualPinOverride,
+    ExternalScaleLabel,
+    ManualWithoutScale
+}
+
 public sealed class SaleDraft
 {
     private SaleDraft() { }
@@ -62,11 +71,13 @@ public sealed class SaleDraft
     public void ReplaceLines(IEnumerable<SaleDraftLine> lines, DateTimeOffset updatedAtUtc)
     {
         var requestedLines = lines.ToDictionary(line =>
-            (line.ProductId, line.InventoryPieceId, line.ScaleLabelReference));
+            (line.ProductId, line.InventoryPieceId, line.ScaleLabelReference,
+                line.ScaleManualOverrideId));
         foreach (var existingLine in Lines.ToArray())
         {
             if (requestedLines.Remove((existingLine.ProductId, existingLine.InventoryPieceId,
-                    existingLine.ScaleLabelReference), out var requestedLine))
+                    existingLine.ScaleLabelReference, existingLine.ScaleManualOverrideId),
+                    out var requestedLine))
                 existingLine.UpdateDetails(requestedLine.Quantity, requestedLine.PieceCount);
             else
                 Lines.Remove(existingLine);
@@ -121,7 +132,8 @@ public sealed class SaleDraftLine
     public SaleDraftLine(Guid companyId, Guid productId, string productCode, string productName,
         string unit, ProductSaleMode saleMode, decimal quantity, decimal unitPrice,
         Guid? inventoryPieceId = null, string? pieceIdentifier = null, int? pieceCount = null,
-        string? scaleLabelReference = null)
+        string? scaleLabelReference = null, Guid? scaleManualOverrideId = null,
+        bool scaleReadFromDevice = false)
     {
         ValidatePieceCount(saleMode, inventoryPieceId, pieceCount);
         Id = Guid.NewGuid();
@@ -137,6 +149,13 @@ public sealed class SaleDraftLine
         PieceIdentifier = pieceIdentifier;
         PieceCount = pieceCount;
         ScaleLabelReference = scaleLabelReference;
+        ScaleManualOverrideId = scaleManualOverrideId;
+        WeightSource = saleMode == ProductSaleMode.Unit || inventoryPieceId is not null
+            ? SaleWeightSource.Unspecified
+            : scaleLabelReference is not null ? SaleWeightSource.ExternalScaleLabel
+            : scaleManualOverrideId is not null ? SaleWeightSource.ManualPinOverride
+            : scaleReadFromDevice ? SaleWeightSource.SerialScale
+            : SaleWeightSource.ManualWithoutScale;
     }
 
     public Guid Id { get; private set; }
@@ -153,6 +172,8 @@ public sealed class SaleDraftLine
     public string? PieceIdentifier { get; private set; }
     public int? PieceCount { get; private set; }
     public string? ScaleLabelReference { get; private set; }
+    public Guid? ScaleManualOverrideId { get; private set; }
+    public SaleWeightSource WeightSource { get; private set; }
 
     public void UpdateDetails(decimal quantity, int? pieceCount)
     {

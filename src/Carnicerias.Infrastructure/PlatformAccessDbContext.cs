@@ -79,6 +79,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
     public DbSet<OtherTaxAssignment> OtherTaxAssignments => Set<OtherTaxAssignment>();
 
     public DbSet<SaleDraft> SaleDrafts => Set<SaleDraft>();
+    public DbSet<ScaleManualOverride> ScaleManualOverrides => Set<ScaleManualOverride>();
 
     public DbSet<BranchInventoryBalance> BranchInventoryBalances => Set<BranchInventoryBalance>();
 
@@ -1031,6 +1032,42 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .HasFilter("\"EffectiveToUtc\" IS NULL");
         });
 
+        modelBuilder.Entity<ScaleManualOverride>(entity =>
+        {
+            entity.ToTable("scale_manual_overrides", "pos_sales", table =>
+            {
+                table.HasCheckConstraint("CK_scale_manual_override_weight",
+                    "\"AppliedWeightKg\" IS NULL OR \"AppliedWeightKg\" > 0");
+                table.HasCheckConstraint("CK_scale_manual_override_application",
+                    "(\"AppliedSaleDraftId\" IS NULL AND \"AppliedWeightKg\" IS NULL AND \"AppliedAtUtc\" IS NULL) OR (\"AppliedSaleDraftId\" IS NOT NULL AND \"AppliedWeightKg\" IS NOT NULL AND \"AppliedAtUtc\" IS NOT NULL)");
+            });
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Id).ValueGeneratedNever();
+            entity.Property(item => item.Reason).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.AppliedWeightKg).HasPrecision(12, 3);
+            entity.HasOne<Branch>().WithMany().HasForeignKey(item =>
+                    new { item.CompanyId, item.BranchId })
+                .HasPrincipalKey(branch => new { branch.CompanyId, branch.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<PosTerminal>().WithMany().HasForeignKey(item =>
+                    new { item.CompanyId, item.BranchId, item.PosTerminalId })
+                .HasPrincipalKey(terminal => new { terminal.CompanyId, terminal.BranchId, terminal.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CashierShift>().WithMany().HasForeignKey(item => item.CashierShiftId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany().HasForeignKey(item => item.CashierId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<UserIdentity>().WithMany().HasForeignKey(item => item.AuthorizedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CatalogProduct>().WithMany().HasForeignKey(item =>
+                    new { item.CompanyId, item.ProductId })
+                .HasPrincipalKey(product => new { product.CompanyId, product.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<SaleDraft>().WithMany().HasForeignKey(item => item.AppliedSaleDraftId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(item => new { item.CompanyId, item.BranchId, item.AuthorizedAtUtc });
+        });
+
         modelBuilder.Entity<SaleDraft>(entity =>
         {
             entity.ToTable("sale_drafts", "pos_sales", table => table.HasCheckConstraint(
@@ -1088,6 +1125,12 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(line => line.UnitPrice).HasPrecision(12, 2);
             entity.Property(line => line.PieceIdentifier).HasMaxLength(80);
             entity.Property(line => line.ScaleLabelReference).HasMaxLength(80);
+            entity.Property(line => line.WeightSource).HasConversion<int>();
+            entity.HasOne<ScaleManualOverride>().WithMany()
+                .HasForeignKey(line => line.ScaleManualOverrideId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(line => line.ScaleManualOverrideId).IsUnique()
+                .HasFilter("\"ScaleManualOverrideId\" IS NOT NULL");
             entity.Property(line => line.PieceCount);
             entity.HasOne<InventoryPiece>().WithMany().HasForeignKey(line => line.InventoryPieceId)
                 .OnDelete(DeleteBehavior.Restrict);
@@ -1256,6 +1299,12 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(line => line.TaxAmount).HasPrecision(12, 2);
             entity.Property(line => line.PieceIdentifier).HasMaxLength(80);
             entity.Property(line => line.ScaleLabelReference).HasMaxLength(80);
+            entity.Property(line => line.WeightSource).HasConversion<int>();
+            entity.HasOne<ScaleManualOverride>().WithMany()
+                .HasForeignKey(line => line.ScaleManualOverrideId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(line => line.ScaleManualOverrideId).IsUnique()
+                .HasFilter("\"ScaleManualOverrideId\" IS NOT NULL");
             entity.Property(line => line.PieceCount);
             entity.HasOne<InventoryPiece>().WithMany().HasForeignKey(line => line.InventoryPieceId)
                 .OnDelete(DeleteBehavior.Restrict);

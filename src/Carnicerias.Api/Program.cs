@@ -181,6 +181,7 @@ app.MapCustomerCollectionEndpoints();
 app.MapCustomerCollectionCorrectionEndpoints();
 app.MapAdminAccountEndpoints();
 app.MapSaleDraftEndpoints();
+app.MapScaleManualOverrideEndpoints();
 app.MapSaleCheckoutEndpoints();
 app.MapSaleConfirmationEndpoints();
 app.MapMercadoPagoPaymentEndpoints();

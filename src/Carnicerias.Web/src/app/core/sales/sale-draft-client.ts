@@ -14,6 +14,8 @@ export interface SaleDraftLine {
   readonly inventoryPieceId?: string | null;
   readonly pieceIdentifier?: string | null;
   readonly scaleLabelReference?: string | null;
+  readonly scaleManualOverrideId?: string | null;
+  readonly weightSource?: string;
 }
 
 export interface SaleDraft {
@@ -85,7 +87,8 @@ export class SaleDraftClient {
 
   save(priceListId: string, lines: readonly { readonly productId: string; readonly quantity: number;
     readonly inventoryPieceId?: string; readonly pieceCount?: number | null;
-    readonly scaleLabelReference?: string }[],
+    readonly scaleLabelReference?: string; readonly scaleManualOverrideId?: string;
+    readonly scaleReadFromDevice?: boolean }[],
     slot: SaleTicketSlot = 'A', discountAmount = 0, discountReason: string | null = null) {
     return this.http.put<SaleDraft>(this.draftUrl(slot),
       { priceListId, lines, discountAmount, discountReason }, { withCredentials: true });

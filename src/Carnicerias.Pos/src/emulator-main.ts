@@ -3,7 +3,8 @@ import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, clipboard, ipcMain, type IpcMainInvokeEvent } from 'electron';
 import QRCode from 'qrcode';
 import { EmulatorChannel, type EmulatorState, type KretzQrPreview } from './emulator-api';
-import { makeKretzConsolidatedQr, type KretzEmulatorItem } from './kretz-emulator';
+import { makeKretzConsolidatedQr, makeRandomKretzCuts, nextSimulatedWeight } from './kretz-emulator';
+import { loadLabScaleCatalog, selectLabScaleCompany } from './lab-scale-catalog';
 import { createVirtualDeviceServer, virtualDevicePipe, type ScaleReading,
   type VirtualDeviceRequest, type VirtualDeviceResponse } from './virtual-device-protocol';
 
@@ -52,19 +53,26 @@ app.whenReady().then(async () => {
     reading = { weightKg, stable, observedAtUtc: new Date().toISOString() };
     return { weightKg: reading.weightKg, stable: reading.stable };
   });
-  ipcMain.handle(EmulatorChannel.KretzQr, async (event, items: unknown,
+  ipcMain.handle(EmulatorChannel.SimulateWeight, (event) => {
+    verifyConsoleSender(event);
+    reading = { weightKg: nextSimulatedWeight(), stable: true,
+      observedAtUtc: new Date().toISOString() };
+    return { weightKg: reading.weightKg, stable: true };
+  });
+  ipcMain.handle(EmulatorChannel.RandomKretzQr, async (event,
     ticketNumber: unknown, scaleNumber: unknown): Promise<KretzQrPreview> => {
     verifyConsoleSender(event);
-    if (!Array.isArray(items) || items.length < 1 || items.length > 99 ||
-        items.some((item: unknown) => typeof item !== 'object' || item === null ||
-          typeof (item as KretzEmulatorItem).plu !== 'string' ||
-          typeof (item as KretzEmulatorItem).weightKg !== 'number') ||
-        typeof ticketNumber !== 'number' || typeof scaleNumber !== 'number')
+    if (typeof ticketNumber !== 'number' || typeof scaleNumber !== 'number')
       throw new Error('INVALID_KRETZ_TICKET');
-    const payload = makeKretzConsolidatedQr(items as KretzEmulatorItem[], {
-      now: new Date(), ticketNumber, seller: ' A', scaleNumber,
-    });
-    return { payload, imageUrl: await QRCode.toDataURL(payload, { width: 360, margin: 2 }) };
+    const company = selectLabScaleCompany(await loadLabScaleCatalog(),
+      process.env.CARNICERIAS_EMULATOR_COMPANY_ID);
+    const items = makeRandomKretzCuts(company.products.map(product => product.plu));
+    const payload = makeKretzConsolidatedQr(items, { now: new Date(),
+      ticketNumber, seller: ' A', scaleNumber });
+    return { payload, imageUrl: await QRCode.toDataURL(payload, { width: 360, margin: 2 }),
+      companyName: company.companyName, catalogCount: company.products.length,
+      items: items.map(item => ({ ...item,
+        productName: company.products.find(product => product.plu === item.plu)!.name })) };
   });
   ipcMain.handle(EmulatorChannel.CopyQr, (event, payload: unknown) => {
     verifyConsoleSender(event);

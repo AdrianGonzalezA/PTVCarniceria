@@ -40,9 +40,20 @@ public static class PosTerminalEndpoints
                 "POS_TERMINAL_REQUIRED", "Caja no habilitada", [])),
                 statusCode: StatusCodes.Status401Unauthorized);
 
+        var devices = terminal.DeviceAssignments();
+        if (terminal.ScaleDeviceId is Guid scaleDeviceId)
+        {
+            var assignedScale = await db.BranchDevices.AsNoTracking()
+                .SingleOrDefaultAsync(device => device.Id == scaleDeviceId &&
+                    device.CompanyId == terminal.CompanyId && device.BranchId == terminal.BranchId &&
+                    device.IsActive && device.Type == "scale", cancellationToken);
+            if (assignedScale is not null)
+                devices = devices with { Scale = assignedScale.ScaleAssignment() };
+        }
+
         return Results.Ok(new TerminalResponse(
             terminal.Id, terminal.Name, terminal.CompanyId, identity.CompanyName,
-            terminal.BranchId, identity.BranchName, terminal.DeviceAssignments()));
+            terminal.BranchId, identity.BranchName, devices));
     }
 
     private sealed record TerminalResponse(Guid Id, string Name, Guid CompanyId,

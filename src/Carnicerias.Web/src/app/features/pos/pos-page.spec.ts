@@ -12,6 +12,7 @@ import { InventoryClient } from '../../core/inventory/inventory-client';
 import { InventoryPieceClient } from '../../core/inventory/inventory-piece-client';
 import { CashierShiftClient } from '../../core/sales/cashier-shift-client';
 import { CashWithdrawalClient } from '../../core/sales/cash-withdrawal-client';
+import { ScaleManualOverrideClient } from '../../core/sales/scale-manual-override-client';
 import { SaleDraftClient } from '../../core/sales/sale-draft-client';
 import { CheckoutTerms, PaymentInstrumentDetails, SaleCheckout, SaleCheckoutClient } from '../../core/sales/sale-checkout-client';
 import { MercadoPagoClient } from '../../core/sales/mercado-pago-client';
@@ -40,6 +41,8 @@ describe('PosPage', () => {
   };
   beforeEach(() => TestBed.configureTestingModule({ providers: [
     { provide: CashWithdrawalClient, useValue: { current: () => of([]), request: () => NEVER } },
+    { provide: ScaleManualOverrideClient, useValue: {
+      authorizers: () => of([]), authorize: () => NEVER } },
     { provide: PaymentDetailCatalogClient, useValue: { get: () => of(paymentCatalog) } },
   ] }));
 
@@ -1592,6 +1595,65 @@ describe('PosPage', () => {
     expect((fixture.nativeElement.querySelector('#product-quantity') as HTMLInputElement).readOnly).toBe(true);
     expect(fixture.nativeElement.querySelector('.scale-status[role="status"]').textContent).toContain('0,750 kg');
     expect(fixture.nativeElement.querySelector('.sale-receipt')).toBeNull();
+  });
+
+  it('accepts one manual weight after a supervisor PIN and saves the audit grant', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-11-17T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const authorize = vi.fn(() => of({ grantId: 'grant-id', authorizerName: 'supervisor',
+      expiresAtUtc: '2026-11-17T20:15:00Z' }));
+    const save = vi.fn((priceListId: string,
+      lines: readonly { scaleReadFromDevice?: boolean }[]) => {
+      expect(priceListId).toBe('list-id');
+      expect(lines).toHaveLength(1);
+      return NEVER;
+    });
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: ScaleManualOverrideClient, useValue: {
+        authorizers: () => of([{ userId: 'supervisor-id', username: 'supervisor' }]), authorize } },
+      { provide: PosDeviceClient, useValue: {
+        deviceAvailability: async () => ({ scale: { port: 'COM6', baudRate: 9600 }, printer: null }) } },
+      { provide: CatalogClient, useValue: {
+        priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
+        categories: () => of([{ id: 'res', name: 'Carne de res', productCount: 1 }]),
+        products: () => of({ items: [{ id: 'asado', code: '1002', name: 'Asado',
+          categoryId: 'res', saleMode: 'weight' as const, price: 4900, availableStock: 10 }],
+          page: 1, pageSize: 50, totalItems: 1 }),
+      } },
+      { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of(null), save } },
+      { provide: InventoryClient, useValue: { stock: () => of([{ productId: 'asado', available: 10 }]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.product-card') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const quantity = fixture.nativeElement.querySelector('#product-quantity') as HTMLInputElement;
+    expect(quantity.readOnly).toBe(true);
+    const pin = fixture.nativeElement.querySelector('#scale-override-pin') as HTMLInputElement;
+    pin.value = '123456';
+    pin.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.scale-override-panel button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(authorize).toHaveBeenCalledWith('asado', 'supervisor-id', '123456',
+      'Balanza sin lectura estable');
+    expect(quantity.readOnly).toBe(false);
+    quantity.value = '0,750';
+    quantity.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.pos-dialog .dialog-actions .finish-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(save).toHaveBeenCalledWith('list-id', [expect.objectContaining({
+      productId: 'asado', quantity: 0.75, scaleManualOverrideId: 'grant-id',
+    })], 'A', 0, null);
+    expect(save.mock.calls[0]?.[1]?.[0]?.scaleReadFromDevice).toBeUndefined();
   });
 
   it('keeps two cuts of the same PLU separate when a Kretz QR is scanned', async () => {

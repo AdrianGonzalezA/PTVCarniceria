@@ -266,4 +266,36 @@ describe('OrganizationPage', () => {
     fixture.detectChanges();
     expect(page.querySelector('.catalog-device-row')?.textContent).toContain('Comandera mostrador');
   });
+
+  it('creates a virtual laboratory scale without asking for a physical COM port', () => {
+    const { fixture, http, page } = load();
+    page.querySelector<HTMLButtonElement>('.company-row button')!.click();
+    http.expectOne('/api/admin/companies/company-1/branches').flush([branch]);
+    fixture.detectChanges();
+    page.querySelector<HTMLButtonElement>('.branch-row .terminals-button')!.click();
+    http.expectOne('/api/admin/companies/company-1/branches/branch-1/terminals').flush([]);
+    fixture.detectChanges();
+    page.querySelector<HTMLButtonElement>('.catalog-button')!.click();
+    const catalogUrl = '/api/admin/companies/company-1/branches/branch-1/devices';
+    http.expectOne(catalogUrl).flush([]);
+    fixture.detectChanges();
+    page.querySelector<HTMLButtonElement>('.create-device-button')!.click();
+    fixture.detectChanges();
+    const type = page.querySelector<HTMLSelectElement>('#catalog-device-type')!;
+    type.value = 'scale';
+    type.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    const driver = page.querySelector<HTMLSelectElement>('#catalog-device-driver')!;
+    driver.value = 'virtual-scale';
+    driver.dispatchEvent(new Event('change'));
+    const name = page.querySelector<HTMLInputElement>('#catalog-device-name')!;
+    name.value = 'Balanza de laboratorio';
+    name.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(page.querySelector('#catalog-device-port')).toBeNull();
+    page.querySelector<HTMLFormElement>('.catalog-device-form')!.dispatchEvent(new Event('submit'));
+    const create = http.expectOne(catalogUrl);
+    expect(create.request.body).toEqual({ name: 'Balanza de laboratorio', type: 'scale',
+      driver: 'virtual-scale', port: 'COM99', baudRate: 9600, paperWidthMm: null, isActive: true });
+  });
 });

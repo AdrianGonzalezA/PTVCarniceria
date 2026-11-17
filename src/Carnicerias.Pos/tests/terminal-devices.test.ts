@@ -70,4 +70,24 @@ describe('terminal device assignments', () => {
     expect(devices.textPrinter().port).toBe('COM1');
     expect(() => devices.hasarPrinter()).toThrow('HASAR_PRINTER_NOT_CONFIGURED');
   });
+
+  it('reads an assigned virtual scale without opening a physical COM port', async () => {
+    const createScale = vi.fn();
+    const readVirtual = vi.fn(async () => ({ ok: true as const, reading: {
+      weightKg: 1.25, stable: true, observedAtUtc: new Date().toISOString(),
+    } }));
+    const devices = new TerminalDevices(createScale, readVirtual);
+    const assigned = parseAssignedDevices({ devices: {
+      scale: { driver: 'virtual-scale', port: 'COM99', baudRate: 9600 }, printer: null,
+    } });
+    await devices.apply(assigned);
+    expect(createScale).not.toHaveBeenCalled();
+    expect((await devices.readScaleAsync()).weightKg).toBe(1.25);
+    expect(readVirtual).toHaveBeenCalledOnce();
+    await devices.apply(none);
+    await expect(devices.readScaleAsync()).rejects.toThrow('SERIAL_SCALE_NOT_CONFIGURED');
+    expect(() => parseAssignedDevices({ devices: {
+      scale: { driver: 'unknown', port: 'COM99', baudRate: 9600 }, printer: null,
+    } })).toThrow('POS_DEVICE_CONFIG_INVALID');
+  });
 });

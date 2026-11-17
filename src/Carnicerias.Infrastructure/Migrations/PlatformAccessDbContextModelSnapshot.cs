@@ -870,6 +870,9 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
 
+                    b.Property<Guid?>("ScaleManualOverrideId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal?>("TaxAmount")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
@@ -897,6 +900,9 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 
+                    b.Property<int>("WeightSource")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("InventoryPieceId")
@@ -904,6 +910,10 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasFilter("\"InventoryPieceId\" IS NOT NULL");
 
                     b.HasIndex("SaleId");
+
+                    b.HasIndex("ScaleManualOverrideId")
+                        .IsUnique()
+                        .HasFilter("\"ScaleManualOverrideId\" IS NOT NULL");
 
                     b.HasIndex("CompanyId", "ProductId");
 
@@ -3821,6 +3831,9 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
 
+                    b.Property<Guid?>("ScaleManualOverrideId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Unit")
                         .IsRequired()
                         .HasMaxLength(24)
@@ -3830,11 +3843,18 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 
+                    b.Property<int>("WeightSource")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("InventoryPieceId");
 
                     b.HasIndex("SaleDraftId");
+
+                    b.HasIndex("ScaleManualOverrideId")
+                        .IsUnique()
+                        .HasFilter("\"ScaleManualOverrideId\" IS NOT NULL");
 
                     b.HasIndex("CompanyId", "ProductId");
 
@@ -3884,6 +3904,73 @@ namespace Carnicerias.Infrastructure.Migrations
                             t.HasCheckConstraint("CK_sale_payments_applied_positive", "\"AppliedAmount\" > 0");
 
                             t.HasCheckConstraint("CK_sale_payments_tendered_positive", "\"TenderedAmount\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.ScaleManualOverride", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("AppliedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("AppliedSaleDraftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("AppliedWeightKg")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)");
+
+                    b.Property<DateTimeOffset>("AuthorizedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("AuthorizedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CashierId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CashierShiftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PosTerminalId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppliedSaleDraftId");
+
+                    b.HasIndex("AuthorizedByUserId");
+
+                    b.HasIndex("CashierId");
+
+                    b.HasIndex("CashierShiftId");
+
+                    b.HasIndex("CompanyId", "ProductId");
+
+                    b.HasIndex("CompanyId", "BranchId", "AuthorizedAtUtc");
+
+                    b.HasIndex("CompanyId", "BranchId", "PosTerminalId");
+
+                    b.ToTable("scale_manual_overrides", "pos_sales", t =>
+                        {
+                            t.HasCheckConstraint("CK_scale_manual_override_weight", "\"AppliedWeightKg\" IS NULL OR \"AppliedWeightKg\" > 0");
+                            t.HasCheckConstraint("CK_scale_manual_override_application", "(\"AppliedSaleDraftId\" IS NULL AND \"AppliedWeightKg\" IS NULL AND \"AppliedAtUtc\" IS NULL) OR (\"AppliedSaleDraftId\" IS NOT NULL AND \"AppliedWeightKg\" IS NOT NULL AND \"AppliedAtUtc\" IS NOT NULL)");
                         });
                 });
 
@@ -4697,6 +4784,11 @@ namespace Carnicerias.Infrastructure.Migrations
                         .HasForeignKey("SaleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.ScaleManualOverride", null)
+                        .WithMany()
+                        .HasForeignKey("ScaleManualOverrideId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Carnicerias.Infrastructure.CatalogProduct", null)
                         .WithMany()
@@ -5732,6 +5824,11 @@ namespace Carnicerias.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Carnicerias.Infrastructure.ScaleManualOverride", null)
+                        .WithMany()
+                        .HasForeignKey("ScaleManualOverrideId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Carnicerias.Infrastructure.CatalogProduct", null)
                         .WithMany()
                         .HasForeignKey("CompanyId", "ProductId")
@@ -5751,6 +5848,53 @@ namespace Carnicerias.Infrastructure.Migrations
                         .WithMany("Payments")
                         .HasForeignKey("SaleId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Carnicerias.Infrastructure.ScaleManualOverride", b =>
+                {
+                    b.HasOne("Carnicerias.Infrastructure.SaleDraft", null)
+                        .WithMany()
+                        .HasForeignKey("AppliedSaleDraftId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("AuthorizedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.PlatformAccess.UserIdentity", null)
+                        .WithMany()
+                        .HasForeignKey("CashierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.CashierShift", null)
+                        .WithMany()
+                        .HasForeignKey("CashierShiftId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.PlatformAccess.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "BranchId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.CatalogProduct", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "ProductId")
+                        .HasPrincipalKey("CompanyId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Carnicerias.Infrastructure.PosTerminal", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "BranchId", "PosTerminalId")
+                        .HasPrincipalKey("CompanyId", "BranchId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

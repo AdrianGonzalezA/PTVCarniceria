@@ -6,6 +6,10 @@ export interface SerialDeviceConfig {
   readonly baudRate: number;
 }
 
+export interface ScaleDeviceConfig extends SerialDeviceConfig {
+  readonly driver?: 'serial-scale' | 'virtual-scale';
+}
+
 export interface DeploymentConfig {
   readonly apiOrigin: string;
 }

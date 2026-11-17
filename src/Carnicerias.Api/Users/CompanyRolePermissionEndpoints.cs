@@ -12,7 +12,8 @@ public static class CompanyRolePermissionEndpoints
     private static readonly string[] ConfigurableRoles = ["administrator", "cashier"];
     private static readonly string[] ConfigurablePermissions =
         [PlatformPermissionCatalog.InventoryReceiptsManage,
-            PlatformPermissionCatalog.InventoryTransfersManage];
+            PlatformPermissionCatalog.InventoryTransfersManage,
+            PlatformPermissionCatalog.PosScaleOverride];
 
     public static IEndpointRouteBuilder MapCompanyRolePermissionEndpoints(
         this IEndpointRouteBuilder endpoints)

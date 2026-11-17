@@ -90,10 +90,10 @@ describe('UsersPage', () => {
     }
   });
 
-  it('sets a six digit withdrawal PIN for an authorizer without displaying it afterward', () => {
+  it('sets a six digit authorization PIN without displaying it afterward', () => {
     const { fixture, http, page } = load();
     const button = Array.from(page.querySelectorAll<HTMLButtonElement>('button'))
-      .find(item => item.textContent?.includes('Configurar PIN de retiros'))!;
+      .find(item => item.textContent?.includes('Configurar PIN de autorizaciones'))!;
     button.click();
     fixture.detectChanges();
     const input = page.querySelector<HTMLInputElement>('#withdrawal-pin-setup')!;
@@ -108,7 +108,7 @@ describe('UsersPage', () => {
     request.flush(null);
     fixture.detectChanges();
     expect(page.querySelector('#withdrawal-pin-setup')).toBeNull();
-    expect(page.textContent).toContain('Cambiar PIN de retiros');
+    expect(page.textContent).toContain('Cambiar PIN de autorizaciones');
   });
 
   it('creates a cashier scoped to selected branches', () => {

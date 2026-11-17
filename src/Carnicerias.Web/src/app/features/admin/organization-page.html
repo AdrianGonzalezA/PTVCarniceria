@@ -261,7 +261,7 @@
             <label for="catalog-device-name">Nombre</label>
             <input id="catalog-device-name" formControlName="name" maxlength="120" required />
             <label for="catalog-device-type">Tipo</label>
-            <select id="catalog-device-type" formControlName="type" [disabled]="!!editingCatalogDevice()">
+            <select id="catalog-device-type" formControlName="type" [disabled]="!!editingCatalogDevice()" (change)="syncCatalogDeviceType()">
               <option value="printer">Impresora</option><option value="scale">Balanza</option>
             </select>
             @if (catalogForm.controls.type.value === 'printer') {
@@ -271,17 +271,27 @@
                 <option value="text">Texto serial</option>
                 <option value="hasar">Hasar SMH/P-441F</option>
               </select>
-            } @else { <p>Lectura de balanza serial.</p> }
-            <label for="catalog-device-port">Puerto COM</label>
-            <input id="catalog-device-port" formControlName="port" maxlength="6" placeholder="COM3" required />
-            @if (catalogForm.controls.driver.value !== 'hasar' || catalogForm.controls.type.value === 'scale') {
+            } @else {
+              <label for="catalog-device-driver">Controlador</label>
+              <select id="catalog-device-driver" formControlName="driver" [disabled]="!!editingCatalogDevice()">
+                <option value="serial-scale">Balanza serial COM</option>
+                <option value="virtual-scale">Balanza virtual de laboratorio</option>
+              </select>
+            }
+            @if (catalogForm.controls.driver.value === 'virtual-scale' && catalogForm.controls.type.value === 'scale') {
+              <p>El simulador se conecta por el canal virtual local; no requiere un puerto COM físico.</p>
+            } @else {
+              <label for="catalog-device-port">Puerto COM</label>
+              <input id="catalog-device-port" formControlName="port" maxlength="6" placeholder="COM3" required />
+            }
+            @if (catalogForm.controls.driver.value !== 'hasar' && catalogForm.controls.driver.value !== 'virtual-scale') {
               <label for="catalog-device-baud">Velocidad</label>
               <select id="catalog-device-baud" formControlName="baudRate">
                 @for (baud of [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]; track baud) {
                   <option [ngValue]="baud">{{ baud }}</option>
                 }
               </select>
-            } @else { <p>Hasar usa 9600 baudios.</p> }
+            } @else if (catalogForm.controls.driver.value === 'hasar') { <p>Hasar usa 9600 baudios.</p> }
             @if (catalogForm.controls.type.value === 'printer' && catalogForm.controls.driver.value === 'escpos') {
               <label for="catalog-device-width">Ancho de papel</label>
               <select id="catalog-device-width" formControlName="paperWidthMm">

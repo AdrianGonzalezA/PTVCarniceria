@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { decodeKretzWeightEan, parseKretzConsolidatedQr } from './kretz-label';
+import { decodeKretzWeightEan, parseKretzConsolidatedQr,
+  scaleQrTicketKey } from './kretz-label';
 
 describe('Kretz Report NX weight profile for the lab', () => {
   it('decodes a checked 2-5-5 EAN into PLU and kilograms', () => {
@@ -27,5 +28,13 @@ describe('Kretz Report NX weight profile for the lab', () => {
     expect(parseKretzConsolidatedQr(code.replace('0102\n', '0103\n'))).toBeNull();
     expect(parseKretzConsolidatedQr(code.replace('2000045005006', '2000045005003'))).toBeNull();
     expect(parseKretzConsolidatedQr(code.replaceAll('\n', ';'))?.labels).toHaveLength(2);
+  });
+
+  it('identifies every cut from one QR as the same single-use ticket', () => {
+    const first = 'QR:17/11/2613:390003 A0102:01:2000123007502';
+    const second = 'QR:17/11/2613:390003 A0102:02:2000045005006';
+    expect(scaleQrTicketKey(first)).toBe('17/11/2613:390003 A01');
+    expect(scaleQrTicketKey(second)).toBe(scaleQrTicketKey(first));
+    expect(scaleQrTicketKey('EAN:2000123007502')).toBeNull();
   });
 });

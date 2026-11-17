@@ -42,4 +42,21 @@ public sealed class BranchDeviceTests
         Assert.Throws<ArgumentException>(() => new BranchDevice(companyId, branchId,
             "Impresora", "printer", "text", "COM3\n", 9600));
     }
+
+    [Fact]
+    public void AssignsVirtualScaleWithoutLosingDriverIdentity()
+    {
+        var companyId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var scale = new BranchDevice(companyId, branchId, "Balanza virtual de laboratorio",
+            "scale", "virtual-scale", "COM99", 9600);
+        var terminal = new PosTerminal(companyId, branchId, "Caja A");
+
+        terminal.AssignCatalogDevices(scale, null);
+
+        Assert.Equal(scale.Id, terminal.ScaleDeviceId);
+        Assert.Equal(new SerialDeviceAssignment("COM99", 9600, "virtual-scale"),
+            scale.ScaleAssignment());
+        Assert.Equal("COM99", terminal.DeviceAssignments().Scale?.Port);
+    }
 }

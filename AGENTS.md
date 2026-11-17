@@ -1,5 +1,6 @@
 # Reglas de desarrollo del POS
 
+- Este POS se encuentra en desarrollo y **no es un sistema productivo**. Las operaciones que solicita el usuario en este entorno son pruebas de laboratorio con datos ficticios; realizar las verificaciones y cambios autorizados sobre la base de desarrollo indicada abajo, sin tratarlos como operaciones comerciales reales. Esta aclaración no habilita crear otras bases ni guardar secretos en Git.
 - Mantener **una sola base de datos de la aplicación** durante este desarrollo: `carnicerias_test_visual` en el PostgreSQL de Docker (puerto local `55433`). La base de mantenimiento `postgres` es propia del servidor y no cuenta como base de la aplicación.
 - No crear, clonar ni provisionar otra base de datos de Carnicerías, ni siquiera para pruebas, sin autorización explícita del usuario. Si hace falta empezar de cero, limpiar y volver a cargar los datos **en la misma base**.
 - No ejecutar pruebas de integración que creen o reinicien una base distinta. Las pruebas unitarias, de frontend y las verificaciones no destructivas sí pueden ejecutarse; documentar qué integración quedó pendiente.

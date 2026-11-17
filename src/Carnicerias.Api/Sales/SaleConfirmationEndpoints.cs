@@ -107,6 +107,13 @@ public static class SaleConfirmationEndpoints
             if (!await SaleDraftTransactionLock.AcquireAsync(db, context.CompanyId,
                     context.BranchId, draft.Id, cancellationToken))
                 return Error(StatusCodes.Status409Conflict, "SALE_NOT_CONFIRMABLE");
+            if (!ScaleTicketGuard.TryGetCompleteTicketKeys(
+                    draft.Lines.Select(line => line.ScaleLabelReference), out var scaleTicketKeys))
+                return Error(StatusCodes.Status409Conflict, "INVALID_SCALE_TICKET");
+            var scaleTicketConflict = await ScaleTicketGuard.CheckAndLockAsync(db,
+                context.CompanyId, context.BranchId, draft.Id, scaleTicketKeys, cancellationToken);
+            if (scaleTicketConflict is not null)
+                return Error(StatusCodes.Status409Conflict, scaleTicketConflict);
 
             var shift = await db.CashierShifts.SingleOrDefaultAsync(item =>
                 item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
@@ -294,7 +301,8 @@ public static class SaleConfirmationEndpoints
             sale.Lines.AddRange(draft.Lines.Select(line => new ConfirmedSaleLine(
                 context.CompanyId, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
                 line.SaleMode, line.Quantity, line.UnitPrice, line.InventoryPieceId, line.PieceIdentifier,
-                line.PieceCount, line.ScaleLabelReference)));
+                line.PieceCount, line.ScaleLabelReference, line.ScaleManualOverrideId,
+                line.WeightSource)));
             var productIds = sale.Lines.Select(line => line.ProductId).Distinct().ToArray();
             var taxRules = await db.ProductTaxRules.AsNoTracking()
                 .Where(rule => rule.CompanyId == context.CompanyId && productIds.Contains(rule.ProductId) &&

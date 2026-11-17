@@ -2,7 +2,8 @@ using System.Text.RegularExpressions;
 
 namespace Carnicerias.Infrastructure;
 
-public sealed record SerialDeviceAssignment(string Port, int BaudRate);
+public sealed record SerialDeviceAssignment(string Port, int BaudRate,
+    string Driver = "serial-scale");
 public sealed record PrinterDeviceAssignment(string Kind, string Port, int BaudRate,
     int? PaperWidthMm = null);
 public sealed record PosTerminalDevices(SerialDeviceAssignment? Scale, PrinterDeviceAssignment? Printer);

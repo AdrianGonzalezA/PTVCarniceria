@@ -850,6 +850,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(product => product.CountPolicyOverride).HasConversion<int?>();
             entity.Property(product => product.AnatomicalGroup).HasMaxLength(120);
             entity.Property(product => product.AnatomicalGroupNormalized).HasMaxLength(120);
+            entity.Property(product => product.ScalePlu).HasMaxLength(8);
             entity.HasOne<Company>().WithMany().HasForeignKey(product => product.CompanyId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<ProductCategory>().WithMany()
@@ -857,6 +858,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
                 .HasPrincipalKey(category => new { category.CompanyId, category.Id })
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(product => new { product.CompanyId, product.NormalizedCode }).IsUnique();
+            entity.HasIndex(product => new { product.CompanyId, product.ScalePlu }).IsUnique();
             entity.HasIndex(product => new { product.CompanyId, product.CategoryId, product.IsActive });
             entity.HasIndex(product => new { product.CompanyId, product.AnatomicalGroupNormalized });
         });

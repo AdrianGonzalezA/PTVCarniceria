@@ -565,6 +565,10 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<int>("SaleMode")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ScalePlu")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
                     b.Property<string>("Unit")
                         .IsRequired()
                         .HasMaxLength(24)
@@ -575,6 +579,9 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.HasIndex("CompanyId", "AnatomicalGroupNormalized");
 
                     b.HasIndex("CompanyId", "NormalizedCode")
+                        .IsUnique();
+
+                    b.HasIndex("CompanyId", "ScalePlu")
                         .IsUnique();
 
                     b.HasIndex("CompanyId", "CategoryId", "IsActive");

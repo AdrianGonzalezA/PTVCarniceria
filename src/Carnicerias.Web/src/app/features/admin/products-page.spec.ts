@@ -106,6 +106,31 @@ describe('ProductsPage', () => {
     expect(page.querySelector('tbody')?.textContent).toContain('Bondiola');
   });
 
+  it('saves a scale PLU with its leading zeroes for matching weighed labels', () => {
+    const { fixture, http, page } = load([]);
+    page.querySelector<HTMLButtonElement>('.create-button')!.click();
+    fixture.detectChanges();
+    for (const [id, value] of Object.entries({
+      'product-code': 'CER-003', 'product-name': 'Costilla',
+      'product-unit': 'kg', 'product-scale-plu': '00123',
+    })) {
+      const input = page.querySelector<HTMLInputElement>(`#${id}`)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+    }
+    fixture.detectChanges();
+    page.querySelector<HTMLFormElement>('.editor-form')!.dispatchEvent(new Event('submit'));
+    const request = http.expectOne('/api/admin/products');
+    expect(request.request.body.scalePlu).toBe('00123');
+    request.flush({ ...product, id: 'product-3', code: 'CER-003', scalePlu: '00123' });
+    http.expectOne((candidate) => candidate.url === '/api/admin/products').flush({
+      items: [{ ...product, id: 'product-3', code: 'CER-003', scalePlu: '00123' }],
+      page: 1, pageSize: 20, totalItems: 1, totalPages: 1,
+    });
+    fixture.detectChanges();
+    expect(page.querySelector('tbody')?.textContent).toContain('PLU 00123');
+  });
+
   it('creates an article with unknown cost and never renders it as zero', () => {
     const { fixture, http, page } = load([]);
     page.querySelector<HTMLButtonElement>('.create-button')!.click();

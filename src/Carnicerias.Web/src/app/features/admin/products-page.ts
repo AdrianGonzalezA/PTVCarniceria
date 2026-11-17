@@ -36,6 +36,7 @@ export class ProductsPage implements OnInit {
     cost: ['', Validators.pattern(/^\d{1,10}(?:[,.]\d{1,2})?$/)],
     allowSaleWithoutStock: [true],
     anatomicalGroup: ['', Validators.maxLength(120)],
+    scalePlu: ['', Validators.pattern(/^\d{0,8}$/)],
   });
   protected readonly session = signal<CurrentSession | null>(null);
   protected readonly categories = signal<readonly AdminCategoryOption[]>([]);
@@ -139,7 +140,7 @@ export class ProductsPage implements OnInit {
     this.alternateCodes.set([]);
     this.editorForm.reset({ categoryId: this.categories()[0].id, code: '', name: '',
       unit: 'kg', saleMode: 'weight', cost: '', allowSaleWithoutStock: true,
-      anatomicalGroup: '' });
+      anatomicalGroup: '', scalePlu: '' });
     this.actionError.set(null);
     this.actionMessage.set(null);
     this.editorOpen.set(true);
@@ -150,7 +151,7 @@ export class ProductsPage implements OnInit {
     this.editorForm.reset({ categoryId: product.categoryId, code: product.code, name: product.name,
       unit: product.unit, saleMode: product.saleMode, cost: product.cost?.toFixed(2) ?? '',
       allowSaleWithoutStock: product.allowSaleWithoutStock,
-      anatomicalGroup: product.anatomicalGroup ?? '' });
+      anatomicalGroup: product.anatomicalGroup ?? '', scalePlu: product.scalePlu ?? '' });
     this.actionError.set(null);
     this.actionMessage.set(null);
     this.editorOpen.set(true);
@@ -209,6 +210,8 @@ export class ProductsPage implements OnInit {
       unit: values.unit.trim(), saleMode: values.saleMode,
       allowSaleWithoutStock: values.allowSaleWithoutStock,
       anatomicalGroup: values.anatomicalGroup.trim(),
+      ...(values.scalePlu.trim() !== (editing?.scalePlu ?? '')
+        ? { scalePlu: values.scalePlu.trim() } : {}),
       ...(cost === null ? {} : { cost }) };
     const operation = editing
       ? this.productsClient.update(editing.id, details)
@@ -448,6 +451,7 @@ export class ProductsPage implements OnInit {
     if (code === 'PRODUCT_QUANTITY_HISTORY_EXISTS')
       return 'No se puede cambiar la unidad o modalidad: el artículo ya tiene stock o tickets.';
     if (code === 'CATEGORY_NOT_ACTIVE') return 'Elegí una categoría activa.';
+    if (code === 'SCALE_PLU_ALREADY_EXISTS') return 'Ese PLU de balanza ya pertenece a otro artículo.';
     if (code === 'COST_NOT_YET_EFFECTIVE' || code === 'COST_HISTORY_MISSING')
       return 'No se pudo abrir una nueva vigencia de costo. Actualizá la pantalla y reintentá.';
     if (error.status === 409) return 'El código ya existe o el cambio entra en conflicto con el catálogo.';

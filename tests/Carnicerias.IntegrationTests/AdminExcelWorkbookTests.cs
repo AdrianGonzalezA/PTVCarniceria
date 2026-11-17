@@ -45,6 +45,28 @@ public sealed class AdminExcelWorkbookTests
     }
 
     [Fact]
+    public void OptionalScalePluRemainsTextIncludingLeadingZeroes()
+    {
+        var bytes = AdminExcelWorkbook.CreateTemplate("products");
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var sheet = workbook.Worksheet("Articulos");
+        Assert.Equal("PluBalanza", sheet.Cell(1, 8).GetString());
+        sheet.Cell(2, 1).Value = "ASADO-1";
+        sheet.Cell(2, 2).Value = "Asado";
+        sheet.Cell(2, 3).Value = "Carnes";
+        sheet.Cell(2, 4).Value = "weight";
+        sheet.Cell(2, 5).Value = "kg";
+        sheet.Cell(2, 8).Value = "00123";
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+
+        var parsed = AdminExcelWorkbook.Read("products", stream.ToArray());
+
+        Assert.Empty(parsed.Issues);
+        Assert.Equal("00123", Assert.Single(parsed.Rows).Text("PluBalanza"));
+    }
+
+    [Fact]
     public void ProductWorkbookAllowsEmptyCostCellWithoutTreatingItAsZero()
     {
         var bytes = AdminExcelWorkbook.CreateTemplate("products");
@@ -86,6 +108,7 @@ public sealed class AdminExcelWorkbookTests
 
         sheet.Cell(2, 7).Clear();
         sheet.Cell(1, 7).Clear();
+        sheet.Cell(1, 8).Clear();
         using var oldTemplate = new MemoryStream();
         workbook.SaveAs(oldTemplate);
         var oldParsed = AdminExcelWorkbook.Read("products", oldTemplate.ToArray());

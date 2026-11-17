@@ -180,12 +180,16 @@ public static class AdminExcelImportProcessor
         var existingAlternates = await db.ProductCodes.AsNoTracking()
             .Where(code => code.CompanyId == companyId && allCodes.Contains(code.NormalizedCode))
             .ToArrayAsync(cancellationToken);
+        var existingScalePlus = await db.CatalogProducts.AsNoTracking()
+            .Where(product => product.CompanyId == companyId && product.ScalePlu != null)
+            .Select(product => product.ScalePlu!).ToArrayAsync(cancellationToken);
         var productsByCode = existingProducts.ToDictionary(product => product.NormalizedCode, StringComparer.Ordinal);
         var alternatesByCode = existingAlternates.ToDictionary(code => code.NormalizedCode, StringComparer.Ordinal);
         var newProducts = new List<CatalogProduct>();
         var newCodes = new List<ProductCode>();
         var seenMain = new HashSet<string>(StringComparer.Ordinal);
         var seenAlt = new HashSet<string>(StringComparer.Ordinal);
+        var seenScalePlus = existingScalePlus.ToHashSet(StringComparer.Ordinal);
 
         foreach (var row in articleRows)
         {
@@ -212,6 +216,7 @@ public static class AdminExcelImportProcessor
             var unit = row.Text("Unidad");
             var cost = row.NumberValue("CostoARS");
             var anatomicalGroup = row.Text("AgrupadorAnatomico");
+            var scalePlu = row.Text("PluBalanza");
             if (!ValidText(name, 200)) AddIssue(issues, row, "Nombre", "INVALID_NAME", "Nombre de hasta 200 caracteres requerido.");
             if (!ValidText(unit, 24)) AddIssue(issues, row, "Unidad", "INVALID_UNIT", "Unidad de hasta 24 caracteres requerida.");
             if (modeText is not ("weight" or "unit"))
@@ -221,14 +226,26 @@ public static class AdminExcelImportProcessor
             if (anatomicalGroup?.Length > 120)
                 AddIssue(issues, row, "AgrupadorAnatomico", "INVALID_ANATOMICAL_GROUP",
                     "El agrupador no puede superar 120 caracteres.");
+            if (scalePlu is not null && (scalePlu.Length is < 1 or > 8 ||
+                scalePlu.Any(character => character is < '0' or > '9')))
+                AddIssue(issues, row, "PluBalanza", "INVALID_SCALE_PLU",
+                    "El PLU debe contener hasta ocho dígitos y conservar los ceros iniciales.");
             if (!ValidText(categoryName, 120) || !categoriesByName.TryGetValue(categoryName!, out var matches) ||
                 matches.Length != 1 || !matches[0].IsActive)
                 AddIssue(issues, row, "Categoria", "CATEGORY_NOT_ACTIVE", "La categoría debe existir y estar activa en la empresa.");
             if (!ValidText(code, 80) || !ValidText(name, 200) || !ValidText(unit, 24) ||
                 modeText is not ("weight" or "unit") || (cost is not null && !ValidMoney(cost)) ||
                 anatomicalGroup?.Length > 120 ||
+                scalePlu is not null && (scalePlu.Length is < 1 or > 8 ||
+                    scalePlu.Any(character => character is < '0' or > '9')) ||
                 !ValidText(categoryName, 120) || !categoriesByName.TryGetValue(categoryName!, out matches) ||
                 matches.Length != 1 || !matches[0].IsActive) continue;
+            if (scalePlu is not null && !seenScalePlus.Add(scalePlu))
+            {
+                AddIssue(issues, row, "PluBalanza", "SCALE_PLU_ALREADY_EXISTS",
+                    "El PLU ya pertenece a otro artículo de la empresa o se repite en el archivo.");
+                continue;
+            }
             if (alternatesByCode.ContainsKey(normalized))
                 AddIssue(issues, row, "Codigo", "CODE_ALREADY_USED", "El código pertenece a un código alternativo.");
             else
@@ -236,6 +253,7 @@ public static class AdminExcelImportProcessor
                 var product = new CatalogProduct(companyId, matches[0].Id, code!, name!, unit!,
                     modeText == "weight" ? ProductSaleMode.Weight : ProductSaleMode.Unit, cost);
                 product.SetAnatomicalGroup(anatomicalGroup);
+                product.SetScalePlu(scalePlu);
                 productsByCode.Add(normalized, product);
                 newProducts.Add(product);
                 outcomes.Add(new ImportRowOutcome(row.Sheet, row.Number, "create",

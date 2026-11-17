@@ -30,8 +30,8 @@ public static class AdminExcelWorkbook
             ["products"] =
             [
                 new("Articulos", ["Codigo", "Nombre", "Categoria", "ModalidadVenta", "Unidad", "CostoARS"],
-                    ["2546", "CORTITO C/FALDA EXP", "Carnes", "weight", "kg", "1250.00", "Lomo"],
-                    OptionalColumns: ["AgrupadorAnatomico"]),
+                    ["2546", "CORTITO C/FALDA EXP", "Carnes", "weight", "kg", "1250.00", "Lomo", "00123"],
+                    OptionalColumns: ["AgrupadorAnatomico", "PluBalanza"]),
                 new("CodigosAlternativos", ["CodigoArticulo", "CodigoAlternativo"], ["2546", "02546"]),
                 new("CodigosBulto", ["CodigoArticulo", "CodigoBulto", "UnidadesPorBulto"],
                     ["CHORI-1", "CAJA6", "6"], Optional: true)

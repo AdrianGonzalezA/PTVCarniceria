@@ -84,7 +84,8 @@ public static class AdminProductEndpoints
                     code.ProductId == product.Id && code.IsActive &&
                     code.Kind == ProductCodeKind.SaleAlternative),
                 product.AllowSaleWithoutStock,
-                product.AnatomicalGroup))
+                product.AnatomicalGroup,
+                product.ScalePlu))
             .ToArrayAsync(cancellationToken);
         return Results.Ok(new ProductPage(items, page, pageSize, totalItems,
             totalItems == 0 ? 0 : (totalItems - 1) / pageSize + 1));
@@ -121,7 +122,8 @@ public static class AdminProductEndpoints
             !ValidText(request.Code, 80) || !ValidText(request.Name, 200) ||
             !ValidText(request.Unit, 24) || !TryParseSaleMode(request.SaleMode, out var saleMode) ||
             (request.Cost.HasValue && !ValidCost(request.Cost.Value)) ||
-            request.AnatomicalGroup?.Trim().Length > 120)
+            request.AnatomicalGroup?.Trim().Length > 120 ||
+            !ValidScalePlu(request.ScalePlu))
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var companyId = contextAccessor.Context.CompanyId;
@@ -134,11 +136,15 @@ public static class AdminProductEndpoints
         var normalizedCode = request.Code.Trim().ToUpperInvariant();
         if (await CodeExistsAsync(db, companyId, normalizedCode, cancellationToken))
             return Error(StatusCodes.Status409Conflict, "PRODUCT_CODE_ALREADY_EXISTS");
+        if (!string.IsNullOrWhiteSpace(request.ScalePlu) &&
+            await ScalePluExistsAsync(db, companyId, request.ScalePlu.Trim(), null, cancellationToken))
+            return Error(StatusCodes.Status409Conflict, "SCALE_PLU_ALREADY_EXISTS");
 
         var product = new CatalogProduct(companyId, category.Id, request.Code,
             request.Name, request.Unit, saleMode, request.Cost,
             request.AllowSaleWithoutStock ?? true);
         product.SetAnatomicalGroup(request.AnatomicalGroup);
+        product.SetScalePlu(request.ScalePlu);
         db.CatalogProducts.Add(product);
         if (product.Cost is decimal initialCost)
             db.ProductCostVersions.Add(new ProductCostVersion(companyId, product.Id,
@@ -149,7 +155,7 @@ public static class AdminProductEndpoints
         }
         catch (DbUpdateException exception) when (IsUniqueConstraintViolation(exception))
         {
-            return Error(StatusCodes.Status409Conflict, "PRODUCT_CODE_ALREADY_EXISTS");
+            return Error(StatusCodes.Status409Conflict, UniqueProductConflict(exception));
         }
         await transaction.CommitAsync(cancellationToken);
 
@@ -169,13 +175,15 @@ public static class AdminProductEndpoints
         if (productId == Guid.Empty || request is null || request.Code is not null ||
             (request.CategoryId is null && request.Name is null && request.Unit is null &&
              request.SaleMode is null && request.Cost is null && request.IsActive is null &&
-             request.AllowSaleWithoutStock is null && request.AnatomicalGroup is null) ||
+             request.AllowSaleWithoutStock is null && request.AnatomicalGroup is null &&
+             request.ScalePlu is null) ||
             (request.CategoryId.HasValue && request.CategoryId == Guid.Empty) ||
             (request.Name is not null && !ValidText(request.Name, 200)) ||
             (request.Unit is not null && !ValidText(request.Unit, 24)) ||
             (request.Cost.HasValue && !ValidCost(request.Cost.Value)) ||
             (request.SaleMode is not null && !TryParseSaleMode(request.SaleMode, out _)) ||
-            request.AnatomicalGroup?.Trim().Length > 120)
+            request.AnatomicalGroup?.Trim().Length > 120 ||
+            !ValidScalePlu(request.ScalePlu))
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var companyId = contextAccessor.Context.CompanyId;
@@ -184,6 +192,9 @@ public static class AdminProductEndpoints
         var product = await db.CatalogProducts.SingleOrDefaultAsync(item =>
             item.CompanyId == companyId && item.Id == productId, cancellationToken);
         if (product is null) return Error(StatusCodes.Status404NotFound, "PRODUCT_NOT_FOUND");
+        if (!string.IsNullOrWhiteSpace(request.ScalePlu) &&
+            await ScalePluExistsAsync(db, companyId, request.ScalePlu.Trim(), productId, cancellationToken))
+            return Error(StatusCodes.Status409Conflict, "SCALE_PLU_ALREADY_EXISTS");
 
         var nextCategoryId = request.CategoryId ?? product.CategoryId;
         var category = await db.ProductCategories.AsNoTracking().SingleOrDefaultAsync(item =>
@@ -238,8 +249,14 @@ public static class AdminProductEndpoints
             product.SetAllowSaleWithoutStock(allowSaleWithoutStock);
         if (request.AnatomicalGroup is not null)
             product.SetAnatomicalGroup(request.AnatomicalGroup);
+        if (request.ScalePlu is not null)
+            product.SetScalePlu(request.ScalePlu);
 
-        await db.SaveChangesAsync(cancellationToken);
+        try { await db.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateException exception) when (IsUniqueConstraintViolation(exception))
+        {
+            return Error(StatusCodes.Status409Conflict, UniqueProductConflict(exception));
+        }
         await transaction.CommitAsync(cancellationToken);
         var alternateCodeCount = await db.ProductCodes.CountAsync(code =>
             code.CompanyId == companyId && code.ProductId == productId && code.IsActive &&
@@ -287,11 +304,17 @@ public static class AdminProductEndpoints
         await db.ProductCodes.AnyAsync(code => code.CompanyId == companyId &&
             code.NormalizedCode == normalizedCode, cancellationToken);
 
+    private static Task<bool> ScalePluExistsAsync(PlatformAccessDbContext db,
+        Guid companyId, string plu, Guid? exceptProductId, CancellationToken cancellationToken) =>
+        db.CatalogProducts.AnyAsync(product => product.CompanyId == companyId &&
+            product.ScalePlu == plu && (!exceptProductId.HasValue || product.Id != exceptProductId.Value),
+            cancellationToken);
+
     private static ProductResponse ToResponse(CatalogProduct product, string categoryName, int alternateCodeCount) =>
         new(product.Id, product.CategoryId, categoryName, product.Code, product.Name, product.Unit,
             product.SaleMode == ProductSaleMode.Weight ? "weight" : "unit", product.Cost,
             product.IsActive, alternateCodeCount, product.AllowSaleWithoutStock,
-            product.AnatomicalGroup);
+            product.AnatomicalGroup, product.ScalePlu);
 
     private static bool ValidText(string? value, int maxLength) =>
         !string.IsNullOrWhiteSpace(value) && value.Trim().Length <= maxLength;
@@ -301,6 +324,10 @@ public static class AdminProductEndpoints
         var rounded = decimal.Round(cost, 2, MidpointRounding.AwayFromZero);
         return rounded > 0 && rounded <= 9_999_999_999.99m;
     }
+
+    private static bool ValidScalePlu(string? value) =>
+        value is null || value.Trim().Length is 0 or <= 8 &&
+        value.Trim().All(character => character is >= '0' and <= '9');
 
     private static bool TryParseSaleMode(string? value, out ProductSaleMode mode)
     {
@@ -330,21 +357,25 @@ public static class AdminProductEndpoints
     private static bool IsUniqueConstraintViolation(DbUpdateException exception) =>
         exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 
+    private static string UniqueProductConflict(DbUpdateException exception) =>
+        exception.InnerException is PostgresException { ConstraintName: "IX_products_CompanyId_ScalePlu" }
+            ? "SCALE_PLU_ALREADY_EXISTS" : "PRODUCT_CODE_ALREADY_EXISTS";
+
     private static IResult Error(int statusCode, string code) => Results.Json(
         new ErrorResponse(new ApiError(code, "No se pudo completar la solicitud", [])),
         statusCode: statusCode);
 
     private sealed record ProductCreateRequest(
         Guid CategoryId, string Code, string Name, string Unit, string SaleMode, decimal? Cost,
-        bool? AllowSaleWithoutStock, string? AnatomicalGroup);
+        bool? AllowSaleWithoutStock, string? AnatomicalGroup, string? ScalePlu);
     private sealed record ProductUpdateRequest(
         Guid? CategoryId, string? Name, string? Unit, string? SaleMode, decimal? Cost,
         bool? IsActive, string? Code, bool? AllowSaleWithoutStock,
-        string? AnatomicalGroup);
+        string? AnatomicalGroup, string? ScalePlu);
     private sealed record ProductResponse(
         Guid Id, Guid CategoryId, string CategoryName, string Code, string Name, string Unit,
         string SaleMode, decimal? Cost, bool IsActive, int AlternateCodeCount,
-        bool AllowSaleWithoutStock, string? AnatomicalGroup);
+        bool AllowSaleWithoutStock, string? AnatomicalGroup, string? ScalePlu);
     private sealed record ProductPage(
         IReadOnlyList<ProductResponse> Items, int Page, int PageSize, long TotalItems, long TotalPages);
     private sealed record CostHistoryRow(Guid Id, decimal Amount, DateTimeOffset EffectiveFromUtc,

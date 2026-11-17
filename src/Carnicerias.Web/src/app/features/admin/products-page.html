@@ -65,6 +65,10 @@
             <label>Unidad de medida
               <input id="product-unit" formControlName="unit" maxlength="24" placeholder="kg o un" required />
             </label>
+            <label>PLU de balanza (opcional)
+              <input id="product-scale-plu" formControlName="scalePlu" inputmode="numeric"
+                maxlength="8" placeholder="Ej.: 00123" />
+            </label>
             <label>Agrupador anatómico (opcional)
               <input id="product-anatomical-group" formControlName="anatomicalGroup"
                 maxlength="120" list="anatomical-groups" placeholder="Ej.: Lomo" />
@@ -79,7 +83,7 @@
               formControlName="allowSaleWithoutStock" /> Permitir venta común sin stock</label>
           </div>
           @if (editorForm.touched && editorForm.invalid) {
-            <p class="field-error" role="alert">Completá los campos obligatorios. Si informás un costo, debe ser positivo y tener hasta dos decimales.</p>
+            <p class="field-error" role="alert">Completá los campos obligatorios. El PLU lleva hasta ocho dígitos; si informás un costo, debe ser positivo y tener hasta dos decimales.</p>
           }
           @if (actionError(); as error) { <p class="field-error" role="alert">{{ error }}</p> }
           <p class="editor-note">Los precios de venta se asignan por lista. Un artículo nuevo no se muestra en caja hasta tener precio y stock.</p>
@@ -193,7 +197,7 @@
               <tbody>
                 @for (product of page.items; track product.id) {
                   <tr>
-                    <td><strong>{{ product.name }}</strong><small>{{ product.code }} · {{ product.alternateCodeCount }} alternativos</small></td>
+                    <td><strong>{{ product.name }}</strong><small>{{ product.code }} · {{ product.alternateCodeCount }} alternativos@if (product.scalePlu) { · PLU {{ product.scalePlu }} }</small></td>
                     <td>{{ product.categoryName }}</td>
                     <td>{{ product.anatomicalGroup ?? '—' }}</td>
                     <td>{{ product.saleMode === 'weight' ? 'Por peso' : 'Por unidad' }} · {{ product.unit }}</td>

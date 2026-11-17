@@ -102,6 +102,16 @@ public sealed class CatalogProduct
     public StockCountPolicy? CountPolicyOverride { get; private set; }
     public string? AnatomicalGroup { get; private set; }
     public string? AnatomicalGroupNormalized { get; private set; }
+    public string? ScalePlu { get; private set; }
+
+    public void SetScalePlu(string? plu)
+    {
+        var value = plu?.Trim();
+        if (!string.IsNullOrEmpty(value) && (value.Length > 8 ||
+            value.Any(character => character is < '0' or > '9')))
+            throw new ArgumentException("Scale PLU must contain one to eight digits.", nameof(plu));
+        ScalePlu = string.IsNullOrEmpty(value) ? null : value;
+    }
 
     public void SetAnatomicalGroup(string? group)
     {

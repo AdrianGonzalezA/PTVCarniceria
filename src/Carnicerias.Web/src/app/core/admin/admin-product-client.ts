@@ -16,6 +16,7 @@ export interface AdminProduct {
   readonly alternateCodeCount: number;
   readonly allowSaleWithoutStock: boolean;
   readonly anatomicalGroup: string | null;
+  readonly scalePlu?: string | null;
 }
 
 export interface AdminProductPage {
@@ -43,6 +44,7 @@ export interface AdminProductCreate {
   readonly cost: number | null;
   readonly allowSaleWithoutStock?: boolean;
   readonly anatomicalGroup?: string | null;
+  readonly scalePlu?: string | null;
 }
 
 export interface AdminProductUpdate {
@@ -54,6 +56,7 @@ export interface AdminProductUpdate {
   readonly isActive?: boolean;
   readonly allowSaleWithoutStock?: boolean;
   readonly anatomicalGroup?: string;
+  readonly scalePlu?: string;
 }
 
 @Injectable({ providedIn: 'root' })

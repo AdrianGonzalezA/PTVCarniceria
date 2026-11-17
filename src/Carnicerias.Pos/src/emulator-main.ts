@@ -11,6 +11,7 @@ import { createVirtualDeviceServer, virtualDevicePipe, type ScaleReading,
 app.setPath('userData', path.join(app.getPath('userData'), 'device-emulator'));
 
 let reading: ScaleReading = { weightKg: 0, stable: false, observedAtUtc: new Date().toISOString() };
+let currentQr: { readonly qrPayload: string; readonly companyId: string } | null = null;
 let consoleWindow: BrowserWindow;
 
 function verifyConsoleSender(event: IpcMainInvokeEvent): void {
@@ -19,7 +20,9 @@ function verifyConsoleSender(event: IpcMainInvokeEvent): void {
     throw new Error('Rejected emulator sender');
 }
 
-async function handleDeviceRequest(_request: VirtualDeviceRequest): Promise<VirtualDeviceResponse> {
+async function handleDeviceRequest(request: VirtualDeviceRequest): Promise<VirtualDeviceResponse> {
+  if (request.action === 'read-qr') return currentQr
+    ? { ok: true, ...currentQr } : { ok: false, error: 'QR_NOT_READY' };
   return { ok: true, reading: { ...reading, observedAtUtc: new Date().toISOString() } };
 }
 
@@ -69,7 +72,9 @@ app.whenReady().then(async () => {
     const items = makeRandomKretzCuts(company.products.map(product => product.plu));
     const payload = makeKretzConsolidatedQr(items, { now: new Date(),
       ticketNumber, seller: ' A', scaleNumber });
-    return { payload, imageUrl: await QRCode.toDataURL(payload, { width: 360, margin: 2 }),
+    const imageUrl = await QRCode.toDataURL(payload, { width: 360, margin: 2 });
+    currentQr = { qrPayload: payload, companyId: company.companyId };
+    return { payload, imageUrl,
       companyName: company.companyName, catalogCount: company.products.length,
       items: items.map(item => ({ ...item,
         productName: company.products.find(product => product.plu === item.plu)!.name })) };

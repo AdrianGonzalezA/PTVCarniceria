@@ -6,6 +6,7 @@ import { ShiftClosingReport } from '../sales/cashier-shift-client';
 
 interface DeviceBridge {
   readSerialScale(): Promise<{ readonly weightKg: number; readonly stable: boolean; readonly observedAtUtc: string }>;
+  readVirtualQr?(): Promise<{ readonly payload: string; readonly companyId: string }>;
   printSerialReceipt(request: ReceiptPayload): Promise<SerialPrintResult>;
   printThermalReceipt?(request: ReceiptPayload): Promise<SerialPrintResult>;
   getDeviceAvailability?(): Promise<PosDeviceAvailability>;
@@ -16,7 +17,8 @@ interface DeviceBridge {
 }
 
 export interface PosDeviceAvailability {
-  readonly scale: { readonly port: string; readonly baudRate: number } | null;
+  readonly scale: { readonly port: string; readonly baudRate: number;
+    readonly driver?: 'serial-scale' | 'virtual-scale' } | null;
   readonly printer: { readonly kind: 'text' | 'hasar' | 'escpos'; readonly port: string;
     readonly baudRate: number; readonly paperWidthMm?: 58 | 80 | null } | null;
 }
@@ -76,6 +78,14 @@ export class PosDeviceClient {
         throw new Error('INVALID_SCALE_READING');
       return weightKg;
     });
+  }
+
+  async readVirtualQr(): Promise<{ readonly payload: string; readonly companyId: string }> {
+    const bridge = (window as Window & { carnicerias?: DeviceBridge }).carnicerias;
+    const devices = await this.deviceAvailability();
+    if (devices.scale?.driver !== 'virtual-scale') throw new Error('VIRTUAL_QR_NOT_CONFIGURED');
+    if (!bridge?.readVirtualQr) throw new Error('DEVICE_UNAVAILABLE');
+    return bridge.readVirtualQr();
   }
 
   async print(sale: ConfirmedSale, branch: string, terminal: string, cashier: string,

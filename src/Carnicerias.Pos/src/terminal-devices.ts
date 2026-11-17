@@ -81,7 +81,9 @@ export class TerminalDevices {
   constructor(private readonly createScale: (config: SerialDeviceConfig) => ScaleReader =
     (config) => new SerialScale(undefined, config),
     private readonly readVirtual: () => Promise<VirtualDeviceResponse> =
-      () => requestVirtualDevice(virtualDevicePipe, { action: 'read-scale' })) {}
+      () => requestVirtualDevice(virtualDevicePipe, { action: 'read-scale' }),
+    private readonly readVirtualQr: () => Promise<VirtualDeviceResponse> =
+      () => requestVirtualDevice(virtualDevicePipe, { action: 'read-qr' })) {}
 
   availability(): AssignedDevices { return this.settings; }
 
@@ -107,7 +109,7 @@ export class TerminalDevices {
     if (!this.settings.scale) throw new Error('SERIAL_SCALE_NOT_CONFIGURED');
     if (this.settings.scale.driver !== 'virtual-scale') return this.readScale();
     const response = await this.readVirtual();
-    if (!response.ok) throw new Error('VIRTUAL_SCALE_UNAVAILABLE');
+    if (!response.ok || !('reading' in response)) throw new Error('VIRTUAL_SCALE_UNAVAILABLE');
     const reading = response.reading;
     if (!Number.isFinite(reading.weightKg) || reading.weightKg <= 0 ||
         reading.weightKg > 10000 || typeof reading.stable !== 'boolean' ||
@@ -115,6 +117,19 @@ export class TerminalDevices {
         Date.now() - Date.parse(reading.observedAtUtc) > 30000)
       throw new Error('VIRTUAL_SCALE_INVALID_READING');
     return reading;
+  }
+
+  async readQrAsync(): Promise<{ readonly payload: string; readonly companyId: string }> {
+    if (this.settings.scale?.driver !== 'virtual-scale')
+      throw new Error('VIRTUAL_QR_NOT_CONFIGURED');
+    const response = await this.readVirtualQr();
+    if (!response.ok) throw new Error(response.error === 'QR_NOT_READY'
+      ? 'VIRTUAL_QR_NOT_READY' : 'VIRTUAL_QR_UNAVAILABLE');
+    if (!('qrPayload' in response) || typeof response.qrPayload !== 'string' ||
+        response.qrPayload.length > 1500 || !response.qrPayload.includes('\n') ||
+        typeof response.companyId !== 'string' || !response.companyId)
+      throw new Error('VIRTUAL_QR_INVALID');
+    return { payload: response.qrPayload, companyId: response.companyId };
   }
 
   textPrinter(): SerialDeviceConfig {

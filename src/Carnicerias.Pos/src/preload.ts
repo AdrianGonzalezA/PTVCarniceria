@@ -12,6 +12,7 @@ const nativeApi: CarniceriasNativeApi = Object.freeze({
   printShiftReport: (report: ShiftClosingReport) =>
     ipcRenderer.invoke(NativeChannel.PrintShiftReport, report),
   readSerialScale: () => ipcRenderer.invoke(NativeChannel.ReadSerialScale),
+  readVirtualQr: () => ipcRenderer.invoke(NativeChannel.ReadVirtualQr),
   getDeviceAvailability: () => ipcRenderer.invoke(NativeChannel.DeviceAvailability),
   printSerialReceipt: (request: ReceiptRequest) => ipcRenderer.invoke(NativeChannel.PrintSerialReceipt, request),
   printThermalReceipt: (request: ReceiptRequest) => ipcRenderer.invoke(NativeChannel.PrintThermalReceipt, request),

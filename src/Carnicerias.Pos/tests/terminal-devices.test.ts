@@ -90,4 +90,19 @@ describe('terminal device assignments', () => {
       scale: { driver: 'unknown', port: 'COM99', baudRate: 9600 }, printer: null,
     } })).toThrow('POS_DEVICE_CONFIG_INVALID');
   });
+
+  it('reads a QR only from an assigned virtual scale', async () => {
+    const payload = '17/11/2613:390003 A0102\n2000123007502\n2000123005003';
+    const readQr = vi.fn(async () => ({ ok: true as const, qrPayload: payload,
+      companyId: 'company-id' }));
+    const devices = new TerminalDevices(vi.fn(),
+      async () => ({ ok: false, error: 'UNUSED' }), readQr);
+    await expect(devices.readQrAsync()).rejects.toThrow('VIRTUAL_QR_NOT_CONFIGURED');
+    await devices.apply({ scale: { port: 'COM6', baudRate: 9600 }, printer: null });
+    await expect(devices.readQrAsync()).rejects.toThrow('VIRTUAL_QR_NOT_CONFIGURED');
+    await devices.apply({ scale: { driver: 'virtual-scale', port: 'COM99', baudRate: 9600 },
+      printer: null });
+    await expect(devices.readQrAsync()).resolves.toEqual({ payload, companyId: 'company-id' });
+    expect(readQr).toHaveBeenCalledOnce();
+  });
 });

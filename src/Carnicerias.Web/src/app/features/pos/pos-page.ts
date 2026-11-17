@@ -188,7 +188,8 @@ export class PosPage implements OnInit {
   private lastScanKeyAt = 0;
   private pendingKretzQr: { lines: string[]; expected: number; startedAt: number;
     viewRevision: number } | null = null;
-  private readonly scaleScanBusy = signal(false);
+  protected readonly scaleScanBusy = signal(false);
+  protected readonly qrReadBusy = signal(false);
   private mercadoPagoPollTimer: ReturnType<typeof setTimeout> | null = null;
   private gatewayRequestId = 0;
 
@@ -1016,6 +1017,33 @@ export class PosPage implements OnInit {
       return;
     }
     this.acceptKretzLabels(qr.labels, qr.header);
+  }
+
+  protected async readVirtualScaleQr(): Promise<void> {
+    if (!this.canOperate() || !this.canSearchCatalog() || this.selectedProduct() ||
+        this.scaleScanBusy() || this.qrReadBusy() ||
+        this.devices().scale?.driver !== 'virtual-scale') return;
+    const revision = this.ticketViewRevision;
+    const slot = this.activeTicketSlot();
+    this.qrReadBusy.set(true);
+    this.errorMessage.set(null);
+    try {
+      const qr = await this.posDeviceClient.readVirtualQr();
+      if (revision !== this.ticketViewRevision || slot !== this.activeTicketSlot() ||
+          !this.canOperate()) return;
+      if (qr.companyId !== this.session()?.context?.companyId) {
+        this.errorMessage.set('El QR de la balanza virtual corresponde a otra empresa.');
+        return;
+      }
+      this.pendingKretzQr = null;
+      this.searchText.set('');
+      this.acceptKretzQr(qr.payload);
+    } catch {
+      if (revision === this.ticketViewRevision && slot === this.activeTicketSlot())
+        this.errorMessage.set('No se pudo leer el QR de la balanza virtual. Verificá que el simulador esté abierto y tenga un ticket generado.');
+    } finally {
+      this.qrReadBusy.set(false);
+    }
   }
 
   private acceptKretzLabels(labels: readonly KretzWeightLabel[], header: string | null): void {

@@ -82,6 +82,11 @@
           />
           <span aria-hidden="true">⌕</span>
         </div>
+        @if (devices().scale?.driver === 'virtual-scale') {
+          <button class="qr-read-button" type="button"
+            [disabled]="!canOperate() || !canSearchCatalog() || !!selectedProduct() || qrReadBusy() || scaleScanBusy()"
+            (click)="readVirtualScaleQr()">{{ qrReadBusy() ? 'Leyendo QR…' : 'Leer QR' }}</button>
+        }
         <span class="catalog-badge">{{ !selectedPriceListId() ? 'Elegí una lista' : isDemoPriceList() ? 'Catálogo de prueba' : 'Catálogo de la sucursal' }}</span>
       </div>
 

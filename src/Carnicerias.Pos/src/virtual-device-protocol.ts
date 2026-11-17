@@ -10,10 +10,11 @@ export interface ScaleReading {
   readonly observedAtUtc: string;
 }
 
-export type VirtualDeviceRequest = { readonly action: 'read-scale' };
+export type VirtualDeviceRequest = { readonly action: 'read-scale' | 'read-qr' };
 
 export type VirtualDeviceResponse =
   | { readonly ok: true; readonly reading: ScaleReading }
+  | { readonly ok: true; readonly qrPayload: string; readonly companyId: string }
   | { readonly ok: false; readonly error: string };
 
 const maximumFrameBytes = 64 * 1024;
@@ -38,7 +39,7 @@ export function createVirtualDeviceServer(
         const parsed: unknown = JSON.parse(frame.subarray(0, end).toString('utf8'));
         if (!parsed || typeof parsed !== 'object' ||
             !('action' in parsed) ||
-            parsed.action !== 'read-scale')
+            parsed.action !== 'read-scale' && parsed.action !== 'read-qr')
           throw new Error('Invalid device action');
         request = parsed as VirtualDeviceRequest;
       } catch {

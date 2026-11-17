@@ -1725,6 +1725,59 @@ describe('PosPage', () => {
     ]);
   });
 
+  it('loads the virtual scale QR from the button without crossing companies or duplicating cuts', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-11-17T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const payload = '17/11/2613:390003 A0102\n2000123007502\n2000123005003';
+    const readVirtualQr = vi.fn().mockResolvedValueOnce({ payload, companyId: 'other-company' })
+      .mockResolvedValue({ payload, companyId: 'company-id' });
+    const product = { id: 'asado', code: '1002', scalePlu: '00123', name: 'Asado',
+      categoryId: 'res', saleMode: 'weight' as const, price: 4900, availableStock: 10 };
+    const products = vi.fn(() => of({ items: [product], page: 1, pageSize: 50, totalItems: 1 }));
+    const save = vi.fn(() => NEVER);
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: PosDeviceClient, useValue: { readVirtualQr,
+        deviceAvailability: async () => ({ scale: { driver: 'virtual-scale',
+          port: 'COM99', baudRate: 9600 }, printer: null }) } },
+      { provide: CatalogClient, useValue: {
+        priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
+        categories: () => of([{ id: 'res', name: 'Carne de res', productCount: 1 }]), products,
+      } },
+      { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of(null), save } },
+      { provide: InventoryClient, useValue: { stock: () => of([{ productId: 'asado', available: 10 }]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('.qr-read-button') as HTMLButtonElement;
+    expect(button).not.toBeNull();
+    const catalogRequests = products.mock.calls.length;
+    button.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.ticket-lines tbody tr')).toHaveLength(0);
+    expect(products).toHaveBeenCalledTimes(catalogRequests);
+    expect(fixture.nativeElement.querySelector('.pos-error').textContent).toContain('otra empresa');
+
+    button.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(readVirtualQr).toHaveBeenCalledTimes(2);
+    expect(fixture.nativeElement.querySelectorAll('.ticket-lines tbody tr')).toHaveLength(2);
+    expect(save).toHaveBeenCalledOnce();
+    button.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.ticket-lines tbody tr')).toHaveLength(2);
+    expect(fixture.nativeElement.querySelector('.pos-error').textContent).toContain('ya está en el ticket');
+  });
+
   it('keeps manual weight entry but offers no scale reading without an assignment', async () => {
     const session: CurrentSession = {
       userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',

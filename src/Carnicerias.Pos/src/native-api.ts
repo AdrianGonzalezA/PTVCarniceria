@@ -16,6 +16,7 @@ export interface CarniceriasNativeApi {
   readonly saveShiftReportPdf: (report: ShiftClosingReport) => Promise<{ readonly path: string }>;
   readonly printShiftReport: (report: ShiftClosingReport) => Promise<{ readonly port: string }>;
   readonly readSerialScale: () => Promise<ScaleReading>;
+  readonly readVirtualQr: () => Promise<{ readonly payload: string; readonly companyId: string }>;
   readonly getDeviceAvailability: () => Promise<AssignedDevices>;
   readonly printSerialReceipt: (request: ReceiptRequest) => Promise<{
     readonly port: string; readonly bytesWritten: number;
@@ -37,6 +38,7 @@ export const enum NativeChannel {
   SaveShiftReportPdf = 'carnicerias:save-shift-report-pdf',
   PrintShiftReport = 'carnicerias:print-shift-report',
   ReadSerialScale = 'carnicerias:read-serial-scale',
+  ReadVirtualQr = 'carnicerias:read-virtual-qr',
   DeviceAvailability = 'carnicerias:device-availability',
   PrintSerialReceipt = 'carnicerias:print-serial-receipt',
   PrintThermalReceipt = 'carnicerias:print-thermal-receipt',

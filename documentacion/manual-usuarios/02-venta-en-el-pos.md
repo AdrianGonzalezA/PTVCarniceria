@@ -19,6 +19,8 @@ Podés elegir una categoría, buscar por nombre/código o escribir/leer un códi
 
 La venta común por peso no pide una cantidad adicional de piezas físicas. Una pieza trazable leída de su código registra internamente una pieza.
 
+En el laboratorio, si la caja tiene asignada la balanza virtual, el botón **Leer QR** aparece junto a la búsqueda. Al pulsarlo, toma el ticket QR que muestra el simulador en ese instante y agrega todos sus cortes a la venta, cada uno con su propio peso y renglón. Esperá a que figure **Borrador guardado**. Si el simulador no está disponible, la venta en curso se conserva; abrilo y repetí la lectura. Un QR ya agregado al ticket no se carga dos veces.
+
 El POS compara la cantidad con el disponible y avisa **Stock insuficiente** antes de agregar. Si el stock cambia mientras se guarda, el servidor puede rechazar la modificación y el POS vuelve al último detalle efectivamente guardado. Esperá el estado **Borrador guardado**; ante un error usá **Reintentar**.
 
 ## Piezas trazables

@@ -25,6 +25,22 @@ describe('PosDeviceClient', () => {
     await expect(TestBed.inject(PosDeviceClient).readScale()).rejects.toThrow('INVALID_SCALE_READING');
   });
 
+  it('reads the virtual QR only when a virtual scale is assigned', async () => {
+    let scale: { driver: string; port: string; baudRate: number } | null =
+      { driver: 'virtual-scale', port: 'COM99', baudRate: 9600 };
+    const readVirtualQr = vi.fn(async () => ({ payload: 'QR payload', companyId: 'company-id' }));
+    (window as Window & { carnicerias?: unknown }).carnicerias = {
+      getDeviceAvailability: async () => ({ scale, printer: null }), readVirtualQr,
+    };
+    const client = TestBed.inject(PosDeviceClient);
+    await expect(client.readVirtualQr()).resolves.toEqual({
+      payload: 'QR payload', companyId: 'company-id',
+    });
+    scale = null;
+    await expect(client.readVirtualQr()).rejects.toThrow('VIRTUAL_QR_NOT_CONFIGURED');
+    expect(readVirtualQr).toHaveBeenCalledOnce();
+  });
+
   it('sends a confirmed receipt to the serial printer bridge', async () => {
     let saleId = '';
     (window as Window & { carnicerias?: unknown }).carnicerias = {

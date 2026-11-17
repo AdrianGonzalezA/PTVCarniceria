@@ -28,6 +28,20 @@ describe('virtual devices', () => {
     });
   });
 
+  it('reads the currently displayed consolidated QR from the emulator', async () => {
+    const pipe = pipeName();
+    const qrPayload = '17/11/2613:390003 A0102\n2000123007502\n2000123005003';
+    const server = createVirtualDeviceServer(async (request) => request.action === 'read-qr'
+      ? { ok: true, qrPayload, companyId: 'company-id' }
+      : { ok: false, error: 'UNSUPPORTED' });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(pipe, resolve));
+
+    await expect(requestVirtualDevice(pipe, { action: 'read-qr' })).resolves.toEqual({
+      ok: true, qrPayload, companyId: 'company-id',
+    });
+  });
+
   it('returns a connection error when the emulator is not running', async () => {
     await expect(requestVirtualDevice(pipeName(), { action: 'read-scale' }))
       .rejects.toThrow('VIRTUAL_DEVICE_UNAVAILABLE');

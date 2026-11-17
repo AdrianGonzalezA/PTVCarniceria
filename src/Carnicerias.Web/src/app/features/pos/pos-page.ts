@@ -331,6 +331,10 @@ export class PosPage implements OnInit {
   protected readonly customerKind = signal<'finalConsumer' | 'other'>('finalConsumer');
   protected readonly customerTaxStatusKnown = signal(true);
   protected readonly recipientTaxStatus = signal<SaleRecipientTaxStatus>('finalConsumer');
+  protected readonly fiscalTicketAvailable = computed(() => this.customerTaxStatusKnown() &&
+    this.recipientTaxStatus() === 'finalConsumer');
+  protected readonly electronicInvoiceClass = computed(() =>
+    this.recipientTaxStatus() === 'registered' || this.recipientTaxStatus() === 'smallTaxpayer' ? 'A' : 'B');
   protected readonly recipientName = signal('');
   protected readonly recipientDocumentNumber = signal('');
   protected readonly recipientAddress = signal('');
@@ -354,6 +358,8 @@ export class PosPage implements OnInit {
       if (this.fiscalRegistryLoading()) return 'Esperá la consulta fiscal del cliente.';
       if (!this.customerTaxStatusKnown()) return 'Seleccioná la condición fiscal del cliente.';
     }
+    if (this.documentType() === 'fiscalTicket' && !this.fiscalTicketAvailable())
+      return 'El ticket fiscal de esta caja solo admite consumidor final. Seleccioná factura electrónica.';
     if (this.documentType() === 'nonFiscalTicket') return null;
     const name = this.recipientName().trim();
     const address = this.recipientAddress().trim();
@@ -2227,15 +2233,25 @@ export class PosPage implements OnInit {
   }
 
   protected selectDocumentType(event: Event): void {
-    this.documentType.set((event.target as HTMLSelectElement).value as SaleDocumentType);
+    const selected = (event.target as HTMLSelectElement).value;
+    if (!['nonFiscalTicket', 'fiscalTicket', 'electronicInvoice'].includes(selected) ||
+        selected === 'fiscalTicket' && !this.fiscalTicketAvailable()) return;
+    this.documentType.set(selected as SaleDocumentType);
     this.rememberDocumentChoice();
     this.checkoutError.set(null);
+  }
+
+  private reconcileDocumentType(): void {
+    if (this.documentType() !== 'fiscalTicket' || this.fiscalTicketAvailable()) return;
+    this.documentType.set('electronicInvoice');
+    this.rememberDocumentChoice();
   }
 
   protected selectRecipientTaxStatus(event: Event): void {
     const status = (event.target as HTMLSelectElement).value;
     if (!['finalConsumer', 'registered', 'smallTaxpayer', 'exempt'].includes(status)) {
       this.customerTaxStatusKnown.set(false);
+      this.reconcileDocumentType();
       return;
     }
     if (this.fiscalRegistryLoading()) {
@@ -2245,6 +2261,7 @@ export class PosPage implements OnInit {
     }
     this.recipientTaxStatus.set(status as SaleRecipientTaxStatus);
     this.customerTaxStatusKnown.set(true);
+    this.reconcileDocumentType();
     this.fiscalCustomerId.set('');
     this.checkoutError.set(null);
   }
@@ -2255,6 +2272,7 @@ export class PosPage implements OnInit {
     this.customerKind.set(kind);
     this.customerTaxStatusKnown.set(kind === 'finalConsumer');
     this.recipientTaxStatus.set('finalConsumer');
+    this.reconcileDocumentType();
     this.recipientName.set('');
     this.recipientDocumentNumber.set('');
     this.recipientAddress.set('');
@@ -2283,6 +2301,7 @@ export class PosPage implements OnInit {
     this.recipientDocumentNumber.set(cuit);
     this.fiscalCustomerSearch.set(cuit);
     this.customerTaxStatusKnown.set(false);
+    this.reconcileDocumentType();
     this.fiscalCustomerId.set('');
     input.value = this.formatCuit(cuit);
   }
@@ -2316,8 +2335,10 @@ export class PosPage implements OnInit {
   }
 
   protected documentTypeName(): string {
-    return { nonFiscalTicket: 'Ticket no fiscal', fiscalTicket: 'Ticket fiscal',
-      electronicInvoice: 'Factura electrónica' }[this.documentType()];
+    if (this.documentType() === 'nonFiscalTicket') return 'Ticket no fiscal';
+    if (this.documentType() === 'fiscalTicket') return 'Ticket fiscal B';
+    return this.customerTaxStatusKnown()
+      ? `Factura electrónica ${this.electronicInvoiceClass()}` : 'Factura electrónica';
   }
 
   protected recipientTaxStatusName(): string {
@@ -2407,6 +2428,7 @@ export class PosPage implements OnInit {
         if (result.taxStatus) {
           this.recipientTaxStatus.set(result.taxStatus);
           this.customerTaxStatusKnown.set(true);
+          this.reconcileDocumentType();
         }
         this.fiscalCustomerId.set(result.source === 'local' ? result.customerId ?? '' : '');
         if (result.source === 'local' && result.customerId && result.customerCode && result.taxStatus) {
@@ -2439,6 +2461,7 @@ export class PosPage implements OnInit {
     if (!customer) return;
     this.recipientTaxStatus.set(customer.fiscalTaxStatus);
     this.customerTaxStatusKnown.set(true);
+    this.reconcileDocumentType();
     this.recipientName.set(customer.name);
     this.recipientDocumentNumber.set(customer.fiscalDocumentNumber ?? '');
     this.recipientAddress.set(customer.fiscalAddress ?? '');

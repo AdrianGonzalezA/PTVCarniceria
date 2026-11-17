@@ -453,13 +453,18 @@
         <section class="sale-document" aria-labelledby="sale-document-title">
           <h3 id="sale-document-title">Comprobante de la venta</h3>
           <label for="checkout-document-type">Tipo de comprobante</label>
-          <select id="checkout-document-type" [value]="documentType()"
+          <select id="checkout-document-type"
             [disabled]="checkoutBusy() || checkoutCommitted()" (change)="selectDocumentType($event)">
-            <option value="nonFiscalTicket">Ticket no fiscal</option>
-            <option value="fiscalTicket">Ticket fiscal</option>
-            <option value="electronicInvoice">Factura electrónica</option>
+            <option value="nonFiscalTicket" [selected]="documentType() === 'nonFiscalTicket'">Ticket no fiscal (interno)</option>
+            @if (fiscalTicketAvailable()) {
+              <option value="fiscalTicket" [selected]="documentType() === 'fiscalTicket'">Ticket fiscal B</option>
+            }
+            <option value="electronicInvoice" [selected]="documentType() === 'electronicInvoice'">Factura electrónica {{ customerTaxStatusKnown() ? electronicInvoiceClass() : '' }}</option>
           </select>
           <p class="sale-document-choice">{{ documentTypeName() }} · {{ customerKind() === 'other' && !customerTaxStatusKnown() ? 'Condición fiscal pendiente' : recipientTaxStatusName() }}</p>
+          @if (documentType() === 'nonFiscalTicket') {
+            <p class="sale-document-choice">El ticket no fiscal es un comprobante interno; no reemplaza un comprobante fiscal válido ante ARCA.</p>
+          }
           @if (customerKind() === 'other') {
             <p class="sale-document-choice">CUIT {{ formatCuit(recipientDocumentNumber()) }}</p>
             <label for="checkout-recipient-tax-status">Condición fiscal del cliente</label>

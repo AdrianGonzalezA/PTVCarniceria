@@ -35,6 +35,11 @@ public sealed record SaleDocumentChoice(
             _ => throw new ArgumentException("Unknown recipient tax status.", nameof(taxStatus))
         };
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(saleTotal);
+        // The current Hasar fiscal ticket path prints B only for final consumers.
+        // Other recipients must use the supported electronic invoice A/B path.
+        if (documentType == SaleDocumentType.FiscalTicket &&
+            recipientTaxStatus != SaleRecipientTaxStatus.FinalConsumer)
+            throw new ArgumentException("Fiscal ticket is supported only for final consumers.", nameof(taxStatus));
         if (documentType == SaleDocumentType.NonFiscalTicket)
             return new(documentType, recipientTaxStatus, null, null, null);
 

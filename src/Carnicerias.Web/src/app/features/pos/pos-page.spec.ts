@@ -256,6 +256,90 @@ describe('PosPage', () => {
     expect(page.querySelector('.checkout-review')?.textContent).toContain('Factura electrónica');
   });
 
+  it('offers electronic invoice B and fiscal ticket B to a final consumer', async () => {
+    const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, false, false);
+    continueToDocument(fixture);
+    const page = fixture.nativeElement as HTMLElement;
+    const choices = Array.from(page.querySelectorAll<HTMLOptionElement>('#checkout-document-type option'));
+
+    expect(choices.map(option => option.value)).toEqual([
+      'nonFiscalTicket', 'fiscalTicket', 'electronicInvoice',
+    ]);
+    expect(choices.find(option => option.value === 'electronicInvoice')?.textContent)
+      .toContain('Factura electrónica B');
+    expect(choices.find(option => option.value === 'fiscalTicket')?.textContent)
+      .toContain('Ticket fiscal B');
+    expect(page.querySelector('.sale-document')?.textContent)
+      .toContain('no reemplaza un comprobante fiscal');
+  });
+
+  it('hides the unsupported fiscal ticket for an identified taxpayer and shows invoice A', async () => {
+    const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, false, false);
+    const page = fixture.nativeElement as HTMLElement;
+    vi.spyOn(TestBed.inject(CreditCustomerClient), 'lookupFiscal').mockReturnValue(of({
+      source: 'arca', customerId: null, customerCode: null,
+      name: 'CLIENTE', documentNumber: '20164755100', address: 'CALLE 1',
+      locality: null, province: null, taxStatus: 'registered', notice: null,
+    }));
+    const kind = page.querySelector('#checkout-customer-kind') as HTMLSelectElement;
+    kind.value = 'other';
+    kind.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    const cuit = page.querySelector('#checkout-cuit') as HTMLInputElement;
+    cuit.value = '20164755100';
+    cuit.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    continueToDocument(fixture);
+
+    const choices = Array.from(page.querySelectorAll<HTMLOptionElement>('#checkout-document-type option'));
+    expect(choices.map(option => option.value)).toEqual(['nonFiscalTicket', 'electronicInvoice']);
+    expect(choices.find(option => option.value === 'electronicInvoice')?.textContent)
+      .toContain('Factura electrónica A');
+    const status = page.querySelector('#checkout-recipient-tax-status') as HTMLSelectElement;
+    status.value = 'exempt';
+    status.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    expect(page.querySelector<HTMLOptionElement>('#checkout-document-type option[value="electronicInvoice"]')?.textContent)
+      .toContain('Factura electrónica B');
+    status.value = 'smallTaxpayer';
+    status.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    expect(page.querySelector<HTMLOptionElement>('#checkout-document-type option[value="electronicInvoice"]')?.textContent)
+      .toContain('Factura electrónica A');
+  });
+
+  it('replaces a fiscal ticket when the recipient condition changes to registered', async () => {
+    const fixture = await checkoutWithGateways(null, false, [], 2500, undefined, false, false);
+    const page = fixture.nativeElement as HTMLElement;
+    vi.spyOn(TestBed.inject(CreditCustomerClient), 'lookupFiscal').mockReturnValue(NEVER);
+    const kind = page.querySelector('#checkout-customer-kind') as HTMLSelectElement;
+    kind.value = 'other';
+    kind.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    const cuit = page.querySelector('#checkout-cuit') as HTMLInputElement;
+    cuit.value = '20164755100';
+    cuit.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    continueToDocument(fixture);
+    const status = page.querySelector('#checkout-recipient-tax-status') as HTMLSelectElement;
+    status.value = 'finalConsumer';
+    status.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    const document = page.querySelector('#checkout-document-type') as HTMLSelectElement;
+    document.value = 'fiscalTicket';
+    document.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+
+    status.value = 'registered';
+    status.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    expect(document.value).toBe('electronicInvoice');
+    expect(Array.from(document.options).map(option => option.value))
+      .toEqual(['nonFiscalTicket', 'electronicInvoice']);
+    expect(page.querySelector('.sale-document-choice')?.textContent)
+      .toContain('Factura electrónica A');
+  });
+
   it('does not offer a new integrated payment on an unconfigured register', async () => {
     const fixture = await checkoutWithGateways(null);
     const options = fixture.nativeElement.querySelector('.payment-methods').textContent as string;
@@ -841,6 +925,7 @@ describe('PosPage', () => {
     continueToDocument(fixture);
     expect((fixture.nativeElement.querySelector('#checkout-document-type') as HTMLSelectElement).value).toBe('nonFiscalTicket');
     choose('checkout-document-type', 'fiscalTicket');
+    expect((fixture.nativeElement.querySelector('#checkout-document-type') as HTMLSelectElement).value).toBe('fiscalTicket');
     (fixture.nativeElement.querySelector('.checkout-dialog .dialog-close') as HTMLButtonElement).click();
     fixture.detectChanges();
     (fixture.nativeElement.querySelectorAll('.ticket-tab')[2] as HTMLButtonElement).click();
@@ -878,6 +963,7 @@ describe('PosPage', () => {
     (reopened.nativeElement.querySelector('.sale-footer .finish-button') as HTMLButtonElement).click();
     reopened.detectChanges();
     continueToDocument(reopened);
+    expect(reopened.nativeElement.querySelector('#checkout-document-type option[value="fiscalTicket"]')).not.toBeNull();
     expect((reopened.nativeElement.querySelector('#checkout-document-type') as HTMLSelectElement).value).toBe('fiscalTicket');
   });
 

@@ -13,11 +13,10 @@ public sealed class SaleDocumentChoiceTests
         Assert.Null(choice.RecipientDocumentNumber);
     }
 
-    [Theory]
-    [InlineData("fiscalTicket")]
-    [InlineData("electronicInvoice")]
-    public void IdentifiedFiscalRecipientNeedsNameCuitAndAddress(string type)
+    [Fact]
+    public void IdentifiedFiscalRecipientNeedsNameCuitAndAddress()
     {
+        const string type = "electronicInvoice";
         Assert.Throws<ArgumentException>(() => SaleDocumentChoice.Create(
             type, "registered", "Cliente", null, "Calle 123", 2500m));
         Assert.Throws<ArgumentException>(() => SaleDocumentChoice.Create(
@@ -28,6 +27,24 @@ public sealed class SaleDocumentChoiceTests
         Assert.Equal("Cliente", choice.RecipientName);
         Assert.Equal("20000000001", choice.RecipientDocumentNumber);
         Assert.Equal("Calle 123", choice.RecipientAddress);
+    }
+
+    [Theory]
+    [InlineData("registered")]
+    [InlineData("smallTaxpayer")]
+    [InlineData("exempt")]
+    public void FiscalTicketRejectsRecipientsUnsupportedByCurrentHasarIntegration(string status)
+    {
+        Assert.Throws<ArgumentException>(() => SaleDocumentChoice.Create(
+            "fiscalTicket", status, "Cliente", "20-00000000-1", "Calle 123", 2500m));
+    }
+
+    [Fact]
+    public void FiscalTicketBRemainsAvailableForFinalConsumer()
+    {
+        var choice = SaleDocumentChoice.Create("fiscalTicket", "finalConsumer", null, null, null, 2500m);
+
+        Assert.Equal(SaleDocumentType.FiscalTicket, choice.Type);
     }
 
     [Fact]

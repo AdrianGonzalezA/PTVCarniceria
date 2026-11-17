@@ -54,6 +54,8 @@ public sealed class FiscalRequestBuilderTests
 
     [Theory]
     [InlineData("registered", 1)]
+    [InlineData("smallTaxpayer", 1)]
+    [InlineData("exempt", 6)]
     [InlineData("finalConsumer", 6)]
     public void PreservesWeightedLineRoundingAndMixedTaxSnapshotInArcaRequest(
         string recipientStatus, int expectedVoucherType)

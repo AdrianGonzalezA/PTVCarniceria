@@ -281,4 +281,6 @@ En cada petición del usuario, sea desarrollo, consulta, diagnóstico, documenta
 | 17/11/2026 | No recuperable | No recuperable | No cuantificable | Informar revisión de la interfaz | El PO comunicó que ya había verificado el desplegable mientras se cerraban las verificaciones, sin marcas separadas. |
 | 17/11/2026 | No recuperable | No recuperable | No cuantificable | Confirmar que la interfaz es correcta | El PO aprobó la revisión visual mientras se cerraba el tramo principal; no se suma tiempo adicional. |
 
-**Total activo registrado desde el 16/10/2026:** 2263 min 38 s medidos, más diez tramos menores a 1 min y tramos no cuantificables.
+| 17/11/2026 | 12:59:10 | 13:00:45 | 1 min 35 s medidos | Investigar simulación de balanzas seriales y QR consolidado | Se contrastaron el lector COM, el emulador existente y la captura de códigos del POS con documentación oficial de Kretz Report NX y la descripción pública de InfoManager. Se comprobó que Report NX documenta QR 2D con varios EAN13 y formato configurable; el POS actual solo lee peso serial simple y códigos numéricos individuales, y el emulador anterior usa un pipe sin conexión con el lector COM vigente. Se prepararon preguntas de alcance y formato real antes de implementar. Sin cambios de código, base ni pausas conocidas. |
+
+**Total activo registrado desde el 16/10/2026:** 2265 min 13 s medidos, más diez tramos menores a 1 min y tramos no cuantificables.

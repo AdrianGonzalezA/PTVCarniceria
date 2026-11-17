@@ -394,14 +394,6 @@
             (input)="updateQuantity($event)"
           />
         </label>
-        @if (product.mode === 'weight') {
-          <label class="quantity-field piece-count-field" for="product-piece-count">
-            Piezas físicas (opcional)
-            <input id="product-piece-count" type="text" inputmode="numeric" [appLocalizedDecimal]="pieceCountDraft()" [decimalPlaces]="0"
-              [readOnly]="!!scannedPieceId()"
-              (input)="updatePieceCount($event)" placeholder="Cantidad de piezas" />
-          </label>
-        }
         @if (product.mode === 'weight' && !scannedPieceIdentifier() && devices().scale) {
           @if (scaleNotice(); as notice) { <p class="scale-status" role="status">{{ notice }}</p> }
           @if (scaleError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }

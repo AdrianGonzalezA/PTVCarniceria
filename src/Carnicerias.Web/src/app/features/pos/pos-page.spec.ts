@@ -1857,9 +1857,7 @@ describe('PosPage', () => {
     const ticketTable = fixture.nativeElement.querySelector('table.ticket-lines') as HTMLTableElement;
     expect(ticketTable).not.toBeNull();
     expect(ticketTable.querySelectorAll('thead th')).toHaveLength(6);
-    expect(ticketTable.querySelector('.ticket-line-quantity-heading .heading-original')?.textContent)
-      .toContain('Peso / Cant.');
-    expect(ticketTable.querySelector('.ticket-line-quantity-heading .heading-nocturno')?.textContent)
+    expect(ticketTable.querySelector('.ticket-line-quantity-heading')?.textContent)
       .toContain('Cantidad');
     expect(ticketTable.querySelector('.ticket-line-total-heading .heading-original')?.textContent)
       .toContain('Total');
@@ -1965,7 +1963,7 @@ describe('PosPage', () => {
     expect(fixture.nativeElement.querySelector('.pos-error')).toBeNull();
   });
 
-  it('checks kilograms and catalog-defined packages before adding a product', async () => {
+  it('checks kilograms without asking for physical pieces and validates catalog-defined packages', async () => {
     const session: CurrentSession = {
       userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
       context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
@@ -2013,14 +2011,13 @@ describe('PosPage', () => {
     let quantity = fixture.nativeElement.querySelector('#product-quantity') as HTMLInputElement;
     quantity.value = '0.25';
     quantity.dispatchEvent(new Event('input', { bubbles: true }));
-    const pieces = fixture.nativeElement.querySelector('#product-piece-count') as HTMLInputElement;
-    pieces.value = '2';
-    pieces.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(fixture.nativeElement.querySelector('#product-piece-count')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.pos-dialog').textContent).not.toContain('Piezas físicas');
     fixture.detectChanges();
     (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
-    expect(savedLines).toEqual([{ productId: 'weight-id', quantity: 0.25, pieceCount: 2 }]);
-    expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('2 piezas');
+    expect(savedLines).toEqual([{ productId: 'weight-id', quantity: 0.25 }]);
+    expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).not.toContain('piezas');
 
     (fixture.nativeElement.querySelectorAll('.product-card')[1] as HTMLButtonElement).click();
     fixture.detectChanges();
@@ -2036,7 +2033,7 @@ describe('PosPage', () => {
     quantity.dispatchEvent(new Event('input', { bubbles: true }));
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.pos-dialog [role="alert"]').textContent).toContain('entera');
-    expect(savedLines).toEqual([{ productId: 'weight-id', quantity: 0.25, pieceCount: 2 }]);
+    expect(savedLines).toEqual([{ productId: 'weight-id', quantity: 0.25 }]);
   });
 
   it('removes a rejected addition when stock changed after the catalog loaded', async () => {
@@ -2498,9 +2495,11 @@ describe('PosPage', () => {
     const measuredQuantity = fixture.nativeElement.querySelector('#product-quantity') as HTMLInputElement;
     expect(measuredQuantity.value).toBe('0,500');
     expect(measuredQuantity.readOnly).toBe(true);
+    expect(fixture.nativeElement.querySelector('#product-piece-count')).toBeNull();
     (fixture.nativeElement.querySelector('.pos-dialog .finish-button') as HTMLButtonElement).click();
     fixture.detectChanges();
-    expect(save).toHaveBeenCalledWith('list-id', [expect.objectContaining({ productId: asado.id, quantity: 0.5, inventoryPieceId: 'piece-id' })], 'A', 0, null);
+    expect(save).toHaveBeenCalledWith('list-id', [expect.objectContaining({ productId: asado.id,
+      quantity: 0.5, inventoryPieceId: 'piece-id', pieceCount: 1 })], 'A', 0, null);
     expect((fixture.nativeElement.querySelector('.quantity-input') as HTMLInputElement).value).toBe('0,500');
     expect(fixture.nativeElement.querySelector('.ticket-lines').textContent).toContain('5.750,00');
 
@@ -2517,8 +2516,8 @@ describe('PosPage', () => {
     expect((ticketRows[0].querySelector('.quantity-input') as HTMLInputElement).value).toBe('0,500');
     expect((ticketRows[1].querySelector('.quantity-input') as HTMLInputElement).value).toBe('0,750');
     expect(save).toHaveBeenLastCalledWith('list-id', [
-      expect.objectContaining({ productId: asado.id, quantity: 0.5, inventoryPieceId: 'piece-id' }),
-      expect.objectContaining({ productId: asado.id, quantity: 0.75, inventoryPieceId: 'piece-id-2' }),
+      expect.objectContaining({ productId: asado.id, quantity: 0.5, inventoryPieceId: 'piece-id', pieceCount: 1 }),
+      expect.objectContaining({ productId: asado.id, quantity: 0.75, inventoryPieceId: 'piece-id-2', pieceCount: 1 }),
     ], 'A', 0, null);
 
     search.value = '2999001005009';

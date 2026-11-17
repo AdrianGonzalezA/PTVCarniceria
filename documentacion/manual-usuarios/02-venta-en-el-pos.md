@@ -14,9 +14,10 @@ Si administración deshabilita la lista seleccionada y el ticket está vacío, l
 
 Podés elegir una categoría, buscar por nombre/código o escribir/leer un código en **Producto / lector**. El campo vuelve a quedar disponible para nuevas lecturas durante la operación. Al elegir un artículo se abre una ventana donde se ingresa:
 
-- **Peso en kilogramos**, hasta tres decimales, si el artículo se vende por peso. Puede escribirse manualmente o usarse **Leer balanza** cuando hay una balanza serial asignada y una lectura estable reciente.
-- **Piezas físicas**, opcional para artículos por peso. Es un entero independiente de los kilogramos; si no se conoce, dejalo vacío. Una pieza trazable leída del código registra una pieza automáticamente.
+- **Peso en kilogramos**, hasta tres decimales, si el artículo se vende por peso. Con balanza asignada, la caja lo lee automáticamente y no permite escribirlo. Si la balanza falla, un responsable habilitado puede autorizar excepcionalmente el peso manual con su PIN. Sin balanza asignada, se ingresa manualmente.
 - **Cantidad entera** si el artículo se vende por unidad. La modalidad y la unidad se definen en el catálogo, no al cobrar.
+
+La venta común por peso no pide una cantidad adicional de piezas físicas. Una pieza trazable leída de su código registra internamente una pieza.
 
 El POS compara la cantidad con el disponible y avisa **Stock insuficiente** antes de agregar. Si el stock cambia mientras se guarda, el servidor puede rechazar la modificación y el POS vuelve al último detalle efectivamente guardado. Esperá el estado **Borrador guardado**; ante un error usá **Reintentar**.
 
@@ -28,7 +29,7 @@ La lectura en venta **no crea stock**. La pieza debe haber ingresado antes por *
 
 ## Editar, descontar o cancelar
 
-El detalle muestra una tabla con producto, cantidad o peso, precio e importe. Podés cambiar la cantidad de un renglón común o quitarlo con **×**. El peso de una pieza trazable no se modifica: quitá el renglón si fue una lectura equivocada. Si tu permiso lo permite, podés aplicar un **descuento del ticket en pesos** e indicar un motivo. El descuento se refleja en el total; no es un descuento individual por artículo.
+El detalle muestra una tabla con producto, cantidad o peso, precio e importe. Podés cambiar la cantidad de un renglón común o quitarlo con **×**. Un peso leído de balanza o de pieza trazable no se modifica: quitá el renglón si fue una lectura equivocada. Si tu permiso lo permite, podés aplicar un **descuento del ticket en pesos** e indicar un motivo. El descuento se refleja en el total; no es un descuento individual por artículo.
 
 **Cancelar venta** libera la reserva de ese ticket y conserva su cancelación para auditoría. Un ticket borrador reserva stock disponible, pero **no descuenta existencia física**; el egreso ocurre al confirmar la venta. No confundas cancelar el ticket con anular una venta ya confirmada.
 

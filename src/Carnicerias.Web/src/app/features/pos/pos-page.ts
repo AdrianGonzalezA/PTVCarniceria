@@ -253,7 +253,6 @@ export class PosPage implements OnInit {
   protected readonly scannedPieceIdentifier = signal<string | null>(null);
   private readonly scannedPieceId = signal<string | null>(null);
   protected readonly quantityDraft = signal('1');
-  protected readonly pieceCountDraft = signal('');
   protected readonly scaleBusy = signal(false);
   protected readonly scaleNotice = signal<string | null>(null);
   protected readonly scaleError = signal<string | null>(null);
@@ -289,11 +288,6 @@ export class PosPage implements OnInit {
         Math.abs(Math.round(quantity * 1000) - quantity * 1000) > 0.000001)
       return product.mode === 'weight' ? 'Ingresá un peso válido mayor a cero (hasta 3 decimales).' : 'Ingresá una cantidad entera válida mayor a cero.';
     if (product.mode === 'unit' && !Number.isInteger(quantity)) return 'Ingresá una cantidad entera de unidades de venta.';
-    if (product.mode === 'weight' && this.pieceCountDraft().trim()) {
-      const pieces = parseLocalizedDecimal(this.pieceCountDraft(), 0) ?? NaN;
-      if (!Number.isInteger(pieces) || pieces < 1 || pieces > 10000)
-        return 'Ingresá una cantidad de piezas entera entre 1 y 10000.';
-    }
     const piece = !!this.scannedPieceId();
     const available = piece ? this.availablePieceStock(product) : this.availableStock(product);
     if (!this.isDemoPriceList() && (piece || !this.canSellGenericWithoutStock(product)) &&
@@ -1299,7 +1293,6 @@ export class PosPage implements OnInit {
     this.quantityDraft.set(product.mode === 'weight' && !pieceIdentifier &&
       (this.devices().scale || !this.deviceConfigReady() || this.deviceConfigError())
       ? '' : String(quantity));
-    this.pieceCountDraft.set(pieceId ? '1' : '');
     this.scaleNotice.set(null);
     this.scaleError.set(null);
     this.syncAutomaticScaleRead();
@@ -1331,14 +1324,6 @@ export class PosPage implements OnInit {
     }
     this.quantityDraft.set((event.target as HTMLInputElement).value);
     this.scaleNotice.set(null);
-  }
-
-  protected updatePieceCount(event: Event): void {
-    if (this.scannedPieceId()) {
-      (event.target as HTMLInputElement).value = '1';
-      return;
-    }
-    this.pieceCountDraft.set((event.target as HTMLInputElement).value);
   }
 
   private syncAutomaticScaleRead(): void {
@@ -1483,8 +1468,7 @@ export class PosPage implements OnInit {
       this.errorMessage.set('Stock insuficiente para agregar esta pieza al ticket.');
       return;
     }
-    const pieceCount = product.mode === 'weight' && this.pieceCountDraft().trim()
-      ? parseLocalizedDecimal(this.pieceCountDraft(), 0) : null;
+    const pieceCount = pieceId ? 1 : null;
     this.addProductLine(product, quantity, pieceId, this.scannedPieceIdentifier(), pieceCount,
       null, this.scaleOverrideGrantId(), product.mode === 'weight' && !pieceId &&
         !this.scannedPieceIdentifier() && !!this.devices().scale && !this.scaleOverrideGrantId());

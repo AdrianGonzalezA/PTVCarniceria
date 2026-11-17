@@ -267,7 +267,7 @@
               <thead>
                 <tr>
                   <th scope="col">Producto</th>
-                  <th scope="col" class="ticket-line-quantity-heading"><span class="heading-original">Peso / Cant.</span><span class="heading-nocturno">Cantidad</span></th>
+                  <th scope="col" class="ticket-line-quantity-heading">Cantidad</th>
                   <th scope="col">Precio</th>
                   <th scope="col" class="ticket-line-discount-heading">Desc.</th>
                   <th scope="col" class="ticket-line-total-heading"><span class="heading-original">Total</span><span class="heading-nocturno">Importe</span></th>
@@ -403,41 +403,42 @@
           </label>
         }
         @if (product.mode === 'weight' && !scannedPieceIdentifier() && devices().scale) {
-          <button class="receipt-pdf-button scale-read-button" type="button" [disabled]="scaleBusy()" (click)="readSerialScale()">
-            {{ scaleBusy() ? 'Leyendo balanza…' : 'Leer balanza' }}
-          </button>
           @if (scaleNotice(); as notice) { <p class="scale-status" role="status">{{ notice }}</p> }
           @if (scaleError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
-          <details class="scale-override-panel">
-            <summary>Excepción: ingresar peso manual con PIN</summary>
-            <p>Un responsable habilitado debe autorizar un solo peso manual. La autorización queda registrada en la venta.</p>
-            <label for="scale-override-authorizer">Responsable
-              <select id="scale-override-authorizer" [value]="scaleOverrideAuthorizerId()"
-                (change)="updateScaleOverrideAuthorizer($event)">
-                @for (authorizer of scaleOverrideAuthorizers(); track authorizer.userId) {
-                  <option [value]="authorizer.userId">{{ authorizer.username }}</option>
-                }
-              </select>
-            </label>
-            <label for="scale-override-reason">Motivo
-              <input id="scale-override-reason" type="text" maxlength="200"
-                [value]="scaleOverrideReason()" (input)="updateScaleOverrideReason($event)" />
-            </label>
-            <label for="scale-override-pin">PIN del responsable
-              <input id="scale-override-pin" type="password" inputmode="numeric" autocomplete="off"
-                maxlength="6" [value]="scaleOverridePin()" (input)="updateScaleOverridePin($event)" />
-            </label>
-            <button type="button" class="receipt-pdf-button" [disabled]="scaleOverrideBusy() ||
-              !scaleOverrideAuthorizerId() || !!scaleOverrideGrantId()" (click)="authorizeManualScaleWeight()">
-              {{ scaleOverrideBusy() ? 'Autorizando…' : 'Autorizar un peso manual' }}
-            </button>
-            @if (scaleOverrideAuthorizers().length === 0) {
-              <p class="scale-status">Configurá un PIN y el permiso de excepción de balanza para un responsable desde Administración.</p>
-            }
-            @if (scaleOverrideError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
-          </details>
+          @if (scaleError() && !scaleOverrideGrantId()) {
+            <details class="scale-override-panel">
+              <summary>Excepción: ingresar peso manual con PIN</summary>
+              <p>Un responsable habilitado debe autorizar un solo peso manual. La autorización queda registrada en la venta.</p>
+              <label for="scale-override-authorizer">Responsable
+                <select id="scale-override-authorizer" [value]="scaleOverrideAuthorizerId()"
+                  (change)="updateScaleOverrideAuthorizer($event)">
+                  @for (authorizer of scaleOverrideAuthorizers(); track authorizer.userId) {
+                    <option [value]="authorizer.userId">{{ authorizer.username }}</option>
+                  }
+                </select>
+              </label>
+              <label for="scale-override-reason">Motivo
+                <input id="scale-override-reason" type="text" maxlength="200"
+                  [value]="scaleOverrideReason()" (input)="updateScaleOverrideReason($event)" />
+              </label>
+              <label for="scale-override-pin">PIN del responsable
+                <input id="scale-override-pin" type="password" inputmode="numeric" autocomplete="off"
+                  maxlength="6" [value]="scaleOverridePin()" (input)="updateScaleOverridePin($event)" />
+              </label>
+              <button type="button" class="receipt-pdf-button" [disabled]="scaleOverrideBusy() ||
+                !scaleOverrideAuthorizerId() || !!scaleOverrideGrantId()" (click)="authorizeManualScaleWeight()">
+                {{ scaleOverrideBusy() ? 'Autorizando…' : 'Autorizar un peso manual' }}
+              </button>
+              @if (scaleOverrideAuthorizers().length === 0) {
+                <p class="scale-status">Configurá un PIN y el permiso de excepción de balanza para un responsable desde Administración.</p>
+              }
+              @if (scaleOverrideError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
+            </details>
+          }
         }
-        @if (quantityProblem(); as problem) { <p class="pos-error" role="alert">{{ problem }}</p> }
+        @if (quantityProblem(); as problem) {
+          @if (!scaleWaiting()) { <p class="pos-error" role="alert">{{ problem }}</p> }
+        }
         @else if (errorMessage(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
         <div class="dialog-actions">
           <button class="dialog-cancel" type="button" (click)="closeProductDialog()">Cancelar</button>

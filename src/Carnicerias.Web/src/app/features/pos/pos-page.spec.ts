@@ -1551,13 +1551,14 @@ describe('PosPage', () => {
     expect(fixture.nativeElement.querySelector('.serial-print-button')).toBeNull();
   });
 
-  it('fills a weighed product from the serial scale without changing a sale or a unit item', async () => {
+  it('reads a weighed product automatically when the box has a scale', async () => {
     const session: CurrentSession = {
       userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',
       context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
         branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
     };
-    const readScale = vi.fn().mockResolvedValue(0.75);
+    const readScale = vi.fn().mockRejectedValueOnce(new Error('INVALID_SCALE_READING'))
+      .mockResolvedValue(0.75);
     TestBed.configureTestingModule({ providers: [
       provideRouter([]),
       { provide: SessionClient, useValue: { current: () => of(session) } },
@@ -1565,13 +1566,16 @@ describe('PosPage', () => {
         deviceAvailability: async () => ({ scale: { port: 'COM6', baudRate: 9600 }, printer: null }) } },
       { provide: CatalogClient, useValue: {
         priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
-        categories: () => of([{ id: 'res', name: 'Carne de res', productCount: 1 }]),
+        categories: () => of([{ id: 'res', name: 'Carne de res', productCount: 2 }]),
         products: () => of({ items: [{ id: 'asado', code: '1002', name: 'Asado',
-          categoryId: 'res', saleMode: 'weight' as const, price: 4900, availableStock: 10 }],
-          page: 1, pageSize: 50, totalItems: 1 }),
+          categoryId: 'res', saleMode: 'weight' as const, price: 4900, availableStock: 10 },
+        { id: 'carbon', code: '1003', name: 'Carbón 5k', categoryId: 'res',
+          saleMode: 'unit' as const, price: 5000, availableStock: 10 }],
+          page: 1, pageSize: 50, totalItems: 2 }),
       } },
       { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of(null) } },
-      { provide: InventoryClient, useValue: { stock: () => of([{ productId: 'asado', available: 10 }]) } },
+      { provide: InventoryClient, useValue: { stock: () => of([
+        { productId: 'asado', available: 10 }, { productId: 'carbon', available: 10 }]) } },
     ] });
     const fixture = TestBed.createComponent(PosPage);
     fixture.detectChanges();
@@ -1582,19 +1586,33 @@ describe('PosPage', () => {
     const quantity = fixture.nativeElement.querySelector('#product-quantity') as HTMLInputElement;
     expect(quantity.readOnly).toBe(true);
     expect(quantity.value).toBe('');
+    expect(fixture.nativeElement.querySelector('.scale-read-button')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.scale-override-panel')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.pos-dialog .pos-error')).toBeNull();
+    expect(readScale).toHaveBeenCalledOnce();
     quantity.value = '2';
     quantity.dispatchEvent(new Event('input', { bubbles: true }));
     fixture.detectChanges();
     expect(quantity.value).toBe('');
     expect((fixture.nativeElement.querySelector('.pos-dialog .dialog-actions .finish-button') as HTMLButtonElement).disabled).toBe(true);
-    (fixture.nativeElement.querySelector('.scale-read-button') as HTMLButtonElement).click();
+    await new Promise<void>(resolve => setTimeout(resolve, 1200));
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(readScale).toHaveBeenCalledOnce();
+    expect(readScale).toHaveBeenCalledTimes(2);
+    expect(fixture.nativeElement.querySelector('.scale-override-panel')).toBeNull();
     expect((fixture.nativeElement.querySelector('#product-quantity') as HTMLInputElement).value).toBe('0,750');
     expect((fixture.nativeElement.querySelector('#product-quantity') as HTMLInputElement).readOnly).toBe(true);
     expect(fixture.nativeElement.querySelector('.scale-status[role="status"]').textContent).toContain('0,750 kg');
     expect(fixture.nativeElement.querySelector('.sale-receipt')).toBeNull();
+    (fixture.nativeElement.querySelector('.pos-dialog .dialog-close') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelectorAll('.product-card')[1] as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(readScale).toHaveBeenCalledTimes(2);
+    expect(fixture.nativeElement.querySelector('.quantity-field').textContent).toContain('Cantidad (unidad)');
+    expect(fixture.nativeElement.querySelector('.quantity-field').textContent).not.toContain('Peso');
+    expect((fixture.nativeElement.querySelector('#product-quantity') as HTMLInputElement).readOnly).toBe(false);
+    expect(fixture.nativeElement.querySelector('.scale-status')).toBeNull();
   });
 
   it('accepts one manual weight after a supervisor PIN and saves the audit grant', async () => {
@@ -1617,6 +1635,7 @@ describe('PosPage', () => {
       { provide: ScaleManualOverrideClient, useValue: {
         authorizers: () => of([{ userId: 'supervisor-id', username: 'supervisor' }]), authorize } },
       { provide: PosDeviceClient, useValue: {
+        readScale: vi.fn().mockRejectedValue(new Error('INVALID_SCALE_READING')),
         deviceAvailability: async () => ({ scale: { port: 'COM6', baudRate: 9600 }, printer: null }) } },
       { provide: CatalogClient, useValue: {
         priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
@@ -1636,6 +1655,10 @@ describe('PosPage', () => {
     fixture.detectChanges();
     const quantity = fixture.nativeElement.querySelector('#product-quantity') as HTMLInputElement;
     expect(quantity.readOnly).toBe(true);
+    expect(fixture.nativeElement.querySelector('.scale-override-panel')).toBeNull();
+    await new Promise<void>(resolve => setTimeout(resolve, 2200));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.scale-override-panel')).not.toBeNull();
     const pin = fixture.nativeElement.querySelector('#scale-override-pin') as HTMLInputElement;
     pin.value = '123456';
     pin.dispatchEvent(new Event('input', { bubbles: true }));

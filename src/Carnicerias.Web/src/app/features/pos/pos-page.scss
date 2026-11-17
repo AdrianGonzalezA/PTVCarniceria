@@ -236,6 +236,7 @@
 .shift-withdrawals-heading button { min-height: 2rem; }
 .shift-withdrawals p { font-size: 0.8rem; }
 .shift-withdrawals .finish-button { margin-top: 0.7rem; }
+.withdrawal-dialog .pos-success { margin: 0.7rem 0 0; padding: 0.65rem 0.75rem; color: #155438; background: #e7f6ed; border-left: 3px solid #29805a; border-radius: 0.2rem; font-size: 0.82rem; line-height: 1.4; }
 .shift-withdrawal-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.2rem 0.6rem; padding: 0.5rem 0; border-top: 1px solid var(--pos-border); font-size: 0.8rem; }
 .shift-withdrawal-row strong { text-align: right; }
 .shift-withdrawal-row small { grid-column: 1 / -1; color: var(--pos-muted); }

@@ -53,8 +53,11 @@ public sealed class CashWithdrawalVisualEndpointTests
                 Assert.Empty(await db.Database.GetPendingMigrationsAsync());
                 var permission = await db.Permissions.SingleAsync(item =>
                     item.Code == PlatformPermissionCatalog.CashWithdrawalApprove);
+                var usersPermission = await db.Permissions.SingleAsync(item =>
+                    item.Code == PlatformPermissionCatalog.UsersManage);
                 db.AddRange(company, branch, cashierRole, adminRole, cashier, adminA, adminB,
                     terminal, new RoleCapability(adminRole.Id, permission.Id),
+                    new RoleCapability(adminRole.Id, usersPermission.Id),
                     new UserAssignment(cashier.Id, cashierRole.Id, company.Id),
                     new UserAssignment(adminA.Id, adminRole.Id, company.Id),
                     new UserAssignment(adminB.Id, adminRole.Id, company.Id));
@@ -69,6 +72,10 @@ public sealed class CashWithdrawalVisualEndpointTests
                 adminA, password);
             using var adminClientB = await LoginAsync(factory, company, branch,
                 adminB, password);
+
+            using var pinSetup = await adminClientA.PutAsJsonAsync(
+                $"/api/users/{adminA.Id}/withdrawal-pin", new { pin = "654321" });
+            Assert.Equal(HttpStatusCode.NoContent, pinSetup.StatusCode);
 
             using var opened = await cashierClient.PostAsJsonAsync("/api/cashier-shifts",
                 new { openingCash = 1000m });
@@ -161,6 +168,46 @@ public sealed class CashWithdrawalVisualEndpointTests
             using var closed = await cashierClient.PostAsJsonAsync(
                 "/api/cashier-shifts/current/close", new { });
             Assert.Equal(HttpStatusCode.OK, closed.StatusCode);
+
+            using var secondCashierClient = await LoginAsync(factory, company, branch,
+                cashier, password, credential.Token);
+            using var reopened = await secondCashierClient.PostAsJsonAsync("/api/cashier-shifts",
+                new { openingCash = 600m });
+            Assert.Equal(HttpStatusCode.Created, reopened.StatusCode);
+            using var authorizers = await secondCashierClient.GetAsync(
+                "/api/cashier-shifts/current/withdrawals/authorizers");
+            Assert.Equal(HttpStatusCode.OK, authorizers.StatusCode);
+            var eligible = await ReadAsync(authorizers);
+            Assert.Equal(adminA.Id, Assert.Single(eligible.EnumerateArray()).GetProperty("userId").GetGuid());
+
+            var onSiteOperation = Guid.NewGuid();
+            var onSiteUrl = "/api/cashier-shifts/current/withdrawals/instant";
+            using var badPin = await secondCashierClient.PostAsJsonAsync(onSiteUrl,
+                new { operationId = onSiteOperation, method = "cash", amount = 500m,
+                    reason = "Retiro presencial", authorizerUserId = adminA.Id, pin = "000000" });
+            Assert.Equal(HttpStatusCode.Forbidden, badPin.StatusCode);
+            using var noFunds = await secondCashierClient.PostAsJsonAsync(onSiteUrl,
+                new { operationId = Guid.NewGuid(), method = "cash", amount = 601m,
+                    reason = "Saldo insuficiente", authorizerUserId = adminA.Id, pin = "654321" });
+            Assert.Equal(HttpStatusCode.Conflict, noFunds.StatusCode);
+            Assert.Equal("WITHDRAWAL_INSUFFICIENT_CASH",
+                (await ReadAsync(noFunds)).GetProperty("error").GetProperty("code").GetString());
+            var onSiteBody = new { operationId = onSiteOperation, method = "cash", amount = 500m,
+                reason = "Retiro presencial", authorizerUserId = adminA.Id, pin = "654321" };
+            using var onSite = await secondCashierClient.PostAsJsonAsync(onSiteUrl, onSiteBody);
+            Assert.Equal(HttpStatusCode.Created, onSite.StatusCode);
+            var onSiteId = (await ReadAsync(onSite)).GetProperty("id").GetGuid();
+            using var replay = await secondCashierClient.PostAsJsonAsync(onSiteUrl, onSiteBody);
+            Assert.Equal(HttpStatusCode.OK, replay.StatusCode);
+            Assert.Equal(onSiteId, (await ReadAsync(replay)).GetProperty("id").GetGuid());
+            using var secondCurrent = await secondCashierClient.GetAsync("/api/cashier-shifts/current");
+            var secondShift = await ReadAsync(secondCurrent);
+            Assert.Equal(100m, secondShift.GetProperty("cashBalance").GetDecimal());
+            Assert.Equal(500m, secondShift.GetProperty("cashWithdrawals").GetDecimal());
+            await using (var db = new PlatformAccessDbContext(options))
+                Assert.Single(await db.CashLedgerMovements.AsNoTracking()
+                    .Where(item => item.CompanyId == company.Id && item.OperationId == onSiteOperation)
+                    .ToArrayAsync());
         }
         finally
         {
@@ -172,6 +219,8 @@ public sealed class CashWithdrawalVisualEndpointTests
                 await db.CashWithdrawalRequests.Where(item => item.CompanyId == company.Id)
                     .ExecuteDeleteAsync();
                 await db.CashLedgerMovements.Where(item => item.CompanyId == company.Id)
+                    .ExecuteDeleteAsync();
+                await db.ShiftClosingReports.Where(item => item.CompanyId == company.Id)
                     .ExecuteDeleteAsync();
                 await db.CashierShifts.Where(item => item.CompanyId == company.Id)
                     .ExecuteDeleteAsync();

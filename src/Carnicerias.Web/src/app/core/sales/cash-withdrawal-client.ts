@@ -28,12 +28,30 @@ export interface CashWithdrawalPage {
   readonly totalItems: number;
 }
 
+export interface CashWithdrawalAuthorizer {
+  readonly userId: string;
+  readonly username: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class CashWithdrawalClient {
   private readonly http = inject(HttpClient);
 
   current() {
     return this.http.get<readonly CashWithdrawal[]>('/api/cashier-shifts/current/withdrawals',
+      { withCredentials: true });
+  }
+
+
+  authorizers() {
+    return this.http.get<readonly CashWithdrawalAuthorizer[]>(
+      '/api/cashier-shifts/current/withdrawals/authorizers', { withCredentials: true });
+  }
+
+  approveOnSite(operationId: string, amount: number, reason: string,
+    authorizerUserId: string, pin: string) {
+    return this.http.post<CashWithdrawal>('/api/cashier-shifts/current/withdrawals/instant',
+      { operationId, method: 'cash', amount, reason, authorizerUserId, pin },
       { withCredentials: true });
   }
 

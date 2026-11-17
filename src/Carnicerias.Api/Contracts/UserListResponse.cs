@@ -12,4 +12,5 @@ public sealed record UserListItemResponse(
     string Username,
     string Email,
     bool IsActive,
-    DateTimeOffset CreatedAtUtc);
+    DateTimeOffset CreatedAtUtc,
+    bool HasWithdrawalPin);

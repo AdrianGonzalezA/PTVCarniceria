@@ -18,7 +18,7 @@ import { ConfirmedSale, SaleDocumentType, SaleDraft, SaleDraftClient, SaleDraftL
 import { ReceiptPdfClient } from '../../core/sales/receipt-pdf-client';
 import { AuthorizedFiscalDocument, FiscalDocumentClient } from '../../core/sales/fiscal-document-client';
 import { CashierShift, CashierShiftClient, ShiftClosingReport } from '../../core/sales/cashier-shift-client';
-import { CashWithdrawal, CashWithdrawalClient } from '../../core/sales/cash-withdrawal-client';
+import { CashWithdrawal, CashWithdrawalAuthorizer, CashWithdrawalClient } from '../../core/sales/cash-withdrawal-client';
 import { CurrentSession, SessionClient } from '../../core/session/session-client';
 import { CreditCustomerAccount, CreditCustomerClient, CreditCustomerOption, FiscalCustomerOption } from '../../core/customers/credit-customer-client';
 import { AccountCollectionDialog } from './account-collection-dialog';
@@ -279,6 +279,11 @@ export class PosPage implements OnInit {
   protected readonly shiftError = signal<string | null>(null);
   protected readonly withdrawalAmount = signal('');
   protected readonly withdrawalReason = signal('');
+  protected readonly withdrawalAuthorizers = signal<readonly CashWithdrawalAuthorizer[]>([]);
+  protected readonly withdrawalAuthorizersLoading = signal(false);
+  protected readonly withdrawalAuthorizerId = signal('');
+  protected readonly withdrawalPin = signal('');
+  protected readonly withdrawalSuccess = signal<string | null>(null);
   protected readonly withdrawals = signal<readonly CashWithdrawal[]>([]);
   protected readonly hasPendingWithdrawal = computed(() =>
     this.withdrawals().some(withdrawal => withdrawal.status === 'pending'));
@@ -1701,7 +1706,38 @@ export class PosPage implements OnInit {
     this.shiftDialog.set(false);
     this.withdrawalDialog.set(true);
     this.withdrawalError.set(null);
+    this.withdrawalSuccess.set(null);
+    this.withdrawalPin.set('');
+    this.loadWithdrawalAuthorizers();
     this.loadCashierShift();
+  }
+
+  protected closeWithdrawalDialog(): void {
+    if (this.withdrawalBusy()) return;
+    this.withdrawalPin.set('');
+    this.withdrawalDialog.set(false);
+  }
+
+  protected refreshWithdrawals(): void {
+    this.loadWithdrawalAuthorizers();
+    this.loadCashierShift();
+  }
+
+  protected loadWithdrawalAuthorizers(): void {
+    this.withdrawalAuthorizersLoading.set(true);
+    this.cashWithdrawalClient.authorizers().subscribe({
+      next: authorizers => {
+        this.withdrawalAuthorizersLoading.set(false);
+        this.withdrawalAuthorizers.set(authorizers);
+        if (!authorizers.some(item => item.userId === this.withdrawalAuthorizerId()))
+          this.withdrawalAuthorizerId.set(authorizers[0]?.userId ?? '');
+      },
+      error: () => {
+        this.withdrawalAuthorizersLoading.set(false);
+        this.withdrawalAuthorizers.set([]);
+        this.withdrawalError.set('No se pudieron consultar los responsables habilitados. Reintentá.');
+      },
+    });
   }
 
   protected updateWithdrawalAmount(event: Event): void {
@@ -1714,6 +1750,18 @@ export class PosPage implements OnInit {
     this.withdrawalOperationId = null;
   }
 
+  protected updateWithdrawalAuthorizer(event: Event): void {
+    this.withdrawalAuthorizerId.set((event.target as HTMLSelectElement).value);
+    this.withdrawalPin.set('');
+    this.withdrawalOperationId = null;
+  }
+
+  protected updateWithdrawalPin(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    input.value = input.value.replace(/\D/g, '').slice(0, 6);
+    this.withdrawalPin.set(input.value);
+  }
+
   protected requestWithdrawal(): void {
     if (this.withdrawalBusy() || !this.cashierShift()) return;
     const amount = parseLocalizedDecimal(this.withdrawalAmount(), 2);
@@ -1723,24 +1771,39 @@ export class PosPage implements OnInit {
       this.withdrawalError.set('Ingresá un importe positivo y un motivo de hasta 500 caracteres.');
       return;
     }
+    if (!this.withdrawalAuthorizerId() || !/^\d{6}$/.test(this.withdrawalPin())) {
+      this.withdrawalError.set('Seleccioná al responsable e ingresá su PIN de seis dígitos.');
+      return;
+    }
     this.withdrawalOperationId ??= crypto.randomUUID();
     this.withdrawalBusy.set(true);
     this.withdrawalError.set(null);
-    this.cashWithdrawalClient.request(this.withdrawalOperationId, amount, reason).subscribe({
-      next: () => {
+    this.withdrawalSuccess.set(null);
+    this.cashWithdrawalClient.approveOnSite(this.withdrawalOperationId, amount, reason,
+      this.withdrawalAuthorizerId(), this.withdrawalPin()).subscribe({
+      next: withdrawal => {
         this.withdrawalBusy.set(false);
         this.withdrawalOperationId = null;
         this.withdrawalAmount.set('');
         this.withdrawalReason.set('');
-        this.loadWithdrawals();
+        this.withdrawalPin.set('');
+        this.withdrawalSuccess.set(`Retiro de ${this.formatMoney(withdrawal.amount)} autorizado por ${withdrawal.decisionByName ?? 'el responsable'}. El efectivo ya se descontó de la caja.`);
+        this.loadCashierShift();
       },
       error: (error: HttpErrorResponse) => {
         this.withdrawalBusy.set(false);
+        this.withdrawalPin.set('');
         this.withdrawalError.set(error.status === 0
-          ? 'No hay conexión. La solicitud puede haberse guardado; reintentá sin cambiar los datos.'
+          ? 'No hay conexión. El retiro puede haberse registrado; reintentá con los mismos datos y pedí el PIN nuevamente.'
           : error.error?.error?.code === 'CASHIER_SHIFT_REQUIRED'
             ? 'El turno ya no está abierto. Actualizá su estado.'
-            : 'No se pudo registrar el retiro. Reintentá con los mismos datos.');
+            : error.error?.error?.code === 'WITHDRAWAL_INSUFFICIENT_CASH'
+              ? 'No hay efectivo registrado suficiente para este retiro.'
+              : error.error?.error?.code === 'WITHDRAWAL_AUTHORIZATION_FAILED'
+                ? 'El PIN o el permiso del responsable no son válidos.'
+                : error.status === 429
+                  ? 'Demasiados intentos. Esperá un minuto antes de volver a autorizar.'
+                  : 'No se pudo registrar el retiro. Reintentá con los mismos datos.');
       },
     });
   }

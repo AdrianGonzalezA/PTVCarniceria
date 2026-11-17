@@ -44,6 +44,11 @@ export class UsersPage implements OnInit {
   protected readonly assignmentUsername = computed(() => this.pageData()?.items.find((user) =>
     user.userId === this.assignmentUserId())?.username ?? 'usuario');
   protected readonly passwordUserId = signal<string | null>(null);
+  protected readonly pinUserId = signal<string | null>(null);
+  protected readonly pinDraft = signal('');
+  protected readonly pinSaving = signal(false);
+  protected readonly pinUsername = computed(() => this.pageData()?.items.find((user) =>
+    user.userId === this.pinUserId())?.username ?? 'usuario');
   protected readonly resetPasswordDraft = signal('');
   protected readonly resettingPassword = signal(false);
   protected readonly passwordUsername = computed(() => this.pageData()?.items.find((user) =>
@@ -302,6 +307,48 @@ export class UsersPage implements OnInit {
       error: () => {
         this.resettingPassword.set(false);
         this.actionError.set('No se pudo restablecer la contraseña del usuario.');
+      },
+    });
+  }
+
+  protected openPinEditor(userId: string): void {
+    this.pinUserId.set(userId);
+    this.pinDraft.set('');
+    this.actionError.set(null);
+  }
+
+  protected closePinEditor(): void {
+    if (this.pinSaving()) return;
+    this.pinUserId.set(null);
+    this.pinDraft.set('');
+  }
+
+  protected updatePin(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    input.value = input.value.replace(/\D/g, '').slice(0, 6);
+    this.pinDraft.set(input.value);
+  }
+
+  protected savePin(): void {
+    const userId = this.pinUserId();
+    if (!userId || !/^\d{6}$/.test(this.pinDraft()) || this.pinSaving()) {
+      this.actionError.set('Ingresá un PIN de seis dígitos.');
+      return;
+    }
+    this.pinSaving.set(true);
+    this.actionError.set(null);
+    this.usersClient.setWithdrawalPin(userId, this.pinDraft()).subscribe({
+      next: () => {
+        this.pinSaving.set(false);
+        this.pageData.update(page => page && ({ ...page, items: page.items.map(user =>
+          user.userId === userId ? { ...user, hasWithdrawalPin: true } : user) }));
+        this.closePinEditor();
+        this.actionMessage.set('PIN de autorización de retiros actualizado.');
+      },
+      error: () => {
+        this.pinSaving.set(false);
+        this.pinDraft.set('');
+        this.actionError.set('No se pudo actualizar el PIN. Intentá de nuevo.');
       },
     });
   }

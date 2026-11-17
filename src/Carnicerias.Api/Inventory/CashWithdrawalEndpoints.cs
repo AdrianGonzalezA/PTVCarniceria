@@ -14,8 +14,12 @@ public static class CashWithdrawalEndpoints
     {
         endpoints.MapGet("/api/cashier-shifts/current/withdrawals", ListCurrentAsync)
             .RequireOperationalContext();
+        endpoints.MapGet("/api/cashier-shifts/current/withdrawals/authorizers", ListAuthorizersAsync)
+            .RequireOperationalContext();
         endpoints.MapPost("/api/cashier-shifts/current/withdrawals", RequestAsync)
             .RequireOperationalContext();
+        endpoints.MapPost("/api/cashier-shifts/current/withdrawals/instant", ApproveOnSiteAsync)
+            .RequireOperationalContext().RequireRateLimiting("withdrawal-pin");
         var admin = endpoints.MapGroup("/api/admin/cash-withdrawals")
             .RequireOperationalPermission(PlatformPermissionCatalog.CashWithdrawalApprove);
         admin.MapGet("", ListAdminAsync);
@@ -37,7 +41,119 @@ public static class CashWithdrawalEndpoints
                 item.BranchId == context.BranchId && item.CashierShiftId == shift.Id)
             .OrderByDescending(item => item.RequestedAtUtc).ThenByDescending(item => item.Id)
             .ToArrayAsync(cancellationToken);
-        return Results.Ok(rows.Select(item => ToResponse(item)).ToArray());
+        var approverIds = rows.Where(item => item.DecidedByUserId.HasValue)
+            .Select(item => item.DecidedByUserId!.Value).Distinct().ToArray();
+        var names = await db.Users.AsNoTracking()
+            .Where(user => user.CompanyId == context.CompanyId && approverIds.Contains(user.Id))
+            .ToDictionaryAsync(user => user.Id, user => user.Username, cancellationToken);
+        return Results.Ok(rows.Select(item => ToResponse(item, decisionByName:
+            item.DecidedByUserId.HasValue ? names.GetValueOrDefault(item.DecidedByUserId.Value) : null))
+            .ToArray());
+    }
+
+    private static async Task<IResult> ListAuthorizersAsync(PlatformAccessDbContext db,
+        OperationalContextAccessor accessor, OperationalContextAccessService contextAccess,
+        CancellationToken cancellationToken)
+    {
+        var context = accessor.Context;
+        var candidates = await db.Users.AsNoTracking()
+            .Where(user => user.CompanyId == context.CompanyId && user.IsActive &&
+                user.Id != context.UserId && user.WithdrawalPinHash != null)
+            .OrderBy(user => user.UsernameNormalized)
+            .Select(user => new { user.Id, user.Username })
+            .ToArrayAsync(cancellationToken);
+        var authorized = new List<object>();
+        foreach (var candidate in candidates)
+        {
+            var resolved = await contextAccess.ResolveAsync(candidate.Id, Guid.Empty,
+                context.CompanyId, context.BranchId, cancellationToken);
+            if (resolved?.Context.Permissions.Contains(PlatformPermissionCatalog.CashWithdrawalApprove) == true)
+                authorized.Add(new { userId = candidate.Id, username = candidate.Username });
+        }
+        return Results.Ok(authorized);
+    }
+
+    private static async Task<IResult> ApproveOnSiteAsync(InstantWithdrawalRequest? body,
+        PlatformAccessDbContext db, OperationalContextAccessor accessor,
+        OperationalContextAccessService contextAccess, IPasswordHasher passwordHasher,
+        TimeProvider timeProvider, HttpContext httpContext, CancellationToken cancellationToken)
+    {
+        if (!ValidOrigin(httpContext)) return Error(403, "CSRF_REJECTED");
+        if (body is null || body.OperationId == Guid.Empty || body.Method != "cash" ||
+            body.Amount <= 0 || body.Amount > 9_999_999_999.99m ||
+            decimal.Round(body.Amount, 2) != body.Amount ||
+            string.IsNullOrWhiteSpace(body.Reason) || body.Reason.Trim().Length > 500 ||
+            body.AuthorizerUserId == Guid.Empty || body.Pin is not { Length: 6 } pin ||
+            !pin.All(char.IsAsciiDigit))
+            return Error(400, "VALIDATION_ERROR");
+        if (accessor.TerminalId is null) return Error(409, "POS_TERMINAL_REQUIRED");
+        var context = accessor.Context;
+        if (body.AuthorizerUserId == context.UserId)
+            return Error(403, "WITHDRAWAL_AUTHORIZATION_FAILED");
+        try
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable, cancellationToken);
+            var existing = await db.CashWithdrawalRequests.AsNoTracking().SingleOrDefaultAsync(item =>
+                item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
+                item.OperationId == body.OperationId, cancellationToken);
+            if (existing is not null)
+            {
+                if (existing.Status != CashWithdrawalStatus.Approved ||
+                    existing.DecidedByUserId != body.AuthorizerUserId)
+                    return Error(409, "WITHDRAWAL_OPERATION_CONFLICT");
+                var approverName = await db.Users.AsNoTracking()
+                    .Where(user => user.Id == body.AuthorizerUserId && user.CompanyId == context.CompanyId)
+                    .Select(user => user.Username).SingleOrDefaultAsync(cancellationToken);
+                return SameRequest(existing, context.UserId, accessor.TerminalId,
+                    new CreateWithdrawalRequest(body.OperationId, body.Method, body.Amount, body.Reason),
+                    approverName);
+            }
+
+            var authorizer = await db.Users.AsNoTracking().SingleOrDefaultAsync(user =>
+                user.Id == body.AuthorizerUserId && user.CompanyId == context.CompanyId &&
+                user.IsActive && user.WithdrawalPinHash != null, cancellationToken);
+            var authorized = authorizer is not null &&
+                (await contextAccess.ResolveAsync(authorizer.Id, Guid.Empty, context.CompanyId,
+                    context.BranchId, cancellationToken))?.Context.Permissions
+                    .Contains(PlatformPermissionCatalog.CashWithdrawalApprove) == true;
+            if (!authorized || !passwordHasher.Verify(pin, authorizer!.WithdrawalPinHash))
+                return Error(403, "WITHDRAWAL_AUTHORIZATION_FAILED");
+
+            var shift = await db.CashierShifts.AsNoTracking().SingleOrDefaultAsync(item =>
+                item.CompanyId == context.CompanyId && item.BranchId == context.BranchId &&
+                item.CashierId == context.UserId && item.PosTerminalId == accessor.TerminalId &&
+                item.Status == CashierShiftStatus.Open, cancellationToken);
+            if (shift is null) return Error(409, "CASHIER_SHIFT_REQUIRED");
+            var availableCash = await db.CashLedgerMovements.AsNoTracking()
+                .Where(item => item.CompanyId == context.CompanyId &&
+                    item.BranchId == context.BranchId && item.CashierShiftId == shift.Id &&
+                    item.Method == Carnicerias.Domain.Sales.PaymentMethod.Cash)
+                .SumAsync(item => (decimal?)item.AmountDelta, cancellationToken) ?? 0m;
+            if (availableCash < body.Amount)
+                return Error(409, "WITHDRAWAL_INSUFFICIENT_CASH");
+
+            var now = timeProvider.GetUtcNow();
+            var request = new CashWithdrawalRequest(context.CompanyId, context.BranchId,
+                accessor.TerminalId, shift.Id, context.UserId, body.OperationId,
+                body.Amount, body.Reason, now);
+            var movement = new CashLedgerMovement(context.CompanyId, context.BranchId,
+                shift.Id, context.UserId, body.OperationId,
+                Carnicerias.Domain.Sales.PaymentMethod.Cash,
+                CashLedgerMovementKind.ExtraordinaryWithdrawal, -body.Amount, now,
+                posTerminalId: accessor.TerminalId);
+            request.Approve(authorizer!.Id, movement.Id, availableCash, now);
+            db.CashWithdrawalRequests.Add(request);
+            db.CashLedgerMovements.Add(movement);
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return Results.Created($"/api/cashier-shifts/current/withdrawals/{request.Id}",
+                ToResponse(request, decisionByName: authorizer.Username));
+        }
+        catch (DbUpdateException exception) when (IsUniqueConflict(exception))
+        { return Error(409, "WITHDRAWAL_CONFLICT"); }
+        catch (Exception exception) when (IsSerializationFailure(exception))
+        { return Error(409, "WITHDRAWAL_CONFLICT"); }
     }
 
     private static async Task<IResult> RequestAsync(CreateWithdrawalRequest? body,
@@ -90,11 +206,12 @@ public static class CashWithdrawalEndpoints
     }
 
     private static IResult SameRequest(CashWithdrawalRequest existing, Guid cashierId,
-        Guid? terminalId, CreateWithdrawalRequest body) =>
+        Guid? terminalId, CreateWithdrawalRequest body, string? approverName = null) =>
         existing.RequestedByUserId == cashierId && existing.PosTerminalId == terminalId &&
         existing.Method == Carnicerias.Domain.Sales.PaymentMethod.Cash &&
         existing.Amount == body.Amount && existing.Reason == body.Reason.Trim()
-            ? Results.Ok(ToResponse(existing)) : Error(409, "WITHDRAWAL_OPERATION_CONFLICT");
+            ? Results.Ok(ToResponse(existing, decisionByName: approverName))
+            : Error(409, "WITHDRAWAL_OPERATION_CONFLICT");
 
     private static async Task<IResult> ListAdminAsync(PlatformAccessDbContext db,
         OperationalContextAccessor accessor, CancellationToken cancellationToken,
@@ -254,5 +371,7 @@ public static class CashWithdrawalEndpoints
 
     private sealed record CreateWithdrawalRequest(Guid OperationId, string Method,
         decimal Amount, string Reason);
+    private sealed record InstantWithdrawalRequest(Guid OperationId, string Method,
+        decimal Amount, string Reason, Guid AuthorizerUserId, string Pin);
     private sealed record DecideWithdrawalRequest(string Action, string? Reason);
 }

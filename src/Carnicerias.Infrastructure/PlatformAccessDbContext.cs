@@ -136,6 +136,7 @@ public sealed class PlatformAccessDbContext(DbContextOptions<PlatformAccessDbCon
             entity.Property(user => user.Email).HasMaxLength(320).IsRequired();
             entity.Property(user => user.EmailNormalized).HasMaxLength(320).IsRequired();
             entity.Property(user => user.PasswordHash).HasMaxLength(512).IsRequired();
+            entity.Property(user => user.WithdrawalPinHash).HasMaxLength(512);
             entity.HasOne<Company>().WithMany().HasForeignKey(user => user.CompanyId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(user => new { user.CompanyId, user.UsernameNormalized }).IsUnique()

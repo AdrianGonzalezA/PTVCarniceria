@@ -899,34 +899,50 @@
   @if (withdrawalDialog()) {
     <div class="dialog-backdrop">
       <section class="pos-dialog withdrawal-dialog" role="dialog" aria-modal="true" aria-labelledby="withdrawals-title">
-        <button class="dialog-close" type="button" aria-label="Cerrar ventana de retiro" [disabled]="withdrawalBusy()" (click)="withdrawalDialog.set(false)">×</button>
+        <button class="dialog-close" type="button" aria-label="Cerrar ventana de retiro" [disabled]="withdrawalBusy()" (click)="closeWithdrawalDialog()">×</button>
         <p class="eyebrow">{{ session()?.context?.branchName }} · {{ terminal()?.name }} · {{ session()?.username }}</p>
         <h2 id="withdrawals-title">Retiro de efectivo</h2>
-        <section class="shift-withdrawals" aria-label="Solicitudes de retiro del turno">
+        <section class="shift-withdrawals" aria-label="Retiros del turno">
           <div class="shift-withdrawals-heading">
-            <h3>Solicitar retiro</h3>
-            <button type="button" [disabled]="withdrawalLoading()" (click)="loadCashierShift()">Actualizar</button>
+            <h3>Autorizar y retirar</h3>
+            <button type="button" [disabled]="withdrawalLoading() || withdrawalAuthorizersLoading()" (click)="refreshWithdrawals()">Actualizar</button>
           </div>
-          <p>El administrador de la sucursal debe aprobar la solicitud. El efectivo se descuenta al aprobarla.</p>
+          <p>El responsable presente autoriza con su PIN. Al confirmar, el efectivo se descuenta de este turno.</p>
           <label class="quantity-field" for="withdrawal-amount">Importe
             <input id="withdrawal-amount" type="text" inputmode="decimal" [appLocalizedDecimal]="withdrawalAmount()" (input)="updateWithdrawalAmount($event)" />
           </label>
           <label class="quantity-field" for="withdrawal-reason">Motivo
             <input id="withdrawal-reason" type="text" maxlength="500" [value]="withdrawalReason()" (input)="updateWithdrawalReason($event)" />
           </label>
-          <button class="finish-button" type="button" [disabled]="withdrawalBusy()" (click)="requestWithdrawal()">{{ withdrawalBusy() ? 'Solicitando…' : 'Solicitar retiro' }}</button>
+          <label class="quantity-field" for="withdrawal-authorizer">Responsable que autoriza
+            <select id="withdrawal-authorizer" [value]="withdrawalAuthorizerId()" (change)="updateWithdrawalAuthorizer($event)">
+              @for (authorizer of withdrawalAuthorizers(); track authorizer.userId) {
+                <option [value]="authorizer.userId">{{ authorizer.username }}</option>
+              }
+            </select>
+          </label>
+          @if (!withdrawalAuthorizersLoading() && withdrawalAuthorizers().length === 0) {
+            <p>Ningún responsable tiene un PIN de retiros habilitado para esta sucursal. Configuralo en Administración → Usuarios.</p>
+          }
+          <label class="quantity-field" for="withdrawal-pin">PIN del responsable
+            <input id="withdrawal-pin" type="password" inputmode="numeric" autocomplete="off"
+              maxlength="6" pattern="[0-9]{6}" [value]="withdrawalPin()" (input)="updateWithdrawalPin($event)" />
+          </label>
+          <button class="finish-button" type="button" [disabled]="withdrawalBusy() || withdrawalAuthorizers().length === 0"
+            (click)="requestWithdrawal()">{{ withdrawalBusy() ? 'Autorizando…' : 'Autorizar retiro y descontar' }}</button>
+          @if (withdrawalSuccess(); as message) { <p class="pos-success" role="status">{{ message }}</p> }
           @if (withdrawalError(); as error) { <p class="pos-error" role="alert">{{ error }}</p> }
           @if (withdrawalLoading()) { <p role="status">Consultando retiros…</p> }
           @for (withdrawal of withdrawals(); track withdrawal.id) {
             <div class="shift-withdrawal-row">
               <span>{{ withdrawal.requestedAtUtc | date:'dd/MM/yyyy HH:mm' }} · {{ withdrawal.reason }}</span>
               <strong>{{ formatMoney(withdrawal.amount) }}</strong>
-              <small>{{ withdrawal.status === 'pending' ? 'Pendiente' : withdrawal.status === 'approved' ? 'Aprobado' : 'Rechazado' }}</small>
+              <small>{{ withdrawal.status === 'pending' ? 'Pendiente anterior' : withdrawal.status === 'approved' ? 'Aprobado' : 'Rechazado' }}@if (withdrawal.decisionByName) { · {{ withdrawal.decisionByName }} }</small>
             </div>
           }
         </section>
         <div class="dialog-actions">
-          <button class="dialog-cancel" type="button" [disabled]="withdrawalBusy()" (click)="withdrawalDialog.set(false)">Volver al POS</button>
+          <button class="dialog-cancel" type="button" [disabled]="withdrawalBusy()" (click)="closeWithdrawalDialog()">Volver al POS</button>
         </div>
       </section>
     </div>

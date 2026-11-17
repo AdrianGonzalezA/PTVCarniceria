@@ -2010,7 +2010,7 @@ describe('PosPage', () => {
     expect(opening.value).toBe('44,00');
   });
 
-  it('keeps a pending withdrawal visible and reuses its operation id after a network failure', async () => {
+  it('authorizes a withdrawal on site and reuses its operation id after a network failure', async () => {
     const session: CurrentSession = {
       userId: 'cashier-id', username: 'cajero', expiresAtUtc: '2026-11-04T22:00:00Z',
       context: { userId: 'cashier-id', companyId: 'company-id', companyName: 'Empresa',
@@ -2025,15 +2025,17 @@ describe('PosPage', () => {
       requestedByUserId: 'cashier-id', requesterName: 'cajero',
       requestedAtUtc: '2026-11-04T18:30:00Z', decidedByUserId: null,
       decisionByName: null, decidedAtUtc: null, decisionReason: null, ledgerMovementId: null };
-    const request = vi.fn().mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 0 })))
-      .mockReturnValueOnce(of({ ...pending, id: 'new-withdrawal' }));
+    const approveOnSite = vi.fn().mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 0 })))
+      .mockReturnValueOnce(of({ ...pending, id: 'new-withdrawal', status: 'approved',
+        decisionByName: 'dueño', amount: 10.5 }));
     TestBed.configureTestingModule({ providers: [
       provideRouter([]),
       { provide: SessionClient, useValue: { current: () => of(session) } },
       { provide: CatalogClient, useValue: { priceLists: () => of([]) } },
       { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of(null) } },
       { provide: CashierShiftClient, useValue: { current: () => of(shift), lastClosed: () => of(null) } },
-      { provide: CashWithdrawalClient, useValue: { current: () => of([pending]), request } },
+      { provide: CashWithdrawalClient, useValue: { current: () => of([pending]),
+        authorizers: () => of([{ userId: 'owner-id', username: 'dueño' }]), approveOnSite } },
       { provide: InventoryClient, useValue: { stock: () => of([]) } },
     ] });
     const fixture = TestBed.createComponent(PosPage);
@@ -2061,16 +2063,23 @@ describe('PosPage', () => {
     const reason = dialog.querySelector<HTMLInputElement>('#withdrawal-reason')!;
     reason.value = 'Nuevo retiro';
     reason.dispatchEvent(new Event('input', { bubbles: true }));
+    const pin = dialog.querySelector<HTMLInputElement>('#withdrawal-pin')!;
+    pin.value = '123456';
+    pin.dispatchEvent(new Event('input', { bubbles: true }));
     fixture.detectChanges();
     const send = dialog.querySelector<HTMLButtonElement>('.shift-withdrawals .finish-button')!;
     send.click();
     fixture.detectChanges();
-    expect(dialog.textContent).toContain('La solicitud puede haberse guardado');
+    expect(dialog.textContent).toContain('El retiro puede haberse registrado');
+    expect(pin.value).toBe('');
+    pin.value = '123456';
+    pin.dispatchEvent(new Event('input', { bubbles: true }));
     send.click();
     fixture.detectChanges();
-    expect(request).toHaveBeenCalledTimes(2);
-    expect(request.mock.calls[0][0]).toBe(request.mock.calls[1][0]);
-    expect(request.mock.calls[0].slice(1)).toEqual([10.5, 'Nuevo retiro']);
+    expect(approveOnSite).toHaveBeenCalledTimes(2);
+    expect(approveOnSite.mock.calls[0][0]).toBe(approveOnSite.mock.calls[1][0]);
+    expect(approveOnSite.mock.calls[0].slice(1)).toEqual([10.5, 'Nuevo retiro', 'owner-id', '123456']);
+    expect(dialog.textContent?.replace(/\s/g, ' ')).toContain('Retiro de $ 10,50 autorizado por dueño');
   });
 
   it('prefills kilograms from a received piece barcode before adding the product', async () => {

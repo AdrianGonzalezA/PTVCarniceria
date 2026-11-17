@@ -60,6 +60,7 @@ public sealed class UserIdentity
     public string EmailNormalized { get; private set; }
 
     public string PasswordHash { get; private set; }
+    public string? WithdrawalPinHash { get; private set; }
 
     public Guid? CompanyId { get; private set; }
 
@@ -94,6 +95,13 @@ public sealed class UserIdentity
         if (string.IsNullOrWhiteSpace(passwordHash))
             throw new ArgumentException("Password hash is required.", nameof(passwordHash));
         PasswordHash = passwordHash;
+    }
+
+    public void SetWithdrawalPinHash(string pinHash)
+    {
+        if (string.IsNullOrWhiteSpace(pinHash))
+            throw new ArgumentException("Withdrawal PIN hash is required.", nameof(pinHash));
+        WithdrawalPinHash = pinHash;
     }
 
     public static UserIdentity Create(string username, string email, string passwordHash) =>

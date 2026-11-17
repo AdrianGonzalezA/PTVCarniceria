@@ -29,6 +29,8 @@ public static class UserEndpoints
             .RequireOperationalPermission(PlatformPermissionCatalog.UsersManage);
         endpoints.MapPut("/api/users/{userId:guid}/password", ResetUserPasswordAsync)
             .RequireOperationalPermission(PlatformPermissionCatalog.UsersManage);
+        endpoints.MapPut("/api/users/{userId:guid}/withdrawal-pin", SetWithdrawalPinAsync)
+            .RequireOperationalPermission(PlatformPermissionCatalog.UsersManage);
         endpoints.MapPatch("/api/users/{userId:guid}", UpdateUserAsync)
             .RequireOperationalPermission(PlatformPermissionCatalog.UsersManage);
         endpoints.MapDelete("/api/users/{userId:guid}/sessions", RevokeUserSessionsAsync)
@@ -78,7 +80,8 @@ public static class UserEndpoints
                 user.Username,
                 user.Email,
                 user.IsActive,
-                user.CreatedAtUtc))
+                user.CreatedAtUtc,
+                user.WithdrawalPinHash != null))
             .ToArrayAsync(cancellationToken);
 
         return Results.Ok(new UserListResponse(
@@ -134,7 +137,7 @@ public static class UserEndpoints
             return Error(StatusCodes.Status409Conflict, "USER_ALREADY_EXISTS");
         }
         return Results.Created($"/api/users/{user.Id}", new UserListItemResponse(
-            user.Id, user.Username, user.Email, user.IsActive, user.CreatedAtUtc));
+            user.Id, user.Username, user.Email, user.IsActive, user.CreatedAtUtc, false));
     }
 
     private static async Task<IResult> ListAssignmentsAsync(
@@ -264,6 +267,28 @@ public static class UserEndpoints
         return Results.NoContent();
     }
 
+    private static async Task<IResult> SetWithdrawalPinAsync(
+        Guid userId,
+        SetWithdrawalPinRequest? request,
+        PlatformAccessDbContext db,
+        IPasswordHasher passwordHasher,
+        OperationalContextAccessor operationalContext,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        if (!AllowedOrigin(httpContext)) return Error(StatusCodes.Status403Forbidden, "CSRF_REJECTED");
+        if (userId == Guid.Empty || request?.Pin is not { Length: 6 } pin ||
+            !pin.All(char.IsAsciiDigit))
+            return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
+        var user = await db.Users.SingleOrDefaultAsync(item => item.Id == userId &&
+            item.CompanyId == operationalContext.Context.CompanyId && !item.IsManufacturer,
+            cancellationToken);
+        if (user is null) return Error(StatusCodes.Status404NotFound, "USER_NOT_FOUND");
+        user.SetWithdrawalPinHash(passwordHasher.Hash(pin));
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.NoContent();
+    }
+
     private static async Task<IResult> UpdateUserAsync(
         Guid userId,
         UpdateUserRequest? request,
@@ -356,7 +381,8 @@ public static class UserEndpoints
             user.Username,
             user.Email,
             user.IsActive,
-            user.CreatedAtUtc));
+            user.CreatedAtUtc,
+            user.WithdrawalPinHash != null));
     }
 
     private static async Task<IResult> RevokeUserSessionsAsync(
@@ -482,6 +508,7 @@ public static class UserEndpoints
         string? Role);
     private sealed record ReplaceAssignmentsRequest(Guid[]? BranchIds, string? Role);
     private sealed record ResetPasswordRequest(string Password);
+    private sealed record SetWithdrawalPinRequest(string Pin);
     private sealed record PasswordPolicyResponse(int MinimumLength);
     private sealed record UserAssignmentsResponse(string Role, Guid[] BranchIds);
 }

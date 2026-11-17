@@ -120,6 +120,24 @@
         </app-admin-detail-dialog>
       }
 
+      @if (pinUserId()) {
+        <app-admin-detail-dialog labelledBy="user-pin-title" [compact]="true" [canClose]="!pinSaving()" (closed)="closePinEditor()">
+          <form class="user-editor" (submit)="$event.preventDefault(); savePin()">
+            <h3 id="user-pin-title">PIN de retiros de {{ pinUsername() }}</h3>
+            <p>Este PIN permite autorizar un retiro en la caja cuando el usuario tiene el permiso de aprobar retiros. No se muestra luego de guardarlo.</p>
+            <label for="withdrawal-pin-setup">PIN de seis dígitos</label>
+            <input id="withdrawal-pin-setup" name="withdrawal-pin" type="password" inputmode="numeric"
+              autocomplete="new-password" maxlength="6" pattern="[0-9]{6}" required
+              [value]="pinDraft()" (input)="updatePin($event)" />
+            @if (actionError(); as error) { <p class="error-message" role="alert">{{ error }}</p> }
+            <div class="row-actions">
+              <button type="submit" [disabled]="pinSaving()">{{ pinSaving() ? 'Guardando…' : 'Guardar PIN' }}</button>
+              <button type="button" class="secondary-button" [disabled]="pinSaving()" (click)="closePinEditor()">Cancelar</button>
+            </div>
+          </form>
+        </app-admin-detail-dialog>
+      }
+
       <form class="search-form" (ngSubmit)="search()">
         <div class="search-field">
           <label for="user-search">Buscar usuario</label>
@@ -198,6 +216,7 @@
                       </button>
                       <button type="button" class="secondary-button" [disabled]="actionUserId() !== null" (click)="openAssignments(user.userId)">Rol y sucursales</button>
                       <button type="button" class="secondary-button" [disabled]="actionUserId() !== null" (click)="openPasswordReset(user.userId)">Contraseña</button>
+                      <button type="button" class="secondary-button" [disabled]="actionUserId() !== null" (click)="openPinEditor(user.userId)">{{ user.hasWithdrawalPin ? 'Cambiar PIN de retiros' : 'Configurar PIN de retiros' }}</button>
                       </div>
                     </td>
                   </tr>

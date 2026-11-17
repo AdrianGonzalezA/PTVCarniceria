@@ -7,6 +7,7 @@ export interface UserListItem {
   readonly email: string;
   readonly isActive: boolean;
   readonly createdAtUtc: string;
+  readonly hasWithdrawalPin: boolean;
 }
 
 export interface UserListPage {
@@ -82,6 +83,11 @@ export class UserDirectoryClient {
   resetUserPassword(userId: string, password: string) {
     return this.http.put<void>(`/api/users/${encodeURIComponent(userId)}/password`,
       { password }, { withCredentials: true });
+  }
+
+  setWithdrawalPin(userId: string, pin: string) {
+    return this.http.put<void>(`/api/users/${encodeURIComponent(userId)}/withdrawal-pin`,
+      { pin }, { withCredentials: true });
   }
 
   update(userId: string, changes: { readonly username?: string; readonly email?: string; readonly isActive?: boolean }) {

@@ -90,6 +90,27 @@ describe('UsersPage', () => {
     }
   });
 
+  it('sets a six digit withdrawal PIN for an authorizer without displaying it afterward', () => {
+    const { fixture, http, page } = load();
+    const button = Array.from(page.querySelectorAll<HTMLButtonElement>('button'))
+      .find(item => item.textContent?.includes('Configurar PIN de retiros'))!;
+    button.click();
+    fixture.detectChanges();
+    const input = page.querySelector<HTMLInputElement>('#withdrawal-pin-setup')!;
+    expect(input.type).toBe('password');
+    input.value = '123456';
+    input.dispatchEvent(new Event('input'));
+    page.querySelector<HTMLFormElement>('dialog[aria-labelledby="user-pin-title"] form')!
+      .dispatchEvent(new Event('submit'));
+    const request = http.expectOne('/api/users/admin-id/withdrawal-pin');
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toEqual({ pin: '123456' });
+    request.flush(null);
+    fixture.detectChanges();
+    expect(page.querySelector('#withdrawal-pin-setup')).toBeNull();
+    expect(page.textContent).toContain('Cambiar PIN de retiros');
+  });
+
   it('creates a cashier scoped to selected branches', () => {
     const { fixture, http, page } = load();
     page.querySelector<HTMLButtonElement>('.create-user-button')!.click();
@@ -230,7 +251,7 @@ describe('UsersPage', () => {
 
   it('edits user details in a dialog, leaving the grid read-only', () => {
     const { fixture, http, page } = load();
-    page.querySelectorAll<HTMLButtonElement>('tbody .row-actions button')[5].click();
+    page.querySelector<HTMLButtonElement>('tbody tr:nth-child(2) .row-actions button')!.click();
     fixture.detectChanges();
     expect(page.querySelector('tbody input')).toBeNull();
     expect(page.querySelector('dialog[aria-labelledby="user-editor-title"]')).not.toBeNull();

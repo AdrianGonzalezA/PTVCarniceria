@@ -27,6 +27,8 @@ import { MercadoPagoClient, MercadoPagoIntent, MercadoPagoMode } from '../../cor
 import { IntegratedGatewayClient } from '../../core/sales/integrated-gateway-client';
 import { CheckoutInstrumentStatus, PaymentInstrumentDetails, SaleCheckout, SaleCheckoutClient } from '../../core/sales/sale-checkout-client';
 import { emptyPaymentDetailCatalog, PaymentDetailCatalog, PaymentDetailCatalogClient, paymentDetailOptions } from '../../core/sales/payment-detail-catalog';
+import { decodeKretzWeightEan, kretzQrExpectedCount, KretzWeightLabel,
+  parseKretzConsolidatedQr } from '../../core/scale/kretz-label';
 
 type SaleMode = 'weight' | 'unit';
 
@@ -88,6 +90,7 @@ interface SaleLine {
   readonly pieceCount?: number | null;
   readonly inventoryPieceId?: string;
   readonly pieceIdentifier?: string;
+  readonly scaleLabelReference?: string;
 }
 
 const categories = [
@@ -176,6 +179,9 @@ export class PosPage implements OnInit {
   private scaleRequestRevision = 0;
   private scannedCode = '';
   private lastScanKeyAt = 0;
+  private pendingKretzQr: { lines: string[]; expected: number; startedAt: number;
+    viewRevision: number } | null = null;
+  private readonly scaleScanBusy = signal(false);
   private mercadoPagoPollTimer: ReturnType<typeof setTimeout> | null = null;
   private gatewayRequestId = 0;
 
@@ -559,6 +565,7 @@ export class PosPage implements OnInit {
               quantity: line.quantity,
               ...(line.pieceCount != null ? { pieceCount: line.pieceCount } : {}),
               ...(line.inventoryPieceId ? { inventoryPieceId: line.inventoryPieceId } : {}),
+              ...(line.scaleLabelReference ? { scaleLabelReference: line.scaleLabelReference } : {}),
             })), slot, operation.discountAmount, operation.discountReason);
         return request.pipe(
           map((result) => ({ revision, slot, operation, result, error: null as HttpErrorResponse | null })),
@@ -619,7 +626,8 @@ export class PosPage implements OnInit {
         this.persistedDiscountReason.set(savedDraft.discountReason ?? '');
         this.lines.update((currentLines) => currentLines.map((line) => {
           const savedLine = savedDraft.lines.find((item) => item.productId === line.product.id &&
-            (item.inventoryPieceId ?? null) === (line.inventoryPieceId ?? null));
+            (item.inventoryPieceId ?? null) === (line.inventoryPieceId ?? null) &&
+            (item.scaleLabelReference ?? null) === (line.scaleLabelReference ?? null));
           return savedLine ? { ...line, product: { ...line.product, price: savedLine.unitPrice } } : line;
         }));
         this.persistedLines.set(savedDraft.lines.map((item) => ({
@@ -637,6 +645,7 @@ export class PosPage implements OnInit {
           pieceCount: item.pieceCount ?? null,
           ...(item.inventoryPieceId ? { inventoryPieceId: item.inventoryPieceId } : {}),
           ...(item.pieceIdentifier ? { pieceIdentifier: item.pieceIdentifier } : {}),
+          ...(item.scaleLabelReference ? { scaleLabelReference: item.scaleLabelReference } : {}),
         })));
       }
       if (revision === this.draftRevision) {
@@ -854,7 +863,8 @@ export class PosPage implements OnInit {
   }
 
   protected updateSearch(event: Event): void {
-    this.searchText.set((event.target as HTMLInputElement).value.slice(0, 80));
+    const value = (event.target as HTMLInputElement).value;
+    this.searchText.set(value.slice(0, value.includes(';') ? 1500 : 80));
     if (!this.isDemoPriceList()) this.realSearchSubmitted.set(false);
   }
 
@@ -909,7 +919,43 @@ export class PosPage implements OnInit {
   protected submitSearch(event: Event): void {
     event.preventDefault();
     if (!this.canOperate()) return;
+    if (this.scaleScanBusy()) return;
     const code = this.searchText().trim();
+    if (this.pendingKretzQr?.viewRevision !== this.ticketViewRevision) this.pendingKretzQr = null;
+    if (this.pendingKretzQr) {
+      const pending = this.pendingKretzQr;
+      this.searchText.set('');
+      if (Date.now() - pending.startedAt > 10_000 || !/^\d{13}$/.test(code)) {
+        this.pendingKretzQr = null;
+        this.errorMessage.set('La lectura QR de la balanza quedó incompleta. Volvé a escanearla.');
+        return;
+      }
+      pending.lines.push(code);
+      this.errorMessage.set(`Leyendo QR de balanza: ${pending.lines.length - 1} de ${pending.expected} cortes.`);
+      if (pending.lines.length === pending.expected + 1) {
+        this.pendingKretzQr = null;
+        this.acceptKretzQr(pending.lines.join('\n'));
+      }
+      return;
+    }
+    const expectedQrLines = kretzQrExpectedCount(code);
+    if (expectedQrLines) {
+      this.pendingKretzQr = { lines: [code], expected: expectedQrLines,
+        startedAt: Date.now(), viewRevision: this.ticketViewRevision };
+      this.searchText.set('');
+      this.errorMessage.set(`Leyendo QR de balanza: 0 de ${expectedQrLines} cortes.`);
+      return;
+    }
+    if (code.includes(';') || code.includes('\n')) {
+      this.acceptKretzQr(code);
+      return;
+    }
+    const scaleLabel = decodeKretzWeightEan(code);
+    if (scaleLabel) {
+      this.searchText.set('');
+      this.acceptKretzLabels([scaleLabel], null);
+      return;
+    }
     if (!this.isDemoPriceList()) {
       const priceListId = this.selectedPriceListId();
       if (!priceListId || code.length === 0) return;
@@ -922,6 +968,77 @@ export class PosPage implements OnInit {
 
     this.searchText.set('');
     this.openProduct(product);
+  }
+
+  @HostListener('window:paste', ['$event'])
+  protected captureKretzQrPaste(event: ClipboardEvent): void {
+    if (!this.canOperate() || !this.canSearchCatalog() || this.selectedProduct() || this.scaleScanBusy()) return;
+    const text = event.clipboardData?.getData('text')?.trim();
+    if (!text || !text.includes('\n') || !kretzQrExpectedCount(text.split(/\r?\n/, 1)[0])) return;
+    event.preventDefault();
+    this.searchText.set('');
+    this.acceptKretzQr(text);
+  }
+
+  private acceptKretzQr(value: string): void {
+    const qr = parseKretzConsolidatedQr(value);
+    if (!qr) {
+      this.errorMessage.set('El QR Kretz no coincide con el perfil de peso configurado para pruebas.');
+      return;
+    }
+    this.acceptKretzLabels(qr.labels, qr.header);
+  }
+
+  private acceptKretzLabels(labels: readonly KretzWeightLabel[], header: string | null): void {
+    const priceListId = this.selectedPriceListId();
+    if (!priceListId || this.isDemoPriceList() || this.scaleScanBusy() || this.liveDataProblem()) return;
+    const revision = this.ticketViewRevision;
+    const slot = this.activeTicketSlot();
+    this.scaleScanBusy.set(true);
+    this.errorMessage.set(null);
+    void Promise.all(labels.map(label => firstValueFrom(this.catalogClient.products({
+      priceListId, scalePlu: label.plu,
+    }).pipe(timeout(4000))))).then(pages => {
+      if (revision !== this.ticketViewRevision || slot !== this.activeTicketSlot() ||
+          this.selectedPriceListId() !== priceListId || this.liveDataProblem()) return;
+      const additions: SaleLine[] = labels.map((label, index) => {
+        const page = pages[index];
+        if (page.totalItems !== 1 || page.items[0]?.saleMode !== 'weight')
+          throw new Error(`El PLU ${label.plu} no corresponde a un artículo pesable con precio vigente.`);
+        const product = this.mapCatalogProduct(page.items[0]);
+        const reference = header
+          ? `QR:${header}:${String(index + 1).padStart(2, '0')}:${label.barcode}`
+          : `EAN:${label.barcode}`;
+        return { id: crypto.randomUUID(), product, quantity: label.weightKg,
+          pieceCount: 1, scaleLabelReference: reference };
+      });
+      const references = [...this.lines().map(line => line.scaleLabelReference),
+        ...additions.map(line => line.scaleLabelReference)].filter(Boolean);
+      if (new Set(references).size !== references.length)
+        throw new Error('Esta etiqueta de balanza ya está en el ticket.');
+      for (const productId of new Set(additions.map(line => line.product.id))) {
+        const product = additions.find(line => line.product.id === productId)!.product;
+        const available = this.availableStock(product) ?? 0;
+        const alreadyInTicket = this.lines().filter(line => line.product.id === productId && !line.inventoryPieceId)
+          .reduce((sum, line) => sum + line.quantity, 0);
+        const reservedByTicket = this.persistedLines().filter(line => line.product.id === productId && !line.inventoryPieceId)
+          .reduce((sum, line) => sum + line.quantity, 0);
+        const scanned = additions.filter(line => line.product.id === productId)
+          .reduce((sum, line) => sum + line.quantity, 0);
+        if (!this.canSellGenericWithoutStock(product) && alreadyInTicket + scanned > available + reservedByTicket)
+          throw new Error(`Stock insuficiente para ${product.name}: ${scanned.toLocaleString('es-AR')} kg leídos.`);
+      }
+      this.lines.update(lines => [...lines, ...additions]);
+      this.persistCurrentDraft();
+      this.focusScanInput();
+    }).catch((error: unknown) => {
+      if (revision === this.ticketViewRevision && slot === this.activeTicketSlot()) {
+        const message = error instanceof Error ? error.message : '';
+        this.errorMessage.set(message.startsWith('El PLU') || message.startsWith('Stock insuficiente') ||
+          message.startsWith('Esta etiqueta') ? message :
+          'No se pudo verificar la etiqueta de balanza. Reintentá la lectura.');
+      }
+    }).finally(() => this.scaleScanBusy.set(false));
   }
 
   protected selectCategory(id: string): void {
@@ -1239,7 +1356,7 @@ export class PosPage implements OnInit {
       this.errorMessage.set(this.liveDataProblem());
       return;
     }
-    if (line?.inventoryPieceId || line?.product.mode === 'weight' &&
+    if (line?.inventoryPieceId || line?.scaleLabelReference || line?.product.mode === 'weight' &&
         (!this.deviceConfigReady() || this.deviceConfigError() || !!this.devices().scale)) {
       input.value = String(line.quantity);
       this.errorMessage.set('El peso leído no se puede modificar. Quitá el renglón y volvé a pesarlo si no corresponde.');
@@ -1699,6 +1816,7 @@ export class PosPage implements OnInit {
     if (code === 'PRICE_LIST_NOT_AVAILABLE') return 'La lista de precios ya no está habilitada para esta sucursal.';
     if (code === 'PRODUCT_PRICE_NOT_AVAILABLE') return 'Hay un producto sin precio vigente en esta lista.';
     if (code === 'PRODUCT_NOT_AVAILABLE') return 'Uno de los productos ya no está disponible para la venta.';
+    if (code === 'INVALID_SCALE_LABEL') return 'La etiqueta de balanza no coincide con el PLU o el peso del artículo. Quitá ese renglón y volvé a escanear.';
     return error.status === 0
       ? 'No hay conexión con el servidor. El detalle se conserva; podés reintentar.'
       : `No se pudo guardar el ticket (HTTP ${error.status}). El detalle se conserva; podés reintentar.`;
@@ -2928,13 +3046,16 @@ export class PosPage implements OnInit {
   }
 
   private addProductLine(product: PosProduct, quantity: number, pieceId: string | null = null,
-    pieceIdentifier: string | null = null, pieceCount: number | null = null): void {
+    pieceIdentifier: string | null = null, pieceCount: number | null = null,
+    scaleLabelReference: string | null = null): void {
     this.lines.update((lines) => {
-      const existing = pieceId ? undefined : lines.find((line) => line.product.id === product.id && !line.inventoryPieceId);
+      const existing = pieceId || scaleLabelReference ? undefined : lines.find((line) =>
+        line.product.id === product.id && !line.inventoryPieceId && !line.scaleLabelReference);
       if (!existing) return [...lines, { id: crypto.randomUUID(), product, quantity,
         pieceCount,
         ...(pieceId ? { inventoryPieceId: pieceId } : {}),
-        ...(pieceIdentifier ? { pieceIdentifier } : {}) }];
+        ...(pieceIdentifier ? { pieceIdentifier } : {}),
+        ...(scaleLabelReference ? { scaleLabelReference } : {}) }];
       return lines.map((line) => line.id === existing.id
         ? { ...line, quantity: this.roundQuantity(line.quantity + quantity),
             pieceCount: line.pieceCount != null && pieceCount != null
@@ -3011,6 +3132,7 @@ export class PosPage implements OnInit {
           pieceCount: item.pieceCount ?? null,
           ...(item.inventoryPieceId ? { inventoryPieceId: item.inventoryPieceId } : {}),
           ...(item.pieceIdentifier ? { pieceIdentifier: item.pieceIdentifier } : {}),
+          ...(item.scaleLabelReference ? { scaleLabelReference: item.scaleLabelReference } : {}),
         })));
         this.persistedLines.set(this.lines());
         this.draftStatus.set('saved');

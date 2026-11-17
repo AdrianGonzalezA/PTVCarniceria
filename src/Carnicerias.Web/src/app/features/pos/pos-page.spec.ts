@@ -1594,6 +1594,52 @@ describe('PosPage', () => {
     expect(fixture.nativeElement.querySelector('.sale-receipt')).toBeNull();
   });
 
+  it('keeps two cuts of the same PLU separate when a Kretz QR is scanned', async () => {
+    const session: CurrentSession = {
+      userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-11-17T20:00:00Z',
+      context: { userId: 'user-id', companyId: 'company-id', companyName: 'Empresa',
+        branchId: 'branch-id', branchName: 'Sucursal', permissions: [], sessionId: 'session-id' },
+    };
+    const product = { id: 'asado', code: '1002', scalePlu: '00123', name: 'Asado',
+      categoryId: 'res', saleMode: 'weight' as const, price: 4900, availableStock: 10 };
+    const products = vi.fn(() => of({ items: [product], page: 1, pageSize: 50, totalItems: 1 }));
+    const savedRequests: (readonly { scaleLabelReference?: string }[])[] = [];
+    const save = vi.fn((priceListId: string, lines: readonly { scaleLabelReference?: string }[]) => {
+      expect(priceListId).toBe('list-id');
+      savedRequests.push(lines);
+      return NEVER;
+    });
+    TestBed.configureTestingModule({ providers: [
+      provideRouter([]),
+      { provide: SessionClient, useValue: { current: () => of(session) } },
+      { provide: PosDeviceClient, useValue: { deviceAvailability: async () => ({ scale: null, printer: null }) } },
+      { provide: CatalogClient, useValue: { priceLists: () => of([{ id: 'list-id', name: 'Mostrador' }]),
+        categories: () => of([{ id: 'res', name: 'Carne de res', productCount: 1 }]), products } },
+      { provide: SaleDraftClient, useValue: { list: () => of([]), current: () => of(null), save } },
+      { provide: InventoryClient, useValue: { stock: () => of([{ productId: 'asado', available: 10 }]) } },
+    ] });
+    const fixture = TestBed.createComponent(PosPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const payload = '17/11/2613:390003 A0102\n2000123007502\n2000123005003';
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', { value: { getData: () => payload } });
+    (fixture.nativeElement.querySelector('#product-search') as HTMLInputElement).dispatchEvent(paste);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const rows = fixture.nativeElement.querySelectorAll('.ticket-lines tbody tr');
+    expect(rows).toHaveLength(2);
+    expect((rows[0].querySelector('.quantity-input') as HTMLInputElement).value).toBe('0,750');
+    expect((rows[1].querySelector('.quantity-input') as HTMLInputElement).value).toBe('0,500');
+    expect(save).toHaveBeenCalledOnce();
+    const requestLines = savedRequests[0];
+    expect(requestLines.map(line => line.scaleLabelReference)).toEqual([
+      'QR:17/11/2613:390003 A0102:01:2000123007502',
+      'QR:17/11/2613:390003 A0102:02:2000123005003',
+    ]);
+  });
+
   it('keeps manual weight entry but offers no scale reading without an assignment', async () => {
     const session: CurrentSession = {
       userId: 'user-id', username: 'cajero', expiresAtUtc: '2026-10-06T20:00:00Z',

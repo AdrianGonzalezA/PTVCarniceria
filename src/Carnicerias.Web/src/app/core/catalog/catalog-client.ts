@@ -23,6 +23,7 @@ export interface CatalogProduct {
   readonly currency: 'ARS';
   readonly priceEffectiveFromUtc: string;
   readonly availableStock: number;
+  readonly scalePlu?: string | null;
 }
 
 export interface CatalogProductPage {
@@ -54,6 +55,7 @@ export class CatalogClient {
     readonly categoryId?: string;
     readonly q?: string;
     readonly code?: string;
+    readonly scalePlu?: string;
     readonly page?: number;
     readonly pageSize?: number;
   }) {
@@ -64,6 +66,7 @@ export class CatalogClient {
     if (filters.categoryId) params = params.set('categoryId', filters.categoryId);
     if (filters.q) params = params.set('q', filters.q);
     if (filters.code) params = params.set('code', filters.code);
+    if (filters.scalePlu) params = params.set('scalePlu', filters.scalePlu);
     return this.http.get<CatalogProductPage>('/api/catalog/products', {
       params,
       withCredentials: true,

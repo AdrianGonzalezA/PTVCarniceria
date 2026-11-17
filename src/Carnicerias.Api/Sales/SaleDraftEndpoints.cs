@@ -1,4 +1,5 @@
 using Carnicerias.Api.Security;
+using Carnicerias.Api.Catalog;
 using Carnicerias.Api.Inventory;
 using Carnicerias.Infrastructure;
 using Carnicerias.PlatformAccess;
@@ -79,8 +80,10 @@ public static class SaleDraftEndpoints
         if (request is null || request.PriceListId == Guid.Empty || request.Lines is null ||
             request.Lines.Count is < 1 or > 100 || request.Lines.Any(line =>
                 line.ProductId == Guid.Empty || line.Quantity <= 0 || line.Quantity > 10000 ||
-                decimal.Round(line.Quantity, 3) != line.Quantity || line.InventoryPieceId == Guid.Empty) ||
-            request.Lines.Select(line => (line.ProductId, line.InventoryPieceId)).Distinct().Count() != request.Lines.Count ||
+                decimal.Round(line.Quantity, 3) != line.Quantity || line.InventoryPieceId == Guid.Empty ||
+                line.ScaleLabelReference is { Length: > 80 }) ||
+            request.Lines.Select(line => (line.ProductId, line.InventoryPieceId,
+                line.ScaleLabelReference)).Distinct().Count() != request.Lines.Count ||
             request.Lines.Where(line => line.InventoryPieceId is not null)
                 .Select(line => line.InventoryPieceId).Distinct().Count() !=
             request.Lines.Count(line => line.InventoryPieceId is not null) ||
@@ -142,7 +145,8 @@ public static class SaleDraftEndpoints
                     cancellationToken);
                 if (product is null) return Error(StatusCodes.Status400BadRequest, "PRODUCT_NOT_AVAILABLE");
                 var existingLine = draft?.Lines.SingleOrDefault(line => line.ProductId == product.Id &&
-                    line.InventoryPieceId == requestedLine.InventoryPieceId);
+                    line.InventoryPieceId == requestedLine.InventoryPieceId &&
+                    line.ScaleLabelReference == requestedLine.ScaleLabelReference);
                 var saleMode = existingLine?.SaleMode ?? product.SaleMode;
                 if ((saleMode == ProductSaleMode.Unit && requestedLine.Quantity != decimal.Truncate(requestedLine.Quantity)) ||
                     (saleMode == ProductSaleMode.Weight && requestedLine.Quantity <= 0))
@@ -151,6 +155,13 @@ public static class SaleDraftEndpoints
                     (saleMode == ProductSaleMode.Unit && requestedLine.PieceCount is not null) ||
                     (requestedLine.InventoryPieceId is not null && requestedLine.PieceCount is not null and not 1))
                     return Error(StatusCodes.Status400BadRequest, "INVALID_PIECE_COUNT");
+
+                if (requestedLine.ScaleLabelReference is not null &&
+                    (requestedLine.InventoryPieceId is not null || saleMode != ProductSaleMode.Weight ||
+                     !KretzScaleLabel.TryDecode(requestedLine.ScaleLabelReference, out var label) ||
+                     (existingLine is null && product.ScalePlu != label.Plu) ||
+                     requestedLine.Quantity != label.WeightKg))
+                    return Error(StatusCodes.Status400BadRequest, "INVALID_SCALE_LABEL");
 
                 InventoryPiece? piece = null;
                 if (requestedLine.InventoryPieceId is Guid pieceId)
@@ -196,7 +207,8 @@ public static class SaleDraftEndpoints
                     existingLine?.ProductName ?? product.Name,
                     existingLine?.Unit ?? product.Unit, saleMode, requestedLine.Quantity, price,
                     piece?.Id, piece?.ExternalIdentifier,
-                    piece is null ? requestedLine.PieceCount : 1));
+                    piece is null ? requestedLine.PieceCount : 1,
+                    requestedLine.ScaleLabelReference));
             }
 
             var undiscountedTotal = lines.Sum(line => decimal.Round(line.Quantity * line.UnitPrice,
@@ -413,7 +425,8 @@ public static class SaleDraftEndpoints
             .Select(line => new SaleDraftLineResponse(
                 line.Id, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
                 line.SaleMode == ProductSaleMode.Weight ? "weight" : "unit", line.Quantity, line.UnitPrice,
-                line.InventoryPieceId, line.PieceIdentifier, line.PieceCount)).ToArray());
+                line.InventoryPieceId, line.PieceIdentifier, line.PieceCount,
+                line.ScaleLabelReference)).ToArray());
 
     private static IResult Error(int statusCode, string code) => Results.Json(
         new Carnicerias.Api.Contracts.ErrorResponse(
@@ -423,11 +436,12 @@ public static class SaleDraftEndpoints
     private sealed record SaveSaleDraftRequest(Guid PriceListId, IReadOnlyList<SaveSaleDraftLineRequest> Lines,
         decimal DiscountAmount = 0, string? DiscountReason = null);
     private sealed record SaveSaleDraftLineRequest(Guid ProductId, decimal Quantity,
-        Guid? InventoryPieceId = null, int? PieceCount = null);
+        Guid? InventoryPieceId = null, int? PieceCount = null, string? ScaleLabelReference = null);
     private sealed record SaleDraftResponse(Guid Id, string TicketSlot, Guid PriceListId, DateTimeOffset UpdatedAtUtc,
         decimal DiscountAmount, string? DiscountReason,
         IReadOnlyList<SaleDraftLineResponse> Lines);
     private sealed record SaleDraftLineResponse(Guid Id, Guid ProductId, string ProductCode, string ProductName,
         string Unit, string SaleMode, decimal Quantity, decimal UnitPrice,
-        Guid? InventoryPieceId, string? PieceIdentifier, int? PieceCount);
+        Guid? InventoryPieceId, string? PieceIdentifier, int? PieceCount,
+        string? ScaleLabelReference);
 }

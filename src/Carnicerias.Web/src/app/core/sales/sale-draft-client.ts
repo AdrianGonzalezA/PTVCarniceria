@@ -13,6 +13,7 @@ export interface SaleDraftLine {
   readonly unitPrice: number;
   readonly inventoryPieceId?: string | null;
   readonly pieceIdentifier?: string | null;
+  readonly scaleLabelReference?: string | null;
 }
 
 export interface SaleDraft {
@@ -63,7 +64,7 @@ export interface ConfirmedSale {
   readonly fiscalCustomerId?: string | null;
   readonly fiscalCustomerCode?: string | null;
   readonly purchaseOrderNumber?: string | null;
-  readonly lines: readonly { readonly code: string; readonly name: string; readonly unit: string; readonly quantity: number; readonly unitPrice: number; readonly lineTotal: number; readonly pieceIdentifier?: string | null; readonly pieceCount?: number | null;
+  readonly lines: readonly { readonly code: string; readonly name: string; readonly unit: string; readonly quantity: number; readonly unitPrice: number; readonly lineTotal: number; readonly pieceIdentifier?: string | null; readonly pieceCount?: number | null; readonly scaleLabelReference?: string | null;
     readonly netAfterDiscount?: number | null; readonly taxableBase?: number | null;
     readonly taxAmount?: number | null; readonly taxRatePercent?: number | null;
     readonly taxTreatment?: 'taxed' | 'exempt' | 'notTaxed' | null }[];
@@ -83,7 +84,8 @@ export class SaleDraftClient {
   }
 
   save(priceListId: string, lines: readonly { readonly productId: string; readonly quantity: number;
-    readonly inventoryPieceId?: string; readonly pieceCount?: number | null }[],
+    readonly inventoryPieceId?: string; readonly pieceCount?: number | null;
+    readonly scaleLabelReference?: string }[],
     slot: SaleTicketSlot = 'A', discountAmount = 0, discountReason: string | null = null) {
     return this.http.put<SaleDraft>(this.draftUrl(slot),
       { priceListId, lines, discountAmount, discountReason }, { withCredentials: true });

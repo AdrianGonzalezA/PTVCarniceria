@@ -104,7 +104,8 @@ public sealed class ConfirmedSaleLine
 
     public ConfirmedSaleLine(Guid companyId, Guid productId, string code, string name, string unit,
         ProductSaleMode saleMode, decimal quantity, decimal unitPrice,
-        Guid? inventoryPieceId = null, string? pieceIdentifier = null, int? pieceCount = null)
+        Guid? inventoryPieceId = null, string? pieceIdentifier = null, int? pieceCount = null,
+        string? scaleLabelReference = null)
     {
         if (pieceCount is <= 0 or > 10000)
             throw new ArgumentOutOfRangeException(nameof(pieceCount));
@@ -125,6 +126,7 @@ public sealed class ConfirmedSaleLine
         InventoryPieceId = inventoryPieceId;
         PieceIdentifier = pieceIdentifier;
         PieceCount = pieceCount;
+        ScaleLabelReference = scaleLabelReference;
     }
 
     public Guid Id { get; private set; }
@@ -141,6 +143,7 @@ public sealed class ConfirmedSaleLine
     public Guid? InventoryPieceId { get; private set; }
     public string? PieceIdentifier { get; private set; }
     public int? PieceCount { get; private set; }
+    public string? ScaleLabelReference { get; private set; }
     public decimal OrderDiscountAmount { get; private set; }
     public decimal? NetAfterDiscount { get; private set; }
     public Guid? TaxRuleId { get; private set; }

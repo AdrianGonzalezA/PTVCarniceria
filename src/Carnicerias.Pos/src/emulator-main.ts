@@ -1,7 +1,9 @@
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron';
-import { EmulatorChannel, type EmulatorState } from './emulator-api';
+import { app, BrowserWindow, clipboard, ipcMain, type IpcMainInvokeEvent } from 'electron';
+import QRCode from 'qrcode';
+import { EmulatorChannel, type EmulatorState, type KretzQrPreview } from './emulator-api';
+import { makeKretzConsolidatedQr, type KretzEmulatorItem } from './kretz-emulator';
 import { createVirtualDeviceServer, virtualDevicePipe, type ScaleReading,
   type VirtualDeviceRequest, type VirtualDeviceResponse } from './virtual-device-protocol';
 
@@ -29,7 +31,7 @@ app.whenReady().then(async () => {
   app.once('will-quit', () => server.close());
 
   consoleWindow = new BrowserWindow({
-    width: 640, height: 760, minWidth: 480, minHeight: 520,
+    width: 780, height: 850, minWidth: 560, minHeight: 600,
     title: 'Balanza virtual · Carnicerías',
     webPreferences: {
       preload: path.join(__dirname, 'emulator-preload.js'),
@@ -49,6 +51,26 @@ app.whenReady().then(async () => {
       throw new Error('INVALID_WEIGHT');
     reading = { weightKg, stable, observedAtUtc: new Date().toISOString() };
     return { weightKg: reading.weightKg, stable: reading.stable };
+  });
+  ipcMain.handle(EmulatorChannel.KretzQr, async (event, items: unknown,
+    ticketNumber: unknown, scaleNumber: unknown): Promise<KretzQrPreview> => {
+    verifyConsoleSender(event);
+    if (!Array.isArray(items) || items.length < 1 || items.length > 99 ||
+        items.some((item: unknown) => typeof item !== 'object' || item === null ||
+          typeof (item as KretzEmulatorItem).plu !== 'string' ||
+          typeof (item as KretzEmulatorItem).weightKg !== 'number') ||
+        typeof ticketNumber !== 'number' || typeof scaleNumber !== 'number')
+      throw new Error('INVALID_KRETZ_TICKET');
+    const payload = makeKretzConsolidatedQr(items as KretzEmulatorItem[], {
+      now: new Date(), ticketNumber, seller: ' A', scaleNumber,
+    });
+    return { payload, imageUrl: await QRCode.toDataURL(payload, { width: 360, margin: 2 }) };
+  });
+  ipcMain.handle(EmulatorChannel.CopyQr, (event, payload: unknown) => {
+    verifyConsoleSender(event);
+    if (typeof payload !== 'string' || payload.length > 1500 || !payload.includes('\n'))
+      throw new Error('INVALID_KRETZ_TICKET');
+    clipboard.writeText(payload);
   });
   await consoleWindow.loadFile(path.join(__dirname, '..', 'devices', 'emulator.html'));
 }).catch((error: unknown) => {

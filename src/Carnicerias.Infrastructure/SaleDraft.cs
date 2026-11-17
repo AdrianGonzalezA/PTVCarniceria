@@ -61,10 +61,12 @@ public sealed class SaleDraft
 
     public void ReplaceLines(IEnumerable<SaleDraftLine> lines, DateTimeOffset updatedAtUtc)
     {
-        var requestedLines = lines.ToDictionary(line => (line.ProductId, line.InventoryPieceId));
+        var requestedLines = lines.ToDictionary(line =>
+            (line.ProductId, line.InventoryPieceId, line.ScaleLabelReference));
         foreach (var existingLine in Lines.ToArray())
         {
-            if (requestedLines.Remove((existingLine.ProductId, existingLine.InventoryPieceId), out var requestedLine))
+            if (requestedLines.Remove((existingLine.ProductId, existingLine.InventoryPieceId,
+                    existingLine.ScaleLabelReference), out var requestedLine))
                 existingLine.UpdateDetails(requestedLine.Quantity, requestedLine.PieceCount);
             else
                 Lines.Remove(existingLine);
@@ -118,7 +120,8 @@ public sealed class SaleDraftLine
 
     public SaleDraftLine(Guid companyId, Guid productId, string productCode, string productName,
         string unit, ProductSaleMode saleMode, decimal quantity, decimal unitPrice,
-        Guid? inventoryPieceId = null, string? pieceIdentifier = null, int? pieceCount = null)
+        Guid? inventoryPieceId = null, string? pieceIdentifier = null, int? pieceCount = null,
+        string? scaleLabelReference = null)
     {
         ValidatePieceCount(saleMode, inventoryPieceId, pieceCount);
         Id = Guid.NewGuid();
@@ -133,6 +136,7 @@ public sealed class SaleDraftLine
         InventoryPieceId = inventoryPieceId;
         PieceIdentifier = pieceIdentifier;
         PieceCount = pieceCount;
+        ScaleLabelReference = scaleLabelReference;
     }
 
     public Guid Id { get; private set; }
@@ -148,6 +152,7 @@ public sealed class SaleDraftLine
     public Guid? InventoryPieceId { get; private set; }
     public string? PieceIdentifier { get; private set; }
     public int? PieceCount { get; private set; }
+    public string? ScaleLabelReference { get; private set; }
 
     public void UpdateDetails(decimal quantity, int? pieceCount)
     {

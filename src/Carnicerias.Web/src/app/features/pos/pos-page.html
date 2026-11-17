@@ -279,7 +279,7 @@
                   <tr class="ticket-line">
                     <th scope="row" class="ticket-line-identity">
                       <strong class="line-product-name">{{ line.product.name }}</strong>
-                      <small>{{ line.product.code }}@if (line.pieceIdentifier) { · Pieza {{ line.pieceIdentifier }} }</small>
+                      <small>{{ line.product.code }}@if (line.pieceIdentifier) { · Pieza {{ line.pieceIdentifier }} }@if (line.scaleLabelReference) { · Balanza }</small>
                     </th>
                     <td class="ticket-line-quantity">
                       <input
@@ -288,7 +288,7 @@
                         [attr.inputmode]="line.product.mode === 'weight' ? 'decimal' : 'numeric'"
                         [appLocalizedDecimal]="line.quantity"
                         [decimalPlaces]="line.product.mode === 'weight' ? 3 : 0"
-                        [readOnly]="!!line.inventoryPieceId || line.product.mode === 'weight' && (!deviceConfigReady() || !!devices().scale || deviceConfigError())"
+                        [readOnly]="!!line.inventoryPieceId || !!line.scaleLabelReference || line.product.mode === 'weight' && (!deviceConfigReady() || !!devices().scale || deviceConfigError())"
                         [disabled]="!!liveDataProblem()"
                         [attr.aria-label]="line.product.mode === 'weight' ? 'Peso en kilogramos de ' + line.product.name : 'Cantidad de ' + unitLabel(line.product) + ' de ' + line.product.name"
                         (change)="updateLineQuantity(line.id, $event)"

@@ -866,6 +866,10 @@ namespace Carnicerias.Infrastructure.Migrations
                     b.Property<int>("SaleMode")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ScaleLabelReference")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
                     b.Property<decimal?>("TaxAmount")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
@@ -3812,6 +3816,10 @@ namespace Carnicerias.Infrastructure.Migrations
 
                     b.Property<int>("SaleMode")
                         .HasColumnType("integer");
+
+                    b.Property<string>("ScaleLabelReference")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
 
                     b.Property<string>("Unit")
                         .IsRequired()

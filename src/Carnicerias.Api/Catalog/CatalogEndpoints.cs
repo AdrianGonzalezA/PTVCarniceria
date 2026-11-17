@@ -55,6 +55,7 @@ public static class CatalogEndpoints
         Guid? categoryId,
         string? q,
         string? code,
+        string? scalePlu,
         int? page,
         int? pageSize,
         PlatformAccessDbContext db,
@@ -64,11 +65,15 @@ public static class CatalogEndpoints
     {
         var query = q?.Trim();
         var exactCode = code?.Trim().ToUpperInvariant();
+        var exactScalePlu = scalePlu?.Trim();
         var pageNumber = page ?? 1;
         var pageLength = pageSize ?? 50;
         if (priceListId is null || priceListId == Guid.Empty || pageNumber < 1 || pageLength is < 1 or > 100 ||
             (!string.IsNullOrEmpty(query) && query.Length < 3) ||
-            (exactCode is not null && exactCode.Length is < 1 or > 80))
+            (exactCode is not null && exactCode.Length is < 1 or > 80) ||
+            (exactScalePlu is not null && (exactScalePlu.Length is < 1 or > 8 ||
+                !exactScalePlu.All(character => character is >= '0' and <= '9'))) ||
+            (exactCode is not null && exactScalePlu is not null))
             return Error(StatusCodes.Status400BadRequest, "VALIDATION_ERROR");
 
         var context = contextAccessor.Context;
@@ -86,7 +91,11 @@ public static class CatalogEndpoints
                     price.EffectiveFromUtc <= now &&
                     (price.EffectiveToUtc == null || price.EffectiveToUtc > now)));
 
-        if (exactCode is not null)
+        if (exactScalePlu is not null)
+        {
+            products = products.Where(product => product.ScalePlu == exactScalePlu);
+        }
+        else if (exactCode is not null)
         {
             products = products.Where(product => product.NormalizedCode == exactCode ||
                 db.ProductCodes.Any(alternate => alternate.CompanyId == context.CompanyId &&
@@ -114,6 +123,7 @@ public static class CatalogEndpoints
             .Select(product => new ProductOption(
                 product.Id,
                 product.Code,
+                product.ScalePlu,
                 product.Name,
                 product.CategoryId,
                 product.Unit,
@@ -185,6 +195,7 @@ public static class CatalogEndpoints
     private sealed record ProductOption(
         Guid Id,
         string Code,
+        string? ScalePlu,
         string Name,
         Guid CategoryId,
         string Unit,

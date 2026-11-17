@@ -294,7 +294,7 @@ public static class SaleConfirmationEndpoints
             sale.Lines.AddRange(draft.Lines.Select(line => new ConfirmedSaleLine(
                 context.CompanyId, line.ProductId, line.ProductCode, line.ProductName, line.Unit,
                 line.SaleMode, line.Quantity, line.UnitPrice, line.InventoryPieceId, line.PieceIdentifier,
-                line.PieceCount)));
+                line.PieceCount, line.ScaleLabelReference)));
             var productIds = sale.Lines.Select(line => line.ProductId).Distinct().ToArray();
             var taxRules = await db.ProductTaxRules.AsNoTracking()
                 .Where(rule => rule.CompanyId == context.CompanyId && productIds.Contains(rule.ProductId) &&
@@ -479,7 +479,7 @@ public static class SaleConfirmationEndpoints
                 line.ProductCode, line.ProductName, line.Unit, line.Quantity, line.UnitPrice,
                 line.LineTotal, line.PieceIdentifier, line.PieceCount, line.NetAfterDiscount,
                 line.TaxableBase, line.TaxAmount, line.TaxRatePercent,
-                TaxTreatmentName(line.TaxTreatment))).ToArray(),
+                TaxTreatmentName(line.TaxTreatment), line.ScaleLabelReference)).ToArray(),
         sale.Payments.Select(payment => new SaleConfirmationPaymentResponse(
             MethodName(payment.Method), payment.TenderedAmount, payment.AppliedAmount)).ToArray());
 
@@ -554,6 +554,6 @@ public static class SaleConfirmationEndpoints
         decimal Quantity, decimal UnitPrice, decimal LineTotal, string? PieceIdentifier,
         int? PieceCount,
         decimal? NetAfterDiscount, decimal? TaxableBase, decimal? TaxAmount,
-        decimal? TaxRatePercent, string? TaxTreatment);
+        decimal? TaxRatePercent, string? TaxTreatment, string? ScaleLabelReference);
     private sealed record SaleConfirmationPaymentResponse(string Method, decimal TenderedAmount, decimal AppliedAmount);
 }

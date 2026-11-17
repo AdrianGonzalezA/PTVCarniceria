@@ -10,10 +10,39 @@
 </head>
 <body>
   <header><span class="eyebrow">ENTORNO DE DESARROLLO</span><h1>Balanza virtual</h1>
-    <p>Inyectá un peso para probar Caja 1. Los tickets ahora se envían por COM1.</p></header>
+    <p>Generá etiquetas Kretz de prueba o enviá una lectura de peso al dispositivo virtual.</p></header>
   <main>
+    <section aria-labelledby="kretz-title">
+      <span class="device-label">KRETZ REPORT NX · PERFIL DE LABORATORIO</span>
+      <h2 id="kretz-title">QR consolidado de cortes</h2>
+      <p>La balanza debe codificar <strong>peso</strong> en el EAN13: 20 + PLU de 5 dígitos + gramos de 5 dígitos + control.</p>
+      <form id="kretz-item-form">
+        <div class="kretz-fields">
+          <label for="kretz-plu">PLU del artículo
+            <input id="kretz-plu" type="text" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" placeholder="00123" required /></label>
+          <label for="kretz-weight">Peso del corte (kg)
+            <input id="kretz-weight" type="text" inputmode="decimal" placeholder="0,750" required /></label>
+        </div>
+        <button type="submit">Agregar corte</button>
+      </form>
+      <ol id="kretz-items" aria-label="Cortes en el ticket de balanza"></ol>
+      <div class="kretz-fields">
+        <label for="kretz-ticket">Número de ticket de balanza
+          <input id="kretz-ticket" type="number" min="0" max="9999" value="1" /></label>
+        <label for="kretz-scale">Número de balanza
+          <input id="kretz-scale" type="number" min="0" max="99" value="1" /></label>
+      </div>
+      <div class="kretz-actions">
+        <button id="kretz-generate" type="button">Generar QR</button>
+        <button id="kretz-copy" type="button" disabled>Copiar lectura</button>
+        <button id="kretz-clear" type="button" class="secondary">Vaciar cortes</button>
+      </div>
+      <p id="kretz-status" role="status">Agregá uno o más cortes para generar el QR.</p>
+      <img id="kretz-image" alt="QR consolidado de la balanza Kretz simulada" hidden />
+      <textarea id="kretz-payload" readonly aria-label="Contenido decodificado del QR Kretz" hidden></textarea>
+    </section>
     <section aria-labelledby="scale-title">
-      <span class="device-label">BALANZA</span><h2 id="scale-title">Inyectar peso</h2>
+      <span class="device-label">BALANZA VIRTUAL</span><h2 id="scale-title">Inyectar peso</h2>
       <form id="weight-form">
         <label for="weight">Kilogramos</label>
         <div class="weight-row"><input id="weight" type="number" min="0" max="10000" step="0.001" value="0.750" inputmode="decimal" /><span>kg</span></div>

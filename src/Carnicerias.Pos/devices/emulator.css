@@ -17,3 +17,17 @@ button { justify-self: start; padding: .7rem 1.1rem; background: #d3ff00; border
 button:hover { filter: brightness(.96); }
 button:focus-visible, input:focus-visible { outline: 3px solid #71b8da; outline-offset: 2px; }
 #status { padding: .65rem; background: #ececd9; }
+.kretz-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; margin: .8rem 0; }
+.kretz-fields label { display: grid; gap: .35rem; }
+.kretz-fields input, #kretz-payload { width: 100%; padding: .65rem; border: 1px solid #a6a6a2; border-radius: .25rem; font: inherit; }
+#kretz-items { padding-left: 1.5rem; }
+#kretz-items li { margin: .35rem 0; }
+.kretz-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .9rem; }
+.kretz-actions button { padding: .6rem .8rem; }
+button.secondary { background: #e0e1df; }
+button:disabled { cursor: default; opacity: .5; }
+#kretz-status { padding: .65rem; background: #ececd9; }
+#kretz-image { display: block; max-width: 100%; width: 360px; margin: .5rem auto; image-rendering: pixelated; }
+#kretz-image[hidden], #kretz-payload[hidden] { display: none; }
+#kretz-payload { height: 8rem; resize: vertical; }
+@media (max-width: 600px) { .kretz-fields { grid-template-columns: 1fr; } }
